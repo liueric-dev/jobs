@@ -40,9 +40,16 @@ pip install 'psycopg[binary]'
 ### 1. Get the code
 
 ```bash
-git clone <this repo> ~/jobs-pipeline
-cd ~/jobs-pipeline
+git clone <this repo> ~/hermes-scripts
+cd ~/hermes-scripts
 ```
+
+> **Layout note:** the jobs pipeline lives under `jobs/` in this repo,
+> alongside the shared `pipelib/` library it imports and the separate
+> `events/` pipeline. Run its scripts from the repository root, as the
+> commands below do -- `pipelib` is located by walking up from each
+> script, so running them from elsewhere still works, but the paths shown
+> assume the root.
 
 ### 2. Point it at the database
 
@@ -99,7 +106,7 @@ step failed.
 Plain cron works too:
 
 ```cron
-0 0 * * * cd ~/jobs-pipeline && DATABASE_URL="postgresql://..." /usr/bin/python3 run-daily.py
+0 0 * * * cd ~/hermes-scripts && DATABASE_URL="postgresql://..." /usr/bin/python3 jobs/run-daily.py
 ```
 
 ### On other devices (ad hoc)
@@ -110,7 +117,7 @@ helps — it uses *that machine's own* SerpApi quota, multiplying total coverage
 ```bash
 export DATABASE_URL="postgresql://nyc_events:PASSWORD@homeserver.tailXXXX.ts.net:5432/nyc_events"
 export SERPAPI_API_KEY="<this machine's own key>"
-python3 ingest/google-serpapi.py
+python3 jobs/ingest/google-serpapi.py
 ```
 
 The other six sources are free HTTP fetches with no per-machine quota, so
@@ -125,8 +132,8 @@ below.
 Every script is independently runnable and testable:
 
 ```bash
-python3 ingest/builtin-nyc.py
-DEBUG_PRINT_KEYS=1 python3 ingest/google-serpapi.py   # verbose per-item logging
+python3 jobs/ingest/builtin-nyc.py
+DEBUG_PRINT_KEYS=1 python3 jobs/ingest/google-serpapi.py   # verbose per-item logging
 ```
 
 `DEBUG_PRINT_KEYS=1` is the convention across every script here.
@@ -211,7 +218,7 @@ spread, and agreement with your current model. It's read-only — it never write
 to `jobs.jobs`, so run it as often as you like:
 
 ```bash
-python3 tools/compare-models.py \
+python3 jobs/tools/compare-models.py \
     --model "glm-4.5-flash@https://api.z.ai/api/paas/v4@$GLM_API_KEY" \
     --model "gemini-3.6-flash@https://generativelanguage.googleapis.com/v1beta/openai@$GEMINI_API_KEY" \
     --n 15

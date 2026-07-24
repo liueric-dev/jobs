@@ -95,17 +95,23 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
 
-import psycopg
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
-)
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib")):
+    _d = os.path.dirname(_d)
+sys.path.insert(0, _d)
+sys.path.insert(0, os.path.join(_d, "jobs"))
+
+import schema  # noqa: E402  (jobs/schema.py)
+from pipelib import dbconn, http, ids, state, text  # noqa: E402
+from pipelib.timeparse import utc_now_str  # noqa: E402
+from pipelib.upsert import upsert  # noqa: E402
+
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 
 BASE_URL = "https://www.builtinnyc.com/jobs"
 MAX_PAGES = 3
 REQUEST_DELAY_SECONDS = 2.5
-HTTP_TIMEOUT = 20
 BUILTIN_STALE_AFTER_DAYS = 14
 USER_AGENT = "Mozilla/5.0 (compatible; hermes-jobs-ingest/1.0; personal job-search automation)"
 
@@ -125,86 +131,17 @@ SENIORITY_MAP = {
     "expert/leader": "senior",
 }
 
-NYC_PATTERN = re.compile(r"\b(new york|nyc|manhattan|brooklyn|queens|bronx|staten island)\b", re.IGNORECASE)
-REMOTE_PATTERN = re.compile(r"\bremote\b", re.IGNORECASE)
-
-
-def utc_now_str():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-
-
-def ensure_schema(conn):
-    """Defensive duplicate of ingest/ats.py's ensure_schema -- this script
-    is meant to work standalone even if run before ingest/ats.py ever has.
-    CREATE ... IF NOT EXISTS makes re-running this a no-op once both scripts
-    have run at least once."""
-    conn.execute("CREATE SCHEMA IF NOT EXISTS jobs")
-    conn.execute("SET search_path TO jobs, public")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id TEXT PRIMARY KEY,
-            platform TEXT NOT NULL,
-            company_token TEXT NOT NULL,
-            company_name TEXT NOT NULL,
-            source_id TEXT NOT NULL,
-            title TEXT,
-            location_raw TEXT,
-            department TEXT,
-            job_url TEXT,
-            posted_at TEXT,
-            seniority_guess TEXT,
-            location_is_nyc BOOLEAN,
-            location_is_remote BOOLEAN,
-            company_is_nyc_hq BOOLEAN,
-            company_is_ai_focused BOOLEAN,
-            status TEXT NOT NULL DEFAULT 'open',
-            description_text TEXT,
-            raw_json TEXT,
-            content_hash TEXT,
-            first_seen TEXT NOT NULL,
-            last_seen TEXT NOT NULL,
-            closed_at TEXT
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company_token)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_seniority ON jobs(seniority_guess)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_nyc ON jobs(location_is_nyc)")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS job_ingest_state (
-            dataset TEXT PRIMARY KEY,
-            last_success_at TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-
-
-def set_watermark(conn, dataset, ts):
-    conn.execute(
-        """
-        INSERT INTO job_ingest_state (dataset, last_success_at) VALUES (%s, %s)
-        ON CONFLICT (dataset) DO UPDATE SET last_success_at = EXCLUDED.last_success_at
-        """,
-        (dataset, ts),
-    )
-    conn.commit()
-
 
 def fetch_page(page_num):
     url = f"{BASE_URL}?page={page_num}"
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+    with urllib.request.urlopen(req, timeout=http.DEFAULT_TIMEOUT) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
 
 def extract_field(text, pattern):
     m = pattern.search(text)
     return html_module.unescape(m.group(1).strip()) if m else None
-
-
-def classify_location(text):
-    text = text or ""
-    return bool(NYC_PATTERN.search(text)), bool(REMOTE_PATTERN.search(text))
 
 
 def parse_page(page_html):
@@ -235,7 +172,7 @@ def parse_page(page_html):
         posted = extract_field(card, POSTED_PATTERN)
 
         location_combined = ", ".join(x for x in [geo_location, work_type] if x)
-        is_nyc, is_remote = classify_location(location_combined)
+        is_nyc, is_remote = text.classify_location(location_combined)
 
         records.append({
             "platform": "builtin",
@@ -259,92 +196,11 @@ def parse_page(page_html):
     return records
 
 
-def content_hash(rec):
-    fields = (
-        rec["title"], rec["location_raw"], rec["job_url"], rec["posted_at"],
-        rec["seniority_guess"], rec.get("salary_text") or "",
-    )
-    return hashlib.sha256("|".join(str(f) for f in fields).encode()).hexdigest()
-
-
-def make_id(platform, token, source_id):
-    return hashlib.sha256(f"{platform}:{token}:{source_id}".encode()).hexdigest()[:24]
-
-
-def upsert(conn, records):
-    now = utc_now_str()
-    new_count = updated_count = unchanged_count = 0
-
-    for rec in records:
-        rec_id = make_id(rec["platform"], rec["company_token"], rec["source_id"])
-        new_hash = content_hash(rec)
-        existing = conn.execute(
-            "SELECT content_hash, status FROM jobs WHERE id = %s", (rec_id,)
-        ).fetchone()
-
-        if existing is None:
-            conn.execute(
-                """
-                INSERT INTO jobs (id, platform, company_token, company_name, source_id, title,
-                    location_raw, department, job_url, posted_at, seniority_guess,
-                    location_is_nyc, location_is_remote, company_is_nyc_hq, company_is_ai_focused,
-                    status, description_text, raw_json, content_hash, first_seen, last_seen, closed_at)
-                VALUES (%(id)s, %(platform)s, %(company_token)s, %(company_name)s, %(source_id)s,
-                    %(title)s, %(location_raw)s, %(department)s, %(job_url)s, %(posted_at)s,
-                    %(seniority_guess)s, %(location_is_nyc)s, %(location_is_remote)s,
-                    %(company_is_nyc_hq)s, %(company_is_ai_focused)s, 'open', %(description_text)s,
-                    %(raw_json)s, %(content_hash)s, %(first_seen)s, %(last_seen)s, NULL)
-                """,
-                {**rec, "id": rec_id, "content_hash": new_hash, "first_seen": now, "last_seen": now},
-            )
-            new_count += 1
-
-        elif existing[0] != new_hash or existing[1] != "open":
-            conn.execute(
-                """
-                UPDATE jobs SET title=%(title)s, location_raw=%(location_raw)s,
-                    job_url=%(job_url)s, posted_at=%(posted_at)s, seniority_guess=%(seniority_guess)s,
-                    location_is_nyc=%(location_is_nyc)s, location_is_remote=%(location_is_remote)s,
-                    status='open', content_hash=%(content_hash)s, last_seen=%(last_seen)s, closed_at=NULL
-                WHERE id=%(id)s
-                """,
-                {**rec, "id": rec_id, "content_hash": new_hash, "last_seen": now},
-            )
-            updated_count += 1
-
-        else:
-            conn.execute("UPDATE jobs SET last_seen = %s WHERE id = %s", (now, rec_id))
-            unchanged_count += 1
-
-    conn.commit()
-    return new_count, updated_count, unchanged_count
-
-
-def close_stale(conn, stale_days):
-    """See module docstring LIMITATION section -- staleness-based closing,
-    not exact-diff, because this source only ever samples ~60 listings."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=stale_days)).strftime("%Y-%m-%dT%H:%M:%S")
-    now = utc_now_str()
-    cur = conn.execute(
-        """
-        UPDATE jobs SET status = 'closed', closed_at = %s
-        WHERE platform = 'builtin' AND status = 'open' AND last_seen < %s
-        """,
-        (now, cutoff),
-    )
-    conn.commit()
-    return cur.rowcount
-
-
 def main():
-    try:
-        conn = psycopg.connect(DATABASE_URL)
-    except psycopg.OperationalError as e:
-        safe_target = DATABASE_URL.split("@")[-1]
-        print(f"builtin-nyc ingest FAILED: could not connect to Postgres ({safe_target}): {e}")
-        sys.exit(1)
+    conn = dbconn.connect_or_exit("builtin-nyc ingest", schema=schema.SCHEMA)
 
-    ensure_schema(conn)
+    schema.ensure_schema(conn)
+    job_spec = schema.spec(schema.HASH_FIELDS_BUILTIN, blank_if_falsy=("salary_text",))
 
     page_errors = []
     all_records = []
@@ -371,9 +227,10 @@ def main():
         conn.close()
         sys.exit(1)
 
-    new_count, updated_count, unchanged_count = upsert(conn, all_records)
-    closed_count = close_stale(conn, BUILTIN_STALE_AFTER_DAYS)
-    set_watermark(conn, "builtin:nyc", utc_now_str())
+    new_count, updated_count, unchanged_count = upsert(conn, job_spec, all_records, schema.make_job_id, debug=DEBUG_PRINT_KEYS)
+    closed_count = schema.close_stale(conn, 'builtin', BUILTIN_STALE_AFTER_DAYS)
+    state.set_watermark(conn, "builtin:nyc", utc_now_str(),
+                        table=schema.WATERMARK_TABLE)
     conn.close()
 
     if page_errors and DEBUG_PRINT_KEYS:

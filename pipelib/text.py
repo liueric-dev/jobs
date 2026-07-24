@@ -2,14 +2,22 @@
 
 Every one of these was duplicated 4-6 times across jobs/ingest/*.py. The
 regexes were verified byte-identical before consolidating (the only
-difference found anywhere was a trailing comma in one copy of NYC_PATTERN),
-so moving them here changes no behaviour.
+difference found anywhere was a trailing comma in one copy of NYC_PATTERN).
+
+The functions were NOT all identical, and assuming they were caused a real
+regression: `strip_html` existed in two versions, one of which unescaped
+HTML entities first. Unifying on the wrong one changed description_text and
+therefore content_hash, reporting 217 of 242 weworkremotely rows as updated
+when nothing upstream had changed. Hence the `unescape` parameter -- and
+hence the rule that anything feeding a stored hash gets diffed across all
+copies before it is merged, not assumed equivalent because the names match.
 
 These are deliberately crude keyword heuristics, not classifiers. They exist
 to make a listing filterable at a glance; `raw_json` always preserves the
 untouched original for anything that needs to be precise.
 """
 
+import html as html_module
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -33,13 +41,29 @@ RELATIVE_TIME_PATTERN = re.compile(
 MAX_DESCRIPTION_CHARS = 5000
 
 
-def strip_html(html):
+def strip_html(markup, unescape=True):
     """Rough tag-stripper -- good enough for keyword heuristics and display,
     not meant to be a correct HTML parser. Truncated because raw_json
-    preserves the untouched original for anything that needs it."""
-    if not html:
+    preserves the untouched original for anything that needs it.
+
+    `unescape` decodes HTML entities ("&amp;" -> "&") before stripping tags.
+    It is parameterised because the six copies of this function had drifted:
+    weworkremotely, google-serpapi and google-apify unescaped, ats did not.
+    That difference is not cosmetic -- it changes description_text, which
+    feeds content_hash, so unifying on either behaviour silently rewrites
+    every row belonging to the sources that used the other one. (Measured:
+    unifying on the ats variant reported 217 of 242 weworkremotely rows as
+    updated when nothing upstream had changed.)
+
+    True is the default because decoding entities is the correct behaviour
+    and three of the four callers already did it. ats.py passes False to
+    preserve its stored hashes; switching it costs a one-time rewrite of
+    its rows and would be an improvement, just not a silent one.
+    """
+    if not markup:
         return None
-    text = re.sub(r"<[^>]+>", " ", html)
+    text = html_module.unescape(markup) if unescape else markup
+    text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text[:MAX_DESCRIPTION_CHARS] if text else None
 

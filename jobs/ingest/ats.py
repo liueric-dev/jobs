@@ -126,100 +126,24 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
 
-import psycopg
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
-)
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib")):
+    _d = os.path.dirname(_d)
+sys.path.insert(0, _d)
+sys.path.insert(0, os.path.join(_d, "jobs"))
+
+import schema  # noqa: E402  (jobs/schema.py)
+from pipelib import dbconn, http, ids, state, text  # noqa: E402
+from pipelib.timeparse import utc_now_str  # noqa: E402
+from pipelib.upsert import upsert  # noqa: E402
+
 JOB_SOURCES_FILE = os.environ.get(
     "JOB_SOURCES_FILE",
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "companies.json"),
 )
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 PRUNE_CLOSED_AFTER_DAYS = 30
-HTTP_TIMEOUT = 20
-
-SENIOR_PATTERN = re.compile(
-    r"\b(senior|sr\.?|staff|principal|director|vp\b|vice president|"
-    r"head of|lead\b|chief|executive|manager)\b",
-    re.IGNORECASE,
-)
-ENTRY_PATTERN = re.compile(
-    r"\b(entry.?level|junior|jr\.?|new grad|graduate|intern(ship)?|"
-    r"apprentice|associate|coordinator)\b",
-    re.IGNORECASE,
-)
-NYC_PATTERN = re.compile(
-    r"\b(new york|nyc|manhattan|brooklyn|queens|bronx|staten island)\b",
-    re.IGNORECASE,
-)
-REMOTE_PATTERN = re.compile(r"\bremote\b", re.IGNORECASE)
-
-
-def utc_now_str():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-
-
-def ensure_schema(conn):
-    """CREATE TABLE IF NOT EXISTS is a no-op on a table that already exists --
-    it does NOT add new columns, so schema changes across revisions of this
-    script need an explicit ALTER TABLE (see nyc-events-ingest.py for
-    precedent; no ALTERs needed yet here since this is the first version).
-
-    Tables live in a `jobs` Postgres schema, not `public` -- see DATABASE
-    section of the module docstring. search_path is set on this connection
-    so every unqualified table name below (and in every other function that
-    takes a conn) resolves inside jobs.* without rewriting every query."""
-    conn.execute("CREATE SCHEMA IF NOT EXISTS jobs")
-    conn.execute("SET search_path TO jobs, public")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id TEXT PRIMARY KEY,
-            platform TEXT NOT NULL,
-            company_token TEXT NOT NULL,
-            company_name TEXT NOT NULL,
-            source_id TEXT NOT NULL,
-            title TEXT,
-            location_raw TEXT,
-            department TEXT,
-            job_url TEXT,
-            posted_at TEXT,
-            seniority_guess TEXT,
-            location_is_nyc BOOLEAN,
-            location_is_remote BOOLEAN,
-            company_is_nyc_hq BOOLEAN,
-            company_is_ai_focused BOOLEAN,
-            status TEXT NOT NULL DEFAULT 'open',
-            description_text TEXT,
-            raw_json TEXT,
-            content_hash TEXT,
-            first_seen TEXT NOT NULL,
-            last_seen TEXT NOT NULL,
-            closed_at TEXT
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company_token)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_seniority ON jobs(seniority_guess)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_nyc ON jobs(location_is_nyc)")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS job_ingest_state (
-            dataset TEXT PRIMARY KEY,
-            last_success_at TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-
-
-def set_watermark(conn, dataset, ts):
-    conn.execute(
-        """
-        INSERT INTO job_ingest_state (dataset, last_success_at) VALUES (%s, %s)
-        ON CONFLICT (dataset) DO UPDATE SET last_success_at = EXCLUDED.last_success_at
-        """,
-        (dataset, ts),
-    )
-    conn.commit()
 
 
 def load_sources():
@@ -228,60 +152,28 @@ def load_sources():
     return data["companies"]
 
 
-def http_get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "hermes-jobs-ingest/1.0"})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-        return json.loads(resp.read().decode())
-
-
 def fetch_greenhouse(token):
-    data = http_get_json(f"https://api.greenhouse.io/v1/boards/{token}/jobs?content=true")
+    data = http.get_json(f"https://api.greenhouse.io/v1/boards/{token}/jobs?content=true")
     return data.get("jobs", [])
 
 
 def fetch_lever(token):
-    data = http_get_json(f"https://api.lever.co/v0/postings/{token}?mode=json")
+    data = http.get_json(f"https://api.lever.co/v0/postings/{token}?mode=json")
     return data if isinstance(data, list) else []
 
 
 def fetch_ashby(token):
-    data = http_get_json(f"https://api.ashbyhq.com/posting-api/job-board/{token}")
+    data = http.get_json(f"https://api.ashbyhq.com/posting-api/job-board/{token}")
     return data.get("jobs", [])
 
 
 FETCHERS = {"greenhouse": fetch_greenhouse, "lever": fetch_lever, "ashby": fetch_ashby}
 
 
-def strip_html(html):
-    """Rough tag-stripper -- good enough for keyword heuristics and display,
-    not meant to be a correct HTML parser. Truncated because raw_json below
-    already preserves the untouched original for anything that needs it."""
-    if not html:
-        return None
-    text = re.sub(r"<[^>]+>", " ", html)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text[:5000] if text else None
-
-
-def guess_seniority(title):
-    if not title:
-        return "unknown"
-    if SENIOR_PATTERN.search(title):
-        return "senior"
-    if ENTRY_PATTERN.search(title):
-        return "entry"
-    return "mid_or_unspecified"
-
-
-def classify_location(text):
-    text = text or ""
-    return bool(NYC_PATTERN.search(text)), bool(REMOTE_PATTERN.search(text))
-
-
 def normalize_greenhouse(company, job):
     title = job.get("title")
     location = (job.get("location") or {}).get("name")
-    is_nyc, is_remote = classify_location(location)
+    is_nyc, is_remote = text.classify_location(location)
     departments = job.get("departments") or []
     department = departments[0].get("name") if departments else None
     return {
@@ -294,12 +186,12 @@ def normalize_greenhouse(company, job):
         "department": department,
         "job_url": job.get("absolute_url"),
         "posted_at": job.get("updated_at") or job.get("first_published"),
-        "seniority_guess": guess_seniority(title),
+        "seniority_guess": text.guess_seniority(title),
         "location_is_nyc": is_nyc,
         "location_is_remote": is_remote,
         "company_is_nyc_hq": bool(company.get("is_nyc_hq")),
         "company_is_ai_focused": bool(company.get("is_ai_focused")),
-        "description_text": strip_html(job.get("content")),
+        "description_text": text.strip_html(job.get("content"), unescape=False),
         "raw_json": json.dumps(job),
     }
 
@@ -308,7 +200,7 @@ def normalize_lever(company, job):
     title = job.get("text")
     cats = job.get("categories") or {}
     location = cats.get("location") or ", ".join(cats.get("allLocations") or [])
-    is_nyc, is_remote = classify_location(location)
+    is_nyc, is_remote = text.classify_location(location)
     posted_at = None
     created = job.get("createdAt")
     if created:
@@ -326,12 +218,12 @@ def normalize_lever(company, job):
         "department": cats.get("department"),
         "job_url": job.get("hostedUrl"),
         "posted_at": posted_at,
-        "seniority_guess": guess_seniority(title),
+        "seniority_guess": text.guess_seniority(title),
         "location_is_nyc": is_nyc,
         "location_is_remote": is_remote,
         "company_is_nyc_hq": bool(company.get("is_nyc_hq")),
         "company_is_ai_focused": bool(company.get("is_ai_focused")),
-        "description_text": strip_html(job.get("description") or job.get("descriptionBody")),
+        "description_text": text.strip_html(job.get("description") or job.get("descriptionBody"), unescape=False),
         "raw_json": json.dumps(job),
     }
 
@@ -339,7 +231,7 @@ def normalize_lever(company, job):
 def normalize_ashby(company, job):
     title = job.get("title")
     location = job.get("location")
-    is_nyc, is_remote = classify_location(location)
+    is_nyc, is_remote = text.classify_location(location)
     if job.get("isRemote"):
         is_remote = True
     return {
@@ -352,12 +244,12 @@ def normalize_ashby(company, job):
         "department": job.get("department"),
         "job_url": job.get("jobUrl"),
         "posted_at": job.get("publishedAt"),
-        "seniority_guess": guess_seniority(title),
+        "seniority_guess": text.guess_seniority(title),
         "location_is_nyc": is_nyc,
         "location_is_remote": is_remote,
         "company_is_nyc_hq": bool(company.get("is_nyc_hq")),
         "company_is_ai_focused": bool(company.get("is_ai_focused")),
-        "description_text": strip_html(job.get("descriptionHtml") or job.get("descriptionPlain")),
+        "description_text": text.strip_html(job.get("descriptionHtml") or job.get("descriptionPlain"), unescape=False),
         "raw_json": json.dumps(job),
     }
 
@@ -365,114 +257,13 @@ def normalize_ashby(company, job):
 NORMALIZERS = {"greenhouse": normalize_greenhouse, "lever": normalize_lever, "ashby": normalize_ashby}
 
 
-def make_id(platform, token, source_id):
-    return hashlib.sha256(f"{platform}:{token}:{source_id}".encode()).hexdigest()[:24]
-
-
-def content_hash(rec):
-    """Fields that represent the posting's actual content -- excludes
-    bookkeeping (raw_json, timestamps, status) so unrelated churn doesn't
-    register as a change. Status transitions are handled separately by
-    close_missing(), not through this hash."""
-    fields = (
-        rec["title"], rec["location_raw"], rec["department"], rec["job_url"],
-        rec["posted_at"], rec.get("description_text") or "",
-    )
-    return hashlib.sha256("|".join(str(f) for f in fields).encode()).hexdigest()
-
-
-def upsert(conn, records):
-    now = utc_now_str()
-    new_count = updated_count = unchanged_count = 0
-
-    for rec in records:
-        rec_id = make_id(rec["platform"], rec["company_token"], rec["source_id"])
-        new_hash = content_hash(rec)
-        existing = conn.execute(
-            "SELECT content_hash, status FROM jobs WHERE id = %s", (rec_id,)
-        ).fetchone()
-
-        if existing is None:
-            conn.execute(
-                """
-                INSERT INTO jobs (id, platform, company_token, company_name, source_id, title,
-                    location_raw, department, job_url, posted_at, seniority_guess,
-                    location_is_nyc, location_is_remote, company_is_nyc_hq, company_is_ai_focused,
-                    status, description_text, raw_json, content_hash, first_seen, last_seen, closed_at)
-                VALUES (%(id)s, %(platform)s, %(company_token)s, %(company_name)s, %(source_id)s,
-                    %(title)s, %(location_raw)s, %(department)s, %(job_url)s, %(posted_at)s,
-                    %(seniority_guess)s, %(location_is_nyc)s, %(location_is_remote)s,
-                    %(company_is_nyc_hq)s, %(company_is_ai_focused)s, 'open', %(description_text)s,
-                    %(raw_json)s, %(content_hash)s, %(first_seen)s, %(last_seen)s, NULL)
-                """,
-                {**rec, "id": rec_id, "content_hash": new_hash, "first_seen": now, "last_seen": now},
-            )
-            new_count += 1
-
-        elif existing[0] != new_hash or existing[1] != "open":
-            # Second condition catches a job that was previously marked
-            # closed (disappeared from a prior fetch) but has now reappeared
-            # -- treat that as a reopen, not just a content edit.
-            conn.execute(
-                """
-                UPDATE jobs SET title=%(title)s, location_raw=%(location_raw)s,
-                    department=%(department)s, job_url=%(job_url)s, posted_at=%(posted_at)s,
-                    seniority_guess=%(seniority_guess)s, location_is_nyc=%(location_is_nyc)s,
-                    location_is_remote=%(location_is_remote)s, company_is_nyc_hq=%(company_is_nyc_hq)s,
-                    company_is_ai_focused=%(company_is_ai_focused)s, status='open',
-                    description_text=%(description_text)s, raw_json=%(raw_json)s,
-                    content_hash=%(content_hash)s, last_seen=%(last_seen)s, closed_at=NULL
-                WHERE id=%(id)s
-                """,
-                {**rec, "id": rec_id, "content_hash": new_hash, "last_seen": now},
-            )
-            updated_count += 1
-
-        else:
-            conn.execute("UPDATE jobs SET last_seen = %s WHERE id = %s", (now, rec_id))
-            unchanged_count += 1
-
-    conn.commit()
-    return new_count, updated_count, unchanged_count
-
-
-def close_missing(conn, platform, token, seen_ids, now):
-    """Mark jobs 'closed' if they were open before but didn't show up in
-    this run's fetch for this company. Caller is responsible for only
-    invoking this when seen_ids is non-empty (see module docstring's
-    SAFETY VALVE note) -- an empty seen_ids here would close every open
-    job for the company, which is correct only if the fetch is trustworthy."""
-    cur = conn.execute(
-        """
-        UPDATE jobs SET status = 'closed', closed_at = %s, last_seen = %s
-        WHERE platform = %s AND company_token = %s AND status = 'open'
-          AND NOT (source_id = ANY(%s))
-        """,
-        (now, now, platform, token, seen_ids),
-    )
-    conn.commit()
-    return cur.rowcount
-
-
-def prune_old_closed(conn, days):
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
-    cur = conn.execute(
-        "DELETE FROM jobs WHERE status = 'closed' AND closed_at IS NOT NULL AND closed_at < %s",
-        (cutoff,),
-    )
-    conn.commit()
-    return cur.rowcount
-
-
 def main():
-    try:
-        conn = psycopg.connect(DATABASE_URL)
-    except psycopg.OperationalError as e:
-        safe_target = DATABASE_URL.split("@")[-1]  # don't log credentials
-        print(f"jobs ingest FAILED: could not connect to Postgres ({safe_target}): {e}")
-        sys.exit(1)
+    conn = dbconn.connect_or_exit("jobs ingest", schema=schema.SCHEMA)
+    schema.ensure_schema(conn)
 
-    ensure_schema(conn)
+    # One spec per source family: ats/wwr hash `department`, the Google and
+    # HN sources do not. The tuples are stored digests -- see jobs/schema.py.
+    ats_spec = schema.spec(schema.HASH_FIELDS_ATS)
 
     try:
         sources = load_sources()
@@ -502,7 +293,9 @@ def main():
             continue
 
         records = [normalize(company, j) for j in raw_jobs]
-        n, u, unc = upsert(conn, records)
+        result = upsert(conn, ats_spec, records, schema.make_job_id,
+                        debug=DEBUG_PRINT_KEYS)
+        n, u, unc = result
         total_new += n
         total_updated += u
         total_unchanged += unc
@@ -510,15 +303,17 @@ def main():
 
         if records:
             seen_ids = [r["source_id"] for r in records]
-            total_closed += close_missing(conn, platform, token, seen_ids, run_started_at)
+            total_closed += schema.close_missing(conn, platform, token,
+                                                 seen_ids, run_started_at)
 
-        set_watermark(conn, f"{platform}:{token}", run_started_at)
+        state.set_watermark(conn, f"{platform}:{token}", run_started_at,
+                            table=schema.WATERMARK_TABLE)
 
         if DEBUG_PRINT_KEYS:
             print(f"[debug] {company['name']} ({platform}): fetched {len(raw_jobs)} -> "
                   f"{n} new, {u} updated, {unc} unchanged", file=sys.stderr)
 
-    pruned = prune_old_closed(conn, PRUNE_CLOSED_AFTER_DAYS)
+    pruned = schema.prune_old_closed(conn, PRUNE_CLOSED_AFTER_DAYS)
     conn.close()
 
     if company_errors and company_successes == 0:

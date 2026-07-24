@@ -188,17 +188,25 @@ def try_claim(conn, dataset, ttl_minutes=DEFAULT_CLAIM_TTL_MINUTES,
     cutoff = (utc_now() - timedelta(minutes=ttl_minutes)).strftime(
         "%Y-%m-%dT%H:%M:%S")
     now = utc_now_str()
+    # RETURNING rather than rowcount: an ON CONFLICT DO UPDATE whose WHERE
+    # fails reports zero affected rows, but "did anyone hand me a row back"
+    # is the unambiguous signal, and it is what the original implementation
+    # relied on. The '' last_success_at on first INSERT is deliberate -- it
+    # is the "never run" sentinel that sorts before every real timestamp,
+    # and the column is NOT NULL so it cannot be NULL instead.
     cur = conn.execute(
         f"""
         INSERT INTO {table} (dataset, last_success_at, claimed_at)
         VALUES (%(dataset)s, '', %(now)s)
         ON CONFLICT (dataset) DO UPDATE SET claimed_at = %(now)s
         WHERE {table}.claimed_at IS NULL OR {table}.claimed_at < %(cutoff)s
+        RETURNING dataset
         """,
         {"dataset": dataset, "now": now, "cutoff": cutoff},
     )
+    won = cur.fetchone() is not None
     conn.commit()
-    return cur.rowcount > 0
+    return won
 
 
 def release_claim(conn, dataset, table="ingest_state"):
@@ -207,8 +215,13 @@ def release_claim(conn, dataset, table="ingest_state"):
     conn.commit()
 
 
-def mark_success(conn, dataset, table="ingest_state"):
-    """Advance the watermark and drop the claim in one step."""
+def mark_success(conn, dataset, ts=None, table="ingest_state"):
+    """Advance the watermark and drop the claim in one step.
+
+    Called once a fetch actually succeeds. Releasing the claim here rather
+    than letting it expire means nobody waits out the TTL for a result that
+    is already known.
+    """
     conn.execute(
         f"""
         INSERT INTO {table} (dataset, last_success_at, claimed_at)
@@ -216,6 +229,6 @@ def mark_success(conn, dataset, table="ingest_state"):
         ON CONFLICT (dataset) DO UPDATE
             SET last_success_at = EXCLUDED.last_success_at, claimed_at = NULL
         """,
-        (dataset, utc_now_str()),
+        (dataset, ts or utc_now_str()),
     )
     conn.commit()

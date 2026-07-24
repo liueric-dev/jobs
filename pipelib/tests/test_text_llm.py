@@ -71,6 +71,28 @@ class TestStripHtmlAndSlug(unittest.TestCase):
         self.assertEqual(text.strip_html("<p>Hello   <b>world</b></p>"),
                          "Hello world")
 
+    def test_unescape_variants_are_both_preserved(self):
+        """The two implementations that existed must both remain reachable.
+
+        weworkremotely/google-serpapi/google-apify unescaped entities before
+        stripping tags; ats did not. description_text feeds content_hash, so
+        collapsing these silently rewrites one group's rows -- it reported
+        217 of 242 weworkremotely rows as updated when nothing had changed.
+        """
+        markup = "<p>R&amp;D team</p>"
+        self.assertEqual(text.strip_html(markup, unescape=True), "R&D team")
+        self.assertEqual(text.strip_html(markup, unescape=False), "R&amp;D team")
+
+    def test_unescape_defaults_to_true(self):
+        self.assertEqual(text.strip_html("A &amp; B"), "A & B")
+
+    def test_unescape_then_strip_eats_encoded_angle_brackets(self):
+        """Unescaping runs BEFORE tag stripping, so entity-encoded angle
+        brackets become real ones and are then removed as tags. Surprising,
+        but it is what the original implementations did and what the stored
+        hashes were computed from -- pinned so it cannot drift silently."""
+        self.assertEqual(text.strip_html("<p>R&amp;D &lt;Engineer&gt;</p>"), "R&D")
+
     def test_empty_becomes_none(self):
         self.assertIsNone(text.strip_html(""))
         self.assertIsNone(text.strip_html(None))

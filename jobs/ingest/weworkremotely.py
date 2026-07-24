@@ -82,11 +82,18 @@ import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from datetime import datetime, timedelta, timezone
 
-import psycopg
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
-)
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib")):
+    _d = os.path.dirname(_d)
+sys.path.insert(0, _d)
+sys.path.insert(0, os.path.join(_d, "jobs"))
+
+import schema  # noqa: E402  (jobs/schema.py)
+from pipelib import dbconn, http, ids, state, text  # noqa: E402
+from pipelib.timeparse import utc_now_str  # noqa: E402
+from pipelib.upsert import upsert  # noqa: E402
+
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 
 CATEGORIES = [
@@ -97,21 +104,9 @@ CATEGORIES = [
 ]
 FEED_URL_TEMPLATE = "https://weworkremotely.com/categories/{category}.rss"
 REQUEST_DELAY_SECONDS = 2.0
-HTTP_TIMEOUT = 20
 WWR_STALE_AFTER_DAYS = 21
 USER_AGENT = "Mozilla/5.0 (compatible; hermes-jobs-ingest/1.0; personal job-search automation)"
 
-SENIOR_PATTERN = re.compile(
-    r"\b(senior|sr\.?|staff|principal|director|vp\b|vice president|"
-    r"head of|lead\b|chief|executive|manager)\b",
-    re.IGNORECASE,
-)
-ENTRY_PATTERN = re.compile(
-    r"\b(entry.?level|junior|jr\.?|new grad|graduate|intern(ship)?|"
-    r"apprentice|associate|coordinator)\b",
-    re.IGNORECASE,
-)
-NYC_PATTERN = re.compile(r"\b(new york|nyc|manhattan|brooklyn|queens|bronx|staten island)\b", re.IGNORECASE)
 NON_TECH_EXCLUDE_PATTERN = re.compile(
     r"\b(customer support|customer success|sales rep|account executive|"
     r"account manager|business development|recruiter|talent acquisition|"
@@ -123,88 +118,11 @@ NON_TECH_EXCLUDE_PATTERN = re.compile(
 )
 
 
-def utc_now_str():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-
-
-def ensure_schema(conn):
-    """Defensive duplicate of ingest/ats.py's ensure_schema -- works standalone."""
-    conn.execute("CREATE SCHEMA IF NOT EXISTS jobs")
-    conn.execute("SET search_path TO jobs, public")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id TEXT PRIMARY KEY,
-            platform TEXT NOT NULL,
-            company_token TEXT NOT NULL,
-            company_name TEXT NOT NULL,
-            source_id TEXT NOT NULL,
-            title TEXT,
-            location_raw TEXT,
-            department TEXT,
-            job_url TEXT,
-            posted_at TEXT,
-            seniority_guess TEXT,
-            location_is_nyc BOOLEAN,
-            location_is_remote BOOLEAN,
-            company_is_nyc_hq BOOLEAN,
-            company_is_ai_focused BOOLEAN,
-            status TEXT NOT NULL DEFAULT 'open',
-            description_text TEXT,
-            raw_json TEXT,
-            content_hash TEXT,
-            first_seen TEXT NOT NULL,
-            last_seen TEXT NOT NULL,
-            closed_at TEXT
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company_token)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_seniority ON jobs(seniority_guess)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_nyc ON jobs(location_is_nyc)")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS job_ingest_state (
-            dataset TEXT PRIMARY KEY,
-            last_success_at TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-
-
-def set_watermark(conn, dataset, ts):
-    conn.execute(
-        """
-        INSERT INTO job_ingest_state (dataset, last_success_at) VALUES (%s, %s)
-        ON CONFLICT (dataset) DO UPDATE SET last_success_at = EXCLUDED.last_success_at
-        """,
-        (dataset, ts),
-    )
-    conn.commit()
-
-
 def fetch_feed(category):
     url = FEED_URL_TEMPLATE.format(category=category)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+    with urllib.request.urlopen(req, timeout=http.DEFAULT_TIMEOUT) as resp:
         return resp.read()
-
-
-def strip_html(text):
-    if not text:
-        return None
-    text = html_module.unescape(text)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text[:5000] if text else None
-
-
-def guess_seniority(title):
-    if not title:
-        return "unknown"
-    if SENIOR_PATTERN.search(title):
-        return "senior"
-    if ENTRY_PATTERN.search(title):
-        return "entry"
-    return "mid_or_unspecified"
 
 
 def parse_posted_at(pub_date_text):
@@ -214,11 +132,6 @@ def parse_posted_at(pub_date_text):
         return parsedate_to_datetime(pub_date_text).astimezone(timezone.utc).isoformat()
     except (TypeError, ValueError):
         return None
-
-
-def slugify(text):
-    text = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
-    return text or "unknown"
 
 
 def parse_feed(xml_bytes, category):
@@ -241,7 +154,7 @@ def parse_feed(xml_bytes, category):
         region = (item.findtext("region") or "").strip()
         rss_category = (item.findtext("category") or category).strip()
         pub_date = item.findtext("pubDate")
-        description = strip_html(item.findtext("description"))
+        description = text.strip_html(item.findtext("description"))
 
         source_id = link.rsplit("/", 1)[-1] if link else None
         if not source_id:
@@ -249,7 +162,7 @@ def parse_feed(xml_bytes, category):
 
         records.append({
             "platform": "weworkremotely",
-            "company_token": slugify(company_name),
+            "company_token": text.slugify(company_name),
             "company_name": company_name,
             "source_id": source_id,
             "title": title,
@@ -257,8 +170,8 @@ def parse_feed(xml_bytes, category):
             "department": rss_category or None,
             "job_url": link or None,
             "posted_at": parse_posted_at(pub_date),
-            "seniority_guess": guess_seniority(title),
-            "location_is_nyc": bool(NYC_PATTERN.search(region)),
+            "seniority_guess": text.guess_seniority(title),
+            "location_is_nyc": bool(text.NYC_PATTERN.search(region)),
             "location_is_remote": True,
             "company_is_nyc_hq": None,
             "company_is_ai_focused": None,
@@ -268,92 +181,11 @@ def parse_feed(xml_bytes, category):
     return records
 
 
-def content_hash(rec):
-    fields = (
-        rec["title"], rec["location_raw"], rec["department"], rec["job_url"],
-        rec["posted_at"], rec.get("description_text") or "",
-    )
-    return hashlib.sha256("|".join(str(f) for f in fields).encode()).hexdigest()
-
-
-def make_id(platform, token, source_id):
-    return hashlib.sha256(f"{platform}:{token}:{source_id}".encode()).hexdigest()[:24]
-
-
-def upsert(conn, records):
-    now = utc_now_str()
-    new_count = updated_count = unchanged_count = 0
-
-    for rec in records:
-        rec_id = make_id(rec["platform"], rec["company_token"], rec["source_id"])
-        new_hash = content_hash(rec)
-        existing = conn.execute(
-            "SELECT content_hash, status FROM jobs WHERE id = %s", (rec_id,)
-        ).fetchone()
-
-        if existing is None:
-            conn.execute(
-                """
-                INSERT INTO jobs (id, platform, company_token, company_name, source_id, title,
-                    location_raw, department, job_url, posted_at, seniority_guess,
-                    location_is_nyc, location_is_remote, company_is_nyc_hq, company_is_ai_focused,
-                    status, description_text, raw_json, content_hash, first_seen, last_seen, closed_at)
-                VALUES (%(id)s, %(platform)s, %(company_token)s, %(company_name)s, %(source_id)s,
-                    %(title)s, %(location_raw)s, %(department)s, %(job_url)s, %(posted_at)s,
-                    %(seniority_guess)s, %(location_is_nyc)s, %(location_is_remote)s,
-                    %(company_is_nyc_hq)s, %(company_is_ai_focused)s, 'open', %(description_text)s,
-                    %(raw_json)s, %(content_hash)s, %(first_seen)s, %(last_seen)s, NULL)
-                """,
-                {**rec, "id": rec_id, "content_hash": new_hash, "first_seen": now, "last_seen": now},
-            )
-            new_count += 1
-
-        elif existing[0] != new_hash or existing[1] != "open":
-            conn.execute(
-                """
-                UPDATE jobs SET title=%(title)s, location_raw=%(location_raw)s,
-                    department=%(department)s, job_url=%(job_url)s, posted_at=%(posted_at)s,
-                    seniority_guess=%(seniority_guess)s, location_is_nyc=%(location_is_nyc)s,
-                    location_is_remote=%(location_is_remote)s, status='open',
-                    description_text=%(description_text)s, content_hash=%(content_hash)s,
-                    last_seen=%(last_seen)s, closed_at=NULL
-                WHERE id=%(id)s
-                """,
-                {**rec, "id": rec_id, "content_hash": new_hash, "last_seen": now},
-            )
-            updated_count += 1
-
-        else:
-            conn.execute("UPDATE jobs SET last_seen = %s WHERE id = %s", (now, rec_id))
-            unchanged_count += 1
-
-    conn.commit()
-    return new_count, updated_count, unchanged_count
-
-
-def close_stale(conn, stale_days):
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=stale_days)).strftime("%Y-%m-%dT%H:%M:%S")
-    now = utc_now_str()
-    cur = conn.execute(
-        """
-        UPDATE jobs SET status = 'closed', closed_at = %s
-        WHERE platform = 'weworkremotely' AND status = 'open' AND last_seen < %s
-        """,
-        (now, cutoff),
-    )
-    conn.commit()
-    return cur.rowcount
-
-
 def main():
-    try:
-        conn = psycopg.connect(DATABASE_URL)
-    except psycopg.OperationalError as e:
-        safe_target = DATABASE_URL.split("@")[-1]
-        print(f"weworkremotely ingest FAILED: could not connect to Postgres ({safe_target}): {e}")
-        sys.exit(1)
+    conn = dbconn.connect_or_exit("weworkremotely ingest", schema=schema.SCHEMA)
 
-    ensure_schema(conn)
+    schema.ensure_schema(conn)
+    job_spec = schema.spec(schema.HASH_FIELDS_WWR)
 
     category_errors = []
     all_records = []
@@ -388,9 +220,10 @@ def main():
         conn.close()
         sys.exit(1)
 
-    new_count, updated_count, unchanged_count = upsert(conn, all_records)
-    closed_count = close_stale(conn, WWR_STALE_AFTER_DAYS)
-    set_watermark(conn, "weworkremotely", utc_now_str())
+    new_count, updated_count, unchanged_count = upsert(conn, job_spec, all_records, schema.make_job_id, debug=DEBUG_PRINT_KEYS)
+    closed_count = schema.close_stale(conn, 'weworkremotely', WWR_STALE_AFTER_DAYS)
+    state.set_watermark(conn, "weworkremotely", utc_now_str(),
+                        table=schema.WATERMARK_TABLE)
     conn.close()
 
     if category_errors and DEBUG_PRINT_KEYS:

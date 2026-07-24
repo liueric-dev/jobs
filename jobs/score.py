@@ -47,7 +47,7 @@ unlike the old CLI approach there's no separate flag needed to suppress
 them, a bare chat-completions call has no tool-use surface unless you ask
 for one.
 
-JSON RELIABILITY: parse_llm_json() still strips markdown fencing and pulls
+JSON RELIABILITY: llm.parse_json() still strips markdown fencing and pulls
 out the {...} substring rather than requiring the entire response to be
 valid JSON -- kept as a tolerant fallback even though response_format
 is now requested explicitly on every call (some OpenAI-compatible servers,
@@ -146,83 +146,28 @@ from datetime import datetime, timezone
 
 import psycopg
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
-)
-JOB_SCORING_BASE_URL = os.environ.get("JOB_SCORING_BASE_URL", "https://api.z.ai/api/paas/v4")
-JOB_SCORING_MODEL = os.environ.get("JOB_SCORING_MODEL", "glm-4.5-flash")
-JOB_SCORING_API_KEY = os.environ.get("JOB_SCORING_API_KEY") or os.environ.get("GLM_API_KEY")
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib")):
+    _d = os.path.dirname(_d)
+sys.path.insert(0, _d)
+sys.path.insert(0, os.path.join(_d, "jobs"))
+
+import schema  # noqa: E402  (jobs/schema.py)
+from pipelib import dbconn, llm  # noqa: E402
+from pipelib.timeparse import utc_now_str  # noqa: E402
+
 PERSONA_FILE = os.environ.get(
     "JOB_SCORING_PERSONA_FILE",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "config/persona.json"),
 )
 SCORE_BATCH_SIZE = int(os.environ.get("SCORE_BATCH_SIZE", "30"))
 SCORE_MAX_WORKERS = int(os.environ.get("SCORE_MAX_WORKERS", "5"))
-LLM_TIMEOUT_SECS = 60
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 
 REQUIRED_FIELDS = (
     "fit_score", "primary_track", "gap_friendly_signal",
     "key_technologies", "gap_bridging_angle", "risk_factors",
 )
-
-
-def utc_now_str():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-
-
-def ensure_schema(conn):
-    """Defensive duplicate of ingest/ats.py's base schema -- works
-    standalone even if run before any ingest script has."""
-    conn.execute("CREATE SCHEMA IF NOT EXISTS jobs")
-    conn.execute("SET search_path TO jobs, public")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id TEXT PRIMARY KEY,
-            platform TEXT NOT NULL,
-            company_token TEXT NOT NULL,
-            company_name TEXT NOT NULL,
-            source_id TEXT NOT NULL,
-            title TEXT,
-            location_raw TEXT,
-            department TEXT,
-            job_url TEXT,
-            posted_at TEXT,
-            seniority_guess TEXT,
-            location_is_nyc BOOLEAN,
-            location_is_remote BOOLEAN,
-            company_is_nyc_hq BOOLEAN,
-            company_is_ai_focused BOOLEAN,
-            status TEXT NOT NULL DEFAULT 'open',
-            description_text TEXT,
-            raw_json TEXT,
-            content_hash TEXT,
-            first_seen TEXT NOT NULL,
-            last_seen TEXT NOT NULL,
-            closed_at TEXT
-        )
-    """)
-    conn.commit()
-
-
-def ensure_scoring_schema(conn):
-    """CREATE TABLE IF NOT EXISTS on the jobs table above is a no-op if the
-    table already exists (it will, from the ingest scripts) -- these
-    columns need explicit ALTER TABLE ADD COLUMN IF NOT EXISTS instead."""
-    for col, coltype in [
-        ("fit_score", "INTEGER"),
-        ("primary_track", "TEXT"),
-        ("gap_friendly_signal", "BOOLEAN"),
-        ("key_technologies", "TEXT"),
-        ("gap_bridging_angle", "TEXT"),
-        ("risk_factors", "TEXT"),
-        ("scored_at", "TEXT"),
-        ("scoring_model", "TEXT"),
-    ]:
-        conn.execute(f"ALTER TABLE jobs ADD COLUMN IF NOT EXISTS {col} {coltype}")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_fit_score ON jobs(fit_score)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_scored_at ON jobs(scored_at)")
-    conn.commit()
 
 
 def load_persona():
@@ -289,56 +234,6 @@ Respond with exactly this JSON schema (no other text):
 }}"""
 
 
-def call_llm(prompt):
-    """Plain OpenAI-compatible chat completion -- no Hermes, no SDK. Works
-    against anything speaking that wire format: Z.ai (the current default),
-    Groq, OpenRouter, a local Ollama/LM Studio server, etc. -- see
-    JOB_SCORING_BASE_URL/MODEL/API_KEY in the module docstring."""
-    body = json.dumps({
-        "model": JOB_SCORING_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "response_format": {"type": "json_object"},
-    }).encode()
-    req = urllib.request.Request(
-        f"{JOB_SCORING_BASE_URL.rstrip('/')}/chat/completions",
-        data=body,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {JOB_SCORING_API_KEY}",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=LLM_TIMEOUT_SECS) as resp:
-            data = json.loads(resp.read().decode())
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"LLM API HTTP {e.code}: {e.read().decode()[:300]}")
-
-    choices = data.get("choices") or []
-    if not choices:
-        raise RuntimeError(f"LLM API returned no choices: {json.dumps(data)[:300]}")
-    return choices[0]["message"]["content"].strip()
-
-
-def parse_llm_json(raw_text):
-    """Tolerant JSON extraction -- strips markdown fences if present and
-    pulls out the {...} substring rather than requiring the whole response
-    to be valid JSON, since smaller/free models are chattier than Claude
-    about wrapping output in explanation text despite instructions not to."""
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text.strip(), flags=re.MULTILINE).strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        return None
-    try:
-        return json.loads(text[start:end + 1])
-    except json.JSONDecodeError:
-        return None
-
-
-def is_valid_result(result):
-    return isinstance(result, dict) and all(k in result for k in REQUIRED_FIELDS)
-
-
 def update_job_score(conn, job_id, result, model_label):
     conn.execute(
         """
@@ -369,7 +264,7 @@ def mark_score_failed(conn, job_id, model_label):
     tombstone table."""
     conn.execute(
         "UPDATE jobs SET scored_at=%s, scoring_model=%s WHERE id=%s",
-        (utc_now_str(), f"FAILED:{model_label}", job_id),
+        (utc_now_str(), llm.failed_label(model_label), job_id),
     )
     conn.commit()
 
@@ -378,23 +273,25 @@ def score_one_job(job, persona, model_label):
     """Runs inside a worker thread -- opens its own connection rather than
     sharing one across threads (psycopg connections aren't safe for
     concurrent use). Returns True if scored, False if marked failed."""
-    conn = psycopg.connect(DATABASE_URL)
-    conn.execute("SET search_path TO jobs, public")  # this connection is new -- ensure_schema()'s
-                                                       # search_path was only ever set on the ORIGINAL
+    # search_path is per-connection, so a worker's fresh connection needs it
+    # set again -- dbconn.connect(schema=...) does that for every connection
+    # it hands out, which is what makes the threaded case correct by
+    # construction instead of by remembering.
+    conn = dbconn.connect(schema=schema.SCHEMA)
                                                        # connection in main(), not global to the DB
     try:
         prompt = build_prompt(persona, job)
         result = None
         try:
-            raw = call_llm(prompt)
-            result = parse_llm_json(raw)
+            raw = llm.call(prompt)
+            result = llm.parse_json(raw)
         except (urllib.error.URLError, TimeoutError, RuntimeError, OSError,
                 json.JSONDecodeError) as e:
             if DEBUG_PRINT_KEYS:
                 print(f"[debug] scoring call failed for {job['id']} ({job.get('title')!r}): {e}",
                       file=sys.stderr)
 
-        if is_valid_result(result):
+        if llm.has_fields(result, REQUIRED_FIELDS):
             update_job_score(conn, job["id"], result, model_label)
             if DEBUG_PRINT_KEYS:
                 print(f"[debug] {job.get('title')!r} @ {job.get('company_name')}: "
@@ -417,14 +314,14 @@ def main():
         sys.exit(1)
 
     try:
-        conn = psycopg.connect(DATABASE_URL)
+        conn = dbconn.connect(schema=schema.SCHEMA)
     except psycopg.OperationalError as e:
         safe_target = DATABASE_URL.split("@")[-1]
         print(f"job-score FAILED: could not connect to Postgres ({safe_target}): {e}")
         sys.exit(1)
 
-    ensure_schema(conn)
-    ensure_scoring_schema(conn)
+    schema.ensure_schema(conn)
+
 
     try:
         persona = load_persona()
@@ -439,7 +336,7 @@ def main():
         return  # nothing to score -- stay silent, same convention as the other scripts
 
     endpoint_host = urllib.parse.urlparse(JOB_SCORING_BASE_URL).hostname or JOB_SCORING_BASE_URL
-    model_label = f"{JOB_SCORING_MODEL}@{endpoint_host}"
+    model_label = f"{llm.model()}@{endpoint_host}"
     conn.close()  # each worker opens its own connection -- see score_one_job()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=SCORE_MAX_WORKERS) as pool:

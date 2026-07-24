@@ -79,102 +79,26 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
 
-import psycopg
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
-)
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib")):
+    _d = os.path.dirname(_d)
+sys.path.insert(0, _d)
+sys.path.insert(0, os.path.join(_d, "jobs"))
+
+import schema  # noqa: E402  (jobs/schema.py)
+from pipelib import dbconn, http, ids, state, text  # noqa: E402
+from pipelib.timeparse import utc_now_str  # noqa: E402
+from pipelib.upsert import upsert  # noqa: E402
+
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 
 HN_API_BASE = "https://hacker-news.firebaseio.com/v0"
 HIRING_TITLE_PREFIX = "ask hn: who is hiring?"
-HTTP_TIMEOUT = 20
 HN_STALE_AFTER_DAYS = 40
 USER_AGENT = "Mozilla/5.0 (compatible; hermes-jobs-ingest/1.0; personal job-search automation)"
 
-SENIOR_PATTERN = re.compile(
-    r"\b(senior|sr\.?|staff|principal|director|vp\b|vice president|"
-    r"head of|lead\b|chief|executive|manager)\b",
-    re.IGNORECASE,
-)
-ENTRY_PATTERN = re.compile(
-    r"\b(entry.?level|junior|jr\.?|new grad|graduate|intern(ship)?|"
-    r"apprentice|associate|coordinator)\b",
-    re.IGNORECASE,
-)
-NYC_PATTERN = re.compile(r"\b(new york|nyc|manhattan|brooklyn|queens|bronx|staten island)\b", re.IGNORECASE)
-REMOTE_PATTERN = re.compile(r"\bremote\b", re.IGNORECASE)
 URL_PATTERN = re.compile(r'https?://[^\s<>"]+')
-
-
-def utc_now_str():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-
-
-def ensure_schema(conn):
-    """Defensive duplicate of ingest/ats.py's ensure_schema -- works standalone."""
-    conn.execute("CREATE SCHEMA IF NOT EXISTS jobs")
-    conn.execute("SET search_path TO jobs, public")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id TEXT PRIMARY KEY,
-            platform TEXT NOT NULL,
-            company_token TEXT NOT NULL,
-            company_name TEXT NOT NULL,
-            source_id TEXT NOT NULL,
-            title TEXT,
-            location_raw TEXT,
-            department TEXT,
-            job_url TEXT,
-            posted_at TEXT,
-            seniority_guess TEXT,
-            location_is_nyc BOOLEAN,
-            location_is_remote BOOLEAN,
-            company_is_nyc_hq BOOLEAN,
-            company_is_ai_focused BOOLEAN,
-            status TEXT NOT NULL DEFAULT 'open',
-            description_text TEXT,
-            raw_json TEXT,
-            content_hash TEXT,
-            first_seen TEXT NOT NULL,
-            last_seen TEXT NOT NULL,
-            closed_at TEXT
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company_token)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_seniority ON jobs(seniority_guess)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_nyc ON jobs(location_is_nyc)")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS job_ingest_state (
-            dataset TEXT PRIMARY KEY,
-            last_success_at TEXT NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS hn_seen_comments (
-            comment_id TEXT PRIMARY KEY,
-            fetched_at TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-
-
-def set_watermark(conn, dataset, ts):
-    conn.execute(
-        """
-        INSERT INTO job_ingest_state (dataset, last_success_at) VALUES (%s, %s)
-        ON CONFLICT (dataset) DO UPDATE SET last_success_at = EXCLUDED.last_success_at
-        """,
-        (dataset, ts),
-    )
-    conn.commit()
-
-
-def http_get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-        return json.loads(resp.read().decode())
 
 
 def find_latest_hiring_thread():
@@ -182,9 +106,9 @@ def find_latest_hiring_thread():
     monthly threads together ("Who is hiring?", "Who wants to be hired?",
     "Freelancer? Seeking freelancer?") -- scan until the title match is
     found rather than assuming a fixed offset."""
-    user = http_get_json(f"{HN_API_BASE}/user/whoishiring.json")
+    user = http.get_json(f"{HN_API_BASE}/user/whoishiring.json")
     for item_id in user.get("submitted", [])[:15]:
-        item = http_get_json(f"{HN_API_BASE}/item/{item_id}.json")
+        item = http.get_json(f"{HN_API_BASE}/item/{item_id}.json")
         if item and item.get("type") == "story" and \
                 (item.get("title") or "").strip().lower().startswith(HIRING_TITLE_PREFIX):
             return item
@@ -198,21 +122,6 @@ def strip_html_keep_text(text):
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text or None
-
-
-def guess_seniority(title):
-    if not title:
-        return "unknown"
-    if SENIOR_PATTERN.search(title):
-        return "senior"
-    if ENTRY_PATTERN.search(title):
-        return "entry"
-    return "mid_or_unspecified"
-
-
-def slugify(text):
-    text = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
-    return text or "unknown"
 
 
 def parse_comment(comment, thread_id):
@@ -237,8 +146,8 @@ def parse_comment(comment, thread_id):
     location_raw = " | ".join(p for p in parts[2:] if p) or None
 
     full_text = strip_html_keep_text(raw_text)
-    is_nyc = bool(NYC_PATTERN.search(location_raw or "")) or bool(NYC_PATTERN.search(title))
-    is_remote = bool(REMOTE_PATTERN.search(location_raw or "")) or bool(REMOTE_PATTERN.search(title))
+    is_nyc = bool(text.NYC_PATTERN.search(location_raw or "")) or bool(text.NYC_PATTERN.search(title))
+    is_remote = bool(text.REMOTE_PATTERN.search(location_raw or "")) or bool(text.REMOTE_PATTERN.search(title))
 
     url_match = URL_PATTERN.search(raw_text.replace("&#x2F;", "/"))
     job_url = url_match.group(0) if url_match else f"https://news.ycombinator.com/item?id={comment['id']}"
@@ -249,7 +158,7 @@ def parse_comment(comment, thread_id):
 
     return {
         "platform": "hn_whoishiring",
-        "company_token": slugify(company_name),
+        "company_token": text.slugify(company_name),
         "company_name": company_name,
         "source_id": str(comment["id"]),
         "title": title,
@@ -257,7 +166,7 @@ def parse_comment(comment, thread_id):
         "department": None,
         "job_url": job_url,
         "posted_at": posted_at,
-        "seniority_guess": guess_seniority(title),
+        "seniority_guess": text.guess_seniority(title),
         "location_is_nyc": is_nyc,
         "location_is_remote": is_remote,
         "company_is_nyc_hq": None,
@@ -266,48 +175,6 @@ def parse_comment(comment, thread_id):
         "raw_json": None,
         "thread_id": thread_id,
     }
-
-
-def content_hash(rec):
-    fields = (
-        rec["title"], rec["location_raw"], rec["job_url"],
-        rec["posted_at"], rec.get("description_text") or "",
-    )
-    return hashlib.sha256("|".join(str(f) for f in fields).encode()).hexdigest()
-
-
-def make_id(platform, token, source_id):
-    return hashlib.sha256(f"{platform}:{token}:{source_id}".encode()).hexdigest()[:24]
-
-
-def upsert(conn, records):
-    """HN comments are effectively immutable once posted, and every record
-    reaching here is brand new (main() already filters out previously-seen
-    kid ids before fetching bodies) -- insert-only, no update branch needed."""
-    now = utc_now_str()
-    new_count = 0
-
-    for rec in records:
-        rec_id = make_id(rec["platform"], rec["company_token"], rec["source_id"])
-        conn.execute(
-            """
-            INSERT INTO jobs (id, platform, company_token, company_name, source_id, title,
-                location_raw, department, job_url, posted_at, seniority_guess,
-                location_is_nyc, location_is_remote, company_is_nyc_hq, company_is_ai_focused,
-                status, description_text, raw_json, content_hash, first_seen, last_seen, closed_at)
-            VALUES (%(id)s, %(platform)s, %(company_token)s, %(company_name)s, %(source_id)s,
-                %(title)s, %(location_raw)s, %(department)s, %(job_url)s, %(posted_at)s,
-                %(seniority_guess)s, %(location_is_nyc)s, %(location_is_remote)s,
-                %(company_is_nyc_hq)s, %(company_is_ai_focused)s, 'open', %(description_text)s,
-                %(raw_json)s, %(content_hash)s, %(first_seen)s, %(last_seen)s, NULL)
-            ON CONFLICT (id) DO UPDATE SET last_seen = EXCLUDED.last_seen
-            """,
-            {**rec, "id": rec_id, "content_hash": content_hash(rec), "first_seen": now, "last_seen": now},
-        )
-        new_count += 1
-
-    conn.commit()
-    return new_count
 
 
 def touch_seen(conn, platform, source_ids):
@@ -323,29 +190,11 @@ def touch_seen(conn, platform, source_ids):
     conn.commit()
 
 
-def close_stale(conn, stale_days):
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=stale_days)).strftime("%Y-%m-%dT%H:%M:%S")
-    now = utc_now_str()
-    cur = conn.execute(
-        """
-        UPDATE jobs SET status = 'closed', closed_at = %s
-        WHERE platform = 'hn_whoishiring' AND status = 'open' AND last_seen < %s
-        """,
-        (now, cutoff),
-    )
-    conn.commit()
-    return cur.rowcount
-
-
 def main():
-    try:
-        conn = psycopg.connect(DATABASE_URL)
-    except psycopg.OperationalError as e:
-        safe_target = DATABASE_URL.split("@")[-1]
-        print(f"hn-hiring ingest FAILED: could not connect to Postgres ({safe_target}): {e}")
-        sys.exit(1)
+    conn = dbconn.connect_or_exit("hn-hiring ingest", schema=schema.SCHEMA)
 
-    ensure_schema(conn)
+    schema.ensure_schema(conn)
+    job_spec = schema.spec(schema.HASH_FIELDS_SHORT)
 
     try:
         thread = find_latest_hiring_thread()
@@ -382,7 +231,7 @@ def main():
     now = utc_now_str()
     for kid_id in new_kid_ids:
         try:
-            comment = http_get_json(f"{HN_API_BASE}/item/{kid_id}.json")
+            comment = http.get_json(f"{HN_API_BASE}/item/{kid_id}.json")
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
                 json.JSONDecodeError, OSError) as e:
             fetch_errors += 1
@@ -402,9 +251,13 @@ def main():
             records.append(rec)
     conn.commit()
 
-    new_count = upsert(conn, records)
-    closed_count = close_stale(conn, HN_STALE_AFTER_DAYS)
-    set_watermark(conn, "hn_whoishiring", utc_now_str())
+    # This source is insert-only -- a comment is never edited in place, so
+    # only the new count is meaningful here.
+    new_count = upsert(conn, job_spec, records, schema.make_job_id,
+                       debug=DEBUG_PRINT_KEYS).new
+    closed_count = schema.close_stale(conn, 'hn_whoishiring', HN_STALE_AFTER_DAYS)
+    state.set_watermark(conn, "hn_whoishiring", utc_now_str(),
+                        table=schema.WATERMARK_TABLE)
     conn.close()
 
     skipped = len(new_kid_ids) - len(records) - fetch_errors
