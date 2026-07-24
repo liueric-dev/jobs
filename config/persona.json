@@ -1,0 +1,33 @@
+{
+  "_comment": "Persona profile fed into score.py's LLM prompt for every job it scores. Edit this file directly to refine positioning -- no code change needed. Mirrors the 4-bucket structure in google-queries.json so scoring and query-allocation stay consistent.",
+  "background_summary": "5 years of professional experience as a full-stack software engineer (production experience, not bootcamp-only). Took a 2.5-year career break. Currently 5 months into a structured program focused on prompt engineering, agent design, and LLM/AI integration -- hands-on building, not just coursework.",
+  "strengths": [
+    "Real production engineering background -- can speak credibly to shipping, on-call, code review, system design at a working level, not just tutorials",
+    "Currently active, hands-on AI/agent/prompt engineering skill-building -- recent and demonstrable, not stale",
+    "Combination of both is relatively rare: most candidates are either pure traditional SWE with no AI exposure, or AI/ML-focused with no production engineering track record"
+  ],
+  "honest_gaps": [
+    "2.5-year employment gap will show up on a resume/LinkedIn timeline and needs to be addressed, not hidden",
+    "No formal ML research background (no graduate ML degree, no published research, no large-scale model training experience) -- roles requiring deep ML theory or research-scientist-level math are a poor fit",
+    "AI/agent program is current and in-progress, not years of production AI experience -- avoid framing as senior AI expertise"
+  ],
+  "buckets": {
+    "core_swe": {
+      "description": "Mid-level full-stack, backend, or general production software engineering roles. Safety-net positioning: the 5 YOE production background alone should qualify for these regardless of AI angle.",
+      "fit_signal": "Look for: full-stack/backend engineering roles at the mid-level (not senior/staff/principal, not new-grad/intern), reasonably tech-stack-agnostic."
+    },
+    "ai_integration": {
+      "description": "Roles building LLM-powered features, agent workflows, or prompt-driven systems -- directly matches the current 5-month program.",
+      "fit_signal": "Look for: LLM integration, agent orchestration, prompt engineering, RAG, applied AI engineering. Best fit when the role explicitly wants SOME production engineering background alongside AI skills, not pure ML research."
+    },
+    "bridge_solutions": {
+      "description": "Technical, client-facing, or implementation-focused roles (Forward Deployed Engineer, AI Solutions Engineer, Technical Solutions Engineer) that combine production engineering credibility with hands-on AI/agent skills to solve specific customer problems.",
+      "fit_signal": "This is the strongest-fit bucket for this exact background combination -- weight fit_score generously here when the role genuinely blends engineering + AI + customer-facing implementation work."
+    },
+    "reentry_growth": {
+      "description": "Roles or postings that explicitly welcome candidates with employment gaps (returnships, 'career break' friendly, 'return to work' programs).",
+      "fit_signal": "Look for explicit gap-friendly language in the posting itself -- this bucket is about postings that proactively address the 2.5yr gap, not just any entry-adjacent role."
+    }
+  },
+  "scoring_instructions": "Score fit_score 0-100 based on genuine alignment between this background and the specific posting -- do not inflate scores. A generic senior/staff/principal/research-scientist posting should score low even if it's nominally 'tech' or 'AI', since it doesn't match this candidate's actual level or ML-research gap. gap_bridging_angle should give a concrete, honest way to frame the 2.5yr break and the in-progress AI program as an asset for THIS specific posting, not generic advice. risk_factors should flag anything in the posting that could work against this candidate (e.g. 'requires 3+ years specifically in production LLM systems', 'PhD required', 'no remote option outside commuting distance')."
+}

@@ -1,0 +1,455 @@
+#!/usr/bin/env python3
+"""
+LLM-driven job fit scoring -- Postgres edition.
+
+Scores newly-ingested jobs (from ANY source -- ATS, Built In NYC, WWR, HN
+Who's Hiring, Google Jobs) against a persona profile
+(config/persona.json), producing a fit_score (0-100), a primary_track
+classification, a gap_bridging_angle (concrete framing for the application),
+key technologies, and risk factors. This is the "surfacing" layer the rest
+of the pipeline has been missing -- everything else collects and tags
+jobs; this is what actually judges relevance.
+
+SWAPPABLE LLM BACKEND, NO HERMES DEPENDENCY -- REVISED 2026-07-24: this
+used to shell out to `hermes -z`. Changed because Eric wants this script
+to run standalone on other (SerpApi/Apify worker) machines, which
+shouldn't need a full Hermes install/config just to score jobs -- and
+Hermes itself was never necessary for swappability, only convenient.
+Instead this calls a plain OpenAI-compatible `/chat/completions` endpoint
+directly via stdlib urllib -- that wire format is a de facto standard
+supported by OpenAI itself, most free-tier cloud providers (Groq,
+OpenRouter, etc.), and local model servers (Ollama, LM Studio). Swapping
+backends is JOB_SCORING_BASE_URL / JOB_SCORING_API_KEY / JOB_SCORING_MODEL
+env vars, not a code change, and this now has zero Hermes dependency --
+just Python + psycopg + network access.
+
+WHY THE DEFAULT MODEL IS glm-4.5-flash, NOT glm-4.7 -- A REAL DEAD END
+WORTH RECORDING: the account's GLM_API_KEY (already in ~/.hermes/.env)
+was assumed to work for whatever model Hermes itself was successfully
+using (glm-4.7, per ~/.hermes/config.yaml). Direct calls to
+api.z.ai/api/paas/v4/chat/completions with that exact key and "glm-4.7"
+returned "Insufficient balance or no resource package" -- yet
+`hermes -z -m glm-4.7 --provider zai` kept working throughout the same
+session. Never fully root-caused why Hermes's own routing succeeds where
+an identical-looking direct call fails (hermes auth's credential pool
+listing claims it uses the same GLM_API_KEY env var directly, which makes
+the discrepancy stranger, not simpler) -- possibly routed through Nous
+Portal's own infrastructure rather than a raw pay-per-token Z.ai account.
+What DID get confirmed by testing several model-ID strings against the
+same endpoint/key: glm-4.5-flash (the free-tier model) works cleanly via
+a plain direct call, including with response_format=json_object. So
+that's the default here -- swap JOB_SCORING_MODEL to glm-4.7 (or anything
+else) once/if that balance question gets resolved on Z.ai's side directly
+(a billing matter, not something fixable in this script).
+
+Tools/function-calling are simply never included in the request body --
+unlike the old CLI approach there's no separate flag needed to suppress
+them, a bare chat-completions call has no tool-use surface unless you ask
+for one.
+
+JSON RELIABILITY: parse_llm_json() still strips markdown fencing and pulls
+out the {...} substring rather than requiring the entire response to be
+valid JSON -- kept as a tolerant fallback even though response_format
+is now requested explicitly on every call (some OpenAI-compatible servers,
+especially smaller local ones, either ignore that field or honor it
+loosely).
+
+FAILURE HANDLING: a job whose scoring call fails or returns unparseable
+JSON still gets scored_at set (with scoring_model="FAILED:<label>" and
+fit_score left NULL) rather than being left alone -- otherwise it would
+get retried, and fail, on every single future run forever. Same lesson as
+ingest/hn-hiring.py's hn_seen_comments tombstone table: a permanent
+failure needs a permanent marker, not silent endless retry.
+
+COST/VOLUME CONTROL: SCORE_BATCH_SIZE caps how many unscored jobs get
+scored per run (default 30) -- newest jobs first (ORDER BY first_seen
+DESC), so a capped batch always prioritizes the freshest postings over
+working through a backlog. Raise this once a model/cost combination is
+trusted.
+
+CONCURRENT SCORING -- WHY: measured directly (2026-07-24) against the
+current default endpoint -- three identical, trivial requests took 17s,
+4.6s, and 29s respectively. That's not prompt size, it's the free-tier
+endpoint itself (almost certainly queued/deprioritized behind paid
+traffic). Scoring jobs one at a time, sequentially, made that latency
+additive: 30 jobs x ~17s average is 8-9 minutes for this one step alone.
+Each job's scoring call is fully independent (no shared state, no
+ordering requirement between jobs), so score_one_job() runs under a
+ThreadPoolExecutor with SCORE_MAX_WORKERS (default 5) concurrent workers
+instead -- wall-clock time drops roughly proportionally to the worker
+count, bounded by whatever concurrency the endpoint itself tolerates
+before rate-limiting. Each worker opens its OWN psycopg connection rather
+than sharing the main() connection -- psycopg connections aren't safe for
+concurrent use across threads, and a fresh connection per job is cheap
+enough at this volume that it's not worth a connection pool. Raise
+SCORE_MAX_WORKERS if the endpoint tolerates more concurrency; lower it if
+a burst of requests starts getting rate-limited (a 429 just surfaces as a
+per-job failure -- marked FAILED per the tombstone lesson below, not a
+crashed run -- but a lower worker count avoids manufacturing those in the
+first place).
+
+DEPENDENCY: psycopg (same as ingest/ats.py). No LLM SDK, no Hermes --
+stdlib urllib against a plain HTTPS JSON endpoint.
+
+INSTALL: lives in ~/.hermes/scripts/jobs/ alongside config/persona.json.
+Portable to other machines -- just needs Python, psycopg, network access
+to both Postgres and whatever LLM endpoint is configured, and the three
+JOB_SCORING_* env vars below (or their fallback defaults).
+
+DATABASE: same Postgres instance/schema as ingest/ats.py. Adds columns to
+the existing jobs.jobs table via ALTER TABLE ADD COLUMN IF NOT EXISTS
+(CREATE TABLE IF NOT EXISTS is a no-op on an existing table and would
+silently skip these -- explicit ALTERs are required for schema changes on
+a table other scripts already created, per nyc-events-ingest.py precedent).
+
+CONFIG:
+    DATABASE_URL             -- postgres connection string
+    JOB_SCORING_BASE_URL     -- OpenAI-compatible API base (default:
+                                "https://api.z.ai/api/paas/v4" -- the
+                                already-working Z.ai endpoint on this
+                                machine). Point at a local Ollama/LM Studio
+                                server, Groq, OpenRouter, etc. to swap.
+    JOB_SCORING_MODEL        -- model id sent in the request body (default:
+                                "glm-4.5-flash" -- see WHY THE DEFAULT MODEL
+                                above for why not glm-4.7).
+    JOB_SCORING_API_KEY      -- bearer token for JOB_SCORING_BASE_URL.
+                                Falls back to GLM_API_KEY (already in
+                                ~/.hermes/.env) if unset, since that's the
+                                credential the default base_url/model
+                                actually needs on this machine -- set this
+                                explicitly on any other machine/provider.
+    JOB_SCORING_PERSONA_FILE -- path to config/persona.json (default:
+                                alongside this script)
+    SCORE_BATCH_SIZE         -- how many unscored jobs to score per run
+                                (default 30)
+
+SCHEDULE: not scheduled directly -- see run-daily.py, which runs
+this as the final step, after all ingestion sources.
+
+TEST BEFORE SCHEDULING:
+    python3 score.py
+    DEBUG_PRINT_KEYS=1 python3 score.py
+    JOB_SCORING_BASE_URL=http://localhost:11434/v1 JOB_SCORING_MODEL=llama3.1 \\
+        JOB_SCORING_API_KEY=unused DEBUG_PRINT_KEYS=1 python3 score.py
+"""
+
+import os
+import sys
+import re
+import json
+import time
+import urllib.request
+import urllib.error
+import urllib.parse
+import concurrent.futures
+from datetime import datetime, timezone
+
+import psycopg
+
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
+)
+JOB_SCORING_BASE_URL = os.environ.get("JOB_SCORING_BASE_URL", "https://api.z.ai/api/paas/v4")
+JOB_SCORING_MODEL = os.environ.get("JOB_SCORING_MODEL", "glm-4.5-flash")
+JOB_SCORING_API_KEY = os.environ.get("JOB_SCORING_API_KEY") or os.environ.get("GLM_API_KEY")
+PERSONA_FILE = os.environ.get(
+    "JOB_SCORING_PERSONA_FILE",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "config/persona.json"),
+)
+SCORE_BATCH_SIZE = int(os.environ.get("SCORE_BATCH_SIZE", "30"))
+SCORE_MAX_WORKERS = int(os.environ.get("SCORE_MAX_WORKERS", "5"))
+LLM_TIMEOUT_SECS = 60
+DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
+
+REQUIRED_FIELDS = (
+    "fit_score", "primary_track", "gap_friendly_signal",
+    "key_technologies", "gap_bridging_angle", "risk_factors",
+)
+
+
+def utc_now_str():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def ensure_schema(conn):
+    """Defensive duplicate of ingest/ats.py's base schema -- works
+    standalone even if run before any ingest script has."""
+    conn.execute("CREATE SCHEMA IF NOT EXISTS jobs")
+    conn.execute("SET search_path TO jobs, public")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS jobs (
+            id TEXT PRIMARY KEY,
+            platform TEXT NOT NULL,
+            company_token TEXT NOT NULL,
+            company_name TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            title TEXT,
+            location_raw TEXT,
+            department TEXT,
+            job_url TEXT,
+            posted_at TEXT,
+            seniority_guess TEXT,
+            location_is_nyc BOOLEAN,
+            location_is_remote BOOLEAN,
+            company_is_nyc_hq BOOLEAN,
+            company_is_ai_focused BOOLEAN,
+            status TEXT NOT NULL DEFAULT 'open',
+            description_text TEXT,
+            raw_json TEXT,
+            content_hash TEXT,
+            first_seen TEXT NOT NULL,
+            last_seen TEXT NOT NULL,
+            closed_at TEXT
+        )
+    """)
+    conn.commit()
+
+
+def ensure_scoring_schema(conn):
+    """CREATE TABLE IF NOT EXISTS on the jobs table above is a no-op if the
+    table already exists (it will, from the ingest scripts) -- these
+    columns need explicit ALTER TABLE ADD COLUMN IF NOT EXISTS instead."""
+    for col, coltype in [
+        ("fit_score", "INTEGER"),
+        ("primary_track", "TEXT"),
+        ("gap_friendly_signal", "BOOLEAN"),
+        ("key_technologies", "TEXT"),
+        ("gap_bridging_angle", "TEXT"),
+        ("risk_factors", "TEXT"),
+        ("scored_at", "TEXT"),
+        ("scoring_model", "TEXT"),
+    ]:
+        conn.execute(f"ALTER TABLE jobs ADD COLUMN IF NOT EXISTS {col} {coltype}")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_fit_score ON jobs(fit_score)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_scored_at ON jobs(scored_at)")
+    conn.commit()
+
+
+def load_persona():
+    with open(PERSONA_FILE) as f:
+        return json.load(f)
+
+
+def select_unscored_jobs(conn, limit):
+    rows = conn.execute(
+        """
+        SELECT id, title, company_name, location_raw, platform, description_text
+        FROM jobs
+        WHERE status = 'open' AND scored_at IS NULL
+        ORDER BY first_seen DESC
+        LIMIT %s
+        """,
+        (limit,),
+    ).fetchall()
+    cols = ["id", "title", "company_name", "location_raw", "platform", "description_text"]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def build_prompt(persona, job):
+    buckets_text = "\n".join(
+        f"- {name}: {b['description']} ({b['fit_signal']})"
+        for name, b in persona["buckets"].items()
+    )
+    strengths_text = "\n".join(f"- {s}" for s in persona["strengths"])
+    gaps_text = "\n".join(f"- {g}" for g in persona["honest_gaps"])
+    description = (job.get("description_text") or "")[:3000]
+
+    return f"""You are evaluating a job posting for fit against a specific candidate's background. Respond with ONLY a single JSON object -- no markdown code fences, no explanation before or after.
+
+CANDIDATE BACKGROUND:
+{persona['background_summary']}
+
+STRENGTHS:
+{strengths_text}
+
+HONEST GAPS:
+{gaps_text}
+
+POSITIONING BUCKETS:
+{buckets_text}
+
+SCORING INSTRUCTIONS:
+{persona['scoring_instructions']}
+
+JOB POSTING TO EVALUATE:
+Title: {job.get('title')}
+Company: {job.get('company_name')}
+Location: {job.get('location_raw')}
+Source: {job.get('platform')}
+Description: {description}
+
+Respond with exactly this JSON schema (no other text):
+{{
+  "fit_score": <integer 0-100>,
+  "primary_track": "<one of: Core SWE, AI Integration, Bridge & Solutions, Re-Entry & Growth, Poor Fit>",
+  "gap_friendly_signal": <true or false>,
+  "key_technologies": ["...", "..."],
+  "gap_bridging_angle": "<1-2 concrete sentences specific to this posting>",
+  "risk_factors": ["...", "..."]
+}}"""
+
+
+def call_llm(prompt):
+    """Plain OpenAI-compatible chat completion -- no Hermes, no SDK. Works
+    against anything speaking that wire format: Z.ai (the current default),
+    Groq, OpenRouter, a local Ollama/LM Studio server, etc. -- see
+    JOB_SCORING_BASE_URL/MODEL/API_KEY in the module docstring."""
+    body = json.dumps({
+        "model": JOB_SCORING_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "response_format": {"type": "json_object"},
+    }).encode()
+    req = urllib.request.Request(
+        f"{JOB_SCORING_BASE_URL.rstrip('/')}/chat/completions",
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {JOB_SCORING_API_KEY}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=LLM_TIMEOUT_SECS) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"LLM API HTTP {e.code}: {e.read().decode()[:300]}")
+
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError(f"LLM API returned no choices: {json.dumps(data)[:300]}")
+    return choices[0]["message"]["content"].strip()
+
+
+def parse_llm_json(raw_text):
+    """Tolerant JSON extraction -- strips markdown fences if present and
+    pulls out the {...} substring rather than requiring the whole response
+    to be valid JSON, since smaller/free models are chattier than Claude
+    about wrapping output in explanation text despite instructions not to."""
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text.strip(), flags=re.MULTILINE).strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        return json.loads(text[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+
+
+def is_valid_result(result):
+    return isinstance(result, dict) and all(k in result for k in REQUIRED_FIELDS)
+
+
+def update_job_score(conn, job_id, result, model_label):
+    conn.execute(
+        """
+        UPDATE jobs SET fit_score=%s, primary_track=%s, gap_friendly_signal=%s,
+            key_technologies=%s, gap_bridging_angle=%s, risk_factors=%s,
+            scored_at=%s, scoring_model=%s
+        WHERE id=%s
+        """,
+        (
+            result.get("fit_score"),
+            result.get("primary_track"),
+            bool(result.get("gap_friendly_signal")),
+            json.dumps(result.get("key_technologies") or []),
+            result.get("gap_bridging_angle"),
+            json.dumps(result.get("risk_factors") or []),
+            utc_now_str(),
+            model_label,
+            job_id,
+        ),
+    )
+    conn.commit()
+
+
+def mark_score_failed(conn, job_id, model_label):
+    """Permanent marker for a failed/unparseable scoring attempt -- without
+    this, a job that fails once gets retried (and fails) on every future
+    run forever. Same lesson as ingest/hn-hiring.py's hn_seen_comments
+    tombstone table."""
+    conn.execute(
+        "UPDATE jobs SET scored_at=%s, scoring_model=%s WHERE id=%s",
+        (utc_now_str(), f"FAILED:{model_label}", job_id),
+    )
+    conn.commit()
+
+
+def score_one_job(job, persona, model_label):
+    """Runs inside a worker thread -- opens its own connection rather than
+    sharing one across threads (psycopg connections aren't safe for
+    concurrent use). Returns True if scored, False if marked failed."""
+    conn = psycopg.connect(DATABASE_URL)
+    conn.execute("SET search_path TO jobs, public")  # this connection is new -- ensure_schema()'s
+                                                       # search_path was only ever set on the ORIGINAL
+                                                       # connection in main(), not global to the DB
+    try:
+        prompt = build_prompt(persona, job)
+        result = None
+        try:
+            raw = call_llm(prompt)
+            result = parse_llm_json(raw)
+        except (urllib.error.URLError, TimeoutError, RuntimeError, OSError,
+                json.JSONDecodeError) as e:
+            if DEBUG_PRINT_KEYS:
+                print(f"[debug] scoring call failed for {job['id']} ({job.get('title')!r}): {e}",
+                      file=sys.stderr)
+
+        if is_valid_result(result):
+            update_job_score(conn, job["id"], result, model_label)
+            if DEBUG_PRINT_KEYS:
+                print(f"[debug] {job.get('title')!r} @ {job.get('company_name')}: "
+                      f"fit={result.get('fit_score')} track={result.get('primary_track')!r}",
+                      file=sys.stderr)
+            return True
+        else:
+            mark_score_failed(conn, job["id"], model_label)
+            if DEBUG_PRINT_KEYS:
+                print(f"[debug] unparseable/invalid result for {job['id']} ({job.get('title')!r})",
+                      file=sys.stderr)
+            return False
+    finally:
+        conn.close()
+
+
+def main():
+    if not JOB_SCORING_API_KEY:
+        print("job-score FAILED: JOB_SCORING_API_KEY (or GLM_API_KEY as a fallback) not set.")
+        sys.exit(1)
+
+    try:
+        conn = psycopg.connect(DATABASE_URL)
+    except psycopg.OperationalError as e:
+        safe_target = DATABASE_URL.split("@")[-1]
+        print(f"job-score FAILED: could not connect to Postgres ({safe_target}): {e}")
+        sys.exit(1)
+
+    ensure_schema(conn)
+    ensure_scoring_schema(conn)
+
+    try:
+        persona = load_persona()
+    except (OSError, json.JSONDecodeError, KeyError) as e:
+        print(f"job-score FAILED: could not load {PERSONA_FILE}: {e}")
+        conn.close()
+        sys.exit(1)
+
+    jobs = select_unscored_jobs(conn, SCORE_BATCH_SIZE)
+    if not jobs:
+        conn.close()
+        return  # nothing to score -- stay silent, same convention as the other scripts
+
+    endpoint_host = urllib.parse.urlparse(JOB_SCORING_BASE_URL).hostname or JOB_SCORING_BASE_URL
+    model_label = f"{JOB_SCORING_MODEL}@{endpoint_host}"
+    conn.close()  # each worker opens its own connection -- see score_one_job()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=SCORE_MAX_WORKERS) as pool:
+        results = list(pool.map(lambda job: score_one_job(job, persona, model_label), jobs))
+
+    scored = sum(1 for r in results if r)
+    failed = len(results) - scored
+    print(f"job-score: {scored} scored, {failed} failed/unparseable, "
+          f"model={model_label}, batch_size={SCORE_BATCH_SIZE}, workers={SCORE_MAX_WORKERS}")
+
+
+if __name__ == "__main__":
+    main()
