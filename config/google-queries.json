@@ -1,0 +1,61 @@
+{
+  "_comment": "Shared query bank for Google Jobs ingestion (google-jobs-serpapi-ingest.py and google-jobs-apify-ingest.py both read this). Restructured 2026-07-24 from a flat 24-query list into 4 strategic buckets weighted to Eric's actual positioning: 5 YOE full-stack SWE, 2.5yr career break, currently 5mo into a prompt/agent engineering program. Each bucket has its own daily_budget (SerpApi picks that many least-recently-run queries PER BUCKET, not globally -- see pick_stale_queries_by_bucket() in google-jobs-serpapi-ingest.py) so AI Integration and Bridge & Solutions (Eric's strongest differentiated positioning) get proportionally more daily coverage than the narrower Re-Entry bucket. Bucket daily_budgets sum to SERPAPI_DAILY_QUERY_BUDGET (8, free tier). Apify's single daily slot (APIFY_DAILY_QUERY_BUDGET=1) draws only from ai_integration + bridge_solutions -- see google-jobs-apify-ingest.py -- since that's the scarcest/most expensive resource and those two buckets are the highest-priority. Paid-tier scaling: bump each bucket's daily_budget directly (see per-bucket comments below for the proposed paid-tier split) -- no other code change needed.",
+  "buckets": {
+    "core_swe": {
+      "_comment": "Safety-net bucket: broadest posting pool, fastest path to interviews, leverages the real 5 YOE production background. Paid tier: bump daily_budget to 6.",
+      "daily_budget": 2,
+      "queries": [
+        {"slug": "core-fullstack-nyc", "query": "full stack engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "core-fullstack-remote", "query": "full stack engineer remote", "location": "United States", "mode": "remote"},
+        {"slug": "core-backend-nyc", "query": "backend engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "core-backend-remote", "query": "backend engineer remote", "location": "United States", "mode": "remote"},
+        {"slug": "core-data-engineer-nyc", "query": "data engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "core-data-engineer-remote", "query": "data engineer remote", "location": "United States", "mode": "remote"},
+        {"slug": "core-devops-nyc", "query": "devops engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "core-devops-remote", "query": "devops engineer remote", "location": "United States", "mode": "remote"}
+      ]
+    },
+    "ai_integration": {
+      "_comment": "Highest strategic alignment -- directly matches the current prompt/agent engineering program. Paid tier: bump daily_budget to 10.",
+      "daily_budget": 3,
+      "queries": [
+        {"slug": "ai-integration-nyc", "query": "AI integration engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "ai-integration-remote", "query": "AI integration engineer remote", "location": "United States", "mode": "remote"},
+        {"slug": "ai-llm-engineer-nyc", "query": "LLM engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "ai-llm-engineer-remote", "query": "LLM engineer remote", "location": "United States", "mode": "remote"},
+        {"slug": "ai-agent-engineer-nyc", "query": "agent engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "ai-agent-engineer-remote", "query": "agent engineer remote", "location": "United States", "mode": "remote"},
+        {"slug": "ai-prompt-engineer-nyc", "query": "prompt engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "ai-prompt-engineer-remote", "query": "prompt engineer remote", "location": "United States", "mode": "remote"},
+        {"slug": "ai-applied-ai-engineer-nyc", "query": "applied AI engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "ai-applied-ai-engineer-remote", "query": "applied AI engineer remote", "location": "United States", "mode": "remote"}
+      ]
+    },
+    "bridge_solutions": {
+      "_comment": "The sweet-spot niche for this exact combo: real production engineering credibility + fresh hands-on AI/agent skills. Paid tier: bump daily_budget to 8.",
+      "daily_budget": 2,
+      "queries": [
+        {"slug": "bridge-forward-deployed-nyc", "query": "forward deployed engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "bridge-forward-deployed-remote", "query": "forward deployed engineer remote", "location": "United States", "mode": "remote"},
+        {"slug": "bridge-ai-solutions-nyc", "query": "AI solutions engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "bridge-ai-solutions-remote", "query": "AI solutions engineer remote", "location": "United States", "mode": "remote"},
+        {"slug": "bridge-technical-solutions-nyc", "query": "technical solutions engineer AI", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "bridge-technical-solutions-remote", "query": "technical solutions engineer AI remote", "location": "United States", "mode": "remote"},
+        {"slug": "bridge-implementation-engineer-nyc", "query": "implementation engineer AI", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "bridge-implementation-engineer-remote", "query": "implementation engineer AI remote", "location": "United States", "mode": "remote"}
+      ]
+    },
+    "reentry_growth": {
+      "_comment": "Real and relevant given the actual 2.5yr career break -- but a narrower posting pool (fewer companies explicitly advertise gap-friendly framing), hence the lower daily_budget. Paid tier: bump daily_budget to 4.",
+      "daily_budget": 1,
+      "queries": [
+        {"slug": "reentry-returnship-nyc", "query": "software engineer returnship", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "reentry-returnship-remote", "query": "software engineer returnship remote", "location": "United States", "mode": "remote"},
+        {"slug": "reentry-career-break-nyc", "query": "career break software engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "reentry-career-break-remote", "query": "career break software engineer remote", "location": "United States", "mode": "remote"},
+        {"slug": "reentry-return-to-work-nyc", "query": "return to work software engineer", "location": "New York, NY", "mode": "nyc"},
+        {"slug": "reentry-return-to-work-remote", "query": "return to work software engineer remote", "location": "United States", "mode": "remote"}
+      ]
+    }
+  }
+}
