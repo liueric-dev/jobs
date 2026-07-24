@@ -1,6 +1,29 @@
+# Python
 __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Secrets -- DATABASE_URL, POSTGRES_PASSWORD and every API key live in
+# ~/.hermes/.env, outside this tree. These patterns are belt-and-braces in
+# case a copy is ever made inside it. This repository is cloned to several
+# machines and hosted remotely: a credential committed here is a credential
+# on all of them, and in the host's history permanently.
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+credentials.json
+
+# Local database artefacts
+*.sql
+*.sql.gz
+*.dump
+backup*.tar.gz
+
+# Logs and scratch
 *.log
+.claude/worktrees/
+tmp/
