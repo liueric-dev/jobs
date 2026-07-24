@@ -95,24 +95,60 @@ doesn't control, and keys can leak.
 
 ## Deployment (manual — not automated by this repo)
 
-The service binds localhost and speaks plain HTTP. Before exposing it:
+**No credential is stored in this repo.** `DATABASE_URL`'s default is
+passwordless; the real connection string lives in `~/.hermes/.env` (mode 600)
+and is loaded into the environment there. The old shared default password was
+rotated out on 2026-07-24.
 
-1. **Put a TLS-terminating reverse proxy in front** (Caddy/nginx). API keys are
-   bearer tokens — plaintext HTTP would leak them on every request.
-2. **Point a domain at it**, or distribute a Tailscale address to contributors.
-3. **Firewall Postgres.** It must not become reachable just because the host
-   became reachable. The checked-in default password
-   (`nyc_events_password`) is a localhost-only convenience and **must be
-   rotated** before the host is exposed.
-4. **Run it under a supervisor** (systemd unit or a container) so it restarts.
-5. Set `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` to match how much of the query bank
-   you actually want external contributors covering per day.
+### Phase 1 — tailnet only (current plan)
+
+Serving only machines their owner controls, over Tailscale:
+
+1. **No TLS / reverse proxy / domain needed.** Tailscale is WireGuard —
+   transport is already encrypted and device-authenticated, so bearer tokens
+   over plain HTTP *inside the tailnet* are fine. Do not "fix" this by adding
+   a proxy; it buys nothing here.
+2. Bind to the tailnet interface rather than `0.0.0.0`.
+3. Run under a supervisor (systemd unit or container) so it restarts.
+
+Note that for one person's own devices this service is optional — those
+machines can point `DATABASE_URL` straight at Postgres over the tailnet and
+use the existing ingest scripts. Running them through this API is worth it
+mainly to shake it out before external contributors exist.
+
+### Phase 2 — public contributors
+
+1. **Terminate TLS.** Tailscale Funnel can expose this service publicly over
+   HTTPS with a valid cert, no port-forwarding and no domain purchase;
+   Caddy/nginx works too. Bearer tokens over plaintext HTTP on the open
+   internet would leak on every request.
+2. **Never put contributors on the tailnet** — that grants network-level
+   access to the home network. They hit the HTTPS endpoint only.
+3. **Firewall Postgres** so it doesn't become reachable just because the host
+   did.
+4. Set `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` to match how much of the query
+   bank external contributors should cover per day.
+5. **Close the two gaps below first.**
+
+### Before opening this up — known gaps
+
+Both are harmless among trusted devices and real once strangers can call it:
+
+- **Claiming is unmetered.** `claims_today()` counts `submission_log` rows,
+  but `POST /v1/queries/claim` writes none. A caller who claims and never
+  submits is never metered, and each claim locks its row for
+  `CLAIM_TTL_MINUTES` — so a claim-loop could hold the whole query bank
+  locked, starving other contributors *and* the owner's own nightly pipeline.
+- **No provenance.** Rows submitted through this API are indistinguishable
+  from locally-ingested ones, and `submission_log` records counts, not job
+  ids. There is no way to trace or purge one contributor's rows if they turn
+  out to be submitting junk.
 
 ## Configuration
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `DATABASE_URL` | `postgresql://nyc_events:nyc_events_password@localhost:5432/nyc_events` | Postgres connection |
+| `DATABASE_URL` | `postgresql://nyc_events@localhost:5432/nyc_events` | Postgres connection |
 | `GOOGLE_QUERIES_FILE` | `config/google-queries.json` | query bank path |
 | `CLAIM_TTL_MINUTES` | `15` | how long a crashed contributor blocks a query |
 | `GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS` | `20` | don't re-hand-out a query that succeeded this recently |

@@ -39,7 +39,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 
 DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://nyc_events:nyc_events_password@localhost:5432/nyc_events"
+    "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
 )
 GOOGLE_QUERIES_FILE = os.environ.get(
     "GOOGLE_QUERIES_FILE",
