@@ -41,7 +41,7 @@ TIMESTAMPS STAY TEXT HERE
     produces exactly this format and is the only thing that should.
 """
 
-from pipelib import dbconn, ids
+from pipelib import dbconn, ids, state
 from pipelib.upsert import TableSpec
 
 SCHEMA = "jobs"
@@ -151,6 +151,41 @@ def ensure_schema(conn):
                       ("idx_jobs_seniority", "seniority_guess"),
                       ("idx_jobs_nyc", "location_is_nyc")):
         conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON jobs({col})")
+    conn.commit()
+    # The watermark table lives in this schema too, and every ingest script
+    # writes it before writing a single row. Each of the six used to create
+    # it inline; centralising ensure_schema() moved that responsibility here.
+    # with_claims because this pipeline leases datasets -- see state.try_claim.
+    state.ensure_state_schema(conn, watermark_table=WATERMARK_TABLE,
+                              with_claims=True)
+
+    # Two source-specific side tables. They are not part of the jobs row, but
+    # they are part of this schema, and the scripts that write them do so
+    # before their first upsert -- so they have to exist by the time
+    # ensure_schema() returns, exactly like the watermark table.
+    #
+    # hn_seen_comments is hn-hiring.py's dedup ledger and is load-bearing for
+    # correctness: it, not jobs.jobs, is the source of truth for "this HN
+    # comment was already parsed."  google_jobs_query_stats is append-only
+    # history for the not-yet-built adaptive-cadence feature (see
+    # DEVELOPER.md); nothing reads it yet, but both Google scripts write it
+    # on every run and previously carried identical copies of this DDL.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS hn_seen_comments (
+            comment_id TEXT PRIMARY KEY,
+            fetched_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS google_jobs_query_stats (
+            slug TEXT NOT NULL,
+            run_at TEXT NOT NULL,
+            new_count INTEGER NOT NULL,
+            total_fetched INTEGER NOT NULL,
+            days_since_last_run REAL,
+            PRIMARY KEY (slug, run_at)
+        )
+    """)
     conn.commit()
 
 
