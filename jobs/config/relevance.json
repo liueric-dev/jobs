@@ -1,0 +1,93 @@
+{
+  "_comment": "Decides which jobs are worth an LLM scoring call, and in what order. See jobs/relevance.py. This is the ONLY file that knows this pipeline is currently pointed at software roles -- relevance.py itself contains no domain terms, so retargeting at a different field means rewriting this file and config/persona.json, not touching code.",
+
+  "_why": "ingest/ats.py pulls entire company job boards, so ~87% of the table is roles this persona will never apply to (compliance, enterprise sales, clinical, tax). Scoring used to be the only filter, which meant paying an LLM call to conclude that a Chief Compliance Officer posting is not a software job.",
+
+  "_tiers": "1 = title matches and location is acceptable. 2 = title matches, location unknown or elsewhere. 3 = everything else. Nothing is ever deleted; max_tier_to_score just decides how deep today's budget reaches, so raising it backfills previously-skipped rows with no re-ingest.",
+
+  "_regex_dialect": "These are POSTGRES regexes (~*), not Python ones. Word boundary is \\y -- in Postgres \\b means BACKSPACE, so a \\b pattern silently matches nothing and quietly demotes everything it was meant to catch to tier 3. This was not hypothetical: the first version of this file used \\b throughout and buried 'ML / LLM Engineer' and 'Senior / Staff Fullstack Engineer' in tier 3. Always re-run tools/relevance-report.py after editing.",
+
+  "title_include": [
+    "\\yengineer",
+    "\\yengineering\\y",
+    "\\ydeveloper\\y",
+    "\\ydevelopment engineer\\y",
+    "software",
+    "\\yswe\\y",
+    "\\yprogrammer\\y",
+    "\\yarchitect\\y",
+    "\\ysre\\y",
+    "site reliability",
+    "\\ydevops\\y",
+    "\\yplatform\\y",
+    "\\ybackend\\y",
+    "back.?end",
+    "\\yfrontend\\y",
+    "front.?end",
+    "full.?stack",
+    "\\ydata scien",
+    "\\ydata engineer",
+    "machine learning",
+    "\\yml\\y",
+    "\\yai\\y",
+    "\\yllm\\y",
+    "applied scien",
+    "forward deployed",
+    "solutions engineer",
+    "solutions architect",
+    "technical account",
+    "developer advocate",
+    "developer relations",
+    "\\yqa\\y",
+    "test engineer",
+    "security engineer",
+    "infrastructure"
+  ],
+
+  "_title_include_note": "Deliberately wider than 'engineer'. The persona's strongest bucket (bridge_solutions) is customer-facing implementation work -- Forward Deployed Engineer, Solutions Engineer, Technical Account Manager -- which a narrow engineering regex would push to tier 3 and never score. Better to spend a few calls on near-misses than to silently lose the best-fit bucket.",
+
+  "title_exclude": [
+    "\\yaccount executive\\y",
+    "sales development",
+    "\\ysdr\\y",
+    "\\ybdr\\y",
+    "business development",
+    "\\yrecruiter\\y",
+    "\\yrecruiting\\y",
+    "talent acquisition",
+    "\\ypayroll\\y",
+    "\\ybenefits\\y",
+    "\\ycompensation\\y",
+    "\\ytax\\y",
+    "\\ycontroller\\y",
+    "\\yaccounting\\y",
+    "\\yauditor\\y",
+    "\\ycompliance officer\\y",
+    "\\yparalegal\\y",
+    "\\ycounsel\\y",
+    "\\yattorney\\y",
+    "\\ytherapist\\y",
+    "\\ynurse\\y",
+    "\\yclinician\\y",
+    "\\yphysician\\y",
+    "\\ycustomer success\\y",
+    "\\yexecutive assistant\\y",
+    "\\yoffice manager\\y",
+    "\\yfacilities\\y",
+    "\\ywarehouse\\y",
+    "\\ydriver\\y",
+    "chief .* officer",
+    "\\yvp,?\\y",
+    "vice president"
+  ],
+
+  "_title_exclude_note": "Narrow and specific on purpose. Broad words that merely CO-OCCUR with unwanted roles -- 'manager', 'lead', 'director', 'specialist' -- are absent deliberately: they also appear in Engineering Manager and Technical Lead. An over-eager exclude is worse than no exclude, because tier 3 is where things go to be forgotten. Exclude only what is unambiguous.",
+
+  "location_columns": ["location_is_nyc", "location_is_remote"],
+
+  "_location_note": "Any-of. These are heuristic tag columns set at ingest; NULL (source could not tell) reads as tier 2, not tier 3, so an undetectable location never buries a good posting. Set to [] to ignore location entirely.",
+
+  "max_tier_to_score": 2,
+
+  "_max_tier_note": "2 means tier-3 rows are not scored while the backlog is being worked through. Set to 3 to open the floodgates once throughput allows -- those rows are still sitting there, unscored, waiting."
+}

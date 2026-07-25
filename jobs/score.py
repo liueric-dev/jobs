@@ -139,6 +139,7 @@ import json
 import urllib.error
 import urllib.parse
 import concurrent.futures
+from collections import Counter
 
 _d = os.path.dirname(os.path.abspath(__file__))
 while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib")):
@@ -147,6 +148,7 @@ sys.path.insert(0, _d)
 sys.path.insert(0, os.path.join(_d, "jobs"))
 
 import schema  # noqa: E402  (jobs/schema.py)
+import relevance  # noqa: E402  (jobs/relevance.py)
 from pipelib import dbconn, llm  # noqa: E402
 from pipelib.timeparse import utc_now_str  # noqa: E402
 
@@ -169,28 +171,43 @@ def load_persona():
         return json.load(f)
 
 
-def select_unscored_jobs(conn, limit, profile):
-    """Open jobs with no score FOR THIS PROFILE, newest first.
+def select_unscored_jobs(conn, limit, profile, rel_cfg=None):
+    """Open, relevant, not-yet-scored-for-this-profile jobs -- best tier first.
+
+    Two filters, doing different jobs:
 
     The anti-join is against (job_id, profile), not "is this job scored at
     all" -- a job scored under a different persona is still unscored here.
     That is the whole reason job_scores is keyed by profile; see SCORES ARE
     PER PROFILE in schema.py.
+
+    The tier gate stops the batch being spent on postings this persona would
+    never apply to. Ordering is (tier, first_seen DESC) rather than
+    first_seen alone, so a fresh irrelevant posting never outranks a slightly
+    older relevant one -- which is exactly what the unfiltered version did,
+    every night, while the real backlog aged out. See jobs/relevance.py.
     """
+    cfg = rel_cfg if rel_cfg is not None else relevance.load()
+    tier_expr, tier_params = relevance.tier_sql(cfg)
+    params = {"status": schema.STATUS_OPEN, "profile": profile,
+              "max_tier": relevance.max_tier(cfg), "limit": limit,
+              **tier_params}
     rows = conn.execute(
         f"""
         SELECT j.id, j.title, j.company_name, j.location_raw, j.platform,
-               j.description_text
+               j.description_text, {tier_expr} AS tier
         FROM {schema.TABLE} j
-        WHERE j.status = %s
+        WHERE j.status = %(status)s
           AND NOT EXISTS (SELECT 1 FROM {schema.SCORES_TABLE} s
-                          WHERE s.job_id = j.id AND s.profile = %s)
-        ORDER BY j.first_seen DESC
-        LIMIT %s
+                          WHERE s.job_id = j.id AND s.profile = %(profile)s)
+          AND {tier_expr} <= %(max_tier)s
+        ORDER BY tier, j.first_seen DESC
+        LIMIT %(limit)s
         """,
-        (schema.STATUS_OPEN, profile, limit),
+        params,
     ).fetchall()
-    cols = ["id", "title", "company_name", "location_raw", "platform", "description_text"]
+    cols = ["id", "title", "company_name", "location_raw", "platform",
+            "description_text", "tier"]
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -298,27 +315,49 @@ def mark_score_failed(conn, job_id, profile, model_label):
     conn.commit()
 
 
+#: score_one_job outcomes.
+SCORED, REJECTED, DEFERRED = "scored", "rejected", "deferred"
+
+
 def score_one_job(job, persona, profile, model_label):
     """Runs inside a worker thread -- opens its own connection rather than
     sharing one across threads (psycopg connections aren't safe for
-    concurrent use). Returns True if scored, False if marked failed."""
+    concurrent use).
+
+    Returns SCORED, REJECTED (the model answered but the answer was unusable
+    -- tombstoned, never retried) or DEFERRED (the endpoint never gave us an
+    answer -- nothing written, retried next run).
+
+    That three-way split matters more than it looks. Tombstoning is right for
+    a model that cannot produce parseable JSON for a given posting: retrying
+    forever would burn a call a night on the same failure. It is badly wrong
+    for an HTTP 429, which says nothing about the posting -- and the current
+    default model rate-limits hard enough that a batch can be mostly 429s.
+    Recording those as failures silently and permanently discards jobs that
+    were never actually evaluated.
+    """
     # search_path is per-connection, so a worker's fresh connection needs it
     # set again -- dbconn.connect(schema=...) does that for every connection
     # it hands out, which is what makes the threaded case correct by
     # construction instead of by remembering.
     conn = dbconn.connect(schema=schema.SCHEMA)
-                                                       # connection in main(), not global to the DB
     try:
         prompt = build_prompt(persona, job)
-        result = None
         try:
             raw = llm.call(prompt)
-            result = llm.parse_json(raw)
-        except (urllib.error.URLError, TimeoutError, RuntimeError, OSError,
-                json.JSONDecodeError) as e:
+        except llm.TransientError as e:
+            if DEBUG_PRINT_KEYS:
+                print(f"[debug] deferring {job['id']} ({job.get('title')!r}): {e}",
+                      file=sys.stderr)
+            return DEFERRED
+        except (RuntimeError, json.JSONDecodeError) as e:
+            # A definite answer we can't use (4xx, malformed envelope).
             if DEBUG_PRINT_KEYS:
                 print(f"[debug] scoring call failed for {job['id']} ({job.get('title')!r}): {e}",
                       file=sys.stderr)
+            raw = None
+
+        result = llm.parse_json(raw) if raw else None
 
         if llm.has_fields(result, REQUIRED_FIELDS):
             update_job_score(conn, job["id"], profile, result, model_label)
@@ -326,13 +365,13 @@ def score_one_job(job, persona, profile, model_label):
                 print(f"[debug] {job.get('title')!r} @ {job.get('company_name')}: "
                       f"fit={result.get('fit_score')} track={result.get('primary_track')!r}",
                       file=sys.stderr)
-            return True
-        else:
-            mark_score_failed(conn, job["id"], profile, model_label)
-            if DEBUG_PRINT_KEYS:
-                print(f"[debug] unparseable/invalid result for {job['id']} ({job.get('title')!r})",
-                      file=sys.stderr)
-            return False
+            return SCORED
+
+        mark_score_failed(conn, job["id"], profile, model_label)
+        if DEBUG_PRINT_KEYS:
+            print(f"[debug] unparseable/invalid result for {job['id']} ({job.get('title')!r})",
+                  file=sys.stderr)
+        return REJECTED
     finally:
         conn.close()
 
@@ -353,7 +392,8 @@ def main():
         sys.exit(1)
 
     profile = schema.resolve_profile(persona)
-    jobs = select_unscored_jobs(conn, SCORE_BATCH_SIZE, profile)
+    rel_cfg = relevance.load()
+    jobs = select_unscored_jobs(conn, SCORE_BATCH_SIZE, profile, rel_cfg)
     if not jobs:
         conn.close()
         return  # nothing to score -- stay silent, same convention as the other scripts
@@ -366,11 +406,20 @@ def main():
         results = list(pool.map(
             lambda job: score_one_job(job, persona, profile, model_label), jobs))
 
-    scored = sum(1 for r in results if r)
-    failed = len(results) - scored
-    print(f"job-score: {scored} scored, {failed} failed/unparseable, "
-          f"profile={profile}, model={model_label}, "
+    outcomes = Counter(results)
+    tiers = ",".join(f"t{t}={n}" for t, n in sorted(
+        Counter(j["tier"] for j in jobs).items()))
+    deferred = outcomes[DEFERRED]
+    print(f"job-score: {outcomes[SCORED]} scored, {outcomes[REJECTED]} unparseable, "
+          f"{deferred} deferred (will retry), "
+          f"profile={profile}, tiers[{tiers}], model={model_label}, "
           f"batch_size={SCORE_BATCH_SIZE}, workers={SCORE_MAX_WORKERS}")
+    if deferred > len(results) / 2:
+        # Worth saying out loud: the run "succeeded" but mostly did nothing,
+        # and the usual cause is SCORE_MAX_WORKERS outpacing the endpoint.
+        print(f"  NOTE: {deferred}/{len(results)} calls never got a response -- "
+              f"the endpoint is rate-limiting or down. Nothing was discarded; "
+              f"lower SCORE_MAX_WORKERS (currently {SCORE_MAX_WORKERS}) if this persists.")
 
 
 if __name__ == "__main__":

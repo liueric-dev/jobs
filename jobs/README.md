@@ -197,6 +197,7 @@ All configuration is environment variables. Nothing needs editing in code.
 | `SCORE_BATCH_SIZE` | `30` | Jobs scored per run |
 | `SCORE_MAX_WORKERS` | `5` | Concurrent scoring requests |
 | `JOBS_PROFILE` | `config/persona.json`'s `profile` | Which score set to read/write |
+| `JOBS_RELEVANCE_FILE` | `config/relevance.json` | Tier rules; missing file = score everything |
 | `GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS` | `20` | Don't re-run a query this recent |
 | `CLAIM_TTL_MINUTES` | `15` | How long a crashed machine blocks a query |
 | `DEBUG_PRINT_KEYS` | unset | `1` for verbose stderr logging |
@@ -205,7 +206,8 @@ All configuration is environment variables. Nothing needs editing in code.
 
 - `config/companies.json` — 68 companies with verified ATS board tokens
 - `config/google-queries.json` — the query bank, 4 weighted buckets
-- `config/persona.json` — candidate background and scoring instructions
+- `config/persona.json` — candidate background, scoring instructions, profile name
+- `config/relevance.json` — which jobs are worth a scoring call (tier rules)
 
 Adding a query to a bucket needs no migration; it simply has no watermark yet
 and sorts first as "never run."
@@ -227,9 +229,57 @@ export JOB_SCORING_MODEL="llama3.1"
 export JOB_SCORING_API_KEY="unused"
 ```
 
-A job whose scoring fails still gets a `job_scores` row (with
-`scoring_model="FAILED:..."` and a NULL `fit_score`) so it isn't retried
-forever.
+### What gets scored, and in what order
+
+Scoring is expensive; ingest is not. `ingest/ats.py` pulls **entire company
+job boards**, so most of the table is roles you'd never apply to — the run log
+shows `tiers[t1=30]` for what a batch actually spent its calls on.
+
+`config/relevance.json` assigns every job a tier, and `score.py` works through
+them in order:
+
+| tier | meaning | share of current backlog |
+|---|---|---|
+| 1 | title matches **and** location is acceptable | 26% |
+| 2 | title matches, location unknown/elsewhere | 21% |
+| 3 | everything else | 53% |
+
+`max_tier_to_score` (default `2`) caps how deep the budget reaches. **Nothing is
+ever deleted** — raise it to `3` and previously-skipped rows become eligible
+with no re-ingest.
+
+All the domain knowledge is in that one JSON file; `relevance.py` contains no
+engineering terms at all. Retargeting the pipeline at a different field means
+rewriting `relevance.json` and `persona.json`, not touching code.
+
+```bash
+python3 jobs/tools/relevance-report.py --dead   # tier counts, samples, dead patterns
+```
+
+**Run that after every edit.** A relevance filter fails silently in the
+direction that hurts: a pattern matching nothing doesn't error, it just quietly
+buries good postings in tier 3. Two things to know:
+
+- These are **Postgres** regexes. Word boundary is `\y` — in Postgres `\b`
+  means *backspace*. The first version of this config used `\b` throughout and
+  silently demoted "ML / LLM Engineer" to tier 3.
+- Read the **tier 3 samples**. Anything there you'd actually apply to is a
+  false negative, and false negatives are invisible in production.
+
+### When scoring fails
+
+Two different outcomes, deliberately:
+
+- **Unparseable** — the model answered but the answer was unusable. Gets a
+  `job_scores` row with `scoring_model="FAILED:..."` and a NULL `fit_score`,
+  so it isn't retried forever.
+- **Deferred** — the endpoint never answered (HTTP 429, timeout, 5xx). Nothing
+  is written and the job is retried next run.
+
+That split matters: a rate limit says nothing about the posting. Recording one
+as a failure would permanently discard a job that was never evaluated. If you
+see a large `deferred` count, lower `SCORE_MAX_WORKERS` — the endpoint is
+throttling you.
 
 ### Scores are per profile
 

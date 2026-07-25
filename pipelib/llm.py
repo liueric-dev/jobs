@@ -43,8 +43,28 @@ def api_key():
             or os.environ.get("GLM_API_KEY"))
 
 
+class TransientError(RuntimeError):
+    """The call failed for a reason that says nothing about this prompt.
+
+    Rate limits, timeouts, connection resets, 5xx. Retrying later is expected
+    to work, so a caller must NOT record a permanent outcome for the item it
+    was working on -- see failed_label() and the tombstone discussion there.
+    """
+
+
+#: Retrying these is worthwhile; anything else is the server's final answer.
+TRANSIENT_STATUSES = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+
+
 def call(prompt, *, timeout=DEFAULT_TIMEOUT_SECS, json_object=True):
-    """One chat completion. Returns the message content as a string."""
+    """One chat completion. Returns the message content as a string.
+
+    Raises TransientError when the failure is retryable and plain
+    RuntimeError when it is not. That distinction is the caller's only way to
+    tell "this model cannot handle this prompt" from "this endpoint was busy",
+    and getting it wrong permanently discards work: a 429 recorded as a
+    failure means that item is never attempted again.
+    """
     payload = {"model": model(),
                "messages": [{"role": "user", "content": prompt}]}
     if json_object:
@@ -60,7 +80,14 @@ def call(prompt, *, timeout=DEFAULT_TIMEOUT_SECS, json_object=True):
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
-        raise RuntimeError(f"LLM API HTTP {e.code}: {e.read().decode()[:300]}")
+        body = e.read().decode()[:300]
+        if e.code in TRANSIENT_STATUSES:
+            raise TransientError(f"LLM API HTTP {e.code}: {body}")
+        raise RuntimeError(f"LLM API HTTP {e.code}: {body}")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        # No response at all -- a socket timeout or a refused/reset
+        # connection. Never evidence about the prompt.
+        raise TransientError(f"LLM API unreachable: {type(e).__name__}: {e}")
 
     choices = data.get("choices") or []
     if not choices:
