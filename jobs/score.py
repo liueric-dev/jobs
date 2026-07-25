@@ -135,16 +135,10 @@ TEST BEFORE SCHEDULING:
 
 import os
 import sys
-import re
 import json
-import time
-import urllib.request
 import urllib.error
 import urllib.parse
 import concurrent.futures
-from datetime import datetime, timezone
-
-import psycopg
 
 _d = os.path.dirname(os.path.abspath(__file__))
 while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib")):
@@ -309,19 +303,12 @@ def score_one_job(job, persona, model_label):
 
 
 def main():
-    if not JOB_SCORING_API_KEY:
+    if not llm.api_key():
         print("job-score FAILED: JOB_SCORING_API_KEY (or GLM_API_KEY as a fallback) not set.")
         sys.exit(1)
 
-    try:
-        conn = dbconn.connect(schema=schema.SCHEMA)
-    except psycopg.OperationalError as e:
-        safe_target = DATABASE_URL.split("@")[-1]
-        print(f"job-score FAILED: could not connect to Postgres ({safe_target}): {e}")
-        sys.exit(1)
-
+    conn = dbconn.connect_or_exit("job-score", schema=schema.SCHEMA)
     schema.ensure_schema(conn)
-
 
     try:
         persona = load_persona()
@@ -335,7 +322,7 @@ def main():
         conn.close()
         return  # nothing to score -- stay silent, same convention as the other scripts
 
-    endpoint_host = urllib.parse.urlparse(JOB_SCORING_BASE_URL).hostname or JOB_SCORING_BASE_URL
+    endpoint_host = urllib.parse.urlparse(llm.base_url()).hostname or llm.base_url()
     model_label = f"{llm.model()}@{endpoint_host}"
     conn.close()  # each worker opens its own connection -- see score_one_job()
 
