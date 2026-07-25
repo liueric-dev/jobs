@@ -31,6 +31,21 @@ HASH FIELDS ARE PER SOURCE, DELIBERATELY
     but is not a column on the table, which is why it appears in
     HASH_FIELDS_BUILTIN and not in COLUMNS.
 
+SCORES ARE PER PROFILE, NOT PER JOB
+    fit_score, primary_track, gap_bridging_angle and the rest used to be
+    columns on `jobs`. They are not properties of a job -- they are one
+    persona's opinion of it, and `jobs` is shared. One column per job means
+    a second persona overwrites the first, and re-scoring after editing
+    config/persona.json destroys the answers the old persona gave.
+
+    `job_scores` is keyed (job_id, profile) instead, so profiles coexist and
+    a persona revision is a new profile rather than a destructive UPDATE.
+    "Is this job scored?" becomes "scored FOR THIS PROFILE", which is the
+    question select_unscored_jobs actually needs to ask.
+
+    Done at 44 scored rows, deliberately: the same change after a few
+    thousand is a real migration rather than an afternoon.
+
 TIMESTAMPS STAY TEXT HERE
     Unlike events, this pipeline keeps bookkeeping timestamps as TEXT in
     'YYYY-MM-DDTHH:MM:SS' form. String comparison is load-bearing --
@@ -40,6 +55,8 @@ TIMESTAMPS STAY TEXT HERE
     google-serpapi's choose_date_chip(). pipelib.timeparse.utc_now_str()
     produces exactly this format and is the only thing that should.
 """
+
+import os
 
 from pipelib import dbconn, ids, state
 from pipelib.upsert import TableSpec
@@ -69,13 +86,33 @@ HASH_FIELDS_SHORT = ("title", "location_raw", "job_url", "posted_at",
 HASH_FIELDS_BUILTIN = ("title", "location_raw", "job_url", "posted_at",
                        "seniority_guess", "salary_text")
 
-#: Scoring columns, added by score.py rather than present in the base DDL.
-SCORING_COLUMNS = (
-    ("fit_score", "INTEGER"), ("primary_track", "TEXT"),
-    ("gap_friendly_signal", "BOOLEAN"), ("key_technologies", "TEXT"),
-    ("gap_bridging_angle", "TEXT"), ("risk_factors", "TEXT"),
-    ("scored_at", "TEXT"), ("scoring_model", "TEXT"),
+SCORES_TABLE = "job_scores"
+
+#: Default profile name when nothing says otherwise. A "profile" is one
+#: persona's answer to "is this job a good fit" -- see the SCORES ARE PER
+#: PROFILE note in the module docstring.
+DEFAULT_PROFILE = "default"
+
+#: The eight legacy per-job scoring columns. Superseded by job_scores and
+#: removed by migrate_scores.py; kept here only so that script knows what to
+#: read and drop. Nothing creates them any more.
+LEGACY_SCORING_COLUMNS = (
+    "fit_score", "primary_track", "gap_friendly_signal", "key_technologies",
+    "gap_bridging_angle", "risk_factors", "scored_at", "scoring_model",
 )
+
+
+def resolve_profile(persona=None):
+    """Which profile's scores we are reading or writing.
+
+    JOBS_PROFILE wins so a one-off run can score against an alternate persona
+    without editing config; otherwise the persona file names itself. Both are
+    optional -- an unlabelled persona is DEFAULT_PROFILE, which is what every
+    existing deployment was implicitly using when scores lived on `jobs`.
+    """
+    return (os.environ.get("JOBS_PROFILE")
+            or (persona or {}).get("profile")
+            or DEFAULT_PROFILE)
 
 
 def spec(hash_fields, blank_if_falsy=("description_text",)):
@@ -140,12 +177,31 @@ def ensure_schema(conn):
         )
     """)
     conn.commit()
-    # Catalog-checked rather than a bare ADD COLUMN IF NOT EXISTS: the latter
-    # takes an ACCESS EXCLUSIVE lock even when it changes nothing, and a
-    # pending exclusive lock queues ahead of readers -- one blocked ALTER
-    # made ingest_state unreadable for everything behind it. See
-    # pipelib.dbconn.add_missing_columns.
-    dbconn.add_missing_columns(conn, TABLE, list(SCORING_COLUMNS))
+    # One row per (job, profile) -- see SCORES ARE PER PROFILE above.
+    # ON DELETE CASCADE because a score for a job that no longer exists is
+    # meaningless; nothing deletes from jobs today (closing is a status
+    # change) but leaving orphans possible would be a slow leak if that ever
+    # changes.
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {SCORES_TABLE} (
+            job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+            profile TEXT NOT NULL,
+            fit_score INTEGER,
+            primary_track TEXT,
+            gap_friendly_signal BOOLEAN,
+            key_technologies TEXT,
+            gap_bridging_angle TEXT,
+            risk_factors TEXT,
+            scored_at TEXT NOT NULL,
+            scoring_model TEXT,
+            PRIMARY KEY (job_id, profile)
+        )
+    """)
+    # select_unscored_jobs anti-joins on (profile, job_id) and the ranking
+    # query sorts by fit_score within a profile; both are profile-first.
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_job_scores_profile "
+                 f"ON {SCORES_TABLE}(profile, fit_score DESC)")
+    conn.commit()
     for name, col in (("idx_jobs_company", "company_token"),
                       ("idx_jobs_status", "status"),
                       ("idx_jobs_seniority", "seniority_guess"),

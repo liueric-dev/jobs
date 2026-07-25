@@ -169,16 +169,26 @@ def load_persona():
         return json.load(f)
 
 
-def select_unscored_jobs(conn, limit):
+def select_unscored_jobs(conn, limit, profile):
+    """Open jobs with no score FOR THIS PROFILE, newest first.
+
+    The anti-join is against (job_id, profile), not "is this job scored at
+    all" -- a job scored under a different persona is still unscored here.
+    That is the whole reason job_scores is keyed by profile; see SCORES ARE
+    PER PROFILE in schema.py.
+    """
     rows = conn.execute(
-        """
-        SELECT id, title, company_name, location_raw, platform, description_text
-        FROM jobs
-        WHERE status = 'open' AND scored_at IS NULL
-        ORDER BY first_seen DESC
+        f"""
+        SELECT j.id, j.title, j.company_name, j.location_raw, j.platform,
+               j.description_text
+        FROM {schema.TABLE} j
+        WHERE j.status = %s
+          AND NOT EXISTS (SELECT 1 FROM {schema.SCORES_TABLE} s
+                          WHERE s.job_id = j.id AND s.profile = %s)
+        ORDER BY j.first_seen DESC
         LIMIT %s
         """,
-        (limit,),
+        (schema.STATUS_OPEN, profile, limit),
     ).fetchall()
     cols = ["id", "title", "company_name", "location_raw", "platform", "description_text"]
     return [dict(zip(cols, r)) for r in rows]
@@ -228,15 +238,33 @@ Respond with exactly this JSON schema (no other text):
 }}"""
 
 
-def update_job_score(conn, job_id, result, model_label):
+def update_job_score(conn, job_id, profile, result, model_label):
+    """Write one (job, profile) score.
+
+    ON CONFLICT DO UPDATE rather than DO NOTHING: re-scoring an already-scored
+    job is a deliberate act (a new model, a revised persona under the same
+    profile name), and the newer answer is the one that should stand.
+    """
     conn.execute(
-        """
-        UPDATE jobs SET fit_score=%s, primary_track=%s, gap_friendly_signal=%s,
-            key_technologies=%s, gap_bridging_angle=%s, risk_factors=%s,
-            scored_at=%s, scoring_model=%s
-        WHERE id=%s
+        f"""
+        INSERT INTO {schema.SCORES_TABLE}
+            (job_id, profile, fit_score, primary_track, gap_friendly_signal,
+             key_technologies, gap_bridging_angle, risk_factors,
+             scored_at, scoring_model)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (job_id, profile) DO UPDATE SET
+            fit_score=EXCLUDED.fit_score,
+            primary_track=EXCLUDED.primary_track,
+            gap_friendly_signal=EXCLUDED.gap_friendly_signal,
+            key_technologies=EXCLUDED.key_technologies,
+            gap_bridging_angle=EXCLUDED.gap_bridging_angle,
+            risk_factors=EXCLUDED.risk_factors,
+            scored_at=EXCLUDED.scored_at,
+            scoring_model=EXCLUDED.scoring_model
         """,
         (
+            job_id,
+            profile,
             result.get("fit_score"),
             result.get("primary_track"),
             bool(result.get("gap_friendly_signal")),
@@ -245,25 +273,32 @@ def update_job_score(conn, job_id, result, model_label):
             json.dumps(result.get("risk_factors") or []),
             utc_now_str(),
             model_label,
-            job_id,
         ),
     )
     conn.commit()
 
 
-def mark_score_failed(conn, job_id, model_label):
+def mark_score_failed(conn, job_id, profile, model_label):
     """Permanent marker for a failed/unparseable scoring attempt -- without
     this, a job that fails once gets retried (and fails) on every future
     run forever. Same lesson as ingest/hn-hiring.py's hn_seen_comments
-    tombstone table."""
+    tombstone table.
+
+    The tombstone is per profile too: a job that one persona failed to score
+    is still worth attempting for another."""
     conn.execute(
-        "UPDATE jobs SET scored_at=%s, scoring_model=%s WHERE id=%s",
-        (utc_now_str(), llm.failed_label(model_label), job_id),
+        f"""
+        INSERT INTO {schema.SCORES_TABLE} (job_id, profile, scored_at, scoring_model)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (job_id, profile) DO UPDATE SET
+            scored_at=EXCLUDED.scored_at, scoring_model=EXCLUDED.scoring_model
+        """,
+        (job_id, profile, utc_now_str(), llm.failed_label(model_label)),
     )
     conn.commit()
 
 
-def score_one_job(job, persona, model_label):
+def score_one_job(job, persona, profile, model_label):
     """Runs inside a worker thread -- opens its own connection rather than
     sharing one across threads (psycopg connections aren't safe for
     concurrent use). Returns True if scored, False if marked failed."""
@@ -286,14 +321,14 @@ def score_one_job(job, persona, model_label):
                       file=sys.stderr)
 
         if llm.has_fields(result, REQUIRED_FIELDS):
-            update_job_score(conn, job["id"], result, model_label)
+            update_job_score(conn, job["id"], profile, result, model_label)
             if DEBUG_PRINT_KEYS:
                 print(f"[debug] {job.get('title')!r} @ {job.get('company_name')}: "
                       f"fit={result.get('fit_score')} track={result.get('primary_track')!r}",
                       file=sys.stderr)
             return True
         else:
-            mark_score_failed(conn, job["id"], model_label)
+            mark_score_failed(conn, job["id"], profile, model_label)
             if DEBUG_PRINT_KEYS:
                 print(f"[debug] unparseable/invalid result for {job['id']} ({job.get('title')!r})",
                       file=sys.stderr)
@@ -317,7 +352,8 @@ def main():
         conn.close()
         sys.exit(1)
 
-    jobs = select_unscored_jobs(conn, SCORE_BATCH_SIZE)
+    profile = schema.resolve_profile(persona)
+    jobs = select_unscored_jobs(conn, SCORE_BATCH_SIZE, profile)
     if not jobs:
         conn.close()
         return  # nothing to score -- stay silent, same convention as the other scripts
@@ -327,12 +363,14 @@ def main():
     conn.close()  # each worker opens its own connection -- see score_one_job()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=SCORE_MAX_WORKERS) as pool:
-        results = list(pool.map(lambda job: score_one_job(job, persona, model_label), jobs))
+        results = list(pool.map(
+            lambda job: score_one_job(job, persona, profile, model_label), jobs))
 
     scored = sum(1 for r in results if r)
     failed = len(results) - scored
     print(f"job-score: {scored} scored, {failed} failed/unparseable, "
-          f"model={model_label}, batch_size={SCORE_BATCH_SIZE}, workers={SCORE_MAX_WORKERS}")
+          f"profile={profile}, model={model_label}, "
+          f"batch_size={SCORE_BATCH_SIZE}, workers={SCORE_MAX_WORKERS}")
 
 
 if __name__ == "__main__":

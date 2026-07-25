@@ -78,7 +78,24 @@ c = psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=5)
 print('rows:', c.execute('SELECT count(*) FROM jobs.jobs').fetchone()[0])"
 ```
 
-Schema is created automatically on first run — no migration step.
+Schema is created automatically on first run — no migration step for a fresh
+database.
+
+### 4. Upgrading an existing database
+
+One migration exists, for databases that predate `jobs.job_scores` (scores used
+to be eight columns on `jobs.jobs`). It's a no-op on a fresh install and safe to
+run twice:
+
+```bash
+python3 jobs/migrate_scores.py                       # dry run — reports, changes nothing
+python3 jobs/migrate_scores.py --apply               # copy scores into job_scores
+python3 jobs/migrate_scores.py --apply --drop-columns  # ...and remove the old columns
+```
+
+Copying is idempotent and never overwrites a newer score. `--drop-columns` is
+separate and opt-in because it's the only destructive step here; it refuses to
+run while any scored row hasn't been copied.
 
 ## Running
 
@@ -179,6 +196,7 @@ All configuration is environment variables. Nothing needs editing in code.
 | `JOB_SCORING_API_KEY` | falls back to `GLM_API_KEY` | Key for the endpoint above |
 | `SCORE_BATCH_SIZE` | `30` | Jobs scored per run |
 | `SCORE_MAX_WORKERS` | `5` | Concurrent scoring requests |
+| `JOBS_PROFILE` | `config/persona.json`'s `profile` | Which score set to read/write |
 | `GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS` | `20` | Don't re-run a query this recent |
 | `CLAIM_TTL_MINUTES` | `15` | How long a crashed machine blocks a query |
 | `DEBUG_PRINT_KEYS` | unset | `1` for verbose stderr logging |
@@ -209,8 +227,27 @@ export JOB_SCORING_MODEL="llama3.1"
 export JOB_SCORING_API_KEY="unused"
 ```
 
-A job whose scoring fails still gets `scored_at` set (with
-`scoring_model="FAILED:..."`) so it isn't retried forever.
+A job whose scoring fails still gets a `job_scores` row (with
+`scoring_model="FAILED:..."` and a NULL `fit_score`) so it isn't retried
+forever.
+
+### Scores are per profile
+
+Scores live in `jobs.job_scores`, keyed `(job_id, profile)` — not as columns on
+`jobs.jobs`. A score isn't a property of a posting; it's one persona's opinion
+of it, and `jobs` is shared across every persona.
+
+The profile name comes from `config/persona.json`'s `profile` key (`tech`),
+overridable per-run with `JOBS_PROFILE`. Two consequences:
+
+- **Editing the persona without renaming the profile re-scores in place.**
+  That's usually what you want when refining wording.
+- **Renaming the profile starts a fresh, empty score set** and leaves the old
+  one intact — so you can score the same postings against a second persona, or
+  A/B two versions of your own, without either destroying the other.
+
+`select_unscored_jobs` anti-joins on `(job_id, profile)`, so "unscored" always
+means "unscored *for this profile*."
 
 **Test a model before making it the default.** `tools/compare-models.py` scores
 real postings with each candidate and reports JSON reliability, latency, score
@@ -246,23 +283,31 @@ extra prose, but smaller models still fail sometimes. Check `scoring_model` for
 `FAILED:` values:
 
 ```sql
-SELECT scoring_model, count(*) FROM jobs.jobs
-WHERE scored_at IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;
+SELECT scoring_model, count(*) FROM jobs.job_scores
+GROUP BY 1 ORDER BY 2 DESC;
 ```
 
 ## Querying results
 
 ```sql
 -- Best-fit open jobs
-SELECT fit_score, title, company_name, location_raw, job_url
-FROM jobs.jobs
-WHERE status = 'open' AND fit_score IS NOT NULL
-ORDER BY fit_score DESC LIMIT 20;
+SELECT s.fit_score, j.title, j.company_name, j.location_raw, j.job_url
+FROM jobs.jobs j
+JOIN jobs.job_scores s ON s.job_id = j.id AND s.profile = 'tech'
+WHERE j.status = 'open' AND s.fit_score IS NOT NULL
+ORDER BY s.fit_score DESC LIMIT 20;
 
 -- What came in today, by source
 SELECT platform, count(*) FROM jobs.jobs
 WHERE first_seen >= to_char(now() - interval '1 day', 'YYYY-MM-DD"T"HH24:MI:SS')
 GROUP BY 1 ORDER BY 2 DESC;
+
+-- How two profiles rate the same posting
+SELECT j.title, a.fit_score AS tech, b.fit_score AS other
+FROM jobs.jobs j
+JOIN jobs.job_scores a ON a.job_id = j.id AND a.profile = 'tech'
+JOIN jobs.job_scores b ON b.job_id = j.id AND b.profile = 'other'
+ORDER BY abs(a.fit_score - b.fit_score) DESC LIMIT 20;
 ```
 
 Heuristic columns (`seniority_guess`, `location_is_nyc`, `location_is_remote`)

@@ -48,36 +48,40 @@ import urllib.request
 import urllib.error
 import concurrent.futures
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib")):
+    _d = os.path.dirname(_d)
+sys.path.insert(0, _d)
+sys.path.insert(0, os.path.join(_d, "jobs"))
 
-import psycopg
+import schema  # noqa: E402  (jobs/schema.py)
+import score   # noqa: E402  (jobs/score.py -- for build_prompt and load_persona)
+from pipelib import dbconn  # noqa: E402
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
-)
-PERSONA_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "persona.json"
-)
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 
 
-def load_persona():
-    with open(PERSONA_FILE) as f:
-        return json.load(f)
-
-
-def select_jobs(conn, n, only_scored):
+def select_jobs(conn, n, only_scored, profile):
     """only_scored=True pulls jobs that already have a trusted score, so you
-    can compare candidates against real prior output as well as each other."""
-    where = "status = 'open' AND description_text IS NOT NULL"
+    can compare candidates against real prior output as well as each other.
+
+    Scores live in job_scores keyed (job_id, profile), so "already scored"
+    means scored under THIS profile -- a LEFT JOIN, since without
+    --only-scored we still want unscored jobs and just no production column
+    to compare against."""
+    join = "LEFT JOIN"
+    where = "j.status = 'open' AND j.description_text IS NOT NULL"
     if only_scored:
-        where += " AND scored_at IS NOT NULL AND fit_score IS NOT NULL"
+        join = "JOIN"
+        where += " AND s.fit_score IS NOT NULL"
     rows = conn.execute(
-        f"""SELECT id, title, company_name, location_raw, platform,
-                   description_text, fit_score, primary_track
-            FROM jobs WHERE {where}
-            ORDER BY first_seen DESC LIMIT %s""",
-        (n,),
+        f"""SELECT j.id, j.title, j.company_name, j.location_raw, j.platform,
+                   j.description_text, s.fit_score, s.primary_track
+            FROM jobs j
+            {join} job_scores s ON s.job_id = j.id AND s.profile = %s
+            WHERE {where}
+            ORDER BY j.first_seen DESC LIMIT %s""",
+        (profile, n),
     ).fetchall()
     cols = ["id", "title", "company_name", "location_raw", "platform",
             "description_text", "fit_score", "primary_track"]
@@ -85,22 +89,20 @@ def select_jobs(conn, n, only_scored):
 
 
 def build_prompt(persona, job):
-    """Mirrors score.py's prompt. Keep these in sync -- comparing models on a
-    different prompt than production uses would measure the wrong thing."""
-    return (
-        f"{json.dumps(persona, indent=2)}\n\n"
-        f"JOB POSTING:\n"
-        f"Title: {job['title']}\n"
-        f"Company: {job['company_name']}\n"
-        f"Location: {job['location_raw']}\n"
-        f"Source: {job['platform']}\n"
-        f"Description: {(job.get('description_text') or '')[:4000]}\n\n"
-        "Score this job for the candidate above. Respond with ONLY a JSON object:\n"
-        '{"fit_score": <0-100>, "primary_track": "<core_swe|ai_integration|'
-        'bridge_solutions|reentry_growth>", "gap_friendly_signal": <true|false>, '
-        '"key_technologies": ["..."], "gap_bridging_angle": "<one sentence>", '
-        '"risk_factors": ["..."]}'
-    )
+    """Delegates to score.py's own build_prompt.
+
+    This used to be a paraphrase, and it had drifted: it asked for
+    primary_track as "core_swe|ai_integration|bridge_solutions|reentry_growth"
+    while production asks for "Core SWE|AI Integration|Bridge & Solutions|
+    Re-Entry & Growth|Poor Fit". Two vocabularies for one column meant
+    track_agree compared candidates against a reference that had answered a
+    different question, and the "[production]" line in SIDE BY SIDE could
+    never match a candidate's label no matter how well they agreed.
+
+    Importing the real thing is the only version of "keep these in sync" that
+    stays true -- a benchmark measured on a different prompt than production
+    runs measures the wrong model."""
+    return score.build_prompt(persona, job)
 
 
 def parse_llm_json(text):
@@ -196,6 +198,8 @@ def main():
     p.add_argument("--only-scored", action="store_true",
                    help="use jobs that already have a production score")
     p.add_argument("--samples", type=int, default=2, help="side-by-side examples to print")
+    p.add_argument("--profile", default=None,
+                   help="score profile to compare against (default: persona.json's)")
     args = p.parse_args()
 
     specs = []
@@ -207,16 +211,16 @@ def main():
         # base_url contains '://' so rejoin the middle
         specs.append((parts[0], "@".join(parts[1:-1]), parts[-1]))
 
-    persona = load_persona()
-    conn = psycopg.connect(DATABASE_URL)
-    conn.execute("SET search_path TO jobs, public")
-    jobs = select_jobs(conn, args.n, args.only_scored)
+    persona = score.load_persona()
+    profile = args.profile or schema.resolve_profile(persona)
+    conn = dbconn.connect_or_exit("compare-models", schema=schema.SCHEMA)
+    jobs = select_jobs(conn, args.n, args.only_scored, profile)
     conn.close()
 
     if not jobs:
         print("no jobs matched -- try without --only-scored")
         sys.exit(1)
-    print(f"testing {len(jobs)} jobs against {len(specs)} model(s)")
+    print(f"testing {len(jobs)} jobs against {len(specs)} model(s), profile={profile}")
 
     all_runs, reference = [], None
     for i, spec in enumerate(specs):
