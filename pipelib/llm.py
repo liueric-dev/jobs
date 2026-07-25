@@ -11,6 +11,10 @@ current default), Groq, OpenRouter, a local Ollama/LM Studio server.
     LLM_BASE_URL   default https://api.z.ai/api/paas/v4
     LLM_MODEL      default glm-4.5-flash
     LLM_API_KEY    falls back to GLM_API_KEY
+
+Free-tier budgets are enforced client-side by pipelib.ratelimit (LLM_MAX_RPM
+/ LLM_MAX_RPD, both per-model). Unset means unlimited, so this stays a no-op
+for local and paid endpoints.
 """
 
 import json
@@ -18,6 +22,8 @@ import os
 import re
 import urllib.error
 import urllib.request
+
+from . import ratelimit
 
 DEFAULT_BASE_URL = "https://api.z.ai/api/paas/v4"
 DEFAULT_MODEL = "glm-4.5-flash"
@@ -65,7 +71,17 @@ def call(prompt, *, timeout=DEFAULT_TIMEOUT_SECS, json_object=True):
     and getting it wrong permanently discards work: a 429 recorded as a
     failure means that item is never attempted again.
     """
-    payload = {"model": model(),
+    active_model = model()
+
+    # Before the request, not after: the point is to not send the call that
+    # would 429. QuotaExhausted becomes a TransientError because the prompt
+    # was never evaluated -- see ratelimit's module docstring.
+    try:
+        ratelimit.acquire(active_model)
+    except ratelimit.QuotaExhausted as e:
+        raise TransientError(str(e))
+
+    payload = {"model": active_model,
                "messages": [{"role": "user", "content": prompt}]}
     if json_object:
         payload["response_format"] = {"type": "json_object"}

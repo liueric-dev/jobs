@@ -196,6 +196,10 @@ All configuration is environment variables. Nothing needs editing in code.
 | `JOB_SCORING_API_KEY` | falls back to `GLM_API_KEY` | Key for the endpoint above |
 | `SCORE_BATCH_SIZE` | `30` | Jobs scored per run |
 | `SCORE_MAX_WORKERS` | `5` | Concurrent scoring requests |
+| `LLM_MAX_RPM` | unset (unlimited) | Client-side requests/minute; per-model |
+| `LLM_MAX_RPD` | unset (unlimited) | Client-side requests/day; per-model |
+| `LLM_QUOTA_STATE` | `~/.cache/hermes/llm-quota.json` | Where the daily count persists |
+| `LLM_QUOTA_TZ` | `UTC` | When the daily budget rolls over |
 | `JOBS_PROFILE` | `config/persona.json`'s `profile` | Which score set to read/write |
 | `JOBS_RELEVANCE_FILE` | `config/relevance.json` | Tier rules; missing file = score everything |
 | `GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS` | `20` | Don't re-run a query this recent |
@@ -228,6 +232,42 @@ export JOB_SCORING_BASE_URL="http://localhost:11434/v1"
 export JOB_SCORING_MODEL="llama3.1"
 export JOB_SCORING_API_KEY="unused"
 ```
+
+### Staying inside a free tier
+
+Free tiers meter **per model, not per project** — the quota id Google returns
+is literally `GenerateRequestsPerDayPerProjectPerModel-FreeTier`. Two separate
+limits bite, and they fail differently: RPM is burst (429s, clears in ~60s),
+RPD is a daily budget (429s for the rest of the day, retrying never helps).
+
+`pipelib/ratelimit.py` enforces both client-side, so the pipeline stops before
+the provider does. Unset means unlimited, so this is a no-op for local and
+paid endpoints. Budgets are per model, with an override that wins over the
+bare name — non-alphanumerics become underscores:
+
+```bash
+export LLM_MAX_RPD__gemini_3_6_flash=20     # measured, not a guess
+export LLM_MAX_RPM__gemini_3_6_flash=10
+export LLM_QUOTA_TZ="America/Los_Angeles"   # Google resets midnight Pacific
+```
+
+Verify a model's real ceiling rather than trusting a blog post — exhaust it
+once and read the violation:
+
+```bash
+curl -s .../chat/completions -d '...' | python3 -c \
+  "import json,sys; d=json.load(sys.stdin); d=d[0] if isinstance(d,list) else d; \
+   print(json.dumps(d['error'].get('details'), indent=2))"
+```
+
+Published free-tier numbers are frequently wrong. `gemini-3.6-flash` is
+documented in several places as 1,500 requests/day; the quota violation on
+this project reports **20**.
+
+When the daily cap is hit, `llm.call()` raises `TransientError`, which
+`score.py` **defers** — nothing is written and the row is retried next run.
+That is deliberate: recording "we ran out of budget" as a verdict on a posting
+would tombstone jobs nobody ever evaluated.
 
 ### What gets scored, and in what order
 
