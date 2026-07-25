@@ -27,7 +27,35 @@ from . import ratelimit
 
 DEFAULT_BASE_URL = "https://api.z.ai/api/paas/v4"
 DEFAULT_MODEL = "glm-4.5-flash"
-DEFAULT_TIMEOUT_SECS = 60
+#: Socket timeout per call. 120s, not 60, because 60 was cutting off work
+#: that was about to succeed: glm-4.5-flash runs a 39s median but a 85s max,
+#: so the slow tail was timing out, raising TransientError, and deferring
+#: jobs that the model would have answered given a few more seconds. In a
+#: backfill smoke test that cost 3 rounds out of 7 -- every call in them
+#: deferred, none of them actually failing.
+#:
+#: A longer timeout costs nothing when the endpoint is healthy (fast calls
+#: still return fast) and only delays the verdict when it is genuinely
+#: hung. Set LLM_TIMEOUT_SECS to override.
+DEFAULT_TIMEOUT_SECS = int(os.environ.get("LLM_TIMEOUT_SECS", "120"))
+
+#: Sampling temperature. 0 because everything this module is used for is
+#: structured extraction against a fixed schema -- there is no upside to
+#: sampling, and a large downside.
+#:
+#: Measured on 40 real postings, scored twice with identical prompts:
+#:
+#:     qwen2.5:14b, provider default   Spearman 0.666, top-15 overlap 11/15
+#:     qwen2.5:14b, temperature 0      Spearman 1.000, top-15 overlap 15/15
+#:
+#: At the default, a third of the shortlist reshuffled between two runs of
+#: the same model over the same jobs. Scores are ranked and read top-down, so
+#: that is the difference between a ranking and a lottery. It also made model
+#: comparison nearly meaningless: run-to-run variance for one model was the
+#: same size as the gap between two different models.
+#:
+#: Set LLM_TEMPERATURE if a caller genuinely wants sampling.
+DEFAULT_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0"))
 
 #: Prefix written into the model column when an attempt fails permanently.
 FAILED_PREFIX = "FAILED:"
@@ -82,6 +110,7 @@ def call(prompt, *, timeout=DEFAULT_TIMEOUT_SECS, json_object=True):
         raise TransientError(str(e))
 
     payload = {"model": active_model,
+               "temperature": DEFAULT_TEMPERATURE,
                "messages": [{"role": "user", "content": prompt}]}
     if json_object:
         payload["response_format"] = {"type": "json_object"}

@@ -19,6 +19,25 @@ headless browser required. (An earlier pass at this wrongly concluded it
 needed JS rendering -- that was a wrong regex for the job-detail URL
 pattern, not an actual site limitation.)
 
+DESCRIPTIONS -- the listing page carries no description, so each posting
+needs one extra GET of its /job/... detail page. Those pages embed
+schema.org JobPosting JSON, which is where the text comes from.
+
+Worth knowing, because it cost 187 unusable rows: the detail pages write
+the MIME type HTML-escaped, `type="application/ld&#x2B;json"`. A selector
+written for a literal "ld+json" therefore matches nothing, finds no
+description, and reports no error -- the rows just arrive empty.
+Every builtin row in the database had description_text = '' while every
+other source averaged ~4,900 chars, and because scoring orders tier 1 by
+first_seen DESC these newest-first rows sorted straight to the top and
+consumed scoring calls on title alone. LD_JSON_PATTERN accepts both
+spellings.
+
+Detail fetches are bounded (BUILTIN_DETAIL_LIMIT, default 60/run), paced
+(BUILTIN_DETAIL_DELAY, default 2.0s) and skipped for rows that already
+have a description, so the backfill spreads across runs instead of
+becoming one long crawl.
+
 ROBOTS.TXT / POLITENESS: builtinnyc.com's robots.txt explicitly Allows
 crawling of /jobs?page=1, ?page=2, and ?page=3, then Disallows deeper
 pagination generally. Pages 4+ were confirmed to still return valid data
@@ -88,6 +107,7 @@ mid_or_unspecified) so both sources are queryable together consistently:
 import os
 import sys
 import re
+import json
 import html as html_module
 import hashlib
 import time
@@ -115,6 +135,12 @@ REQUEST_DELAY_SECONDS = 2.5
 BUILTIN_STALE_AFTER_DAYS = 14
 USER_AGENT = "Mozilla/5.0 (compatible; hermes-jobs-ingest/1.0; personal job-search automation)"
 
+#: Detail pages are one extra GET per posting, so a run is bounded and rows
+#: already holding a description are never re-fetched. Raise this to backfill
+#: faster; the work is resumable, so several small runs get there too.
+DETAIL_FETCH_LIMIT = int(os.environ.get("BUILTIN_DETAIL_LIMIT", "60"))
+DETAIL_DELAY_SECONDS = float(os.environ.get("BUILTIN_DETAIL_DELAY", "2.0"))
+
 TITLE_PATTERN = re.compile(r'data-id="job-card-title"[^>]*data-alias="([^"]+)"[^>]*>([^<]+)<')
 COMPANY_PATTERN = re.compile(r'<a href="([^"]+)"[^>]*data-id="company-title"[^>]*><span>([^<]+)</span>')
 WORK_TYPE_PATTERN = re.compile(r'fa-house-building[^>]*></i></div>\s*<span[^>]*>([^<]+)</span>', re.DOTALL)
@@ -122,6 +148,24 @@ GEO_PATTERN = re.compile(r'fa-location-dot[^>]*></i></div>\s*<div><span[^>]*>([^
 SALARY_PATTERN = re.compile(r'([0-9]{1,3}K-[0-9]{1,3}K[^<]*)')
 SENIORITY_PATTERN = re.compile(r'(Junior|Mid level|Senior level|Entry level|Expert/Leader)')
 POSTED_PATTERN = re.compile(r'fa-clock[^>]*></i>([^<]+)<', re.DOTALL)
+
+#: The `+` in the MIME type is HTML-escaped on these pages
+#: (type="application/ld&#x2B;json"), so the conventional `ld\+json` selector
+#: matches nothing at all. That is exactly how the description went missing:
+#: silently, with no error. Both spellings are accepted here.
+LD_JSON_PATTERN = re.compile(
+    r'<script[^>]*type="application/ld(?:\+|&#x2B;)json"[^>]*>(.*?)</script>',
+    re.DOTALL | re.IGNORECASE)
+
+TAG_PATTERN = re.compile(r"<[^>]+>")
+WHITESPACE_PATTERN = re.compile(r"\s+")
+
+#: Tags become spaces so list items and block elements don't run together
+#: ("<li>One</li><li>Two</li>" must not read "OneTwo"), but that leaves a
+#: space before punctuation whenever a tag closes mid-sentence -- "Build
+#: <b>things</b>." would come out "Build things .". This puts it back.
+SPACE_BEFORE_PUNCT = re.compile(r"\s+([,.;:!?%)\]])")
+SPACE_AFTER_OPEN = re.compile(r"([(\[])\s+")
 
 SENIORITY_MAP = {
     "entry level": "entry",
@@ -142,6 +186,130 @@ def fetch_page(page_num):
 def extract_field(text, pattern):
     m = pattern.search(text)
     return html_module.unescape(m.group(1).strip()) if m else None
+
+
+def extract_description(page_html):
+    """Plain-text JobPosting description from a detail page, or None.
+
+    Built In embeds schema.org JobPosting inside an "@graph" array rather
+    than as a bare top-level object, so both shapes are handled. The
+    description itself is HTML, which is unescaped and stripped to text --
+    the scorer reads prose, and markup is just tokens it pays for.
+    """
+    for block in LD_JSON_PATTERN.findall(page_html):
+        try:
+            data = json.loads(block)
+        except ValueError:
+            continue    # one malformed block must not hide a later good one
+        nodes = data.get("@graph", data) if isinstance(data, dict) else data
+        for node in (nodes if isinstance(nodes, list) else [nodes]):
+            if not isinstance(node, dict) or node.get("@type") != "JobPosting":
+                continue
+            raw = node.get("description") or ""
+            if not raw:
+                continue
+            plain = WHITESPACE_PATTERN.sub(
+                " ", TAG_PATTERN.sub(" ", html_module.unescape(raw))).strip()
+            plain = SPACE_AFTER_OPEN.sub(r"\1", SPACE_BEFORE_PUNCT.sub(r"\1", plain))
+            if plain:
+                return plain
+    return None
+
+
+class RateLimited(RuntimeError):
+    """The site asked us to stop. Distinct from a per-posting failure.
+
+    Collapsing this into "no description, try the next one" is what turns a
+    polite scraper into a rude one: the whole remaining budget gets spent
+    hammering a host that already said no, every request fails, and nothing
+    is written. Callers must abandon the pass, not continue it.
+    """
+
+
+def fetch_description(job_url):
+    """One detail-page GET. None when this posting has no usable description.
+
+    A posting whose detail page 404s or times out must not fail the whole
+    ingest: the listing row is still worth having, and the description is
+    additive. Returning None leaves the row eligible for a retry next run,
+    which is the same deferral logic scoring uses for transient errors.
+
+    429 is the exception -- see RateLimited.
+    """
+    req = urllib.request.Request(job_url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=http.DEFAULT_TIMEOUT) as resp:
+            return extract_description(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise RateLimited(f"HTTP 429 from {job_url}")
+        if DEBUG_PRINT_KEYS:
+            print(f"[debug] detail fetch failed for {job_url}: {e}", file=sys.stderr)
+        return None
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        if DEBUG_PRINT_KEYS:
+            print(f"[debug] detail fetch failed for {job_url}: {e}", file=sys.stderr)
+        return None
+
+
+def fill_descriptions(conn, budget):
+    """Fetch and store descriptions for open rows that lack one.
+
+    Runs AFTER the upsert, against the table rather than the parsed records,
+    and writes with a direct UPDATE. Both of those are deliberate.
+
+    Routing descriptions through upsert() does not work: it writes a row only
+    when content_hash changes, and description_text is deliberately absent
+    from HASH_FIELDS_BUILTIN (schema.py freezes those tuples). A fetched
+    description therefore leaves the hash identical, the row reads as
+    "unchanged", and the text is silently dropped -- which is exactly what
+    happened the first time this was written. Only brand-new rows kept their
+    description, because an INSERT writes every column regardless of hash.
+
+    Working off the table also reaches postings the current listing pages no
+    longer show. attach-to-records only ever covered pages 1-3 (~65 cards),
+    so anything pushed deeper kept an empty description forever -- that is
+    how 187 empty rows accumulated in the first place. Oldest gap first, so
+    the backlog drains in a predictable order.
+    """
+    if budget <= 0:
+        return 0, 0
+
+    rows = conn.execute(
+        f"""SELECT id, job_url FROM {schema.SCHEMA}.jobs
+            WHERE platform = 'builtin' AND status = 'open'
+              AND coalesce(description_text, '') = ''
+              AND coalesce(job_url, '') <> ''
+            ORDER BY first_seen ASC
+            LIMIT %(limit)s""",
+        {"limit": budget},
+    ).fetchall()
+
+    fetched = failed = 0
+    limited = False
+    for n, (job_id, job_url) in enumerate(rows):
+        try:
+            desc = fetch_description(job_url)
+        except RateLimited as e:
+            # Stop the pass entirely. Each row is committed as it lands, so
+            # the work already done survives and the next run resumes from
+            # the same "oldest gap first" position.
+            limited = True
+            print(f"builtin-nyc: rate limited after {fetched} descriptions "
+                  f"({e}) -- stopping this pass, {len(rows) - n} still empty. "
+                  f"Raise BUILTIN_DETAIL_DELAY or lower BUILTIN_DETAIL_LIMIT.")
+            break
+        if desc:
+            conn.execute(
+                f"UPDATE {schema.SCHEMA}.jobs SET description_text = %(d)s "
+                f"WHERE id = %(id)s", {"d": desc, "id": job_id})
+            conn.commit()
+            fetched += 1
+        else:
+            failed += 1
+        if n + 1 < len(rows):
+            time.sleep(DETAIL_DELAY_SECONDS)
+    return fetched, failed
 
 
 def parse_page(page_html):
@@ -189,7 +357,7 @@ def parse_page(page_html):
             "location_is_remote": is_remote,
             "company_is_nyc_hq": None,   # unknown from this source -- not the same signal ingest/ats.py has
             "company_is_ai_focused": None,
-            "description_text": None,    # not present on the listing page; would need a per-job detail fetch
+            "description_text": None,    # filled by fill_descriptions() after the upsert
             "raw_json": None,
             "salary_text": salary,
         })
@@ -228,6 +396,10 @@ def main():
         sys.exit(1)
 
     new_count, updated_count, unchanged_count = upsert(conn, job_spec, all_records, schema.make_job_id, debug=DEBUG_PRINT_KEYS)
+
+    # After the upsert: new rows are in the table by now, so one pass covers
+    # both this run's postings and the older backlog. See fill_descriptions().
+    desc_fetched, desc_failed = fill_descriptions(conn, DETAIL_FETCH_LIMIT)
     closed_count = schema.close_stale(conn, 'builtin', BUILTIN_STALE_AFTER_DAYS)
     state.set_watermark(conn, "builtin:nyc", utc_now_str(),
                         table=schema.WATERMARK_TABLE)
@@ -239,6 +411,7 @@ def main():
     if new_count or updated_count or closed_count or page_errors:
         print(f"builtin-nyc: {new_count} new, {updated_count} updated, "
               f"{unchanged_count} unchanged, {closed_count} closed (stale), "
+              f"{desc_fetched} descriptions fetched ({desc_failed} failed), "
               f"{len(all_records)} parsed across {MAX_PAGES - len(page_errors)}/{MAX_PAGES} pages "
               f"({len(page_errors)} page failures).")
 

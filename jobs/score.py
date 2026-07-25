@@ -186,6 +186,17 @@ def select_unscored_jobs(conn, limit, profile, rel_cfg=None):
     first_seen alone, so a fresh irrelevant posting never outranks a slightly
     older relevant one -- which is exactly what the unfiltered version did,
     every night, while the real backlog aged out. See jobs/relevance.py.
+
+    The description gate is the third: a row with no description_text gives
+    the model nothing but a title, a company and a location to judge on, and
+    the answer it invents from that is worse than no answer -- it gets stored
+    as if it were real, and the anti-join then treats the job as done.
+
+    This is not hypothetical. Every builtin row carried an empty description
+    (see ingest/builtin-nyc.py) and, being the newest tier-1 rows, they sorted
+    to the front of every batch. Rows become eligible on their own once the
+    description lands, so nothing is lost by skipping them -- and no tombstone
+    is written, because none of them was ever evaluated.
     """
     cfg = rel_cfg if rel_cfg is not None else relevance.load()
     tier_expr, tier_params = relevance.tier_sql(cfg)
@@ -198,6 +209,7 @@ def select_unscored_jobs(conn, limit, profile, rel_cfg=None):
                j.description_text, {tier_expr} AS tier
         FROM {schema.TABLE} j
         WHERE j.status = %(status)s
+          AND coalesce(j.description_text, '') <> ''
           AND NOT EXISTS (SELECT 1 FROM {schema.SCORES_TABLE} s
                           WHERE s.job_id = j.id AND s.profile = %(profile)s)
           AND {tier_expr} <= %(max_tier)s

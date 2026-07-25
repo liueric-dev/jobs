@@ -202,6 +202,8 @@ All configuration is environment variables. Nothing needs editing in code.
 | `LLM_QUOTA_TZ` | `UTC` | When the daily budget rolls over |
 | `JOBS_PROFILE` | `config/persona.json`'s `profile` | Which score set to read/write |
 | `JOBS_RELEVANCE_FILE` | `config/relevance.json` | Tier rules; missing file = score everything |
+| `BUILTIN_DETAIL_LIMIT` | `60` | Detail-page fetches per run (descriptions) |
+| `BUILTIN_DETAIL_DELAY` | `2.0` | Seconds between detail-page fetches |
 | `GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS` | `20` | Don't re-run a query this recent |
 | `CLAIM_TTL_MINUTES` | `15` | How long a crashed machine blocks a query |
 | `DEBUG_PRINT_KEYS` | unset | `1` for verbose stderr logging |
@@ -232,6 +234,39 @@ export JOB_SCORING_BASE_URL="http://localhost:11434/v1"
 export JOB_SCORING_MODEL="llama3.1"
 export JOB_SCORING_API_KEY="unused"
 ```
+
+### Backfilling the whole backlog
+
+`score.py` scores `SCORE_BATCH_SIZE` jobs and exits, which is right for a
+nightly cron and useless for a one-time backlog. `backfill-scores.py` drives
+it in a loop until the backlog is empty:
+
+```bash
+python3 jobs/backfill-scores.py --dry-run              # plan only
+nohup python3 jobs/backfill-scores.py --workers 3 > backfill.log 2>&1 &
+```
+
+Resumable by construction — each round is an independent short transaction,
+and "what is still unscored" *is* the progress, asked fresh from the database
+every round. Interrupt it whenever; rerun to continue. Ctrl-C finishes the
+round in flight and exits cleanly.
+
+It pins the model for the whole run and re-checks it every round, because a
+fit_score is only comparable to one produced the same way. `--rescore-stale`
+deletes scores from other models so they get redone in the current one (off
+by default; it deletes rows).
+
+Measured throughput on `glm-4.5-flash`, which is slow and intermittently
+drops calls even sequentially:
+
+| workers | rate | 5,100 jobs |
+|---|---|---|
+| 1 | ~40/hr | ~5 days |
+| 2 | ~94/hr | ~2.3 days |
+| 3 | ~81-111/hr | ~2-2.5 days |
+
+Deferred calls are not failures — nothing is written and the row is retried
+next round. Only genuinely unparseable responses get tombstoned.
 
 ### Staying inside a free tier
 
