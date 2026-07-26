@@ -288,23 +288,29 @@ def serpapi_search(query, location, date_chip=None):
 def normalize_job(job, mode):
     """Shared record shape for both Google Jobs sources (SerpApi and the
     Apify actor return identical schema -- confirmed live, same job_id for
-    the same posting via both paths)."""
+    the same posting via both paths).
+
+    `source_id` is ids.google_source_id(), NOT the raw `job_id`. The raw blob
+    embeds a per-search token that rotates on every fresh fetch, so using it
+    minted a new primary key for an already-stored posting on every run --
+    32% duplicate rows on the live table. See the Google Jobs section of
+    pipelib/ids.py for the full autopsy.
+    """
     title = job.get("title")
     company_name = job.get("company_name") or "Unknown"
     location = job.get("location")
     detected = job.get("detected_extensions") or {}
     apply_options = job.get("apply_options") or []
+    company_token = text.slugify(company_name)
 
     is_nyc = bool(text.NYC_PATTERN.search(location or ""))
     is_remote = bool(text.REMOTE_PATTERN.search(location or "")) or mode == "remote"
 
     return {
         "platform": "google_jobs",
-        "company_token": text.slugify(company_name),
+        "company_token": company_token,
         "company_name": company_name,
-        "source_id": job.get("job_id") or hashlib.sha256(
-            f"{title}|{company_name}|{location}".encode()
-        ).hexdigest()[:16],
+        "source_id": ids.google_source_id(job, company_token),
         "title": title,
         "location_raw": location,
         "department": detected.get("schedule_type"),

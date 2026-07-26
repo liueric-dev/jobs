@@ -76,7 +76,6 @@ import re
 import json
 import time
 import html as html_module
-import hashlib
 import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone
@@ -196,23 +195,28 @@ def run_actor_query(query, location):
 def normalize_job(job, mode):
     """Identical record shape to ingest/google-serpapi.py -- this
     actor's output schema matches SerpApi's field-for-field (confirmed live,
-    same job_id for the same posting via both paths)."""
+    same job_id for the same posting via both paths).
+
+    That last point is why this file MUST use the same ids.google_source_id()
+    the SerpApi script does: the two sources returning the same posting is
+    supposed to be one row, and it only stays one row while both derive the
+    key the same way. See the Google Jobs section of pipelib/ids.py.
+    """
     title = job.get("title")
     company_name = job.get("company_name") or "Unknown"
     location = job.get("location")
     detected = job.get("detected_extensions") or {}
     apply_options = job.get("apply_options") or []
+    company_token = text.slugify(company_name)
 
     is_nyc = bool(text.NYC_PATTERN.search(location or ""))
     is_remote = bool(text.REMOTE_PATTERN.search(location or "")) or mode == "remote"
 
     return {
         "platform": "google_jobs",
-        "company_token": text.slugify(company_name),
+        "company_token": company_token,
         "company_name": company_name,
-        "source_id": job.get("job_id") or hashlib.sha256(
-            f"{title}|{company_name}|{location}".encode()
-        ).hexdigest()[:16],
+        "source_id": ids.google_source_id(job, company_token),
         "title": title,
         "location_raw": location,
         "department": detected.get("schedule_type"),

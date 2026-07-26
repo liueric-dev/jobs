@@ -105,6 +105,102 @@ class TestHashCompatibility(unittest.TestCase):
                             ids.content_hash(rec, ("a",), blank_if_falsy=("a",)))
 
 
+class TestGoogleJobIdentity(unittest.TestCase):
+    """The 32%-duplicate-rows bug -- see the Google Jobs section of ids.py.
+
+    The two blobs below are REAL `job_id` values taken from the live jobs
+    table (rows first_seen 2026-07-24T18:17:53 and T19:47:41). Both describe
+    the same 15Five posting; they differ in the volatile `fc` token and in
+    whether `hl` is present, which is exactly what made the old raw-blob key
+    mint two rows for one job. Keeping the real values here means the test
+    fails if the decoder ever stops coping with what Google actually sends.
+    """
+
+    # first_seen 2026-07-24T18:17:53 -- carries "hl":"en"
+    BLOB_A = (
+        "eyJqb2JfdGl0bGUiOiJbUmVtb3RlXSBTZW5pb3IgQWkgU29sdXRpb25zIEVuZ2luZWVyIiwiY29t"
+        "cGFueV9uYW1lIjoiMTVGaXZlIiwiaHRpZG9jaWQiOiI1cDY5aHhNekZtUXJsTHFpQUFBQUFBPT0i"
+        "LCJ1dWxlIjoidytDQUlRSUNJTlZXNXBkR1ZrSUZOMFlYUmxjdyIsImdsIjoidXMiLCJobCI6ImVu"
+        "IiwiZmMiOiJFc3dCQ293QlFVcHBWRFIwVEZaQ05USnVPRWQwWWtoUlVVWkhUMFpsZFVKVWVsZEpi"
+        "bUZzUVhOZk1GODVVSGh5Tm1SVWMxVkZXVlpSUjIxaFdVcEZWMVU0Ym05UFYzaGlha2xTVUdsR2Ez"
+        "bGxNMVJ2WDI4emMyWm5TV2xWVVRSTlJFaEtPRXRhWWtwWGFGRnJOSEZ6UmtWM1ZuUjFXR2RoYVRS"
+        "dWFWRllVekJzY1RKaWNteFNjR3A2YTBGT2IxbDFURElTRjFWTGVHcGhkRU5GU1UxcGNqRnpVVkJm"
+        "WW5aMGQxRnpHaUpCUkhOeU9XWlVVMmhSTTE5WVpsbENhM1JoUzBKeWNtOXVOWGhJVFRkbldVRjMi"
+        "LCJmY3YiOiIzIiwiZmNfaWQiOiI1cDY5aHhNekZtUXJsTHFpQUFBQUFBPT0ifQ=="
+    )
+    # first_seen 2026-07-24T19:47:41 -- 90 minutes later, NO "hl", different fc
+    BLOB_B = (
+        "eyJqb2JfdGl0bGUiOiJbUmVtb3RlXSBTZW5pb3IgQWkgU29sdXRpb25zIEVuZ2luZWVyIiwiY29t"
+        "cGFueV9uYW1lIjoiMTVGaXZlIiwiaHRpZG9jaWQiOiI1cDY5aHhNekZtUXJsTHFpQUFBQUFBPT0i"
+        "LCJ1dWxlIjoidytDQUlRSUNJTlZXNXBkR1ZrSUZOMFlYUmxjdyIsImdsIjoidXMiLCJmYyI6IkVz"
+        "d0JDb3dCUVVwcFZEUjBURWRhYzJ4NGVVMU1VMGx0Um1oWWFYVkRSMEprTUVob1gxZFJTMHg1WVda"
+        "Q1pWQmxlVFJoZEhadE9VeDBTSGR3TFZoVlIxTTRZakV3VEhZd2JtMVRWRTVNVW5SVWNHZDFTbll3"
+        "U2xCdU1WbEhVRmhmVTE5RlVrOUtlRjlKYTBOUlIydG5TMVJzYTFZdE5FTTFabGs0UWs1WFRIaHNl"
+        "R040WTNZeVZFOWljRnBrWTJkRWVtSVNGMVZ6Um1waGRqWnZSMk0yZW0xMGExQnVZbVZIYlVGVkdp"
+        "SkJSSE55T1daVFUyTlpTbkZ2ZG1ZNVZrUklSMmR5YXpVelRFRlphVE10UTBobiIsImZjdiI6IjMi"
+        "LCJmY19pZCI6IjVwNjloeE16Rm1RcmxMcWlBQUFBQUE9PSJ9"
+    )
+    HTIDOCID = "5p69hxMzFmQrlLqiAAAAAA=="
+
+    def test_decodes_real_blob(self):
+        d = ids.decode_google_job_id(self.BLOB_A)
+        self.assertEqual(d["htidocid"], self.HTIDOCID)
+        self.assertEqual(d["company_name"], "15Five")
+
+    def test_same_posting_two_fetches_one_id(self):
+        """The whole point: the volatile fc token must not reach the key."""
+        a = ids.google_source_id({"job_id": self.BLOB_A}, "15five")
+        b = ids.google_source_id({"job_id": self.BLOB_B}, "15five")
+        self.assertEqual(a, b)
+        self.assertEqual(a, self.HTIDOCID)
+
+    def test_raw_blob_would_have_differed(self):
+        """Pins WHY the fix was needed, so nobody 'simplifies' it back."""
+        self.assertNotEqual(self.BLOB_A, self.BLOB_B)
+
+    def test_unpadded_blob_still_decodes(self):
+        self.assertIsNotNone(
+            ids.decode_google_job_id(self.BLOB_A.rstrip("=")))
+
+    def test_garbage_decodes_to_none(self):
+        for bad in (None, "", "not-base64!!", "aGVsbG8="):  # last is valid b64, not JSON
+            self.assertIsNone(ids.decode_google_job_id(bad))
+
+    def test_fingerprint_fallback_when_no_htidocid(self):
+        job = {"job_id": None, "title": "Backend Engineer",
+               "apply_options": [{"link": "https://x.com/j/1?utm_campaign=google_jobs_apply"}]}
+        got = ids.google_source_id(job, "acme")
+        self.assertTrue(got.startswith("fp:"))
+        # tracking params and title whitespace/case must not change identity
+        same = ids.google_source_id(
+            {"job_id": None, "title": "  backend   engineer ",
+             "apply_options": [{"link": "https://x.com/j/1"}]}, "acme")
+        self.assertEqual(got, same)
+
+    def test_fingerprint_excludes_location(self):
+        """Google reports one remote posting as 'United States' and 'Anywhere'
+        on different searches -- 37 such cases on the live table. Location
+        must not participate in identity."""
+        base = {"job_id": None, "title": "SRE",
+                "apply_options": [{"link": "https://x.com/j/2"}]}
+        self.assertEqual(
+            ids.google_source_id({**base, "location": "United States"}, "acme"),
+            ids.google_source_id({**base, "location": "Anywhere"}, "acme"))
+
+    def test_different_postings_differ(self):
+        a = ids.google_source_id(
+            {"job_id": None, "title": "A", "apply_options": [{"link": "https://x/1"}]}, "acme")
+        b = ids.google_source_id(
+            {"job_id": None, "title": "B", "apply_options": [{"link": "https://x/2"}]}, "acme")
+        self.assertNotEqual(a, b)
+
+    def test_normalize_apply_url(self):
+        self.assertEqual(
+            ids.normalize_apply_url("https://x.com/j/1/?utm_source=g&b=2&a=1#frag"),
+            "https://x.com/j/1?a=1&b=2")
+        self.assertEqual(ids.normalize_apply_url(None), "")
+
+
 class TestToUtc(unittest.TestCase):
     """The 4-hour bug: naive Socrata values are NYC local, not UTC."""
 
