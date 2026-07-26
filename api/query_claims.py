@@ -61,10 +61,10 @@ from pipelib import dbconn  # noqa: E402
 from pipelib.timeparse import utc_now_str  # noqa: E402
 from pipelib.upsert import upsert as _pipelib_upsert  # noqa: E402
 
-#: The same spec ingest/google-serpapi.py builds, so both write identical rows.
-#: HASH_FIELDS_SHORT is the Google-source hash field set; using a different one
-#: here would give the same posting two identities.
-_JOB_SPEC = schema.spec(schema.HASH_FIELDS_SHORT)
+#: The same spec both Google ingest scripts build, so all three write
+#: identical rows -- including the sticky posted_at that keeps a re-submitted
+#: posting's publication date from sliding. One function, three callers.
+_JOB_SPEC = schema.google_spec()
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"

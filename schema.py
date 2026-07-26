@@ -178,13 +178,16 @@ def resolve_profile(persona=None):
             or DEFAULT_PROFILE)
 
 
-def spec(hash_fields, blank_if_falsy=("description_text",)):
+def spec(hash_fields, blank_if_falsy=("description_text",), sticky=()):
     """A TableSpec for one source's hash field set.
 
     `computed` reopens a listing that reappears upstream: status back to
     'open' and closed_at cleared, on INSERT and UPDATE alike. Paired with
     revive_column, a row previously marked closed counts as an update rather
     than as unchanged, so a reappearance is never silently ignored.
+
+    `sticky` is empty for every source that reports an absolute publication
+    date, which is all of them except Google -- see google_spec().
     """
     return TableSpec(
         table=TABLE,
@@ -194,7 +197,30 @@ def spec(hash_fields, blank_if_falsy=("description_text",)):
         computed={"status": f"'{STATUS_OPEN}'", "closed_at": "NULL"},
         revive_column="status",
         revive_value=STATUS_OPEN,
+        sticky=sticky,
     )
+
+
+#: Derived from a relative string ("23 days ago") rather than an absolute date,
+#: so the value depends on WHEN it was computed. First observation wins.
+GOOGLE_STICKY = ("posted_at", "posted_at_ts")
+
+
+def google_spec():
+    """The spec for every Google Jobs writer -- both ingest scripts and api/.
+
+    A function rather than three call sites passing the same arguments,
+    because the three have to agree and there is nothing else making them.
+    That is the same lesson google_jobs.py exists to record: the SerpApi
+    script, the Apify script and the contributor API are three routes into one
+    table, and every property they must share belongs in one place.
+
+    ONLY the Google sources are sticky. ATS, WeWorkRemotely, Built In and HN
+    all report an absolute publication date, which re-derives identically
+    forever, so pinning it there would buy nothing and would additionally
+    ignore a genuine upstream correction.
+    """
+    return spec(HASH_FIELDS_SHORT, sticky=GOOGLE_STICKY)
 
 
 def make_job_id(rec):

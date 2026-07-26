@@ -201,7 +201,7 @@ def main():
     schema.ensure_schema(conn)
     state.ensure_state_schema(conn, schema.WATERMARK_TABLE,
                               with_claims=True)
-    job_spec = schema.spec(schema.HASH_FIELDS_SHORT)
+    job_spec = schema.google_spec()
 
     try:
         all_queries = load_priority_queries()
