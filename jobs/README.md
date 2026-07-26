@@ -45,11 +45,17 @@ cd ~/hermes-scripts
 ```
 
 > **Layout note:** the jobs pipeline lives under `jobs/` in this repo,
-> alongside the shared `pipelib/` library it imports and the separate
-> `events/` pipeline. Run its scripts from the repository root, as the
+> alongside the shared `pipelib/` library it imports. The events pipeline
+> used to live here too; it moved to `~/apps/events` in slice C of
+> `~/apps/REORG.md`. Run the jobs scripts from the repository root, as the
 > commands below do -- `pipelib` is located by walking up from each
 > script, so running them from elsewhere still works, but the paths shown
 > assume the root.
+>
+> `pipelib` is now also installable (`pip install --user -e .`), which is how
+> out-of-tree consumers import it. The walk-up stays for these scripts
+> because in 22 of them the same block supplies `jobs/`'s own `sys.path`
+> entry, not just pipelib's -- slice D rewrites them.
 
 ### 2. Point it at the database
 

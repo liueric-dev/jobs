@@ -53,7 +53,7 @@ def connect(schema=None, url=None, autocommit=False):
 
     `autocommit=True` is required for the geocode cache, whose writes must
     survive independently of whatever transaction the caller is running --
-    see events/geocode.py.
+    see ~/apps/events/geocode.py.
     """
     conn = psycopg.connect(url or database_url())
     if autocommit:

@@ -34,7 +34,8 @@ MEMBERSHIP RULE -- two consumers, or it goes home.
     affected both.
 
     Four modules were moved out for exactly this reason -- `llm` and
-    `ratelimit` to `jobs/`, `geocode` and `boroughs` to `events/`. Before
+    `ratelimit` to `jobs/`, `geocode` and `boroughs` to the events pipeline
+    (which itself then moved to `~/apps/events` in slice C). Before
     adding a module, name its second consumer. Thin usage is not the same as
     single usage: `text` and `ids` stay because events uses a little of them
     and duplicating pure functions is the drift this package exists to

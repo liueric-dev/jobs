@@ -2,13 +2,19 @@
 
 One Postgres + PostGIS instance backs both pipelines:
 
-| Schema   | Table              | Owner                |
-|----------|--------------------|----------------------|
-| `public` | `events`           | `events/` pipeline   |
-| `jobs`   | `jobs`             | `jobs/` pipeline     |
+| Schema   | Table              | Owner                                   |
+|----------|--------------------|-----------------------------------------|
+| `public` | `events`           | the events pipeline, at `~/apps/events`  |
+| `jobs`   | `jobs`             | `jobs/` pipeline, in this repo           |
 
 They share the instance but not the schema. See `pipelib/__init__.py` for why
 the shared library covers mechanism only.
+
+The events pipeline moved out of this repo in slice C of `~/apps/REORG.md` and
+is scheduled by a systemd user timer rather than `hermes cron`. It still
+connects to this same database with the same `DATABASE_URL`, but reads it from
+`~/apps/events/.env` rather than `~/.hermes/.env`. Slice E splits the two
+applications into separate databases and gives events its own role.
 
 ## Credentials
 
@@ -121,12 +127,12 @@ SELECT pg_terminate_backend(<pid>);
 
 ## Backups
 
-`events/migrate.py` defaults to a dry run and should be rehearsed against a
-restored snapshot before touching live data:
+`~/apps/events/migrate.py` defaults to a dry run and should be rehearsed
+against a restored snapshot before touching live data:
 
 ```sh
 docker exec nyc-events-postgres pg_dump -U nyc_events -d nyc_events | gzip > backup.sql.gz
 docker exec nyc-events-postgres psql -U nyc_events -d postgres -c "CREATE DATABASE migtest;"
 zcat backup.sql.gz | docker exec -i nyc-events-postgres psql -q -U nyc_events -d migtest
-DATABASE_URL=...//migtest python3 events/migrate.py --apply
+DATABASE_URL=...//migtest python3 ~/apps/events/migrate.py --apply
 ```
