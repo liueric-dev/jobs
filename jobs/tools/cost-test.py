@@ -60,6 +60,8 @@ sys.path.insert(0, os.path.join(_d, "jobs"))
 import schema      # noqa: E402
 import relevance   # noqa: E402
 import score       # noqa: E402
+import extract     # noqa: E402
+import profiles    # noqa: E402
 from pipelib import dbconn, llm  # noqa: E402
 
 #: $ per million tokens: (input_miss, input_cache_hit, output).
@@ -84,7 +86,12 @@ def price_for(model, args):
 
 def call_with_usage(prompt, model, base_url, api_key, thinking, timeout):
     """One completion. Returns (content, usage_dict, elapsed_seconds)."""
+    # Must match what pipelib/llm.py actually sends. Omitting temperature
+    # here measures the provider's default sampling, not production: it
+    # inflates run-to-run disagreement and makes any A/B look noisier than
+    # the pipeline really is.
     body = {"model": model,
+            "temperature": llm.DEFAULT_TEMPERATURE,
             "response_format": {"type": "json_object"},
             "messages": [{"role": "user", "content": prompt}]}
     if not thinking:
@@ -128,6 +135,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True,
                     help="MODEL@BASE_URL@API_KEY")
+    ap.add_argument("--stage", choices=("score", "extract"), default="score",
+                    help="which prompt to measure (default: score)")
     ap.add_argument("--n", type=int, default=100)
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--timeout", type=int, default=180)
@@ -149,16 +158,30 @@ def main():
         sys.exit(2)
 
     conn = dbconn.connect_or_exit("cost-test", schema=schema.SCHEMA)
-    persona = score.load_persona()
-    profile = schema.resolve_profile(persona)
-    jobs = score.select_unscored_jobs(conn, args.n, profile, relevance.load())
+    # The two stages have different prompts and different economics -- the
+    # extraction prompt carries no persona, which is the whole reason its
+    # prefix caches across every job AND every profile. Measuring one and
+    # assuming the other is how the stale figure in this file's docstring
+    # happened.
+    if args.stage == "extract":
+        cfgs = [relevance.for_profile(p) for p in profiles.load_active(conn)]
+        jobs = extract.select_unextracted_jobs(conn, args.n, cfgs)
+        required = extract.REQUIRED_FIELDS
+        build = extract.build_prompt
+    else:
+        persona = score.load_persona()
+        profile = schema.resolve_profile(persona)
+        jobs = score.select_unscored_jobs(conn, args.n, profile, relevance.load())
+        required = score.REQUIRED_FIELDS
+        build = lambda j: score.build_prompt(persona, j)  # noqa: E731
     conn.close()
     if not jobs:
-        print("cost-test: no unscored jobs matched -- nothing to measure.")
+        print(f"cost-test: no {args.stage} candidates matched -- "
+              f"nothing to measure.")
         return
 
-    prompts = [score.build_prompt(persona, j) for j in jobs]
-    print(f"cost-test: {len(prompts)} calls to {model} "
+    prompts = [build(j) for j in jobs]
+    print(f"cost-test: {len(prompts)} {args.stage} calls to {model} "
           f"(thinking={'off' if args.no_thinking else 'on'}, "
           f"workers={args.workers})\n")
 
@@ -172,7 +195,7 @@ def main():
         except Exception as e:                       # noqa: BLE001
             return ("err", f"{type(e).__name__}: {str(e)[:120]}")
         parsed = llm.parse_json(content)
-        ok = llm.has_fields(parsed, score.REQUIRED_FIELDS)
+        ok = llm.has_fields(parsed, required)
         return ("ok", (usage_fields(usage), elapsed, ok,
                        (parsed or {}).get("fit_score")))
 

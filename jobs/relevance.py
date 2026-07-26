@@ -61,7 +61,20 @@ DISABLED = {
 }
 
 
-def load(path=None):
+def load(path=None, cfg=None):
+    """The shared config from disk, or a profile's own overrides.
+
+    `cfg` is the per-profile case: profiles.relevance is either None ("use the
+    shared default") or a dict from jobs.profiles.relevance_json. Merging it
+    over DISABLED rather than over the file's contents is deliberate -- a
+    profile that specifies title_include and nothing else should get the
+    permissive default for the keys it omitted, not the shared config's
+    answers for them, which would make its behaviour depend on a file it never
+    mentioned.
+    """
+    if cfg is not None:
+        return {**DISABLED, **{k: v for k, v in cfg.items()
+                               if not k.startswith("_")}}
     path = path or CONFIG_FILE
     try:
         with open(path) as f:
@@ -69,6 +82,18 @@ def load(path=None):
     except FileNotFoundError:
         return dict(DISABLED)
     return {**DISABLED, **{k: v for k, v in cfg.items() if not k.startswith("_")}}
+
+
+def for_profile(profile, default_cfg=None):
+    """The relevance config one profile should be filtered by.
+
+    Kept here rather than in profiles.py because "None means fall back to the
+    shared config" is a fact about relevance, not about profiles -- and both
+    extract.py and score.py need to resolve it the same way.
+    """
+    if profile.relevance is not None:
+        return load(cfg=profile.relevance)
+    return default_cfg if default_cfg is not None else load()
 
 
 def _alternation(patterns):
@@ -82,12 +107,18 @@ def _alternation(patterns):
     return "|".join(p for p in patterns if p) or None
 
 
-def tier_sql(cfg, table_alias="j"):
+def tier_sql(cfg, table_alias="j", param_prefix="rel"):
     """(sql_expression, params) computing the tier for a row.
 
     Built as SQL rather than evaluated in Python because the caller needs
     ORDER BY tier ... LIMIT n. Ranking in Python would mean fetching all
     11k candidate rows to choose 30 of them.
+
+    param_prefix exists so union_sql() can embed one of these per profile in
+    a single statement without the bound names colliding. A collision would
+    not error -- it would silently apply one profile's regex under another
+    profile's name, which is the kind of bug that only shows up as "why is
+    this profile seeing compliance roles".
     """
     a = table_alias
     include = _alternation(cfg["title_include"])
@@ -96,11 +127,11 @@ def tier_sql(cfg, table_alias="j"):
 
     params = {}
     if include:
-        title_ok = f"{a}.title ~* %(rel_include)s"
-        params["rel_include"] = include
+        title_ok = f"{a}.title ~* %({param_prefix}_include)s"
+        params[f"{param_prefix}_include"] = include
         if exclude:
-            title_ok += f" AND {a}.title !~* %(rel_exclude)s"
-            params["rel_exclude"] = exclude
+            title_ok += f" AND {a}.title !~* %({param_prefix}_exclude)s"
+            params[f"{param_prefix}_exclude"] = exclude
     else:
         title_ok = "TRUE"
 
@@ -129,3 +160,33 @@ def tier_sql(cfg, table_alias="j"):
 
 def max_tier(cfg):
     return int(cfg.get("max_tier_to_score", 3))
+
+
+def union_sql(cfgs, table_alias="j"):
+    """(sql_boolean, params): does this row clear the bar for ANY profile?
+
+    THE QUESTION THIS ANSWERS IS NOT THE ONE tier_sql ANSWERS
+        tier_sql ranks a posting for one persona. This asks whether a posting
+        is worth extracting facts from at all, and extraction is shared -- it
+        happens once and every profile reads the result. So the gate has to be
+        the union: a posting one profile would never look at still deserves
+        the call if a second profile would.
+
+        Using one profile's filter here, or intersecting them, would mean the
+        shared asset is quietly shaped by whoever happens to be profile #1.
+
+    An empty profile list returns FALSE rather than TRUE. "No active profiles"
+    means nobody is waiting for this work, and spending an LLM call per
+    posting on their behalf is the more expensive way to be wrong.
+    """
+    if not cfgs:
+        return "FALSE", {}
+
+    clauses, params = [], {}
+    for i, cfg in enumerate(cfgs):
+        expr, p = tier_sql(cfg, table_alias, param_prefix=f"rel{i}")
+        key = f"rel{i}_max_tier"
+        clauses.append(f"({expr}) <= %({key})s")
+        params[key] = max_tier(cfg)
+        params.update(p)
+    return "(" + " OR ".join(clauses) + ")", params

@@ -1,0 +1,85 @@
+{
+  "_comment": "Seed matcher weights for the 'tech' profile -- the free, deterministic ranking that decides which postings are worth a narrative LLM call. Imported once by migrate_profiles.py; thereafter jobs.profiles.criteria_json is authoritative and this file is a template for new profiles. Edit + re-run migrate_profiles.py --apply --bump to change a live profile.",
+
+  "_calibration": "These numbers are a starting point derived from config/persona.json, NOT a tuned model. tools/calibrate-match.py scores them against the job_scores rows the LLM already produced: ship thresholds are Spearman >= 0.6 and >= 0.8 recall of the LLM's top 50 inside the rules' top 150.",
+
+  "_scale": "match_score = clamp(base + sum(deltas), 0, 100). A hard_exclude short-circuits to 0 regardless of other deltas. Deltas are absolute points, not multipliers, so they are readable next to the 0-100 result.",
+
+  "base": 35,
+
+  "_archetypes_comment": "Mirrors the four positioning buckets in persona.json. bridge_solutions is the strongest fit, so forward_deployed/solutions lead -- but only just. CALIBRATED 2026-07-26: the first version had core SWE at +15 against +28 for bridge roles, and every one of the worst rules-vs-LLM disagreements was a backend/fullstack role the LLM scored 85 and the rules put near the floor. That was a misreading of persona.json, which calls core_swe 'safety-net positioning: the 5 YOE production background alone should qualify for these regardless of AI angle'. Core SWE is a strong fit, not a fallback.",
+  "archetypes": {
+    "forward_deployed": 30,
+    "solutions": 28,
+    "ai_integration": 26,
+    "fullstack": 26,
+    "backend": 26,
+    "frontend": 20,
+    "data": 12,
+    "devops": 8,
+    "security": -10,
+    "pm": -30,
+    "ml_research": -55,
+    "other": 0
+  },
+
+  "_seniority_comment": "persona.json asks for mid-level explicitly: 'not senior/staff/principal, not new-grad/intern'. senior is tolerated at a small penalty because titles are inconsistent across companies and a 5-YOE candidate is a real senior at some of them; staff and up are not.",
+  "_hard_exclude_comment": "CALIBRATED 2026-07-26: only fields that are BOTH reliably extracted and genuinely disqualifying belong here. tools/compare-extract.py measures seniority_level agreeing with itself 95% of the time and role_archetype 90%, so a -100 on either turns a 1-in-10 extraction slip into a deleted job -- and that is what the worst recall failures were ('Java Full Stack with AI Integration' read as new_grad, 'Senior Software Engineer' read as ml_research, both annihilated). new_grad and principal are now large penalties instead: an extraction error costs points, not the posting. intern/director/exec stay excluded -- unambiguous in a title and never a fit.",
+  "seniority": {
+    "target": ["mid"],
+    "tolerate": {"senior": -5, "junior": -12, "new_grad": -40, "principal": -35},
+    "hard_exclude": ["intern", "director", "exec"],
+    "unknown_penalty": -4
+  },
+
+  "_years_comment": "5 years of production experience. A posting demanding more than that is not disqualifying but is progressively less plausible.",
+  "years_experience": {
+    "max_required": 6,
+    "over_penalty_per_year": 8,
+    "over_penalty_cap": 32
+  },
+
+  "_tech_comment": "Additive up to the cap, so a posting is not rewarded simply for listing many technologies. Absence is never penalised -- the persona is explicitly stack-agnostic for core_swe roles.",
+  "tech": {
+    "boost": {
+      "python": 6,
+      "typescript": 5,
+      "javascript": 4,
+      "react": 4,
+      "node": 3,
+      "postgres": 3,
+      "sql": 2,
+      "llm": 7,
+      "langchain": 5,
+      "rag": 6,
+      "agents": 7,
+      "openai": 4,
+      "anthropic": 4
+    },
+    "cap": 26
+  },
+
+  "_ai_comment": "The current 5-month program is agent/LLM integration work, not model training. builds_llm_features is the sweet spot; core_ml_research is the gap.",
+  "ai_involvement": {
+    "builds_llm_features": 12,
+    "uses_ai_tools": 6,
+    "none": 0,
+    "core_ml_research": -60
+  },
+
+  "_location_comment": "Reads jobs.location_is_nyc / location_is_remote, which pipelib.text already computes for free at ingest, plus job_facts.remote_policy for the onsite-elsewhere case. Neither NYC nor remote is a hard exclude rather than a penalty: a commutable-but-unclassified location is a data gap, not a bad job. CALIBRATED 2026-07-26: softened from -45/-55. The LLM largely ignores location when judging fit, so a heavy penalty here pushed genuinely good postings out of the shortlist for a reason the persona never asked to be decisive.",
+  "location": {
+    "accept_nyc": true,
+    "accept_remote": true,
+    "neither_penalty": -15,
+    "onsite_elsewhere_penalty": -25
+  },
+
+  "_flags_comment": "gap_friendly_language is the reentry_growth bucket: postings that proactively address a career break. advanced_degree_required and ml_research_required are the persona's two stated hard gaps. customer_facing is a bonus because bridge_solutions is the strongest-fit bucket.",
+  "flags": {
+    "gap_friendly_language": 10,
+    "customer_facing": 8,
+    "advanced_degree_required": -45,
+    "ml_research_required": -100
+  }
+}

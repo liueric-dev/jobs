@@ -1,14 +1,38 @@
 #!/usr/bin/env python3
 """
-LLM-driven job fit scoring -- Postgres edition.
+The narrative tier: why THIS posting, for THIS person.
 
-Scores newly-ingested jobs (from ANY source -- ATS, Built In NYC, WWR, HN
-Who's Hiring, Google Jobs) against a persona profile
-(config/persona.json), producing a fit_score (0-100), a primary_track
-classification, a gap_bridging_angle (concrete framing for the application),
-key technologies, and risk factors. This is the "surfacing" layer the rest
-of the pipeline has been missing -- everything else collects and tags
-jobs; this is what actually judges relevance.
+WHAT THIS STOPPED DOING
+    This script used to be the whole scoring pipeline -- one LLM call per
+    (job, profile), over every relevant posting. That is the only part of the
+    old design that scaled with corpus size AND user count, and at 100
+    profiles it is ~11,500 calls a day with a four-hour wait before a new
+    profile sees anything.
+
+    Ranking now happens in match.py, for free, from the facts extract.py
+    pulled out of each posting once. What is left here is the part that
+    genuinely needs a model to have read both the posting and the persona:
+    gap_bridging_angle, risk_factors, and a fit_score that annotates the
+    shortlist. Everything it is asked about is already in the top 20 for
+    someone, so the call is spent on jobs a person will actually look at.
+
+    Consequence for cost: this is bounded by what gets SHOWN, not by how many
+    jobs exist. Adding a profile costs `daily_narrative_budget` calls a day
+    that they are active, and nothing at all while they are not.
+
+IT DOES NOT RANK. match_score DOES.
+    fit_score is displayed as a refinement and must never be used to order a
+    list. The moment ordering depends on it, every job a user might see needs
+    an LLM call before it can be placed -- which is the property this split
+    exists to remove. See the SCORING IS TWO TIERS note in schema.py.
+
+THE PROMPT READS FACTS, NOT THE POSTING
+    Stage 2 already distilled each posting into structured facts plus a
+    neutral two-sentence summary, so this sends those instead of the
+    3,000-char description. Same persona, much smaller variable part, and
+    the persona prefix still caches across a profile's whole batch -- which
+    is why run_for_profile does one profile at a time rather than
+    interleaving them.
 
 SWAPPABLE LLM BACKEND, NO HERMES DEPENDENCY -- REVISED 2026-07-24: this
 used to shell out to `hermes -z`. Changed because Eric wants this script
@@ -61,11 +85,12 @@ get retried, and fail, on every single future run forever. Same lesson as
 ingest/hn-hiring.py's hn_seen_comments tombstone table: a permanent
 failure needs a permanent marker, not silent endless retry.
 
-COST/VOLUME CONTROL: SCORE_BATCH_SIZE caps how many unscored jobs get
-scored per run (default 30) -- newest jobs first (ORDER BY first_seen
-DESC), so a capped batch always prioritizes the freshest postings over
-working through a backlog. Raise this once a model/cost combination is
-trusted.
+COST/VOLUME CONTROL: each profile's daily_narrative_budget (jobs.profiles,
+default 20) caps how many narratives it gets per run, and the shortlist is
+ordered by match_score, so a capped batch spends its calls on the
+highest-ranked postings rather than merely the freshest. SCORE_BATCH_SIZE
+is no longer the limit -- it survives only as a fallback for callers that
+do not pass one.
 
 CONCURRENT SCORING -- WHY: measured directly (2026-07-24) against the
 current default endpoint -- three identical, trivial requests took 17s,
@@ -96,11 +121,11 @@ Portable to other machines -- just needs Python, psycopg, network access
 to both Postgres and whatever LLM endpoint is configured, and the three
 JOB_SCORING_* env vars below (or their fallback defaults).
 
-DATABASE: same Postgres instance/schema as ingest/ats.py. Adds columns to
-the existing jobs.jobs table via ALTER TABLE ADD COLUMN IF NOT EXISTS
-(CREATE TABLE IF NOT EXISTS is a no-op on an existing table and would
-silently skip these -- explicit ALTERs are required for schema changes on
-a table other scripts already created, per nyc-events-ingest.py precedent).
+DATABASE: same Postgres instance/schema as ingest/ats.py. Reads
+jobs.job_matches (the ranking) joined to jobs.job_facts (the posting, as
+facts) and writes jobs.job_scores keyed (job_id, profile). Scores have not
+lived on jobs.jobs since the job_scores migration; personas have not lived
+in config/persona.json since the profiles migration.
 
 CONFIG:
     DATABASE_URL             -- postgres connection string
@@ -136,10 +161,12 @@ TEST BEFORE SCHEDULING:
 import os
 import sys
 import json
+import argparse
 import urllib.error
 import urllib.parse
 import concurrent.futures
 from collections import Counter
+from datetime import datetime, timedelta, timezone
 
 _d = os.path.dirname(os.path.abspath(__file__))
 while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib")):
@@ -148,7 +175,8 @@ sys.path.insert(0, _d)
 sys.path.insert(0, os.path.join(_d, "jobs"))
 
 import schema  # noqa: E402  (jobs/schema.py)
-import relevance  # noqa: E402  (jobs/relevance.py)
+import profiles  # noqa: E402  (jobs/profiles.py)
+import relevance  # noqa: E402  (jobs/relevance.py -- kept for the cost tools)
 from pipelib import dbconn, llm  # noqa: E402
 from pipelib.timeparse import utc_now_str  # noqa: E402
 
@@ -167,70 +195,113 @@ REQUIRED_FIELDS = (
 
 
 def load_persona():
+    """The seed persona from disk.
+
+    Retained for tools/cost-test.py and tools/compare-models.py, which measure
+    a prompt without needing a database profile. The pipeline reads personas
+    from jobs.profiles via profiles.py -- a file cannot describe more than one
+    user.
+    """
     with open(PERSONA_FILE) as f:
         return json.load(f)
 
 
-def select_unscored_jobs(conn, limit, profile, rel_cfg=None):
-    """Open, relevant, not-yet-scored-for-this-profile jobs -- best tier first.
+def select_shortlist(conn, limit, profile):
+    """The top-ranked postings this profile has not had a narrative written for.
 
-    Two filters, doing different jobs:
+    Ordered by match_score, which match.py already computed for free. That is
+    the whole point: choosing what to spend a call on costs nothing, so the
+    calls go to the jobs a person is actually about to see.
 
-    The anti-join is against (job_id, profile), not "is this job scored at
-    all" -- a job scored under a different persona is still unscored here.
-    That is the whole reason job_scores is keyed by profile; see SCORES ARE
-    PER PROFILE in schema.py.
+    The anti-join is still (job_id, profile) -- a narrative written for one
+    persona says nothing about another, exactly as before. Tombstones live in
+    the same table, so a posting that could not be scored is not retried
+    nightly forever.
 
-    The tier gate stops the batch being spent on postings this persona would
-    never apply to. Ordering is (tier, first_seen DESC) rather than
-    first_seen alone, so a fresh irrelevant posting never outranks a slightly
-    older relevant one -- which is exactly what the unfiltered version did,
-    every night, while the real backlog aged out. See jobs/relevance.py.
-
-    The description gate is the third: a row with no description_text gives
-    the model nothing but a title, a company and a location to judge on, and
-    the answer it invents from that is worse than no answer -- it gets stored
-    as if it were real, and the anti-join then treats the job as done.
-
-    This is not hypothetical. Every builtin row carried an empty description
-    (see ingest/builtin-nyc.py) and, being the newest tier-1 rows, they sorted
-    to the front of every batch. Rows become eligible on their own once the
-    description lands, so nothing is lost by skipping them -- and no tombstone
-    is written, because none of them was ever evaluated.
+    No relevance tier here any more. A row only reaches job_matches if it
+    cleared the profile's own relevance gate in extract.py AND scored above
+    MATCH_FLOOR, so the filtering has already happened twice by this point.
     """
-    cfg = rel_cfg if rel_cfg is not None else relevance.load()
-    tier_expr, tier_params = relevance.tier_sql(cfg)
-    params = {"status": schema.STATUS_OPEN, "profile": profile,
-              "max_tier": relevance.max_tier(cfg), "limit": limit,
-              **tier_params}
     rows = conn.execute(
         f"""
         SELECT j.id, j.title, j.company_name, j.location_raw, j.platform,
-               j.description_text, {tier_expr} AS tier
-        FROM {schema.TABLE} j
-        WHERE j.status = %(status)s
-          AND coalesce(j.description_text, '') <> ''
+               m.match_score, m.match_reasons,
+               f.summary, f.seniority_level, f.years_experience_min,
+               f.role_archetype, f.tech_stack, f.remote_policy,
+               f.ai_involvement, f.gap_friendly_language, f.comp_min, f.comp_max
+        FROM {schema.MATCHES_TABLE} m
+        JOIN {schema.TABLE} j ON j.id = m.job_id
+        JOIN {schema.FACTS_TABLE} f ON f.job_id = m.job_id
+        WHERE m.profile = %(profile)s
+          AND j.status = %(status)s
           AND NOT EXISTS (SELECT 1 FROM {schema.SCORES_TABLE} s
-                          WHERE s.job_id = j.id AND s.profile = %(profile)s)
-          AND {tier_expr} <= %(max_tier)s
-        ORDER BY tier, j.first_seen DESC
+                          WHERE s.job_id = m.job_id AND s.profile = %(profile)s)
+        ORDER BY m.match_score DESC, j.first_seen DESC
         LIMIT %(limit)s
         """,
-        params,
+        {"profile": profile, "status": schema.STATUS_OPEN, "limit": limit},
     ).fetchall()
     cols = ["id", "title", "company_name", "location_raw", "platform",
-            "description_text", "tier"]
+            "match_score", "match_reasons", "summary", "seniority_level",
+            "years_experience_min", "role_archetype", "tech_stack",
+            "remote_policy", "ai_involvement", "gap_friendly_language",
+            "comp_min", "comp_max"]
     return [dict(zip(cols, r)) for r in rows]
 
 
+def _facts_block(job):
+    """The posting, as facts rather than prose.
+
+    Replaces the 3,000-char description the old prompt carried. Only fields
+    that are actually present are emitted -- a wall of "unknown" lines invites
+    a model to treat absence as a negative signal, when it usually just means
+    the posting did not say.
+    """
+    stack = job.get("tech_stack")
+    try:
+        stack = ", ".join(json.loads(stack or "[]")[:20])
+    except (TypeError, json.JSONDecodeError):
+        stack = ""
+    comp = ""
+    if job.get("comp_min") or job.get("comp_max"):
+        comp = f"\nCompensation: {job.get('comp_min')}-{job.get('comp_max')}"
+    years = ("" if job.get("years_experience_min") is None
+             else f"\nYears required: {job['years_experience_min']}+")
+    return (
+        f"Title: {job.get('title')}\n"
+        f"Company: {job.get('company_name')}\n"
+        f"Location: {job.get('location_raw')} ({job.get('remote_policy')})\n"
+        f"Level: {job.get('seniority_level')}{years}\n"
+        f"Role type: {job.get('role_archetype')}\n"
+        f"AI involvement: {job.get('ai_involvement')}\n"
+        f"Technologies: {stack or 'not stated'}"
+        f"{comp}\n"
+        f"Explicitly welcomes career breaks: "
+        f"{'yes' if job.get('gap_friendly_language') else 'not stated'}\n"
+        f"Summary: {job.get('summary')}"
+    )
+
+
 def build_prompt(persona, job):
+    """The narrative prompt.
+
+    Accepts either shape of `job`: a shortlist row (facts) or a raw jobs row
+    with description_text. The latter is what tools/cost-test.py and
+    tools/compare-models.py pass, and keeping both working means the
+    measurement tools did not need rewriting alongside the pipeline.
+    """
     buckets_text = "\n".join(
         f"- {name}: {b['description']} ({b['fit_signal']})"
         for name, b in persona["buckets"].items()
     )
     strengths_text = "\n".join(f"- {s}" for s in persona["strengths"])
     gaps_text = "\n".join(f"- {g}" for g in persona["honest_gaps"])
-    description = (job.get("description_text") or "")[:3000]
+    posting = (_facts_block(job) if "summary" in job else
+               f"Title: {job.get('title')}\n"
+               f"Company: {job.get('company_name')}\n"
+               f"Location: {job.get('location_raw')}\n"
+               f"Source: {job.get('platform')}\n"
+               f"Description: {(job.get('description_text') or '')[:3000]}")
 
     return f"""You are evaluating a job posting for fit against a specific candidate's background. Respond with ONLY a single JSON object -- no markdown code fences, no explanation before or after.
 
@@ -250,11 +321,7 @@ SCORING INSTRUCTIONS:
 {persona['scoring_instructions']}
 
 JOB POSTING TO EVALUATE:
-Title: {job.get('title')}
-Company: {job.get('company_name')}
-Location: {job.get('location_raw')}
-Source: {job.get('platform')}
-Description: {description}
+{posting}
 
 Respond with exactly this JSON schema (no other text):
 {{
@@ -388,50 +455,122 @@ def score_one_job(job, persona, profile, model_label):
         conn.close()
 
 
+def run_for_profile(conn, profile_obj, limit=None, model_label=None):
+    """Write narratives for one profile's shortlist. Returns a Counter.
+
+    Importable rather than buried in main() because the login path calls it
+    directly: a user signing in is exactly the moment their top 20 should get
+    narratives, and it is the trigger that makes cost track engagement rather
+    than registration. main() is then just the nightly warm pass over the same
+    function.
+
+    One profile at a time, deliberately. The persona is the bulk of the prompt
+    and it caches as a prefix; interleaving profiles would evict it between
+    every call.
+    """
+    limit = limit or profile_obj.daily_narrative_budget
+    jobs = select_shortlist(conn, limit, profile_obj.profile)
+    if not jobs:
+        return Counter()
+
+    if model_label is None:
+        host = urllib.parse.urlparse(llm.base_url()).hostname or llm.base_url()
+        model_label = f"{llm.model()}@{host}"
+
+    with concurrent.futures.ThreadPoolExecutor(
+            max_workers=SCORE_MAX_WORKERS) as pool:
+        results = list(pool.map(
+            lambda job: score_one_job(job, profile_obj.persona,
+                                      profile_obj.profile, model_label), jobs))
+    return Counter(results)
+
+
 def main():
+    p = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--profile", help="one profile (default: all active)")
+    p.add_argument("--limit", type=int, default=None,
+                   help="override the profile's daily_narrative_budget")
+    p.add_argument("--active-within-days", type=int, default=None,
+                   help="warm pass: skip profiles with no job_events in this "
+                        "window, so dormant accounts cost nothing")
+    args = p.parse_args()
+
     if not llm.api_key():
-        print("job-score FAILED: JOB_SCORING_API_KEY (or GLM_API_KEY as a fallback) not set.")
+        print("job-score FAILED: JOB_SCORING_API_KEY (or GLM_API_KEY as a "
+              "fallback) not set.")
         sys.exit(1)
 
     conn = dbconn.connect_or_exit("job-score", schema=schema.SCHEMA)
     schema.ensure_schema(conn)
 
-    try:
-        persona = load_persona()
-    except (OSError, json.JSONDecodeError, KeyError) as e:
-        print(f"job-score FAILED: could not load {PERSONA_FILE}: {e}")
+    if args.profile:
+        one = profiles.load_one(conn, args.profile)
+        if not one:
+            print(f"job-score FAILED: no profile named {args.profile!r}")
+            conn.close()
+            sys.exit(1)
+        targets = [one]
+    else:
+        targets = profiles.load_active(conn)
+
+    if args.active_within_days is not None:
+        targets = [t for t in targets
+                   if _recently_active(conn, t.profile, args.active_within_days)]
+
+    if not targets:
         conn.close()
-        sys.exit(1)
+        return  # nothing to do -- silent, same convention as the other scripts
 
-    profile = schema.resolve_profile(persona)
-    rel_cfg = relevance.load()
-    jobs = select_unscored_jobs(conn, SCORE_BATCH_SIZE, profile, rel_cfg)
-    if not jobs:
-        conn.close()
-        return  # nothing to score -- stay silent, same convention as the other scripts
+    host = urllib.parse.urlparse(llm.base_url()).hostname or llm.base_url()
+    model_label = f"{llm.model()}@{host}"
 
-    endpoint_host = urllib.parse.urlparse(llm.base_url()).hostname or llm.base_url()
-    model_label = f"{llm.model()}@{endpoint_host}"
-    conn.close()  # each worker opens its own connection -- see score_one_job()
+    total = Counter()
+    parts = []
+    for prof in targets:
+        outcomes = run_for_profile(conn, prof, args.limit, model_label)
+        if not outcomes:
+            continue
+        total.update(outcomes)
+        parts.append(f"{prof.profile}: {outcomes[SCORED]} scored"
+                     + (f", {outcomes[REJECTED]} unparseable"
+                        if outcomes[REJECTED] else "")
+                     + (f", {outcomes[DEFERRED]} deferred"
+                        if outcomes[DEFERRED] else ""))
+    conn.close()
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=SCORE_MAX_WORKERS) as pool:
-        results = list(pool.map(
-            lambda job: score_one_job(job, persona, profile, model_label), jobs))
-
-    outcomes = Counter(results)
-    tiers = ",".join(f"t{t}={n}" for t, n in sorted(
-        Counter(j["tier"] for j in jobs).items()))
-    deferred = outcomes[DEFERRED]
-    print(f"job-score: {outcomes[SCORED]} scored, {outcomes[REJECTED]} unparseable, "
-          f"{deferred} deferred (will retry), "
-          f"profile={profile}, tiers[{tiers}], model={model_label}, "
-          f"batch_size={SCORE_BATCH_SIZE}, workers={SCORE_MAX_WORKERS}")
-    if deferred > len(results) / 2:
-        # Worth saying out loud: the run "succeeded" but mostly did nothing,
-        # and the usual cause is SCORE_MAX_WORKERS outpacing the endpoint.
-        print(f"  NOTE: {deferred}/{len(results)} calls never got a response -- "
+    if not parts:
+        return  # every profile's shortlist was already written
+    n = total[SCORED] + total[REJECTED] + total[DEFERRED]
+    print(f"job-score: " + "; ".join(parts)
+          + f", model={model_label}, workers={SCORE_MAX_WORKERS}")
+    if total[DEFERRED] > n / 2:
+        print(f"  NOTE: {total[DEFERRED]}/{n} calls never got a response -- "
               f"the endpoint is rate-limiting or down. Nothing was discarded; "
-              f"lower SCORE_MAX_WORKERS (currently {SCORE_MAX_WORKERS}) if this persists.")
+              f"lower SCORE_MAX_WORKERS (currently {SCORE_MAX_WORKERS}) if "
+              f"this persists.")
+
+
+def _recently_active(conn, profile, days):
+    """Has this profile generated any engagement inside the window?
+
+    Used by the nightly warm pass so a returning user finds narratives already
+    written while a dormant account costs nothing. A profile that has never
+    produced an event counts as active -- otherwise a brand-new signup would
+    be skipped by the very pass meant to prepare their first list.
+    """
+    row = conn.execute(
+        f"SELECT count(*) FROM {schema.EVENTS_TABLE} WHERE profile = %s",
+        (profile,)).fetchone()
+    if not row[0]:
+        return True
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)
+              ).strftime("%Y-%m-%dT%H:%M:%S")
+    return bool(conn.execute(
+        f"SELECT 1 FROM {schema.EVENTS_TABLE} "
+        f"WHERE profile = %s AND occurred_at >= %s LIMIT 1",
+        (profile, cutoff)).fetchone())
 
 
 if __name__ == "__main__":
