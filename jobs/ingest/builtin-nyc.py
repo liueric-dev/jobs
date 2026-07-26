@@ -352,6 +352,12 @@ def parse_page(page_html):
             "department": None,
             "job_url": f"https://www.builtinnyc.com{alias}",
             "posted_at": posted,
+            # posted_at stays the raw relative string Built In prints
+            # ("Reposted 8 Hours Ago"): it is in HASH_FIELDS_BUILTIN, so
+            # rewriting it re-hashes every row and buys nothing -- a recomputed
+            # absolute time drifts between runs exactly as the phrase does.
+            # posted_at_ts is unhashed, which is what makes it safe to derive.
+            "posted_at_ts": text.posted_at_timestamp(posted),
             "seniority_guess": SENIORITY_MAP.get((seniority_raw or "").lower(), "unknown"),
             "location_is_nyc": is_nyc,
             "location_is_remote": is_remote,

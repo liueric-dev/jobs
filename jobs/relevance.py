@@ -56,6 +56,8 @@ CONFIG_FILE = os.environ.get(
 DISABLED = {
     "title_include": [],
     "title_exclude": [],
+    "company_exclude": [],
+    "description_exclude": [],
     "location_columns": [],
     "max_tier_to_score": 3,
 }
@@ -123,17 +125,49 @@ def tier_sql(cfg, table_alias="j", param_prefix="rel"):
     a = table_alias
     include = _alternation(cfg["title_include"])
     exclude = _alternation(cfg["title_exclude"])
+    company_exclude = _alternation(cfg.get("company_exclude") or [])
+    description_exclude = _alternation(cfg.get("description_exclude") or [])
     loc_cols = cfg["location_columns"]
 
     params = {}
     if include:
-        title_ok = f"{a}.title ~* %({param_prefix}_include)s"
+        row_ok = f"{a}.title ~* %({param_prefix}_include)s"
         params[f"{param_prefix}_include"] = include
         if exclude:
-            title_ok += f" AND {a}.title !~* %({param_prefix}_exclude)s"
+            row_ok += f" AND {a}.title !~* %({param_prefix}_exclude)s"
             params[f"{param_prefix}_exclude"] = exclude
     else:
-        title_ok = "TRUE"
+        row_ok = "TRUE"
+
+    # Two exclusions that are about the POSTING's provenance rather than the
+    # role, so they belong here and not in title_exclude.
+    #
+    #   company_exclude     -- Google Jobs returns relist sites as the employer:
+    #       25.5% of those rows name a job board ("remote zest jobs",
+    #       "vmysmartpros") in company_name. Their titles are keyword-stuffed,
+    #       which is exactly what a title_include regex rewards, so they were
+    #       taking the top of the ranking -- 19 sat at match_score >= 90, one at
+    #       match 99 against an LLM fit of 15.
+    #   description_exclude -- some of those relisters scrub the employer out of
+    #       the body and leave the literal phrase "reputed company" behind
+    #       ("reputed company is redefining IT operations for the modern
+    #       reputed company"). A posting whose employer has been deleted cannot
+    #       be applied to, whatever its title says.
+    #
+    # NOT USED, DELIBERATELY: "SerpApi's `via` field equals company_name".
+    # It catches 160 rows but false-positives on every company that posts to
+    # its own careers site -- via='Cisco Careers'/company='Cisco',
+    # 'Snowflake Careers'/'Snowflake', Capital One, Deloitte, ServiceNow,
+    # Citadel. Those are the BEST rows in the table. Measured before rejecting.
+    if company_exclude:
+        row_ok += f" AND {a}.company_name !~* %({param_prefix}_coexcl)s"
+        params[f"{param_prefix}_coexcl"] = company_exclude
+    if description_exclude:
+        # COALESCE: a NULL description must not turn the whole predicate NULL
+        # and silently demote every not-yet-described row to tier 3.
+        row_ok += (f" AND COALESCE({a}.description_text, '') "
+                     f"!~* %({param_prefix}_dexcl)s")
+        params[f"{param_prefix}_dexcl"] = description_exclude
 
     # Column names cannot be bound as parameters, so they are interpolated --
     # hence the identifier check. This is trusted config, but "trusted" is a
@@ -152,8 +186,8 @@ def tier_sql(cfg, table_alias="j", param_prefix="rel"):
     else:
         loc_ok = "TRUE"
 
-    sql = (f"CASE WHEN ({title_ok}) AND ({loc_ok}) THEN 1 "
-           f"     WHEN ({title_ok}) THEN 2 "
+    sql = (f"CASE WHEN ({row_ok}) AND ({loc_ok}) THEN 1 "
+           f"     WHEN ({row_ok}) THEN 2 "
            f"     ELSE 3 END")
     return sql, params
 

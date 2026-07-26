@@ -119,6 +119,7 @@ systemic -- DB down, network outage -- worth actually paging on).
 
 import os
 import sys
+import html
 import json
 import re
 import hashlib
@@ -170,6 +171,34 @@ def fetch_ashby(token):
 FETCHERS = {"greenhouse": fetch_greenhouse, "lever": fetch_lever, "ashby": fetch_ashby}
 
 
+def greenhouse_description(content):
+    """Plain text from Greenhouse's `content`, which arrives HTML-ESCAPED.
+
+    Greenhouse does not serve HTML in this field -- it serves HTML that has
+    been escaped once, so the tags themselves are entities:
+
+        &lt;div class=&quot;content-intro&quot;&gt;&lt;h2&gt;About Us:&amp;nbsp;
+
+    That is one level deeper than every other source here, and it is why a
+    single unescape is not enough. Unescaping once turns `&lt;div&gt;` into a
+    real `<div>` (strippable) but only turns `&amp;nbsp;` into `&nbsp;`, which
+    then survives tag-stripping and lands in the database as literal text.
+
+    Measured over 400 sampled postings:
+        strip_html(c, unescape=False)  -- 300/300 rows held literal entities
+        strip_html(c)                  -- 277/300 still did
+        strip_html(html.unescape(c))   --   0/300   <- this
+
+    So: unescape once here, and let strip_html's own unescape handle the
+    second level before it strips tags. Do not "simplify" this into a single
+    call -- 7,182 rows reading `&lt;div class=&quot;...` is what that looks
+    like in production.
+    """
+    if not content:
+        return None
+    return text.strip_html(html.unescape(content))
+
+
 def normalize_greenhouse(company, job):
     title = job.get("title")
     location = (job.get("location") or {}).get("name")
@@ -186,12 +215,19 @@ def normalize_greenhouse(company, job):
         "department": department,
         "job_url": job.get("absolute_url"),
         "posted_at": job.get("updated_at") or job.get("first_published"),
+        # posted_at (hashed, frozen format) keeps updated_at first for
+        # compatibility. posted_at_ts is what an app sorts on, so it prefers
+        # first_published: "posted" should mean posted. Greenhouse bumps
+        # updated_at for edits, which is why 6,096 rows looked July-fresh.
+        "posted_at_ts": text.posted_at_timestamp(
+            job.get("first_published") or job.get("updated_at")),
+        "salary_text": None,
         "seniority_guess": text.guess_seniority(title),
         "location_is_nyc": is_nyc,
         "location_is_remote": is_remote,
         "company_is_nyc_hq": bool(company.get("is_nyc_hq")),
         "company_is_ai_focused": bool(company.get("is_ai_focused")),
-        "description_text": text.strip_html(job.get("content"), unescape=False),
+        "description_text": greenhouse_description(job.get("content")),
         "raw_json": json.dumps(job),
     }
 
@@ -218,12 +254,17 @@ def normalize_lever(company, job):
         "department": cats.get("department"),
         "job_url": job.get("hostedUrl"),
         "posted_at": posted_at,
+        "posted_at_ts": text.posted_at_timestamp(posted_at),
+        "salary_text": None,
         "seniority_guess": text.guess_seniority(title),
         "location_is_nyc": is_nyc,
         "location_is_remote": is_remote,
         "company_is_nyc_hq": bool(company.get("is_nyc_hq")),
         "company_is_ai_focused": bool(company.get("is_ai_focused")),
-        "description_text": text.strip_html(job.get("description") or job.get("descriptionBody"), unescape=False),
+        # Lever serves real HTML (verified: `<p><strong>About Finix</strong>`),
+        # so one unescape -- strip_html's default -- is correct here. Passing
+        # unescape=False was leaving `&amp;` in the stored text.
+        "description_text": text.strip_html(job.get("description") or job.get("descriptionBody")),
         "raw_json": json.dumps(job),
     }
 
@@ -244,12 +285,16 @@ def normalize_ashby(company, job):
         "department": job.get("department"),
         "job_url": job.get("jobUrl"),
         "posted_at": job.get("publishedAt"),
+        "posted_at_ts": text.posted_at_timestamp(job.get("publishedAt")),
+        "salary_text": None,
         "seniority_guess": text.guess_seniority(title),
         "location_is_nyc": is_nyc,
         "location_is_remote": is_remote,
         "company_is_nyc_hq": bool(company.get("is_nyc_hq")),
         "company_is_ai_focused": bool(company.get("is_ai_focused")),
-        "description_text": text.strip_html(job.get("descriptionHtml") or job.get("descriptionPlain"), unescape=False),
+        # Ashby also serves real HTML (`<h1>Who We Are</h1>`) -- same reasoning
+        # as Lever. This was leaving `&amp;` in 1,521 of 2,561 rows.
+        "description_text": text.strip_html(job.get("descriptionHtml") or job.get("descriptionPlain")),
         "raw_json": json.dumps(job),
     }
 

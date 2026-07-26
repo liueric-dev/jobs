@@ -39,6 +39,13 @@ independent data sources (same reasoning ingest/ats.py itself uses for
 per-company failures: one source being down isn't a reason to skip
 another). Exit code is non-zero if any sub-script failed.
 
+ENVIRONMENT: this script loads ~/.hermes/.env itself rather than assuming
+the caller did. `hermes cron` does NOT do it for you -- the 2026-07-25 00:00
+scheduled run failed all seven steps at once on missing DATABASE_URL and
+missing API keys, and the job was paused as a result. Anything already
+exported takes precedence over the file, so a one-off run can still override
+a single key. See pipelib/envfile.py.
+
 INSTALL: lives in ~/.hermes/scripts/jobs/ alongside the seven scripts
 listed in STEPS.
 
@@ -60,7 +67,20 @@ import os
 import sys
 import subprocess
 
+_d = os.path.dirname(os.path.abspath(__file__))
+while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib")):
+    _d = os.path.dirname(_d)
+sys.path.insert(0, _d)
+
+from pipelib import envfile  # noqa: E402
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+#: Steps that cannot do anything useful without these. Checked once here so a
+#: misconfigured run reports one actionable line, instead of nine steps each
+#: printing their own version of the same failure -- which is exactly what the
+#: 2026-07-25 run did (see envfile.py).
+REQUIRED_ENV = ("DATABASE_URL",)
 #: A step is a script name, or a script name plus arguments. Order matters
 #: after ingest: extract turns new postings into shared facts, match turns
 #: facts into per-profile rankings, and only then does score spend a call on
@@ -99,6 +119,19 @@ def run_step(step):
 
 
 def main():
+    # Before anything else: this process IS the environment every step
+    # inherits (run_step passes os.environ.copy()), so establishing it here
+    # covers all nine at once. Values already exported win -- see
+    # envfile.load()'s override=False rationale.
+    envfile.load()
+
+    missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
+    if missing:
+        print(f"run-daily FAILED: {', '.join(missing)} not set and not found in "
+              f"{envfile.DEFAULT_ENV_FILE}. Every step would fail to connect; "
+              f"see DATABASE.md.")
+        sys.exit(1)
+
     failures = []
 
     for step in STEPS:

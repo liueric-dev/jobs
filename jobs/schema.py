@@ -90,6 +90,8 @@ TIMESTAMPS STAY TEXT HERE
 
 import os
 
+import psycopg
+
 from pipelib import dbconn, ids, state
 from pipelib.upsert import TableSpec
 
@@ -100,10 +102,13 @@ WATERMARK_TABLE = "job_ingest_state"
 STATUS_OPEN = "open"
 STATUS_CLOSED = "closed"
 
-#: Columns written from a normalized record.
+#: Columns written from a normalized record. Every normalize_* function must
+#: supply every key here: upsert binds them as named parameters, so a missing
+#: one fails that record (isolated by its SAVEPOINT) rather than the batch.
 COLUMNS = (
     "platform", "company_token", "company_name", "source_id",
     "title", "location_raw", "department", "job_url", "posted_at",
+    "posted_at_ts", "salary_text",
     "seniority_guess", "location_is_nyc", "location_is_remote",
     "company_is_nyc_hq", "company_is_ai_focused",
     "description_text", "raw_json",
@@ -128,7 +133,16 @@ EVENTS_TABLE = "job_events"
 #: which generation of the extraction schema produced a row, so "which rows
 #: predate the new field" is a query rather than a guess, and a re-extraction
 #: can be a resumable backlog burn-down instead of a TRUNCATE.
-FACTS_VERSION = 1
+#:
+#: 2 (2026-07-26): the INPUT changed, not the schema. Version 1 rows were
+#: extracted from Greenhouse descriptions that stored escaped markup as
+#: literal text and were truncated at 5,000 chars, so roughly a quarter of the
+#: 3,000-char prompt budget was spent on `&lt;div class=&quot;` instead of
+#: prose. Measured against a self-consistency control on 50 postings, the
+#: clean text moves tech_stack (-13.1 jaccard), employment_type (-18.0) and
+#: years_experience_min (-10.0) beyond run-to-run noise; role_archetype and
+#: ai_involvement were unaffected. See jobs/migrate_ats_descriptions.py.
+FACTS_VERSION = 2
 
 #: match_score below this is not written to job_matches at all. Most jobs are
 #: irrelevant to most profiles, and at N profiles the full cross product is
@@ -344,11 +358,35 @@ def ensure_schema(conn):
     conn.commit()
 
     _ensure_fk_update_cascade(conn)
+
+    # Columns added after the table already existed in the wild. Routed through
+    # add_missing_columns (which checks the catalog first) rather than a bare
+    # ADD COLUMN IF NOT EXISTS, because the latter still takes an ACCESS
+    # EXCLUSIVE lock on every run even when it changes nothing -- see
+    # pipelib/dbconn.py and the idle-transaction incident in DATABASE.md.
+    #
+    #   posted_at_ts -- sortable absolute time. posted_at is TEXT, is in every
+    #     HASH_FIELDS_* tuple (so its format is frozen), and holds three
+    #     incompatible formats including Built In's relative English
+    #     ("Reposted 8 Hours Ago"), which no database can order. See
+    #     text.posted_at_timestamp.
+    #   salary_text  -- ingest/builtin-nyc.py has always parsed this and it has
+    #     always been in HASH_FIELDS_BUILTIN, but it was never in COLUMNS, so
+    #     every run hashed it and threw it away.
+    dbconn.add_missing_columns(conn, "jobs", [
+        ("posted_at_ts", "TIMESTAMPTZ"),
+        ("salary_text", "TEXT"),
+    ])
+
     for name, col in (("idx_jobs_company", "company_token"),
                       ("idx_jobs_status", "status"),
                       ("idx_jobs_seniority", "seniority_guess"),
                       ("idx_jobs_nyc", "location_is_nyc")):
         conn.execute(f"CREATE INDEX IF NOT EXISTS {name} ON jobs({col})")
+    # DESC NULLS LAST matches how an app reads a job board: newest first, and
+    # the 126 postings whose source gave no date sort last rather than first.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_posted_at_ts "
+                 "ON jobs(posted_at_ts DESC NULLS LAST)")
     conn.commit()
     # The watermark table lives in this schema too, and every ingest script
     # writes it before writing a single row. Each of the six used to create
@@ -385,6 +423,99 @@ def ensure_schema(conn):
         )
     """)
     conn.commit()
+
+    ensure_app_view(conn)
+
+
+#: The one supported read surface for a consumer (an app, a digest, a report).
+#:
+#: WHY A VIEW AND NOT "JUST QUERY jobs.jobs"
+#:     jobs.jobs is deliberately unfiltered. ingest/ats.py pulls entire company
+#:     boards, so roughly two thirds of it is roles this pipeline exists to
+#:     ignore -- enterprise sales, tax directors, clinical staff. Querying the
+#:     table directly means every consumer re-derives the same four or five
+#:     joins and the same status/completeness predicates, and gets them subtly
+#:     different. This is that query, written once.
+#:
+#: WHY NOT NOT NULL CONSTRAINTS INSTEAD
+#:     The required-field guarantee cannot be a column constraint, because
+#:     ingest/builtin-nyc.py legitimately writes a listing row first and fills
+#:     description_text on a later pass (its detail pages are rate-limited, so
+#:     the backlog drains over days). A NOT NULL would break that two-phase
+#:     write. Enforcing completeness at the read edge keeps both properties:
+#:     partial rows may exist, but nothing downstream can see one.
+#:
+#: ORDERING: match_score first (the whole point of the ranking), posted_at_ts
+#: as the tie-break so equal scores read newest-first.
+APP_VIEW = "jobs_app"
+
+_APP_VIEW_SQL = f"""
+CREATE OR REPLACE VIEW {APP_VIEW} AS
+SELECT j.id,
+       j.platform,
+       j.company_name,
+       j.title,
+       j.job_url,
+       j.description_text,
+       j.location_raw,
+       j.location_is_nyc,
+       j.location_is_remote,
+       j.department,
+       j.seniority_guess,
+       j.posted_at_ts,
+       j.first_seen,
+       j.last_seen,
+       coalesce(j.salary_text, f.comp_currency || ' ' ||
+                nullif(concat_ws('-', f.comp_min, f.comp_max), '')) AS salary,
+       f.comp_min,
+       f.comp_max,
+       f.comp_currency,
+       f.seniority_level,
+       f.years_experience_min,
+       f.role_archetype,
+       f.tech_stack,
+       f.ai_involvement,
+       f.remote_policy,
+       f.employment_type,
+       f.visa_sponsorship,
+       f.gap_friendly_language,
+       f.summary,
+       m.profile,
+       m.match_score,
+       m.match_reasons,
+       s.fit_score,
+       s.primary_track,
+       s.gap_bridging_angle,
+       s.risk_factors,
+       s.key_technologies
+FROM {TABLE} j
+JOIN {MATCHES_TABLE} m ON m.job_id = j.id
+LEFT JOIN {FACTS_TABLE} f ON f.job_id = j.id
+LEFT JOIN {SCORES_TABLE} s ON s.job_id = j.id AND s.profile = m.profile
+WHERE j.status = '{STATUS_OPEN}'
+  AND coalesce(j.company_name, '') <> ''
+  AND coalesce(j.title, '') <> ''
+  AND coalesce(j.job_url, '') <> ''
+  AND coalesce(j.description_text, '') <> ''
+"""
+
+
+def ensure_app_view(conn):
+    """Create or refresh jobs_app. Idempotent, and safe to call every run.
+
+    CREATE OR REPLACE VIEW cannot drop or reorder existing columns, so a change
+    that removes one needs an explicit DROP first -- deliberately noisy, since
+    anything reading the view would break.
+    """
+    try:
+        conn.execute(_APP_VIEW_SQL)
+        conn.commit()
+    except psycopg.errors.InvalidTableDefinition:
+        # Column set changed incompatibly; replace it outright.
+        conn.rollback()
+        conn.execute(f"DROP VIEW IF EXISTS {APP_VIEW}")
+        conn.execute(_APP_VIEW_SQL)
+        conn.commit()
 
 
 #: Child tables whose job_id must follow jobs.id when a row is re-keyed.

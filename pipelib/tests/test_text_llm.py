@@ -6,6 +6,7 @@ these tests pin current behaviour rather than proposing new behaviour --
 their job is to prove the extraction changed nothing.
 """
 
+import json
 import unittest
 from datetime import datetime, timezone
 
@@ -99,8 +100,16 @@ class TestStripHtmlAndSlug(unittest.TestCase):
         self.assertIsNone(text.strip_html("<br/>"))
 
     def test_truncated(self):
-        self.assertEqual(len(text.strip_html("x" * 9000)),
-                         text.MAX_DESCRIPTION_CHARS)
+        """Written relative to the cap on purpose: the previous version hard-coded
+        an input of 9000 chars, which silently stopped testing anything the moment
+        the cap moved past it (5000 -> 20000)."""
+        over = "x" * (text.MAX_DESCRIPTION_CHARS + 1000)
+        self.assertEqual(len(text.strip_html(over)), text.MAX_DESCRIPTION_CHARS)
+
+    def test_under_cap_is_not_padded_or_cut(self):
+        under = "y" * (text.MAX_DESCRIPTION_CHARS - 1)
+        self.assertEqual(len(text.strip_html(under)),
+                         text.MAX_DESCRIPTION_CHARS - 1)
 
     def test_slugify(self):
         self.assertEqual(text.slugify("Flatiron Health, Inc."),
@@ -134,6 +143,94 @@ class TestRelativeTime(unittest.TestCase):
             text.days_since("2026-07-22T12:00:00", now=self.NOW), 2.0, places=3)
         self.assertIsNone(text.days_since(""))
         self.assertIsNone(text.days_since("not-a-timestamp"))
+
+    # The four shapes Built In prints that used to parse to None, leaving 35 of
+    # 192 rows with no usable date at all.
+    def test_minutes_ago(self):
+        self.assertTrue(text.parse_relative_posted_at("51 Minutes Ago", now=self.NOW)
+                        .startswith("2026-07-24T11:09:00"))
+
+    def test_bare_article_means_one(self):
+        """"An Hour Ago" carries no digit, so the numeric branch missed it."""
+        self.assertTrue(text.parse_relative_posted_at("An Hour Ago", now=self.NOW)
+                        .startswith("2026-07-24T11:00:00"))
+
+    def test_reposted_prefix_is_ignored(self):
+        """Built In writes "Reposted 8 Hours Ago"; .search() handles the prefix."""
+        self.assertTrue(text.parse_relative_posted_at("Reposted 8 Hours Ago",
+                                                      now=self.NOW)
+                        .startswith("2026-07-24T04:00:00"))
+        self.assertTrue(text.parse_relative_posted_at("Reposted An Hour Ago",
+                                                      now=self.NOW)
+                        .startswith("2026-07-24T11:00:00"))
+
+    def test_day_words_anchor_to_midnight(self):
+        """Anchored to midnight, not now-24h, so two runs on the same day agree
+        instead of drifting the same posting's date by hours."""
+        self.assertTrue(text.parse_relative_posted_at("Yesterday", now=self.NOW)
+                        .startswith("2026-07-23T00:00:00"))
+        self.assertTrue(text.parse_relative_posted_at("Reposted Yesterday",
+                                                      now=self.NOW)
+                        .startswith("2026-07-23T00:00:00"))
+        self.assertTrue(text.parse_relative_posted_at("Today", now=self.NOW)
+                        .startswith("2026-07-24T00:00:00"))
+
+
+class TestPostedAtTimestamp(unittest.TestCase):
+    NOW = datetime(2026, 7, 24, 12, 0, tzinfo=timezone.utc)
+
+    def test_iso_passes_through_untouched(self):
+        """Six of seven sources already store ISO; re-deriving it would only
+        risk changing it."""
+        for iso in ("2026-02-01T17:48:22-05:00",
+                    "2021-04-27T20:13:45.158+00:00",
+                    "2026-07-01"):
+            self.assertEqual(text.posted_at_timestamp(iso, now=self.NOW), iso)
+
+    def test_relative_is_converted(self):
+        self.assertTrue(text.posted_at_timestamp("Reposted 8 Hours Ago",
+                                                 now=self.NOW)
+                        .startswith("2026-07-24T04:00:00"))
+
+    def test_absent_or_unparseable_is_none(self):
+        self.assertIsNone(text.posted_at_timestamp(None))
+        self.assertIsNone(text.posted_at_timestamp(""))
+        self.assertIsNone(text.posted_at_timestamp("Full-time"))
+
+
+class TestBoundedJson(unittest.TestCase):
+    """raw_json must always be valid JSON.
+
+    `json.dumps(obj)[:20000]` was storing stumps that json.loads cannot read --
+    10 rows in the live table end mid-string at character 20000. Anything
+    rebuilding from raw_json (jobs/migrate_ats_descriptions.py) needs it valid.
+    """
+
+    def test_under_limit_is_plain_dumps(self):
+        obj = {"a": 1, "description": "short"}
+        self.assertEqual(text.bounded_json(obj, 20000), json.dumps(obj))
+
+    def test_over_limit_stays_parseable_and_keeps_envelope(self):
+        obj = {"id": "abc", "apply_options": [{"link": "https://x"}],
+               "description": "y" * 40000}
+        out = text.bounded_json(obj, 20000)
+        self.assertLessEqual(len(out), 20000)
+        back = json.loads(out)                      # must not raise
+        self.assertEqual(back["id"], "abc")
+        self.assertEqual(back["apply_options"], [{"link": "https://x"}])
+        self.assertLess(len(back["description"]), 40000)
+
+    def test_naive_slice_would_have_been_invalid(self):
+        """Pins why this function exists rather than a slice."""
+        obj = {"id": "abc", "description": "y" * 40000}
+        with self.assertRaises(json.JSONDecodeError):
+            json.loads(json.dumps(obj)[:20000])
+
+    def test_unshrinkable_falls_back_to_valid_placeholder(self):
+        obj = {"description": "z" * 10, "other": "q" * 40000}
+        back = json.loads(text.bounded_json(obj, 1000))
+        self.assertTrue(back["_truncated"])
+        self.assertGreater(back["_original_chars"], 1000)
 
 
 class TestLlmParsing(unittest.TestCase):

@@ -69,6 +69,7 @@ CONCURRENCY: this script is not scheduled directly -- run-daily.py
 runs all ingest scripts sequentially so they never run concurrently.
 """
 
+import argparse
 import os
 import sys
 import re
@@ -86,6 +87,7 @@ while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib"
 sys.path.insert(0, _d)
 sys.path.insert(0, os.path.join(_d, "jobs"))
 
+import relevance  # noqa: E402  (jobs/relevance.py -- for the role vocabulary)
 import schema  # noqa: E402  (jobs/schema.py)
 from pipelib import dbconn, http, ids, state, text  # noqa: E402
 from pipelib.timeparse import utc_now_str  # noqa: E402
@@ -99,6 +101,151 @@ HN_STALE_AFTER_DAYS = 40
 USER_AGENT = "Mozilla/5.0 (compatible; hermes-jobs-ingest/1.0; personal job-search automation)"
 
 URL_PATTERN = re.compile(r'https?://[^\s<>"]+')
+
+#: Segments that are plainly not a job title. Used to score header fields --
+#: see pick_title_segment().
+COMP_PATTERN = re.compile(
+    r"([$€£]|\d+\s*k\b|\bk\s*\+|\bequity\b|\bsalary\b|\bcompensation\b|"
+    r"\bbonus\b|\bbenefits\b|\bper hour\b|\bhourly\b|\bcommission\b)",
+    re.IGNORECASE)
+EMPLOYMENT_PATTERN = re.compile(
+    r"\b(full[- ]?time|part[- ]?time|contract(or)?|freelance|intern(ship)?|"
+    r"permanent|temporary|c2c|w2|\d+\+?\s*(yoe|years))\b", re.IGNORECASE)
+#: Keyword half of "this field describes a place or a work mode". IGNORECASE is
+#: load-bearing: without it \bonsite\b misses the "ONSITE" that HN posters
+#: actually write, and the field scores as neutral and can win the title slot.
+PLACE_PATTERN = re.compile(
+    r"(\bonsite\b|\bon[- ]site\b|\bhybrid\b|\banywhere\b|\bin[- ]person\b|"
+    r"\bvisa\b|\btime\s?zone\b|\bgmt\b|\bcet\b|\butc\b|\bany country\b|"
+    r"\bflexible\b|\blocation:)", re.IGNORECASE)
+#: "Brooklyn, NY" / "San Francisco, CA". Case-SENSITIVE on purpose -- the
+#: trailing two-letter uppercase token is the whole signal, and lowercasing it
+#: would match any "word, wo" pair.
+CITY_STATE_PATTERN = re.compile(r"[A-Z][a-zA-Z.\- ]+,\s*[A-Z]{2}\b")
+#: A bare domain ("spruceid.com"), which URL_PATTERN misses because it has no
+#: scheme. Without this, a header whose only neutral-looking field is the
+#: company's website gets that website stored as the job title.
+BARE_DOMAIN_PATTERN = re.compile(
+    r"\b[\w-]+\.(com|io|ai|org|net|co|dev|tech|app|xyz|so|sh|com?\.[a-z]{2})\b",
+    re.IGNORECASE)
+#: Longest plausible job title. Measured against the longest correctly-parsed
+#: title in the current thread ("Senior/Staff Software Engineer - AI / Agentic
+#: apps", 50 chars); 100 leaves generous headroom while still excluding a field
+#: that has swallowed the comment body.
+MAX_TITLE_CHARS = 100
+
+
+def _python_role_pattern():
+    """"Does this text look like a job title?", from config/relevance.json.
+
+    Reuses title_include so the role vocabulary lives in ONE place -- the same
+    file relevance.py tiers on -- rather than being duplicated here. That is
+    what keeps this script domain-neutral: pointing the pipeline at nursing
+    roles means editing that config, not this parser.
+
+    The patterns are POSTGRES regexes, where a word boundary is \\y. Python's re
+    rejects \\y outright ("bad escape"), so it is translated to \\b, which means
+    the same thing in Python's dialect. Translating is safe in this direction
+    and only in this direction: every other construct in that file (`back.?end`,
+    `full.?stack`) is already common to both dialects.
+    """
+    patterns = relevance.load().get("title_include") or []
+    if not patterns:
+        return None
+    try:
+        return re.compile("|".join(p.replace("\\y", "\\b") for p in patterns),
+                          re.IGNORECASE)
+    except re.error:
+        # A pattern only Postgres can parse must not take the ingest down; the
+        # positional fallback in pick_title_segment() is still correct.
+        return None
+
+
+ROLE_PATTERN = _python_role_pattern()
+
+
+def _segment_score(segment):
+    """Higher means "more likely to be the role", for one header field.
+
+    The positive signal is only a tie-breaker, not a requirement. title_include
+    is this persona's relevance vocabulary, not a general definition of "job
+    title", so real titles it does not list -- "Chief Technology Officer",
+    "Senior Technical Program Manager", "Founding GTM Lead", "Technical
+    Co-Founder" -- score a neutral 0 and must stay eligible. The work is done
+    by the NEGATIVE signals: a field is rejected for looking like a place, a
+    salary, an employment type or a URL, not for failing to look like a role.
+    """
+    score = 0
+    if ROLE_PATTERN and ROLE_PATTERN.search(segment):
+        score += 3
+    if text.REMOTE_PATTERN.search(segment) or text.NYC_PATTERN.search(segment):
+        score -= 2
+    if PLACE_PATTERN.search(segment) or CITY_STATE_PATTERN.search(segment):
+        score -= 2
+    if COMP_PATTERN.search(segment):
+        score -= 3
+    if EMPLOYMENT_PATTERN.search(segment):
+        score -= 2
+    if URL_PATTERN.search(segment) or BARE_DOMAIN_PATTERN.search(segment):
+        score -= 4
+    # A field this long is not a job title -- it is the comment body. The
+    # header is split on the first "<p>", so a poster who writes no paragraph
+    # break leaves the whole comment in the last pipe field, and rows like
+    # "Full Time LiveKit is building the infrastructure layer for the voi..."
+    # get stored as titles. Length is the only signal that separates those from
+    # a genuinely long title, and real ones do not run past ~100 characters.
+    if len(segment) > MAX_TITLE_CHARS:
+        score -= 3
+    return score
+
+
+def pick_title_segment(parts):
+    """(title, location_text) from the pipe-delimited fields after the company.
+
+    THE CONVENTION IS NOT A SCHEMA
+        HN's informal header is "Company | Role | Location | Type | URL", and
+        the previous implementation took parts[1] as the title unconditionally.
+        Posters do not agree on the order, so 52 of 247 stored rows held
+        something else entirely in `title`:
+
+            SmarterDx        -> "150-250k+ + equity + benefits"
+            Rail Europe      -> "Hiring in Paris and REMOTE"  (location "Senior SWE")
+            SpruceID (YC W21)-> "REMOTE (US-Based Preferred)"
+
+        Those are unusable in a listing and they poison guess_seniority() and
+        the relevance title filter downstream.
+
+    So: score every field after the company and take the best one, keeping the
+    rest as location text in its original order. Ties go to the earliest field,
+    so a header whose fields are indistinguishable is read exactly as before.
+
+    RETURNS (None, None) WHEN EVERY FIELD LOOKS LIKE SOMETHING ELSE
+        Some headers genuinely contain no title: "Junior | Remote | Any Time
+        Zone" is a company, a work mode and a timezone. "SpruceID (YC W21) |
+        REMOTE (US-Based Preferred) | Full-Time | spruceid.com" never says the
+        role. Those are skipped rather than having "Any Time Zone" stored as a
+        job title -- the same precision-over-recall trade this module's
+        docstring already makes for comments with no pipes at all.
+
+        The bar is score >= 0, i.e. "nothing marks this as a place, a salary, an
+        employment type or a URL" -- NOT "matches title_include". Requiring a
+        positive score was measured against all 247 stored rows and skipped 72
+        of them, including real titles like "Chief Technology Officer"; this bar
+        skips 30 and fixes 24, with no row made worse.
+    """
+    candidates = [p for p in parts[1:] if p]
+    if not candidates:
+        return None, None
+    best_i, best_score = 0, _segment_score(candidates[0])
+    for i, seg in enumerate(candidates[1:], start=1):
+        s = _segment_score(seg)
+        if s > best_score:
+            best_i, best_score = i, s
+    if best_score < 0:
+        return None, None
+    title = candidates[best_i]
+    rest = [seg for i, seg in enumerate(candidates) if i != best_i]
+    return title, (" | ".join(rest) or None)
 
 
 def find_latest_hiring_thread():
@@ -142,8 +289,9 @@ def parse_comment(comment, thread_id):
         return None  # doesn't follow the pipe-delimited convention -- skip, don't guess
 
     company_name = parts[0]
-    title = parts[1]
-    location_raw = " | ".join(p for p in parts[2:] if p) or None
+    title, location_raw = pick_title_segment(parts)
+    if not title:
+        return None
 
     full_text = strip_html_keep_text(raw_text)
     is_nyc = bool(text.NYC_PATTERN.search(location_raw or "")) or bool(text.NYC_PATTERN.search(title))
@@ -166,12 +314,14 @@ def parse_comment(comment, thread_id):
         "department": None,
         "job_url": job_url,
         "posted_at": posted_at,
+        "posted_at_ts": text.posted_at_timestamp(posted_at),
+        "salary_text": None,
         "seniority_guess": text.guess_seniority(title),
         "location_is_nyc": is_nyc,
         "location_is_remote": is_remote,
         "company_is_nyc_hq": None,
         "company_is_ai_focused": None,
-        "description_text": (full_text or "")[:5000] or None,
+        "description_text": (full_text or "")[:text.MAX_DESCRIPTION_CHARS] or None,
         "raw_json": None,
         "thread_id": thread_id,
     }
@@ -191,6 +341,14 @@ def touch_seen(conn, platform, source_ids):
 
 
 def main():
+    ap = argparse.ArgumentParser(description="HN 'Who is hiring?' ingest.")
+    ap.add_argument(
+        "--reparse", action="store_true",
+        help="re-fetch and re-parse comments already in hn_seen_comments. "
+             "Needed after a parser change: the ledger is what makes the daily "
+             "run cheap, and it also makes a fix invisible to existing rows.")
+    args = ap.parse_args()
+
     conn = dbconn.connect_or_exit("hn-hiring ingest", schema=schema.SCHEMA)
 
     schema.ensure_schema(conn)
@@ -222,11 +380,21 @@ def main():
         ([str(k) for k in kid_ids],),
     ).fetchall()
     already_seen_ids = {r[0] for r in seen_rows}
-    new_kid_ids = [k for k in kid_ids if str(k) not in already_seen_ids]
+    if args.reparse:
+        # Deliberately re-fetches every comment in the current thread: a parser
+        # change is exactly the case the ledger's cheapness hides, because a
+        # fixed title is invisible to a row that is never re-read. Costs one
+        # request per comment, once, against HN's own API.
+        new_kid_ids = list(kid_ids)
+        print(f"hn-hiring: --reparse, re-reading all {len(kid_ids)} comments "
+              f"({len(already_seen_ids)} were already in the ledger)")
+    else:
+        new_kid_ids = [k for k in kid_ids if str(k) not in already_seen_ids]
 
     touch_seen(conn, "hn_whoishiring", already_seen_ids)
 
     records = []
+    declined = []          # comment ids re-read but yielding no usable record
     fetch_errors = 0
     now = utc_now_str()
     for kid_id in new_kid_ids:
@@ -249,12 +417,38 @@ def main():
         rec = parse_comment(comment, thread["id"])
         if rec:
             records.append(rec)
+        else:
+            declined.append(str(kid_id))
     conn.commit()
 
     # This source is insert-only -- a comment is never edited in place, so
     # only the new count is meaningful here.
     new_count = upsert(conn, job_spec, records, schema.make_job_id,
                        debug=DEBUG_PRINT_KEYS).new
+
+    # A --reparse that now DECLINES a comment must retire the row it wrote
+    # under the old parser, because a skipped comment produces no record and
+    # upsert therefore never touches the stale row. Without this, fixing the
+    # parser leaves exactly the rows it was meant to fix -- 19 titles reading
+    # "REMOTE (US)" or a swallowed comment body -- sitting there open forever.
+    #
+    # Closed, not deleted: that is this pipeline's convention everywhere
+    # (close_stale, close_missing), it keeps the row inspectable, it excludes
+    # it from extract/match/the app, and prune_old_closed eventually collects
+    # it. Scoped to comments actually re-read on this run, so a fetch failure
+    # can never close anything.
+    retired_count = 0
+    if args.reparse and declined:
+        retired_count = conn.execute(
+            f"UPDATE {schema.TABLE} SET status = %s, closed_at = %s "
+            f"WHERE platform = 'hn_whoishiring' AND status = %s "
+            f"  AND source_id = ANY(%s)",
+            (schema.STATUS_CLOSED, now, schema.STATUS_OPEN, declined),
+        ).rowcount
+        conn.commit()
+        print(f"hn-hiring: retired {retired_count} row(s) whose comment no "
+              f"longer yields a usable title ({len(declined)} declined).")
+
     closed_count = schema.close_stale(conn, 'hn_whoishiring', HN_STALE_AFTER_DAYS)
     state.set_watermark(conn, "hn_whoishiring", utc_now_str(),
                         table=schema.WATERMARK_TABLE)

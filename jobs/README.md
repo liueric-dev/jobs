@@ -101,8 +101,12 @@ run while any scored row hasn't been copied.
 
 ### On the server (scheduled)
 
-`run-daily.py` runs all seven steps in order, in one process. It's wired to
-`hermes cron`, which loads `~/.hermes/.env` for you:
+`run-daily.py` runs all nine steps in order, in one process, and loads
+`~/.hermes/.env` itself. **`hermes cron` does not load it for you** — this
+README used to claim it did, and the 2026-07-25 scheduled run failed all seven
+steps at once on a missing `DATABASE_URL` and missing API keys because of it.
+Anything already exported wins over the file, so a one-off run can override a
+single key.
 
 ```bash
 hermes cron list                      # confirm it's registered
@@ -154,6 +158,39 @@ DEBUG_PRINT_KEYS=1 python3 jobs/ingest/google-serpapi.py   # verbose per-item lo
 ```
 
 `DEBUG_PRINT_KEYS=1` is the convention across every script here.
+
+## Reading the results: `jobs.jobs_app`
+
+**Query the `jobs.jobs_app` view, not `jobs.jobs`.** The base table is
+deliberately unfiltered — `ingest/ats.py` pulls entire company job boards, so
+roughly two thirds of it is roles this pipeline exists to ignore (enterprise
+sales, tax directors, clinical staff). The view is the supported read surface:
+
+```sql
+SELECT title, company_name, job_url, posted_at_ts, match_score, fit_score
+FROM jobs.jobs_app
+WHERE profile = 'tech'
+ORDER BY match_score DESC, posted_at_ts DESC NULLS LAST
+LIMIT 50;
+```
+
+It guarantees the four fields a listing cannot render without — `company_name`,
+`title`, `job_url`, `description_text` are all non-empty — plus `status='open'`,
+and joins in facts, match scores and narratives. One row per (job, profile).
+
+Those are **not** `NOT NULL` constraints on the columns, on purpose:
+`ingest/builtin-nyc.py` legitimately writes a listing row first and fills
+`description_text` on a later pass, because Built In rate-limits detail-page
+fetches. A column constraint would break that two-phase write. Enforcing
+completeness at the read edge keeps both properties — partial rows may exist,
+but nothing downstream can see one.
+
+Two columns worth knowing about:
+
+| Column | Notes |
+|---|---|
+| `posted_at_ts` | `TIMESTAMPTZ`, and the only date you can sort on. `jobs.posted_at` is TEXT, is part of `content_hash` (so its format is frozen), and holds three incompatible formats — ISO from most sources, `NULL` from Google when the posting gave no date, and relative English from Built In (`"Reposted 8 Hours Ago"`). For Greenhouse it prefers `first_published` over `updated_at`, so "posted" means posted. |
+| `salary` | `builtin`'s parsed `salary_text` when present, else the LLM-extracted `comp_min`/`comp_max`. Sparse — most postings disclose nothing. |
 
 ## How multiple machines stay out of each other's way
 

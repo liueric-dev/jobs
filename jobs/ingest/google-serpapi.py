@@ -316,13 +316,17 @@ def normalize_job(job, mode):
         "department": detected.get("schedule_type"),
         "job_url": (apply_options[0].get("link") if apply_options else None) or job.get("share_link"),
         "posted_at": text.parse_relative_posted_at(detected.get("posted_at")),
+        "posted_at_ts": text.parse_relative_posted_at(detected.get("posted_at")),
+        "salary_text": (detected.get("salary") or None),
         "seniority_guess": text.guess_seniority(title),
         "location_is_nyc": is_nyc,
         "location_is_remote": is_remote,
         "company_is_nyc_hq": None,
         "company_is_ai_focused": None,
         "description_text": text.strip_html(job.get("description")),
-        "raw_json": json.dumps(job)[:20000],
+        # NOT json.dumps(job)[:20000] -- that slices serialized JSON mid-string
+        # and stored 10 unparseable stumps in the live table. See bounded_json.
+        "raw_json": text.bounded_json(job, 20000),
     }
 
 

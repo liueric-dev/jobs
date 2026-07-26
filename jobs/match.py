@@ -54,6 +54,7 @@ sys.path.insert(0, _d)
 sys.path.insert(0, os.path.join(_d, "jobs"))
 
 import profiles  # noqa: E402
+import relevance  # noqa: E402
 import schema  # noqa: E402
 from pipelib import dbconn, llm  # noqa: E402
 from pipelib.timeparse import utc_now_str  # noqa: E402
@@ -193,10 +194,11 @@ _SELECT_FACTS = f"""
     JOIN {schema.TABLE} j ON j.id = f.job_id
     WHERE j.status = %(status)s
       AND f.extraction_model NOT LIKE %(failed)s
+      AND {{union}}
 """
 
 
-def load_facts(conn):
+def load_facts(conn, cfgs):
     """Every usable extracted posting, as plain dicts.
 
     Loaded whole rather than streamed: 11k rows is a few MB, and holding them
@@ -207,10 +209,29 @@ def load_facts(conn):
     Tombstones are excluded here rather than in the caller -- a FAILED row has
     NULL in every fact column and would otherwise be scored as though the
     posting genuinely had no seniority, no archetype and no stack.
+
+    THE RELEVANCE UNION IS APPLIED HERE, NOT ONLY IN extract.py
+        Facts outlive the config that produced them. A posting extracted last
+        week keeps its job_facts row forever, so filtering only at extraction
+        time means a row that config later rejects still gets scored, still
+        clears MATCH_FLOOR, and still sits at the top of the ranking.
+
+        That was not hypothetical: 113 Google Jobs rows naming a relist site as
+        the employer had already been extracted, and 19 of them held
+        match_score >= 90 -- one at match 99 against an LLM fit of 15. Adding
+        company_exclude to config/relevance.json demoted them to tier 3 for
+        future extraction and changed nothing about the ranking until this
+        filter existed.
+
+        The union (not one profile's config) because facts are shared: a
+        posting one profile rejects may be exactly what another wants, and
+        per-profile precision is what the criteria weights are for.
     """
-    rows = conn.execute(_SELECT_FACTS,
+    union, union_params = relevance.union_sql(cfgs, table_alias="j")
+    rows = conn.execute(_SELECT_FACTS.format(union=union),
                         {"status": schema.STATUS_OPEN,
-                         "failed": f"{llm.FAILED_PREFIX}%"}).fetchall()
+                         "failed": f"{llm.FAILED_PREFIX}%",
+                         **union_params}).fetchall()
     cols = ("job_id", "facts_version", "seniority_level",
             "years_experience_min", "role_archetype", "tech_stack",
             "ai_involvement", "ml_research_required",
@@ -233,6 +254,32 @@ def existing_versions(conn, profile):
         f"SELECT job_id, facts_version, criteria_version "
         f"FROM {schema.MATCHES_TABLE} WHERE profile = %s", (profile,)).fetchall()
     return {r[0]: (r[1], r[2]) for r in rows}
+
+
+def prune_orphans(conn, profile, facts, *, dry_run=False):
+    """Drop match rows for postings that are no longer scoreable at all.
+
+    Distinct from the demotion path inside match_profile(), which only fires
+    for a job still present in `facts` whose score fell below MATCH_FLOOR. A
+    job that leaves `facts` entirely -- closed upstream, tombstoned, or newly
+    excluded by config/relevance.json -- never enters that loop, so without
+    this its stale row survives every subsequent run and keeps being shown.
+
+    Deliberately keyed on the loaded fact set rather than on a fresh query, so
+    "what match.py just considered" and "what match.py keeps" cannot disagree.
+    """
+    keep = [f["job_id"] for f in facts]
+    if dry_run:
+        return conn.execute(
+            f"SELECT count(*) FROM {schema.MATCHES_TABLE} "
+            f"WHERE profile = %s AND NOT (job_id = ANY(%s))",
+            (profile.profile, keep)).fetchone()[0]
+    n = conn.execute(
+        f"DELETE FROM {schema.MATCHES_TABLE} "
+        f"WHERE profile = %s AND NOT (job_id = ANY(%s))",
+        (profile.profile, keep)).rowcount
+    conn.commit()
+    return n
 
 
 def match_profile(conn, profile, facts, *, rebuild=False, dry_run=False):
@@ -307,7 +354,8 @@ def main():
         conn.close()
         return
 
-    facts = load_facts(conn)
+    cfgs = [relevance.for_profile(p) for p in active]
+    facts = load_facts(conn, cfgs)
     if not facts:
         print("job-match: no extracted facts yet -- run jobs/extract.py first.")
         conn.close()
@@ -317,8 +365,10 @@ def main():
     for prof in active:
         written, deleted, skipped = match_profile(
             conn, prof, facts, rebuild=args.rebuild, dry_run=args.dry_run)
+        orphaned = prune_orphans(conn, prof, facts, dry_run=args.dry_run)
         parts.append(f"{prof.profile}: {written} matched"
                      + (f", {deleted} demoted" if deleted else "")
+                     + (f", {orphaned} orphaned" if orphaned else "")
                      + (f", {skipped} current" if skipped else ""))
     print(f"job-match{' [dry run]' if args.dry_run else ''}: "
           f"{len(facts)} facts x {len(active)} profile(s) -- "

@@ -7,6 +7,8 @@
 
   "_regex_dialect": "These are POSTGRES regexes (~*), not Python ones. Word boundary is \\y -- in Postgres \\b means BACKSPACE, so a \\b pattern silently matches nothing and quietly demotes everything it was meant to catch to tier 3. This was not hypothetical: the first version of this file used \\b throughout and buried 'ML / LLM Engineer' and 'Senior / Staff Fullstack Engineer' in tier 3. Always re-run tools/relevance-report.py after editing.",
 
+  "_dead_patterns_note": "tools/relevance-report.py --dead lists patterns matching zero rows. That report exists to catch \\b-instead-of-\\y mistakes, NOT to prune correct-but-currently-unused terms. '\\yattorney\\y' and '\\ywarehouse\\y' match nothing today and are kept on purpose: both were verified to match a synthetic title in Postgres, so they are working exclusions waiting for their first posting. Deleting an exclusion because the role has not appeared yet is how it appears in tier 1 next week.",
+
   "title_include": [
     "\\yengineer",
     "\\yengineering\\y",
@@ -82,6 +84,27 @@
   ],
 
   "_title_exclude_note": "Narrow and specific on purpose. Broad words that merely CO-OCCUR with unwanted roles -- 'manager', 'lead', 'director', 'specialist' -- are absent deliberately: they also appear in Engineering Manager and Technical Lead. An over-eager exclude is worse than no exclude, because tier 3 is where things go to be forgotten. Exclude only what is unambiguous.",
+
+  "company_exclude": [
+    "\\yremote zest\\y",
+    "\\yremote click\\y",
+    "\\yv?mysmartpros\\y",
+    "\\yvacancy global\\y",
+    "\\ybrighthush\\y",
+    "\\yjobgether\\y"
+  ],
+
+  "_company_exclude_note": "Matched against company_name, not title. These six are relist sites that Google Jobs reports AS the employer, so the actual employer is unknown and an app would display the job board's name in the company field. 113 rows as of 2026-07-26. Their titles are keyword-stuffed in exactly the way title_include rewards, which is how 19 of them reached match_score >= 90 -- one at match 99 against an LLM fit of 15. Four of the six scrub the employer out of the body entirely (see description_exclude): remote zest 50/50, remote click 23/23, vacancy global 5/5, BrightHush 3/3.",
+
+  "_company_exclude_scope_note": "Deliberately does NOT list bebee, jobleads, learn4good, whatjobs, jooble, lensa, theladders, dailyremote, salutemyjob, remotejobs.org or jobright.ai, even though 150+ job_url values point at them. For those rows company_name holds the REAL employer and only the apply link is routed through the aggregator -- annoying to click, but a genuine posting, and excluding by company_name would match zero of them anyway. Add a pattern here only after confirming the name actually appears in company_name.",
+
+  "_company_exclude_rejected_note": "Rejected alternative: flag rows where SerpApi's `via` field matches company_name. It catches 160 rows but false-positives on every company posting to its own careers site -- via='Cisco Careers'/company='Cisco', 'Snowflake Careers'/'Snowflake', Capital One, Deloitte, ServiceNow, Citadel, D. E. Shaw. Those are the BEST rows in the table. Measured on all 632 Google rows, then rejected; do not revive it without re-running that check.",
+
+  "description_exclude": [
+    "reputed company"
+  ],
+
+  "_description_exclude_note": "Some relisters scrub the employer's name out of the body and substitute a placeholder, leaving text like 'reputed company is redefining IT operations for the modern reputed company'. 82 rows read that way. A posting whose employer has been deleted cannot be applied to no matter how good the title looks, and unlike company_exclude this catches the same spam when it arrives under a fresh company name. Keep this list tiny and literal -- it scans description_text, so a loose pattern here could bury thousands of legitimate rows.",
 
   "location_columns": ["location_is_nyc", "location_is_remote"],
 

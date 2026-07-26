@@ -170,6 +170,8 @@ def parse_feed(xml_bytes, category):
             "department": rss_category or None,
             "job_url": link or None,
             "posted_at": parse_posted_at(pub_date),
+            "posted_at_ts": text.posted_at_timestamp(parse_posted_at(pub_date)),
+            "salary_text": None,
             "seniority_guess": text.guess_seniority(title),
             "location_is_nyc": bool(text.NYC_PATTERN.search(region)),
             "location_is_remote": True,
