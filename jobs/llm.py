@@ -12,7 +12,7 @@ current default), Groq, OpenRouter, a local Ollama/LM Studio server.
     LLM_MODEL      default glm-4.5-flash
     LLM_API_KEY    falls back to GLM_API_KEY
 
-Free-tier budgets are enforced client-side by pipelib.ratelimit (LLM_MAX_RPM
+Free-tier budgets are enforced client-side by ratelimit.py (LLM_MAX_RPM
 / LLM_MAX_RPD, both per-model). Unset means unlimited, so this stays a no-op
 for local and paid endpoints.
 """
@@ -24,7 +24,7 @@ import subprocess
 import urllib.error
 import urllib.request
 
-from . import ratelimit
+import ratelimit
 
 DEFAULT_BASE_URL = "https://api.z.ai/api/paas/v4"
 DEFAULT_MODEL = "glm-4.5-flash"

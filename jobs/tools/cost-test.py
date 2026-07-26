@@ -62,7 +62,8 @@ import relevance   # noqa: E402
 import score       # noqa: E402
 import extract     # noqa: E402
 import profiles    # noqa: E402
-from pipelib import dbconn, llm  # noqa: E402
+import llm         # noqa: E402
+from pipelib import dbconn  # noqa: E402
 
 #: $ per million tokens: (input_miss, input_cache_hit, output).
 #: Output covers reasoning tokens too -- they are billed as output.
@@ -86,7 +87,7 @@ def price_for(model, args):
 
 def call_with_usage(prompt, model, base_url, api_key, thinking, timeout):
     """One completion. Returns (content, usage_dict, elapsed_seconds)."""
-    # Must match what pipelib/llm.py actually sends. Omitting temperature
+    # Must match what jobs/llm.py actually sends. Omitting temperature
     # here measures the provider's default sampling, not production: it
     # inflates run-to-run disagreement and makes any A/B look noisier than
     # the pipeline really is.

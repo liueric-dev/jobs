@@ -177,7 +177,8 @@ sys.path.insert(0, os.path.join(_d, "jobs"))
 import schema  # noqa: E402  (jobs/schema.py)
 import profiles  # noqa: E402  (jobs/profiles.py)
 import relevance  # noqa: E402  (jobs/relevance.py -- kept for the cost tools)
-from pipelib import dbconn, llm  # noqa: E402
+import llm  # noqa: E402  (jobs/llm.py)
+from pipelib import dbconn  # noqa: E402
 from pipelib.timeparse import utc_now_str  # noqa: E402
 
 PERSONA_FILE = os.environ.get(

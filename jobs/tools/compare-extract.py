@@ -45,10 +45,11 @@ sys.path.insert(0, _d)
 sys.path.insert(0, os.path.join(_d, "jobs"))
 
 import extract     # noqa: E402
+import llm         # noqa: E402
 import profiles    # noqa: E402
 import relevance   # noqa: E402
 import schema      # noqa: E402
-from pipelib import dbconn, llm  # noqa: E402
+from pipelib import dbconn  # noqa: E402
 
 #: Compared exactly. summary is excluded (prose), tech_stack handled separately.
 SCALAR_FIELDS = ("seniority_level", "role_archetype", "ai_involvement",
@@ -60,7 +61,7 @@ SCALAR_FIELDS = ("seniority_level", "role_archetype", "ai_involvement",
 
 
 def call(prompt, model, base_url, api_key, thinking, timeout):
-    # Must match what pipelib/llm.py actually sends. Omitting temperature
+    # Must match what jobs/llm.py actually sends. Omitting temperature
     # here measures the provider's default sampling, not production: it
     # inflates run-to-run disagreement and makes any A/B look noisier than
     # the pipeline really is.

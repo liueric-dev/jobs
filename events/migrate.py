@@ -37,7 +37,7 @@ STEPS
   5. Geocode reset truncate `geocode_failed`. It had become a permanent
                    blocklist (2,720 rows, consulted with no expiry), so the
                    addresses that failed under the old facility-code parser
-                   could never recover. pipelib.geocode now expires failures.
+                   could never recover. events/geocode.py now expires failures.
   6. Park lookup   populate `park_locations` from NYC Parks Properties and
                    resolve the park-coded addresses locally -- no
                    rate-limited calls. Measured coverage: 91.8% of the
@@ -63,8 +63,9 @@ while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib"
     _d = os.path.dirname(_d)
 sys.path.insert(0, _d)
 
+import geocode  # noqa: E402  (events/geocode.py, same directory)
 import schema  # noqa: E402  (events/schema.py, same directory)
-from pipelib import dbconn, geocode, ids  # noqa: E402
+from pipelib import dbconn, ids  # noqa: E402
 from pipelib.timeparse import to_utc, utc_now_str  # noqa: E402
 
 #: Was a local copy of the category list, which had already drifted from the

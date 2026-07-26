@@ -30,7 +30,7 @@ CONSISTENCY IS THE POINT
         they are re-done in the current one. Off by default: it deletes
         rows, and that should be a decision, not a side effect.
 
-    Temperature is pinned in pipelib.llm (DEFAULT_TEMPERATURE = 0), which
+    Temperature is pinned in jobs/llm.py (DEFAULT_TEMPERATURE = 0), which
     matters here more than anywhere else -- at the provider default, the
     same model rescored the same jobs into a materially different order.
 
@@ -74,7 +74,8 @@ sys.path.insert(0, SCRIPT_DIR)
 import schema      # noqa: E402
 import relevance   # noqa: E402
 import score       # noqa: E402
-from pipelib import dbconn, llm  # noqa: E402
+import llm         # noqa: E402
+from pipelib import dbconn  # noqa: E402
 
 #: Progress is the whole point of this script, and it will normally be run
 #: as `nohup ... > backfill.log &`. Python block-buffers stdout when it is

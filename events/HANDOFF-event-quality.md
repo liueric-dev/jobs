@@ -91,7 +91,7 @@ dataset and stable across content updates, unlike a data column. Both Socrata da
 
 | file | change |
 |---|---|
-| `pipelib/boroughs.py` | **new.** Borough by point-in-polygon (PostGIS + NYC Open Data `gthc-hcne`), plus the `parkids` prefix decoder. |
+| `events/boroughs.py` | **new.** Borough by point-in-polygon (PostGIS + NYC Open Data `gthc-hcne`), plus the `parkids` prefix decoder. |
 | `pipelib/__init__.py` | added `boroughs` to `__all__`. |
 | `events/schema.py` | **new home of the drop policy:** `DROPPED_CATEGORIES`, `DROPPED_TITLES`, `CLOSURE_PATTERN`, `is_public_event()`. |
 | `events/nyc-events-ingest.py` | `$order=:id`; filters via `is_public_event`; parks borough; parks description via `strip_html`; permitted `description=None`. |

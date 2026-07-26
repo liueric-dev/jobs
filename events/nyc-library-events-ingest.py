@@ -86,8 +86,9 @@ while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib"
     _d = os.path.dirname(_d)
 sys.path.insert(0, _d)
 
+import geocode  # noqa: E402  (events/geocode.py)
 import schema  # noqa: E402
-from pipelib import dbconn, geocode, http as phttp, state  # noqa: E402
+from pipelib import dbconn, http as phttp, state  # noqa: E402
 from pipelib.timeparse import day_bounds_utc, to_utc, utc_now_str  # noqa: E402
 from pipelib.upsert import prune_expired, upsert  # noqa: E402
 

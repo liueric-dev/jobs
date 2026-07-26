@@ -72,10 +72,11 @@ while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib"
 sys.path.insert(0, _d)
 sys.path.insert(0, os.path.join(_d, "jobs"))
 
+import llm         # noqa: E402
 import match       # noqa: E402
 import profiles    # noqa: E402
 import schema      # noqa: E402
-from pipelib import dbconn, llm  # noqa: E402
+from pipelib import dbconn  # noqa: E402
 
 #: Ship thresholds from the design. Below these the rules tier is not ranking
 #: well enough to be trusted to choose what the narrative tier spends on.

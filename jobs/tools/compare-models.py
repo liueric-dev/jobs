@@ -56,7 +56,8 @@ sys.path.insert(0, os.path.join(_d, "jobs"))
 
 import schema  # noqa: E402  (jobs/schema.py)
 import score   # noqa: E402  (jobs/score.py -- for build_prompt and load_persona)
-from pipelib import dbconn, llm  # noqa: E402
+import llm     # noqa: E402  (jobs/llm.py)
+from pipelib import dbconn  # noqa: E402
 
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 
@@ -125,7 +126,7 @@ def parse_llm_json(text):
 
 def call_model(spec, prompt):
     model, base_url, api_key = spec
-    # Must match pipelib.llm.DEFAULT_TEMPERATURE. This harness previously
+    # Must match jobs/llm.py's DEFAULT_TEMPERATURE. This harness previously
     # hardcoded 0.2 while production sent no temperature at all, so every
     # comparison measured a configuration that never actually ran -- and did
     # it at a temperature low enough to hide the sampling noise production

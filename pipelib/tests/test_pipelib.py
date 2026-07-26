@@ -20,7 +20,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 
-from pipelib import geocode, ids, timeparse, upsert  # noqa: E402
+from pipelib import ids, timeparse, upsert  # noqa: E402
 
 
 class TestHashCompatibility(unittest.TestCase):
@@ -253,34 +253,6 @@ class TestToUtc(unittest.TestCase):
         now = timeparse.utc_now_str()
         self.assertRegex(now, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
         self.assertLess("", now)
-
-
-class TestParkNameMatching(unittest.TestCase):
-    def test_park_name_split(self):
-        self.assertEqual(geocode.park_name_of("Chelsea Park: Soccer-01"),
-                         "Chelsea Park")
-        self.assertEqual(
-            geocode.park_name_of("Riverside Park: Lawn-145th Street West-RSP"),
-            "Riverside Park")
-        self.assertIsNone(geocode.park_name_of("MADISON AVE between E 42 and E 43"))
-        self.assertIsNone(geocode.park_name_of(None))
-
-    def test_candidates_cover_observed_mismatches(self):
-        self.assertIn("thomas paine park",
-                      list(geocode.candidates("Thomas Paine Park (Foley Square)")))
-        self.assertIn("park of the americas",
-                      list(geocode.candidates("Park Of The Americas / Linden Park")))
-        self.assertIn("montefiore square park",
-                      list(geocode.candidates("MontefioreSquarePark")))
-
-    def test_candidates_are_deduped_and_ordered(self):
-        got = list(geocode.candidates("Central Park"))
-        self.assertEqual(got[0], "central park")
-        self.assertEqual(len(got), len(set(got)))
-
-    def test_normalize_strips_punctuation(self):
-        self.assertEqual(geocode.normalize_name("Phil \"Scooter\" Rizzuto Park"),
-                         "phil scooter rizzuto park")
 
 
 class TestTableSpec(unittest.TestCase):

@@ -36,8 +36,8 @@ import json
 import sys
 from datetime import timedelta
 
-from . import http
-from .timeparse import utc_now, utc_now_str
+from pipelib import http
+from pipelib.timeparse import utc_now, utc_now_str
 
 BOROUGH_DATASET = "gthc-hcne"  # NYC Borough Boundaries -- verified to carry the_geom
 BOROUGH_REFRESH_DAYS = 180

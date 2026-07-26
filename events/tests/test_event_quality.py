@@ -26,8 +26,9 @@ import unittest
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _ROOT)
+sys.path.insert(0, os.path.join(_ROOT, "events"))
 
-from pipelib import boroughs  # noqa: E402
+import boroughs  # noqa: E402  (events/boroughs.py)
 
 
 def _load(name, path):

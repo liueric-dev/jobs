@@ -312,7 +312,7 @@ is literally `GenerateRequestsPerDayPerProjectPerModel-FreeTier`. Two separate
 limits bite, and they fail differently: RPM is burst (429s, clears in ~60s),
 RPD is a daily budget (429s for the rest of the day, retrying never helps).
 
-`pipelib/ratelimit.py` enforces both client-side, so the pipeline stops before
+`jobs/ratelimit.py` enforces both client-side, so the pipeline stops before
 the provider does. Unset means unlimited, so this is a no-op for local and
 paid endpoints. Budgets are per model, with an override that wins over the
 bare name — non-alphanumerics become underscores:

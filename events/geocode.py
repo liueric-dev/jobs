@@ -43,8 +43,8 @@ import time
 import urllib.request
 from datetime import timedelta
 
-from . import dbconn, http
-from .timeparse import utc_now, utc_now_str
+from pipelib import dbconn, http
+from pipelib.timeparse import utc_now, utc_now_str
 
 PARKS_DATASET = "enfh-gkve"  # NYC Parks Properties -- verified to carry geometry
 NOMINATIM_BASE = "https://nominatim.openstreetmap.org/search"

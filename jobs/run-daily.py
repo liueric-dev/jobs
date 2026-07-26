@@ -44,7 +44,7 @@ the caller did. `hermes cron` does NOT do it for you -- the 2026-07-25 00:00
 scheduled run failed all seven steps at once on missing DATABASE_URL and
 missing API keys, and the job was paused as a result. Anything already
 exported takes precedence over the file, so a one-off run can still override
-a single key. See pipelib/envfile.py.
+a single key. See jobs/envfile.py.
 
 INSTALL: lives in ~/.hermes/scripts/jobs/ alongside the seven scripts
 listed in STEPS.
@@ -72,7 +72,7 @@ while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib"
     _d = os.path.dirname(_d)
 sys.path.insert(0, _d)
 
-from pipelib import envfile  # noqa: E402
+import envfile  # noqa: E402  (jobs/envfile.py)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 

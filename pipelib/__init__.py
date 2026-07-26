@@ -21,6 +21,20 @@ GUIDING PRINCIPLE -- share mechanism, not schema.
     NYPL GraphQL query, QPL's WAF handling, every normalize_* function)
     stays in the pipeline that owns it.
 
+MEMBERSHIP RULE -- two consumers, or it goes home.
+    A module belongs here only while *both* pipelines import it. One
+    consumer means it is that pipeline's code sitting behind a shared
+    import path, which is strictly worse than living in the pipeline: it
+    reads as infrastructure, so a local change gets reviewed as though it
+    affected both.
+
+    Five modules were moved out for exactly this reason -- `llm`,
+    `ratelimit` and `envfile` to `jobs/`, `geocode` and `boroughs` to
+    `events/`. Before adding a module, name its second consumer. Thin usage
+    is not the same as single usage: `text` and `ids` stay because events
+    uses a little of them and duplicating pure functions is the drift this
+    package exists to prevent.
+
 IMPORT BOOTSTRAP
     Several ingest scripts have hyphenated filenames (`builtin-nyc.py`,
     `google-serpapi.py`) so they are not importable as modules, and they sit
@@ -46,13 +60,9 @@ DEPENDENCY
 """
 
 __all__ = [
-    "boroughs",
     "dbconn",
-    "envfile",
-    "geocode",
     "http",
     "ids",
-    "llm",
     "state",
     "text",
     "timeparse",

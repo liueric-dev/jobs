@@ -62,10 +62,11 @@ while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib"
 sys.path.insert(0, _d)
 sys.path.insert(0, os.path.join(_d, "jobs"))
 
+import llm  # noqa: E402
 import profiles  # noqa: E402
 import relevance  # noqa: E402
 import schema  # noqa: E402
-from pipelib import dbconn, llm  # noqa: E402
+from pipelib import dbconn  # noqa: E402
 from pipelib.timeparse import utc_now_str  # noqa: E402
 
 EXTRACT_BATCH_SIZE = int(os.environ.get("EXTRACT_BATCH_SIZE", "40"))

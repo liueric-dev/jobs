@@ -13,9 +13,11 @@ CONFIG
     NYC_OPENDATA_APP_TOKEN   optional; raises Socrata's rate limit
     NOMINATIM_EMAIL          contact address, required to geocode remotely
 
-Mechanism (upsert, retry, hashing, watermarks, geocoding) lives in pipelib;
-the events table definition lives in events/schema.py. What remains here is
-only what is specific to these two Socrata datasets.
+Mechanism (upsert, retry, hashing, watermarks) lives in pipelib; geocoding
+and borough derivation are events-only, so they live alongside this script
+in events/geocode.py and events/boroughs.py; the events table definition
+lives in events/schema.py. What remains here is only what is specific to
+these two Socrata datasets.
 
 SOURCES
     permitted_events  tvpp-9vvx
@@ -55,7 +57,7 @@ GEOCODING
     permitted_events carries no coordinates -- only free-text
     `event_location`, which is a facility code like "Chelsea Park:
     Soccer-01". The old approach fed that whole string to Nominatim and
-    failed 95.5% of the time. pipelib.geocode instead splits on the colon
+    failed 95.5% of the time. events/geocode.py instead splits on the colon
     and resolves the park name against NYC Parks Properties, which covers
     91.8% of park-coded rows with no rate-limited call. See that module.
 
@@ -96,8 +98,10 @@ while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib"
     _d = os.path.dirname(_d)
 sys.path.insert(0, _d)
 
+import boroughs  # noqa: E402  (events/boroughs.py)
+import geocode  # noqa: E402  (events/geocode.py)
 import schema  # noqa: E402
-from pipelib import boroughs, dbconn, geocode, http, state, text  # noqa: E402
+from pipelib import dbconn, http, state, text  # noqa: E402
 from pipelib.timeparse import NYC, to_utc, utc_now_str  # noqa: E402
 from pipelib.upsert import prune_expired, upsert  # noqa: E402
 

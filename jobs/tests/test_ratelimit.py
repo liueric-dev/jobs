@@ -13,10 +13,9 @@ import time
 import unittest
 
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__)))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pipelib import ratelimit  # noqa: E402
+import ratelimit  # noqa: E402  (jobs/ratelimit.py)
 
 MODEL = "gemini-3.6-flash"
 
