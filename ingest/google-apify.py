@@ -88,7 +88,8 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema  # noqa: E402  (schema.py)
-from pipelib import dbconn, http, ids, state, text  # noqa: E402
+from google_jobs import normalize_job  # noqa: E402  (../google_jobs.py)
+from pipelib import dbconn, http, state, text  # noqa: E402
 from pipelib.timeparse import utc_now_str  # noqa: E402
 from pipelib.upsert import upsert  # noqa: E402
 
@@ -190,50 +191,6 @@ def run_actor_query(query, location):
 
     dataset_id = run["data"]["defaultDatasetId"]
     return http.get_json(f"https://api.apify.com/v2/datasets/{dataset_id}/items?token={APIFY_API_TOKEN}")
-
-
-def normalize_job(job, mode):
-    """Identical record shape to ingest/google-serpapi.py -- this
-    actor's output schema matches SerpApi's field-for-field (confirmed live,
-    same job_id for the same posting via both paths).
-
-    That last point is why this file MUST use the same ids.google_source_id()
-    the SerpApi script does: the two sources returning the same posting is
-    supposed to be one row, and it only stays one row while both derive the
-    key the same way. See the Google Jobs section of pipelib/ids.py.
-    """
-    title = job.get("title")
-    company_name = job.get("company_name") or "Unknown"
-    location = job.get("location")
-    detected = job.get("detected_extensions") or {}
-    apply_options = job.get("apply_options") or []
-    company_token = text.slugify(company_name)
-
-    is_nyc = bool(text.NYC_PATTERN.search(location or ""))
-    is_remote = bool(text.REMOTE_PATTERN.search(location or "")) or mode == "remote"
-
-    return {
-        "platform": "google_jobs",
-        "company_token": company_token,
-        "company_name": company_name,
-        "source_id": ids.google_source_id(job, company_token),
-        "title": title,
-        "location_raw": location,
-        "department": detected.get("schedule_type"),
-        "job_url": (apply_options[0].get("link") if apply_options else None) or job.get("share_link"),
-        "posted_at": text.parse_relative_posted_at(detected.get("posted_at")),
-        "posted_at_ts": text.parse_relative_posted_at(detected.get("posted_at")),
-        "salary_text": (detected.get("salary") or None),
-        "seniority_guess": text.guess_seniority(title),
-        "location_is_nyc": is_nyc,
-        "location_is_remote": is_remote,
-        "company_is_nyc_hq": None,
-        "company_is_ai_focused": None,
-        "description_text": text.strip_html(job.get("description")),
-        # NOT json.dumps(job)[:20000] -- see text.bounded_json; slicing
-        # serialized JSON produces a value json.loads cannot read.
-        "raw_json": text.bounded_json(job, 20000),
-    }
 
 
 def main():

@@ -37,14 +37,15 @@ would expose them.
 
 import os
 import hashlib
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone, timedelta
+from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime, timezone
 
 import psycopg
 from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-import query_claims as qc
+import query_claims as qc          # also puts the repo root on sys.path
+from pipelib import text
 
 MAX_JOBS_PER_SUBMIT = int(os.environ.get("MAX_JOBS_PER_SUBMIT", "50"))
 MAX_QUERIES_PER_CLAIM = int(os.environ.get("MAX_QUERIES_PER_CLAIM", "5"))
@@ -57,10 +58,25 @@ MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY = int(
 # on a hostile payload.
 MAX_BODY_BYTES = int(os.environ.get("MAX_BODY_BYTES", str(2 * 1024 * 1024)))
 
+@contextmanager
 def db():
+    """A connection that commits on success AND closes afterwards.
+
+    psycopg's own `with conn:` commits or rolls back but deliberately does NOT
+    close -- it is designed for reusing a long-lived connection. This service
+    opens one per request, so every request was leaking a socket until GC got
+    round to it. Nesting `with conn:` inside a finally-close keeps psycopg's
+    transaction semantics exactly (several callers below rely on the implicit
+    commit) and adds the close. contextlib.closing alone would NOT do: it
+    closes without committing.
+    """
     conn = psycopg.connect(qc.DATABASE_URL)
     conn.execute("SET search_path TO jobs, public")
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def verify_schema():
@@ -81,6 +97,12 @@ def verify_schema():
     without SELECT on google_jobs_query_stats looks fine until the first
     ON CONFLICT runs. has_table_privilege() turns that into a startup error
     naming the missing grant.
+
+    The sequence is checked too. submission_log.id is BIGSERIAL, so an INSERT
+    needs USAGE on submission_log_id_seq as well as INSERT on the table. That
+    grant was in README's privilege table and in nothing that ran, which made
+    it the one documented requirement a startup check could not catch -- it
+    would have surfaced as a 500 on a contributor's first submit instead.
     """
     problems = []
     with db() as conn:
@@ -93,6 +115,20 @@ def verify_schema():
                 p for p in privileges
                 if not conn.execute(
                     "SELECT has_table_privilege(current_user, %s, %s)", (qualified, p)
+                ).fetchone()[0]
+            ]
+            if lacking:
+                problems.append(f"{qualified}: no {', '.join(lacking)}")
+
+        for sequence, privileges in qc.REQUIRED_SEQUENCES.items():
+            qualified = f"jobs.{sequence}"
+            if conn.execute("SELECT to_regclass(%s)", (qualified,)).fetchone()[0] is None:
+                problems.append(f"{qualified}: missing")
+                continue
+            lacking = [
+                p for p in privileges
+                if not conn.execute(
+                    "SELECT has_sequence_privilege(current_user, %s, %s)", (qualified, p)
                 ).fetchone()[0]
             ]
             if lacking:
@@ -303,7 +339,7 @@ async def submit(
         # this is what makes a failed submit safely retryable (see mark_success).
         last_run = _last_success(conn, dataset)
         qc.mark_success(conn, dataset, qc.utc_now_str())
-        qc.log_query_stats(conn, slug, new, len(payload.jobs), qc.days_since(last_run))
+        qc.log_query_stats(conn, slug, new, len(payload.jobs), text.days_since(last_run))
 
         conn.execute(
             """

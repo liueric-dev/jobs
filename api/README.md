@@ -17,29 +17,48 @@ contributor machine                    this server              Postgres
                                              server-side
 ```
 
-## Relationship to `~/.hermes/scripts/jobs/`
+## Relationship to the pipeline in the parent directory
 
-That directory holds the operator's private daily ingest pipeline, run as a
-Hermes cron job. It is a **separate codebase with no shared imports** — this
-repo deliberately reimplements the claim algorithm rather than importing it,
-because `~/.hermes` is the Hermes harness's private directory and shouldn't be
-a library dependency of a public-facing server.
+Until slice D of `~/apps/REORG.md` this was a separate repo with **no shared
+imports**, deliberately reimplementing the claim algorithm rather than
+importing it, on the grounds that `~/.hermes` was the harness's private
+directory and had no business being a library dependency of a public-facing
+server. That reasoning was sound and its conclusion was still wrong, because
+what got duplicated went well beyond the claim: nine functions and the DDL for
+three tables, which had drifted six ways by the time anyone measured. Two of
+those drifts changed `content_hash`, which is row identity — so the same
+posting written by the pipeline and then through this API produced two
+different digests and the two systems rewrote each other's rows on alternating
+runs. It stayed latent only because this service has never been deployed.
 
-They coordinate anyway, safely, because they serialize through the **same
-Postgres row**: `job_ingest_state`, keyed `google_jobs:query:<slug>`, updated
-with the same atomic `INSERT ... ON CONFLICT ... WHERE claimed_at IS NULL OR
-expired`. Postgres row-level locking makes "two claimants never get the same
-query" hold across both systems automatically. The operator's own machines and
-external contributors can run simultaneously without coordination.
+The fix was to move the pipeline out of `~/.hermes` too and put both halves in
+one repo. This directory now imports `../schema.py`, `../google_jobs.py` and
+`pipelib` directly.
 
-`config/google-queries.json` is this service's **own copy** of the query bank.
-It's allowed to diverge from the pipeline's copy — e.g. to expose only a
-curated public subset. Sync by hand if you want parity.
+**What is still deliberately not shared: the claim SQL.** `try_claim_query`,
+`holds_claim`, `mark_success` and `release_claim` are a superset of
+`pipelib.state`'s — they add `claimed_by` and `claim_granted_at`, because this
+service must answer "does this contributor still own the claim they are
+submitting against?", which the pipeline never asks. The two still coordinate
+through the **same Postgres row** (`job_ingest_state`, keyed
+`google_jobs:query:<slug>`) with the same atomic
+`INSERT ... ON CONFLICT ... WHERE claimed_at IS NULL OR expired`, so row-level
+locking keeps "two claimants never get the same query" true across both.
+
+`config/google-queries.json` is now the pipeline's copy, one level up, read by
+both. It used to be a separate file here, free to diverge to a curated public
+subset; the two were byte-identical in practice, and nothing was keeping them
+that way. Set `GOOGLE_QUERIES_FILE` if you do want to serve a different bank.
 
 ## Setup
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -e ~/apps/pipelib   # REQUIRED: this venv has
+                                          # include-system-site-packages=false,
+                                          # so the user-site pipelib the
+                                          # pipeline uses is invisible here
 cp .env.example .env && chmod 600 .env    # fill in DATABASE_URL
 set -a; . .env; set +a
 
@@ -133,8 +152,12 @@ Granting INSERT alone fails at *runtime*, not at deploy time — which is why
 `verify_schema()` checks privileges with `has_table_privilege()` rather than
 just checking that tables exist.
 
-The grants are re-creatable from `query_claims.REQUIRED_TABLES`, which is the
-single source of truth for both the startup check and this table.
+The grants are re-creatable from `query_claims.REQUIRED_TABLES` and
+`REQUIRED_SEQUENCES`, which are the source of truth for both the startup check
+and this table. The sequence row used to appear here and nowhere in the code,
+which made it the one documented grant whose absence surfaced as a 500 on a
+contributor's first submit rather than as a refusal to start; slice D added
+`REQUIRED_SEQUENCES` and a `has_sequence_privilege()` check to close that.
 
 ## Deployment (manual — not automated by this repo)
 
