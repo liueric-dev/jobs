@@ -141,10 +141,7 @@ results for that query, not an exhaustive "all open postings" list.
 
 import os
 import sys
-import re
 import json
-import html as html_module
-import hashlib
 import urllib.request
 import urllib.parse
 import urllib.error

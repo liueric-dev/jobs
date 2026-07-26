@@ -72,10 +72,8 @@ ingest/google-serpapi.py and ingest/builtin-nyc.py.
 
 import os
 import sys
-import re
 import json
 import time
-import html as html_module
 import urllib.request
 import urllib.error
 from datetime import datetime, timedelta, timezone

@@ -43,6 +43,7 @@ it. This module declares only the three contributor tables and the two extra
 claim columns, and never drops or rewrites anything the pipeline owns.
 """
 
+import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone

@@ -56,7 +56,6 @@ IDEMPOTENT: re-running finds no group with >1 row and reports nothing to do.
 """
 
 import argparse
-import os
 import sys
 from collections import defaultdict
 

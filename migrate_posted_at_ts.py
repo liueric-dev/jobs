@@ -37,8 +37,6 @@ re-running finds nothing.
 import argparse
 import collections
 import json
-import os
-import sys
 
 import schema
 from pipelib import dbconn, text
