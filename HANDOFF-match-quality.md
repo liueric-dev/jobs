@@ -43,7 +43,7 @@ Both were wrong — see §4.6. The rules tier beats the status quo 8 to 5, not
 Reproduce with:
 
 ```bash
-set -a && . ~/.hermes/.env && set +a
+set -a && . ./.env && set +a
 python3 tools/calibrate-match.py --profile tech --disagreements 10
 ```
 
@@ -107,7 +107,7 @@ Reproduce with:
 ```bash
 python3 -m venv /tmp/mlvenv
 /tmp/mlvenv/bin/pip install scikit-learn 'psycopg[binary]'
-set -a && . ~/.hermes/.env && set +a
+set -a && . ./.env && set +a
 /tmp/mlvenv/bin/python tools/learned-ranker-probe.py --profile tech
 ```
 

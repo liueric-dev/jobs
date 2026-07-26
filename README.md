@@ -63,8 +63,17 @@ The pipeline needs a `DATABASE_URL`. **No credential is stored in this repo** �
 the default is passwordless and will fail against a password-protected server,
 which is intentional.
 
-On the machine hosting Postgres, this pipeline reads it from `~/.hermes/.env`
-(loaded automatically by `hermes cron`). On any other machine, export it:
+This pipeline reads it from `./.env`, which it loads itself — copy
+`.env.example` and fill it in:
+
+```bash
+cp .env.example .env && chmod 600 .env
+```
+
+That file is read by both `systemd`'s `EnvironmentFile=` and
+`pipelib.envfile`, which do not parse identically; `.env.example` documents the
+intersection you have to stay inside. On any other machine you can export the
+variable instead:
 
 ```bash
 export DATABASE_URL="postgresql://nyc_events:PASSWORD@SERVER:5432/nyc_events"
@@ -107,34 +116,42 @@ run while any scored row hasn't been copied.
 
 ### On the server (scheduled)
 
-`run-daily.py` runs all nine steps in order, in one process, and loads
-`~/.hermes/.env` itself. **`hermes cron` does not load it for you** — this
-README used to claim it did, and the 2026-07-25 scheduled run failed all seven
-steps at once on a missing `DATABASE_URL` and missing API keys because of it.
+A **systemd user timer** runs `run-daily.py` at midnight local time. It is not
+`hermes cron` any more, and it cannot be: the Hermes scheduler resolves the
+script path and requires `path.relative_to(HERMES_HOME/scripts)`, naming
+symlink escape as a case it deliberately blocks, so this pipeline became
+unschedulable there the moment it moved to `~/apps/jobs`.
+
+`run-daily.py` runs all nine steps in order in one process and loads `./.env`
+itself, in addition to the unit's `EnvironmentFile=`. That belt-and-braces is
+deliberate, so a manual run in a bare shell behaves like the scheduled one.
 Anything already exported wins over the file, so a one-off run can override a
 single key.
 
 ```bash
-hermes cron list                      # confirm it's registered
-hermes cron run daily-jobs-ingest     # trigger a run now
+systemctl --user list-timers jobs-ingest.timer     # when does it next fire?
+systemctl --user start jobs-ingest.service         # trigger a run now
+journalctl --user -u jobs-ingest.service -n 50     # what happened
+systemctl --user --failed                          # did anything fail
 ```
 
-To register it fresh:
+To wire it up fresh — units live in `~/.config/systemd/user/`:
 
 ```bash
-hermes cron create "0 0 * * *" "" --script run-daily.py --no-agent \
-    --name daily-jobs-ingest --deliver origin
+systemctl --user daemon-reload
+systemctl --user enable --now jobs-ingest.timer
+loginctl enable-linger eric      # so it runs while logged out (already set)
 ```
+
+A failed run pushes a Telegram notification via `jobs-failure@.service`,
+replacing the `--deliver origin` that came free with the old scheduler.
+**Check `journalctl`, not `systemctl show`**, immediately after a run: a
+`show` read taken right as a unit finishes can report `Result=success` for a
+run the journal shows failing.
 
 Every step runs even if an earlier one fails — the sources are independent, so
 one being down is no reason to skip the rest. Exit code is non-zero if any
 step failed.
-
-Plain cron works too:
-
-```cron
-0 0 * * * cd ~/hermes-scripts && DATABASE_URL="postgresql://..." /usr/bin/python3 run-daily.py
-```
 
 ### On other devices (ad hoc)
 

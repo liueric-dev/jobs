@@ -28,7 +28,7 @@ until its entire eligible corpus had been scored. At ten signups a day that is
 forty machine-hours a day of pure onboarding.
 
 Separately, 11,500 requests/day is impossible on any free tier —
-`~/.hermes/.env` caps `gemini-3.6-flash` at 20 requests/day, and the real free
+`./.env` caps `gemini-3.6-flash` at 20 requests/day, and the real free
 quota is 20, not the documented 1,500 (`README.md`).
 
 ---

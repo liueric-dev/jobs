@@ -196,7 +196,7 @@ reachable right now from the whole LAN at `192.168.1.111:5432`. **Docker's publi
 bypass firewalld** by writing straight into the DOCKER iptables chain, so a firewalld rule
 will not cover this.
 
-1. Rotate `POSTGRES_PASSWORD` **and** the password inside `DATABASE_URL` in `~/.hermes/.env`
+1. Rotate `POSTGRES_PASSWORD` **and** the password inside `DATABASE_URL` in `~/apps/jobs/.env`
    (they must match or compose fails fast). Also update `~/apps/jobs-api`'s environment.
 2. `docker-compose.yml`:
    ```yaml
@@ -204,7 +204,7 @@ will not cover this.
      - "100.107.134.96:5432:5432"   # tailscale0 — fedora
      - "127.0.0.1:5432:5432"
    ```
-3. `docker compose --env-file ~/.hermes/.env up -d --force-recreate postgres`, then confirm
+3. `docker compose --env-file ~/apps/jobs/.env up -d --force-recreate postgres`, then confirm
    `ss -ltnp | grep 5432` shows **no** `0.0.0.0` line.
 4. `ALTER SYSTEM SET idle_in_transaction_session_timeout = '15min'; SELECT pg_reload_conf();`
 
@@ -215,13 +215,22 @@ device-authenticated. `jobs-api`'s README makes the same call.
 `100.112.178.70`, online. (`erics-macbook-pro` has been offline 36 days — add later, the claim
 TTL handles intermittent workers fine.)
 
+> **STALE SINCE SLICE D (2026-07-26) — this worker needs two hand edits on the
+> mac mini, which cannot be made from the server.** The repo layout changed:
+> the pipeline used to sit under `jobs/` and is now at the repo root, so the
+> cron path `jobs/ingest/google-serpapi.py` no longer exists. Secrets also
+> moved from `~/.hermes/.env` into the repo's own `./.env`. Note this worker
+> was almost certainly already dark: slice A rotated the superuser credential
+> its `DATABASE_URL` used.
+
 ```bash
 git clone https://github.com/hermes-toes/jobs-script.git ~/hermes-scripts
 cd ~/hermes-scripts && pip3 install 'psycopg[binary]'
+pip3 install -e ~/apps/pipelib     # or clone pipelib too -- it is a separate repo now
 ```
-`~/.hermes/.env` there (mode 600), **its own** SerpApi key:
+`~/hermes-scripts/.env` there (mode 600), **its own** SerpApi key:
 ```
-DATABASE_URL=postgresql://nyc_events:<new-password>@fedora:5432/nyc_events
+DATABASE_URL=postgresql://jobs_pipeline:<password>@fedora:5432/nyc_events
 SERPAPI_API_KEY=<mac mini's own key>
 ```
 Cron — **SerpApi step only** (the other five sources are free HTTP with no per-machine quota;
