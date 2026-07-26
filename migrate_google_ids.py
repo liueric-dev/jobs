@@ -33,9 +33,12 @@ USAGE
     python3 migrate_google_ids.py --apply    # merge
     python3 migrate_google_ids.py --apply --keep-stats   # don't truncate stats
 
-    Back up first:
-      docker exec nyc-events-postgres pg_dump -U nyc_events -d nyc_events \\
-        | gzip > ~/.hermes/backups/pre-googleid-$(date +%Y%m%d).sql.gz
+    Back up first -- note this must dump the `jobs` database, NOT nyc_events.
+    Since slice E of the reorg the jobs tables live in their own database; a
+    dump of nyc_events would back up the events data and none of what this
+    script rewrites:
+      docker exec nyc-events-postgres pg_dump -U jobs_pipeline -d jobs \\
+        | gzip > ~/backups/pre-googleid-$(date +%Y%m%d).sql.gz
 
 MERGE RULES (per group of rows collapsing to one new id)
     survivor      the most recently seen row -- its content columns are the
@@ -220,8 +223,8 @@ def main():
 
     if not args.apply:
         print("\ndry run -- nothing changed. Re-run with --apply.")
-        print("Back up first: docker exec nyc-events-postgres pg_dump -U nyc_events "
-              "-d nyc_events | gzip > ~/.hermes/backups/pre-googleid-$(date +%Y%m%d).sql.gz")
+        print("Back up first: docker exec nyc-events-postgres pg_dump -U jobs_pipeline "
+              "-d jobs | gzip > ~/backups/pre-googleid-$(date +%Y%m%d).sql.gz")
         conn.close()
         return
 

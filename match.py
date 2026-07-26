@@ -79,7 +79,7 @@ def score_job(facts, criteria):
     touching the pipeline.
 
     `facts` is a job_facts row plus the two location booleans that already
-    live on jobs.jobs -- pipelib.text computes those at ingest for free, so
+    live on the `jobs` table -- pipelib.text computes those at ingest for free, so
     re-deriving them from an LLM would be paying for something we have.
     """
     reasons = []
@@ -157,7 +157,7 @@ def score_job(facts, criteria):
         add("tech", min(earned, tech_cfg.get("cap", 10 ** 6)))
 
     # -- location -----------------------------------------------------------
-    # Reads the booleans already on jobs.jobs, falling back to the extracted
+    # Reads the booleans already on the `jobs` table, falling back to the extracted
     # remote_policy only to distinguish "onsite somewhere else" (a real no)
     # from "we could not classify this" (a data gap, penalised less).
     loc_cfg = criteria.get("location") or {}

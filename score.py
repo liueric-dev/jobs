@@ -48,8 +48,8 @@ env vars, not a code change, and this now has zero Hermes dependency --
 just Python + psycopg + network access.
 
 WHY THE DEFAULT MODEL IS glm-4.5-flash, NOT glm-4.7 -- A REAL DEAD END
-WORTH RECORDING: the account's GLM_API_KEY (already in ~/.hermes/.env)
-was assumed to work for whatever model Hermes itself was successfully
+WORTH RECORDING: the account's GLM_API_KEY (in ./.env, and also still in
+~/.hermes/.env for the harness's own use) was assumed to work for whatever model Hermes itself was successfully
 using (glm-4.7, per ~/.hermes/config.yaml). Direct calls to
 api.z.ai/api/paas/v4/chat/completions with that exact key and "glm-4.7"
 returned "Insufficient balance or no resource package" -- yet
@@ -121,11 +121,13 @@ Portable to other machines -- just needs Python, psycopg, network access
 to both Postgres and whatever LLM endpoint is configured, and the three
 JOB_SCORING_* env vars below (or their fallback defaults).
 
-DATABASE: same Postgres instance/schema as ingest/ats.py. Reads
-jobs.job_matches (the ranking) joined to jobs.job_facts (the posting, as
-facts) and writes jobs.job_scores keyed (job_id, profile). Scores have not
-lived on jobs.jobs since the job_scores migration; personas have not lived
-in config/persona.json since the profiles migration.
+DATABASE: the same `jobs` database as ingest/ats.py, everything in its
+`public` schema (since slice E of the reorg; these tables used to be a `jobs`
+schema inside the events database). Reads job_matches (the ranking) joined to
+job_facts (the posting, as facts) and writes job_scores keyed
+(job_id, profile). Scores have not lived on the `jobs` table since the
+job_scores migration; personas have not lived in config/persona.json since the
+profiles migration.
 
 CONFIG:
     DATABASE_URL             -- postgres connection string
@@ -138,8 +140,8 @@ CONFIG:
                                 "glm-4.5-flash" -- see WHY THE DEFAULT MODEL
                                 above for why not glm-4.7).
     JOB_SCORING_API_KEY      -- bearer token for JOB_SCORING_BASE_URL.
-                                Falls back to GLM_API_KEY (already in
-                                ~/.hermes/.env) if unset, since that's the
+                                Falls back to GLM_API_KEY (in ./.env) if
+                                unset, since that's the
                                 credential the default base_url/model
                                 actually needs on this machine -- set this
                                 explicitly on any other machine/provider.

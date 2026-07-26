@@ -67,7 +67,7 @@ READ-ONLY. Zero LLM calls, zero writes, no network.
 SETUP -- scikit-learn is deliberately not a dependency of this repo
     python3 -m venv /tmp/mlvenv
     /tmp/mlvenv/bin/pip install scikit-learn 'psycopg[binary]'
-    set -a && . ~/.hermes/.env && set +a
+    set -a && . ~/apps/jobs/.env && set +a
     /tmp/mlvenv/bin/python tools/learned-ranker-probe.py --profile tech
 
     psycopg too, because a venv does not see the system site-packages the rest

@@ -55,7 +55,7 @@ DATABASE: same database and table as ingest/ats.py (the `jobs` table
 CONFIG:
     DATABASE_URL              -- postgres connection string
     APIFY_API_TOKEN            -- required, no fallback default (billing-
-                                  linked secret, stored in ~/.hermes/.env)
+                                  linked secret, stored in ~/apps/jobs/.env)
     GOOGLE_JOBS_QUERIES_FILE   -- path to config/google-queries.json
 
 SCHEDULE: not scheduled directly -- see run-daily.py. Runs AFTER

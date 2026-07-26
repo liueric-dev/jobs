@@ -20,7 +20,7 @@ WHY THIS IS NOT AN ESTIMATE
     numbers it prints are reconcilable against a provider's billing page,
     which is the only real test.
 
-READ-ONLY. Scores nothing, writes nothing to jobs.jobs or jobs.job_scores.
+READ-ONLY. Scores nothing, writes nothing to `jobs` or `job_scores`.
 It pulls real unscored postings, builds the real prompt, and throws the
 answers away. The API calls are billable -- that is the point.
 

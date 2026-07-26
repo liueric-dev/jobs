@@ -1,7 +1,7 @@
 {
   "_comment": "Persona profile fed into score.py's LLM prompt for every job it scores. Edit this file directly to refine positioning -- no code change needed. Mirrors the 4-bucket structure in google-queries.json so scoring and query-allocation stay consistent.",
   "profile": "tech",
-  "_profile_comment": "Names the row set this persona's scores live under in jobs.job_scores (job_id, profile). Change it and you start a fresh, empty score set rather than overwriting the old one -- which is the point: revising the persona below without renaming re-scores in place, renaming keeps both. JOBS_PROFILE overrides this for a one-off run.",
+  "_profile_comment": "Names the row set this persona's scores live under in the job_scores table (job_id, profile). Change it and you start a fresh, empty score set rather than overwriting the old one -- which is the point: revising the persona below without renaming re-scores in place, renaming keeps both. JOBS_PROFILE overrides this for a one-off run.",
   "background_summary": "5 years of professional experience as a full-stack software engineer (production experience, not bootcamp-only). Took a 2.5-year career break. Currently 5 months into a structured program focused on prompt engineering, agent design, and LLM/AI integration -- hands-on building, not just coursework.",
   "strengths": [
     "Real production engineering background -- can speak credibly to shipping, on-call, code review, system design at a working level, not just tutorials",

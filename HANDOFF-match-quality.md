@@ -294,8 +294,12 @@ population and hence anything computed from `job_matches`.
 
 ## 7. Practical warnings
 
-- **Pause cron before a long run.** It is live now and runs `0 0 * * *`.
-  `hermes cron pause 43f2e0330e75`, and resume when done. Concurrent
+- **Stop the timer before a long run.** The nightly run is live and fires at
+  midnight local. `systemctl --user stop jobs-ingest.timer`, and `start` it
+  again when done. (This was `hermes cron pause 43f2e0330e75` before slice D of
+  the reorg moved the pipeline onto a systemd user timer.) In practice the
+  `flock -n -E 0` in the unit already makes an overlap exit 0 rather than run
+  twice, so this is about not confusing your own measurements. Concurrent
   `extract.py` runs are safe (the anti-join prevents duplicate work) but they
   will compete for the same rate limit and confuse your timings.
 - **`--bump` or your results are stale.** `match.py` keys its incremental

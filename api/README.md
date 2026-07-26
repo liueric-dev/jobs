@@ -9,8 +9,8 @@ what to search, run the search, and post the raw results back. This server is
 the only thing that talks to Postgres.
 
 ```
-contributor machine                    this server              Postgres
-  worker script  ──claim──────────────▶  app.py    ──────────▶  jobs.jobs
+contributor machine                    this server        Postgres db `jobs`
+  worker script  ──claim──────────────▶  app.py    ──────────▶  public.jobs
        │                                   │                    job_ingest_state
        ├─ SerpApi (their own key)          │                    submission_log
        └──submit raw results─────────────▶ │ normalizes

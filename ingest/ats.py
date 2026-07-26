@@ -54,7 +54,7 @@ single cron entry point and calls this script as a subprocess.
 TEST BEFORE SCHEDULING:
     python3 ingest/ats.py
     DEBUG_PRINT_KEYS=1 python3 ingest/ats.py
-    hermes cron run jobs-ingest
+    systemctl --user start jobs-ingest.service   # the whole nightly run
 
 HEURISTICS -- both are best-effort tags stored alongside each row, not hard
 filters. Query them (WHERE seniority_guess != 'senior' etc.) rather than

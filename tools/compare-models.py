@@ -6,7 +6,7 @@ Answers the only question that matters when swapping JOB_SCORING_MODEL: does
 the cheaper/faster model produce *usable* output, and does it broadly agree
 with what you already trust?
 
-READ-ONLY. This never writes to jobs.jobs -- it pulls real postings, scores
+READ-ONLY. This never writes to the `jobs` table -- it pulls real postings, scores
 them with each candidate model in memory, and prints a comparison. Run it as
 many times as you like without polluting scores.
 

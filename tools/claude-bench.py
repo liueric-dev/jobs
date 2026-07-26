@@ -23,7 +23,7 @@ on the four variables that decide whether it's viable at scale:
                        Score spread and JSON parse rate matter too -- a model
                        that rates everything 70-75 isn't discriminating.
 
-READ-ONLY. Never writes to jobs.jobs or jobs.job_scores. Pulls real unscored
+READ-ONLY. Never writes to `jobs` or `job_scores`. Pulls real unscored
 postings, scores them in memory, prints a comparison table.
 
 USAGE

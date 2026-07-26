@@ -42,7 +42,7 @@ COMPARE AGAINST THE BASELINE, NOT AGAINST THE LLM
     about whether to ship. Read the baseline block, not just the PASS/FAIL.
 
 THE LABELS ARE FREE
-    jobs.job_scores already holds real LLM judgements for profile `tech`,
+    `job_scores` already holds real LLM judgements for profile `tech`,
     produced by the pipeline this replaces. They cost real money once and are
     sitting there. Using them as ground truth means calibration needs no new
     API calls at all -- this script is READ-ONLY and makes zero LLM requests.

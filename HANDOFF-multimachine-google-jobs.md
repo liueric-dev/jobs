@@ -3,6 +3,24 @@
 **Date:** 2026-07-25 · **Status:** Steps 1–2 done and verified. Step 3 written, **not applied**. Steps 4–7 not started.
 **Full plan:** `~/.claude/plans/read-hermes-scripts-jobs-and-create-ancient-badger.md`
 
+> **Multi-machine is NOT IN USE and is not a pending task** — see Step 6. No
+> second worker runs and none is planned (confirmed 2026-07-26). Keep this as
+> the design record for what it would take.
+>
+> **Two things this document predates**, both from `~/apps/REORG.md` the day
+> after it was written. Paths and connection strings below have been corrected
+> for them; the design reasoning has not been touched.
+>
+> 1. **Slice D** merged the standalone `~/apps/jobs-api` repo into this one as
+>    `api/`, and moved the pipeline itself from `~/.hermes/scripts/jobs` to
+>    `~/apps/jobs`. Every `~/apps/jobs-api/x` below is now `~/apps/jobs/api/x`.
+> 2. **Slice E** gave the jobs tables their own `jobs` database, out of the
+>    `jobs` schema they occupied inside `nyc_events`. So the tables are
+>    unqualified in that database's `public`, and any `DATABASE_URL` here names
+>    `/jobs`, never `/nyc_events`. A `jobs_pipeline` URL pointing at
+>    `nyc_events` is the specific combination `ensure_schema()`'s guard exists
+>    to refuse.
+
 ---
 
 ## The ask
@@ -16,7 +34,7 @@ key.
 
 **The coordination layer already existed and was correct.** `pipelib.state.try_claim()` does an
 atomic `INSERT … ON CONFLICT … WHERE claimed_at IS NULL OR expired RETURNING`; Postgres
-row-locking makes "two machines never get the same query" a real guarantee. `~/apps/jobs-api/`
+row-locking makes "two machines never get the same query" a real guarantee. `api/`
 already implements the contributor-worker model the future app needs. **Neither needed
 redesigning.** The original ask was mostly already built.
 
@@ -110,9 +128,12 @@ But 14.5% of its volume is three spam reposters (`remote zest jobs` 53, `vmysmar
 - **`ingest/google-serpapi.py`**, **`ingest/google-apify.py`** — `normalize_job()`
   now calls `ids.google_source_id()`. Both sources return the same `job_id` for the same
   posting, so they must derive the key identically or one posting becomes two rows.
-- **`~/apps/jobs-api/query_claims.py`** — same three functions **reimplemented** (that repo
-  deliberately shares no code with `~/.hermes`). Marked in-file as the one place the two
-  codebases must agree.
+- **`~/apps/jobs/api/query_claims.py`** — at the time, the same three functions
+  **reimplemented**, because that was a separate repo deliberately sharing no code with
+  `~/.hermes`. Slice D of the reorg ended that: `api/` now imports the same `pipelib`
+  functions the pipeline does, and the reimplementations are gone. Measured on merge, the
+  vendored copies had drifted **six** ways, two of which changed `content_hash` — which is
+  the concrete argument against re-splitting them.
 - **`pipelib/tests/test_pipelib.py`** — `TestGoogleJobIdentity`, 8 tests, pinned against two
   **verbatim real blobs** from the live table (the 15Five posting at 18:17:53 and 19:47:41 —
   same `htidocid`, different `fc`, one has `hl` and one doesn't).
@@ -142,12 +163,14 @@ and *before* the delete, that score is silently destroyed.
 
 **Before `--apply`:**
 1. Confirm nothing is running: `pgrep -af "score.py"` returns nothing.
-2. Find out *what* is relaunching it. `hermes cron` has `daily-jobs-ingest` at `0 0 * * *`
-   (`run-daily.py`, enabled) — that does not explain a 05:55 start. Suspect a manual run,
-   another agent session, or a loop.
+2. Find out *what* is relaunching it. The nightly run is `jobs-ingest.timer` at midnight
+   local (`run-daily.py`) — that does not explain a 05:55 start. Suspect a manual run,
+   another agent session, or a loop. (When this was written the nightly run was the
+   `hermes cron` entry `daily-jobs-ingest`; slice D replaced it with the systemd timer, and
+   the unit's `flock -n -E 0` now makes an overlapping start exit 0 instead of running.)
 3. Re-take the backup if significant time has passed.
 4. Then: `python3 migrate_google_ids.py` (confirm ~837→632), then `--apply`.
-5. Verify: `SELECT count(*), count(DISTINCT source_id) FROM jobs.jobs WHERE platform='google_jobs'`
+5. Verify: `SELECT count(*), count(DISTINCT source_id) FROM jobs WHERE platform='google_jobs'`
    — **the two numbers must be equal.**
 
 **Also:** `pipelib/llm.py` was modified at 05:54, during this session, by something other than
@@ -197,7 +220,10 @@ bypass firewalld** by writing straight into the DOCKER iptables chain, so a fire
 will not cover this.
 
 1. Rotate `POSTGRES_PASSWORD` **and** the password inside `DATABASE_URL` in `~/apps/jobs/.env`
-   (they must match or compose fails fast). Also update `~/apps/jobs-api`'s environment.
+   (they must match or compose fails fast). Also update `~/apps/jobs/api/.env`, which holds
+   the separate `jobs_api` credential, and `~/apps/infra/.env`, which is where
+   `POSTGRES_PASSWORD` lives since slice F. Note `POSTGRES_PASSWORD` is inert against an
+   existing volume — rotation is `ALTER ROLE` plus every file that names it.
 2. `docker-compose.yml`:
    ```yaml
    ports:
@@ -236,7 +262,7 @@ pip3 install -e ~/apps/pipelib     # or clone pipelib too -- it is a separate re
 ```
 `~/hermes-scripts/.env` there (mode 600), **its own** SerpApi key:
 ```
-DATABASE_URL=postgresql://jobs_pipeline:<password>@fedora:5432/nyc_events
+DATABASE_URL=postgresql://jobs_pipeline:<password>@fedora:5432/jobs
 SERPAPI_API_KEY=<mac mini's own key>
 ```
 Cron — **SerpApi step only** (the other five sources are free HTTP with no per-machine quota;
@@ -265,7 +291,7 @@ Cron — **SerpApi step only** (the other five sources are free HTTP with no per
 | `ingest/google-serpapi.py` | modified — `normalize_job()` |
 | `ingest/google-apify.py` | modified — `normalize_job()`, dropped unused `hashlib` |
 | `migrate_google_ids.py` | **new**, dry-run verified, **not applied** |
-| `~/apps/jobs-api/query_claims.py` | modified — mirrored identity rule |
+| `api/query_claims.py` (then `~/apps/jobs-api/`) | modified — mirrored identity rule; de-vendored in slice D |
 
 **Nothing has been committed.** Both repos have uncommitted changes.
 
@@ -283,7 +309,7 @@ Cron — **SerpApi step only** (the other five sources are free HTTP with no per
   837 rows is the cheapest this will ever be — same reasoning `schema.py` used for doing
   `job_scores` at 44 rows.
 - **App key custody:** the user's SerpApi key **never leaves their machine**. Extend the
-  existing `~/apps/jobs-api` contributor-worker model; do not build hosted key storage. No
+  existing `api/` contributor-worker model; do not build hosted key storage. No
   encryption-at-rest, no breach surface, no liability.
 - **Scope:** foundation first. The credit-market scheduler is deliberately deferred until
   there's ~2 weeks of *clean* yield data to tune against — which is only possible after

@@ -124,7 +124,7 @@ CONFIG:
     SERPAPI_API_KEY            -- required, no fallback default (unlike
                                   DATABASE_URL's localhost-only default --
                                   this is a billing-linked secret, stored in
-                                  ~/.hermes/.env, never hardcoded here)
+                                  ~/apps/jobs/.env, never hardcoded here)
     GOOGLE_JOBS_QUERIES_FILE   -- path to config/google-queries.json (default:
                                   alongside this script)
 

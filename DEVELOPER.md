@@ -92,7 +92,9 @@ ingest/ats.py → ingest/builtin-nyc.py → ingest/weworkremotely.py → ingest/
 
 All steps always run even if an earlier one fails (independent sources — one being down isn't a reason to skip the rest). Exit code is non-zero if any step failed. `ingest/google-apify.py` must run after the SerpApi step (see its own docstring), and `score.py` runs last since it scores whatever the other six just ingested.
 
-Scheduled: the `jobs-ingest.timer` systemd user unit, daily at midnight local. Slice D moved this off `hermes cron` — the scheduler refuses any script outside `~/.hermes/scripts`, including via symlink, so the move forced it. The old entry (`daily-jobs-ingest`, `43f2e0330e75`) is **paused, not deleted**, so rollback stays one `hermes cron resume` until the timer has proven itself.
+Scheduled: the `jobs-ingest.timer` systemd user unit, daily at midnight local. Slice D moved this off `hermes cron` — the scheduler requires any script it runs to resolve inside `~/.hermes/scripts` and explicitly blocks symlink escape, so moving the code out forced the scheduling change.
+
+The old hermes entry (`daily-jobs-ingest`, `43f2e0330e75`) is still present but **paused, and it is not a rollback** — it points at `jobs/run-daily.py` inside `~/.hermes/scripts`, a path that no longer exists, so resuming it would fail rather than restore anything. Its last real run (2026-07-25) had already failed all 7 steps with `fe_sendauth: no password supplied`, because the hermes scheduler strips secrets out of the subprocess environment via `_sanitize_subprocess_env`. Delete it; do not plan around it. A real rollback means putting the code back, not un-pausing the entry.
 
 ## Per-script reference
 

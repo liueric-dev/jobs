@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-One-time migration: jobs.<scoring columns> -> jobs.job_scores.
+One-time migration: the `jobs` table's scoring columns -> the job_scores table.
 
 Scores used to be eight columns on `jobs`. They are one persona's opinion of
 a posting, not a property of it, so they now live in job_scores keyed

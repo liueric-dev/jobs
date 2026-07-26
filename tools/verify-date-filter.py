@@ -172,7 +172,7 @@ def main():
         return 0
 
     if not SERPAPI_API_KEY:
-        print("FAILED: SERPAPI_API_KEY not set (it lives in ~/.hermes/.env).",
+        print("FAILED: SERPAPI_API_KEY not set (it lives in ~/apps/jobs/.env).",
               file=sys.stderr)
         return 1
 
