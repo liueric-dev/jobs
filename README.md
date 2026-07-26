@@ -40,12 +40,21 @@ curated public subset. Sync by hand if you want parity.
 
 ```bash
 pip install -r requirements.txt
-export DATABASE_URL=postgresql://user:pass@localhost:5432/nyc_events
+cp .env.example .env && chmod 600 .env    # fill in DATABASE_URL
+set -a; . .env; set +a
+
+# once, with an admin credential — the only command that issues DDL
+JOBS_ADMIN_DATABASE_URL=postgresql://admin:pass@localhost:5432/nyc_events \
+  python3 manage_users.py init-schema
+
 uvicorn app:app --port 8420
 ```
 
-Schema is created/extended automatically on startup (additive only — it never
-drops or rewrites columns the ingest pipeline owns).
+Schema creation is a **deliberate, separate step**, not something the service
+does at startup. `init-schema` is additive only — it never drops or rewrites
+columns the ingest pipeline owns. The service itself connects as a role with no
+DDL rights and refuses to start if the schema or its grants are missing, naming
+what's absent. See "Database privileges" below.
 
 ### Issuing a key
 
@@ -93,12 +102,47 @@ doesn't control, and keys can leak.
   from `submission_log`).
 - **Keys are stored hashed**, and revoked rows are kept rather than deleted.
 
+## Database privileges
+
+This service connects as `jobs_api`, a role that can do exactly six things and
+nothing else. It is **not** the database owner, and deliberately not a
+superuser — before 2026-07-26 it shared the instance's only role, `nyc_events`,
+which is a superuser, so a leaked bearer token or an injection bug would have
+yielded `COPY ... FROM PROGRAM` and full access to the unrelated
+`public.events` data.
+
+| Table (schema `jobs`) | Granted |
+|---|---|
+| `jobs` | SELECT, INSERT, UPDATE |
+| `job_ingest_state` | SELECT, INSERT, UPDATE |
+| `google_jobs_query_stats` | SELECT, INSERT |
+| `contributors` | SELECT, INSERT |
+| `api_keys` | SELECT, INSERT, UPDATE |
+| `submission_log` | SELECT, INSERT |
+| `submission_log_id_seq` | USAGE, SELECT |
+
+No `DELETE` on anything — the code never issues one. No `CREATE`, so the
+running service cannot alter the schema the ingest pipeline owns. No grant at
+all on the ten pipeline-owned tables (`job_scores`, `job_facts`, `job_matches`,
+`profiles`, …) or on `public.events`.
+
+`google_jobs_query_stats` needs SELECT despite being write-only from this
+service's perspective: `log_query_stats()` uses `INSERT ... ON CONFLICT
+(slug, run_at) DO NOTHING`, and Postgres requires SELECT on the arbiter index.
+Granting INSERT alone fails at *runtime*, not at deploy time — which is why
+`verify_schema()` checks privileges with `has_table_privilege()` rather than
+just checking that tables exist.
+
+The grants are re-creatable from `query_claims.REQUIRED_TABLES`, which is the
+single source of truth for both the startup check and this table.
+
 ## Deployment (manual — not automated by this repo)
 
 **No credential is stored in this repo.** `DATABASE_URL`'s default is
-passwordless; the real connection string lives in `~/.hermes/.env` (mode 600)
-and is loaded into the environment there. The old shared default password was
-rotated out on 2026-07-24.
+passwordless; the real connection string lives in `.env` (mode 600, gitignored)
+— see `.env.example`. The old shared default password was rotated out on
+2026-07-24, and on 2026-07-26 this service moved off the superuser onto the
+restricted `jobs_api` role described above.
 
 ### Phase 1 — tailnet only (current plan)
 

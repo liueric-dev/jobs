@@ -37,6 +37,7 @@ would expose them.
 
 import os
 import hashlib
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 
 import psycopg
@@ -56,19 +57,63 @@ MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY = int(
 # on a hostile payload.
 MAX_BODY_BYTES = int(os.environ.get("MAX_BODY_BYTES", str(2 * 1024 * 1024)))
 
-app = FastAPI(title="jobs-api", docs_url=None, redoc_url=None)
-
-
 def db():
     conn = psycopg.connect(qc.DATABASE_URL)
     conn.execute("SET search_path TO jobs, public")
     return conn
 
 
-@app.on_event("startup")
-def startup():
+def verify_schema():
+    """Fail fast if the database has not been initialised.
+
+    This process deliberately holds no DDL rights: it connects as a role
+    granted SELECT/INSERT/UPDATE on exactly the six tables in
+    qc.REQUIRED_TABLES, and nothing else. Creating the schema here -- which is
+    what this used to do -- would mean an internet-facing service permanently
+    holding CREATE on the same schema the ingest pipeline owns.
+
+    So a missing table is a deployment error to report, not damage to silently
+    repair. Refusing to start is the point: a half-initialised database would
+    otherwise surface later as a confusing 500 on a contributor's submit.
+
+    Privileges are checked, not just existence. A table can exist and still be
+    unusable if a GRANT was missed, and that failure mode is real -- INSERT
+    without SELECT on google_jobs_query_stats looks fine until the first
+    ON CONFLICT runs. has_table_privilege() turns that into a startup error
+    naming the missing grant.
+    """
+    problems = []
     with db() as conn:
-        qc.ensure_schema(conn)
+        for table, privileges in qc.REQUIRED_TABLES.items():
+            qualified = f"jobs.{table}"
+            if conn.execute("SELECT to_regclass(%s)", (qualified,)).fetchone()[0] is None:
+                problems.append(f"{qualified}: missing")
+                continue
+            lacking = [
+                p for p in privileges
+                if not conn.execute(
+                    "SELECT has_table_privilege(current_user, %s, %s)", (qualified, p)
+                ).fetchone()[0]
+            ]
+            if lacking:
+                problems.append(f"{qualified}: no {', '.join(lacking)}")
+    if problems:
+        raise RuntimeError(
+            "database is not ready for this service -- "
+            + "; ".join(problems)
+            + ". Run `python3 manage_users.py init-schema` with an admin "
+              "credential (JOBS_ADMIN_DATABASE_URL), and check the GRANTs in "
+              "README 'Deployment'."
+        )
+
+
+@asynccontextmanager
+async def lifespan(app):
+    verify_schema()
+    yield
+
+
+app = FastAPI(title="jobs-api", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
 # --------------------------------------------------------------------------

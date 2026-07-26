@@ -44,6 +44,27 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
 )
 
+#: Every table this service touches, and the exact privileges it needs on each.
+#: The role in DATABASE_URL is granted these and nothing else -- no DELETE
+#: anywhere, no DDL, and no access to the ten pipeline-owned tables in the same
+#: schema or to public.events. app.py verifies this at startup instead of
+#: creating anything, because a service that faces untrusted input should not
+#: hold schema-modification rights.
+#:
+#: google_jobs_query_stats needs SELECT despite being write-only from this
+#: service's point of view: log_query_stats() uses
+#: `INSERT ... ON CONFLICT (slug, run_at) DO NOTHING`, and Postgres requires
+#: SELECT on the conflict target to evaluate the arbiter index. Granting INSERT
+#: alone fails at runtime with "permission denied", not at deploy time -- which
+#: is exactly why verify_schema() checks privileges and not just existence.
+REQUIRED_TABLES = {
+    "jobs": ("SELECT", "INSERT", "UPDATE"),
+    "job_ingest_state": ("SELECT", "INSERT", "UPDATE"),
+    "google_jobs_query_stats": ("SELECT", "INSERT"),
+    "contributors": ("SELECT", "INSERT"),
+    "api_keys": ("SELECT", "INSERT", "UPDATE"),
+    "submission_log": ("SELECT", "INSERT"),
+}
 GOOGLE_QUERIES_FILE = os.environ.get(
     "GOOGLE_QUERIES_FILE",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "google-queries.json"),
