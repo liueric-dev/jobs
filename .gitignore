@@ -4,16 +4,17 @@ __pycache__/
 .venv/
 venv/
 
-# Build artefacts from `pip install -e .` (pipelib -- see pyproject.toml)
+# Build artefacts from an editable install
 *.egg-info/
 build/
 dist/
 
-# Secrets -- DATABASE_URL, POSTGRES_PASSWORD and every API key live in
-# ~/.hermes/.env, outside this tree. These patterns are belt-and-braces in
-# case a copy is ever made inside it. This repository is cloned to several
-# machines and hosted remotely: a credential committed here is a credential
-# on all of them, and in the host's history permanently.
+# Secrets. Since slice D these live IN this tree, not in ~/.hermes/.env: ./.env
+# for the pipeline and api/.env for the service, which holds a deliberately
+# different, restricted credential. Both are mode 600 with a tracked
+# .env.example beside them. This repository is cloned to several machines and
+# hosted remotely: a credential committed here is a credential on all of them,
+# and in the host's history permanently.
 .env
 .env.*
 !.env.example
@@ -35,3 +36,6 @@ tmp/
 
 # Agent worktrees and scratch state
 .claude/
+
+# flock target from the systemd unit ExecStart -- created on every run
+.run.lock
