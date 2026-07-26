@@ -25,10 +25,18 @@ COMPARE AGAINST THE BASELINE, NOT AGAINST THE LLM
     The LLM never ranked anything. It scored postings in arrival order and
     nothing sorted the results, because there is no surfacing layer. So the
     status quo this replaces is RECENCY, and that is what the final block of
-    output compares against. Measured on this corpus, recency put 1 of 20
-    good postings in front of a user and the rules put 8 -- while recency was
-    itself worse than random, because newest-first surfaces whatever was just
-    scraped, spam reposters included.
+    output compares against. Measured on this corpus: the rules put 8 of 20
+    good postings in front of a user, newest-first put 5, and a random draw
+    puts 3.1.
+
+    GET THE DIRECTION OF THE BASELINE RIGHT. This block sorted first_seen
+    ASCENDING until 2026-07-26, so the row labelled "recency" was the 20
+    OLDEST postings and scored 1/20. That made the rules look 8x better than
+    the status quo when the honest figure is 8 vs 5. The random row had the
+    same shape of error -- a single seed that happened to draw 5/20 against a
+    500-seed mean of 3.1 -- which made recency look worse than random, a
+    conclusion that was entirely an artifact of the reversed sort. Both are
+    fixed; a baseline is only useful if it is the thing you actually replaced.
 
     A quality bar invented before the baseline is measured tells you nothing
     about whether to ship. Read the baseline block, not just the PASS/FAIL.
@@ -74,6 +82,10 @@ from pipelib import dbconn, llm  # noqa: E402
 MIN_SPEARMAN = 0.6
 MIN_RECALL = 0.8
 
+#: How many draws the random baseline averages over. One draw is not a
+#: baseline -- see the note in the baseline block at the bottom of main().
+RANDOM_DRAWS = 500
+
 
 def load_pairs(conn, profile_obj):
     """Every LLM-scored posting that has facts, scored by the rules in-process.
@@ -111,6 +123,16 @@ def load_pairs(conn, profile_obj):
         pairs.append({"job_id": f["job_id"], "fit": fit, "match": score,
                       "reasons": reasons, "title": title, "company": company,
                       "first_seen": first_seen})
+
+    # Sorted, because Postgres does not promise row order without an ORDER BY
+    # and three things below depend on it: which of a block of tied
+    # match_scores lands inside top-`within`, which postings the random
+    # baseline draws, and the order ties break in. Two runs against an
+    # unchanged database reported recall 0.440 and 0.433, and a random
+    # baseline of 3.1 and 2.9, with nothing whatsoever having changed. Small
+    # enough to shrug at, which is the problem -- it is indistinguishable from
+    # a small real effect, and this file exists to measure small real effects.
+    pairs.sort(key=lambda p: p["job_id"])
     return pairs
 
 
@@ -246,19 +268,34 @@ def main():
     #
     # "recency" is the honest baseline: the LLM never ranked anything, it
     # scored postings in arrival order, and nothing sorted the results. So the
-    # status quo is whatever arrived most recently.
-    by_rules = sorted(pairs, key=lambda p: -p["match"])[:20]
-    by_recent = sorted(pairs, key=lambda p: p.get("first_seen") or "")[:20]
-    random.seed(7)
-    rnd = random.sample(pairs, min(20, len(pairs)))
+    # status quo is whatever arrived most recently -- DESCENDING first_seen.
+    # Sorting it the other way measures the oldest postings in the corpus,
+    # which is not a baseline anybody was ever served. See the docstring.
+    k = min(20, len(pairs))
+    by_rules = sorted(pairs, key=lambda p: -p["match"])[:k]
+    by_recent = sorted(pairs, key=lambda p: p.get("first_seen") or "",
+                       reverse=True)[:k]
+
+    # Averaged over many draws rather than one seed. A single sample of 20 from
+    # a ~15% positive base rate has a standard deviation of ~1.5 hits, so one
+    # seed can land anywhere from 1 to 6 and any of those looks like a fact.
+    fit_sum = good_sum = 0.0
+    for seed in range(RANDOM_DRAWS):
+        random.seed(seed)
+        sel = random.sample(pairs, k)
+        fit_sum += statistics.mean([p["fit"] for p in sel])
+        good_sum += sum(1 for p in sel if p["fit"] >= args.good)
+
     print("\n  TOP 20 QUALITY vs BASELINE (what actually reaches a user):")
     for label, sel in (("rules (match_score)", by_rules),
-                       ("recency (old behaviour)", by_recent),
-                       ("random", rnd)):
+                       ("recency (newest first)", by_recent)):
         fits = [p["fit"] for p in sel]
         good = sum(1 for f in fits if f >= args.good)
         print(f"    {label:<26} mean fit {statistics.mean(fits):5.1f}   "
-              f"{good:2}/{len(sel)} at fit>={args.good}")
+              f"{good:5.1f}/{k} at fit>={args.good}")
+    print(f"    {f'random (mean of {RANDOM_DRAWS})':<26} "
+          f"mean fit {fit_sum / RANDOM_DRAWS:5.1f}   "
+          f"{good_sum / RANDOM_DRAWS:5.1f}/{k} at fit>={args.good}")
 
     ok = rho >= MIN_SPEARMAN and (recall is None or recall >= MIN_RECALL)
     print(f"\n  {'READY' if ok else 'BELOW THRESHOLD'}: the rules tier "

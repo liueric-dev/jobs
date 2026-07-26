@@ -265,30 +265,44 @@ Measured over the 917 LLM-scored postings that have facts:
 
 | ordering | mean fit of top 20 | top 20 that are fit>=80 | recall@150 |
 |---|---|---|---|
-| **rules (`match_score`)** | **69.3** | **40%** | **0.440** |
-| recency (old behaviour) | 35.2 | 5% | 0.075 |
-| random | 47.6 | 25% | 0.164 |
+| **rules (`match_score`)** | **69.3** | **40%** (8/20) | **0.433** |
+| recency (newest first, old behaviour) | 48.9 | 25% (5/20) | 0.179 |
+| random (mean of 500 draws) | 46.6 | 15% (3.0/20) | 0.164 |
 
-2x the mean fit of the old behaviour, 8x the hit rate, 5.9x the recall. Note
-that recency was **worse than random** — newest-first surfaces whatever was
-just scraped, which skews toward the high-volume spam reposters that are ~14.5%
-of Google Jobs volume.
+1.4x the mean fit of the old behaviour, 1.6x the hit rate, 2.5x the recall.
+Real, and worth having, but not a transformation.
+
+**These two rows were wrong until 2026-07-26 and the error flattered the
+result.** The baseline block sorted `first_seen` *ascending*, so the row
+labelled "recency" was the 20 **oldest** postings — it scored 1/20 and made the
+rules look 8x better than the status quo. The `random` row used a single seed
+that happened to draw 5/20 against a 500-seed mean of 3.1. Together those
+produced the conclusion that recency was *worse than random*, which was
+entirely an artifact of the reversed sort: newest-first is in fact modestly
+better than random, not worse. A baseline is only worth measuring against if it
+is the thing you actually replaced.
 
 Set quality bars relative to what a change replaces. A bar invented before the
 baseline is measured tells you nothing about whether to ship.
 
 ### Result as of 2026-07-26 — one threshold met, one not
 
-Measured against 914 LLM-scored postings for profile `tech`, over a fully
+Measured against 917 LLM-scored postings for profile `tech`, over a fully
 extracted corpus (4,977 `job_facts` rows, 1 tombstoned):
 
 ```
-spearman                 +0.617   (need >= 0.6)   PASS
-recall fit>=80 in top150  0.444   (need >= 0.8)   FAIL  [59/133]
+spearman                 +0.619   (need >= 0.6)   PASS
+recall fit>=80 in top150  0.433   (need >= 0.8)   FAIL  [58/134]
 ```
 
-Spearman is stable across sample sizes (+0.605 / +0.613 / +0.617 at 756 / 806
-/ 914 postings), which is what a real measurement looks like.
+Spearman is stable across sample sizes (+0.605 / +0.613 / +0.619 at 756 / 806
+/ 917 postings), which is what a real measurement looks like.
+
+These figures are reproducible to the digit only since `load_pairs` started
+sorting by `job_id`. Before that, two runs against an unchanged database
+returned recall 0.440 and 0.433: a seeded sample over an unordered SELECT is
+not a pinned experiment, and the wobble was the same size as the effects this
+tool exists to detect.
 
 **Recall is window-relative — do not compare it across corpus sizes.** The same
 ranking scored 0.476 when 806 postings were ranked and 0.444 when 3,214 were,
@@ -296,12 +310,47 @@ because "top 150" is a far narrower slice of the larger pool. When the corpus
 grows, either the window grows with it or the number falls for reasons that
 have nothing to do with the weights.
 
-**This is a capacity ceiling, not a tuning gap.** A sweep across the entire
-plausible weight space — base 22–55, location penalty 0 to −55, tech cap 18–34,
-match floor 0–40 — moves recall only between 0.468 and 0.484. Seventeen coarse
-fields cannot reproduce a judgement made from reading full prose: the LLM sees
-"this role blends production engineering with customer-facing AI work" in the
-description; the rules see `archetype=backend`.
+**This is a tuning gap, not a capacity ceiling — the opposite of what this
+document said until the probe was run.** A sweep across the entire plausible
+weight space — base 22–55, location penalty 0 to −55, tech cap 18–34, match
+floor 0–40 — moves recall only between 0.468 and 0.484, and the conclusion
+drawn from that was that seventeen coarse fields simply could not reproduce a
+judgement made from reading full prose.
+
+That inference does not hold. A weight *sweep* only explores the shapes
+`criteria.json` can express: a base, a per-level penalty, a capped additive
+boost. It cannot find an interaction, and exhausting it says nothing about
+what the features contain. `tools/learned-ranker-probe.py` asks the question
+properly — fit a model on **exactly the inputs `score_job()` reads** and
+cross-validate it against the same 917 labels:
+
+| ranking over the same 917 postings | precision@20 | avg precision |
+|---|---|---|
+| rules (`match_score`), hand-tuned | 8.0 | 0.347 |
+| **learned, identical features** | **12.7 ± 1.0** | **0.498 ± 0.015** |
+| learned, + the unused `job_facts` columns | 11.6 ± 1.4 | 0.480 ± 0.025 |
+| learned, + tf-idf over the full description | 14.7 ± 1.3 | 0.520 ± 0.031 |
+
+Out-of-fold, 10× 5-fold, paired bootstrap on the difference: +0.167 average
+precision [+0.099, +0.240]. The features were never the problem. The same 17
+fields, weighted by fitting instead of by hand, close most of the gap.
+
+Two riders, both of which cut against spending on extraction:
+
+- **The unused columns are worthless here.** `employment_type`,
+  `visa_sponsorship`, `comp_*` and `years_experience_max` are already
+  extracted and cost nothing to adopt — and adding them makes the model
+  slightly *worse*. `visa_sponsorship` is 96% `unknown` and `comp_*` is 13%
+  populated, so they are mostly noise with a missingness indicator attached.
+- **Full prose adds little once its boilerplate is stripped.** The text arm
+  first scored 0.534, and its strongest positive terms were `18808` and
+  `18808 ljbffr` — a republisher's footer tag, present on 41 `google_jobs`
+  postings that happen to be 34% `fit>=80` against a 13.9% base rate. It was
+  learning which board scraped the page. Stripped, the arm falls to 0.520,
+  inside one standard deviation of the structured-only model.
+
+So the ranking ceiling is the weighting function, and the answer is the
+learned ranker below — not richer extraction.
 
 Three things were learned getting to that number, all of which were
 measurement errors first:
@@ -323,6 +372,15 @@ measurement errors first:
   `new_grad`, "Senior Software Engineer" read as `ml_research`, both
   annihilated. Hard excludes are now reserved for fields that are both
   reliably extracted and genuinely disqualifying.
+- **The recency baseline was sorted backwards.** See the table above: the row
+  labelled "the old behaviour" was the 20 *oldest* postings, and the random
+  row was a single lucky seed. Together they overstated the improvement as 8x
+  and made recency look worse than random.
+- **An exhausted weight sweep was read as an exhausted feature set.** The
+  sweep only ever explored the shapes `criteria.json` can express. Concluding
+  from it that the features were at capacity took four days of planned
+  extraction work off the critical path in the wrong direction, and the
+  experiment that disproved it cost zero API calls and twenty minutes.
 
 **What this costs in practice**, given the baseline comparison above:
 
@@ -341,9 +399,13 @@ measurement errors first:
   net is earning its keep, because the good postings are scattered further
   down.
 
-Closing it needs more signal, not better weights — which is exactly what the
-learned ranker below is for, and why `job_events` is worth logging now.
-precision@20 is the objective it should be trained against.
+Closing it needs better weights, not more signal — a learned ranker over the
+features that already exist, which the probe measures at 12.7/20 against the
+hand-tuned 8/20. `job_events` is still worth logging now, because engagement
+labels are what let that model improve past the LLM's own judgement rather
+than merely imitating it. precision@20 is the objective it should be trained
+against; average precision is what to *measure* it with, since p@20 is a count
+of twenty things and its confidence interval is correspondingly useless.
 
 ---
 
@@ -357,11 +419,19 @@ problem.
    fully explainable, free at inference.
 2. **Now** — log engagement (`job_events`). No payoff this quarter, total
    blocker for everything below if skipped.
-3. **Next** — learned ranker. Features from `job_facts`, labels from
-   `job_events`, logistic regression on saved/applied. Zero inference cost,
+3. **Next, and now measured rather than assumed** — learned ranker. Features
+   from `job_facts`, logistic regression, labels from `job_events` once there
+   are any and from `job_scores.fit_score` until then. Zero inference cost,
    beats hand-tuned weights because it learns preferences users cannot
    articulate, and improves with use instead of decaying. A global model plus a
    per-user residual handles cold start.
+
+   `tools/learned-ranker-probe.py` already fits this model out-of-fold on the
+   existing 917 labels: **12.7/20 precision@20 against the rules' 8.0**, +0.167
+   average precision [+0.099, +0.240] paired. That is the whole business case,
+   and it needs no new extraction, no new labels and no engagement history to
+   start — the cold-start model can be trained on `fit_score` today and swapped
+   to engagement labels as they accumulate.
 4. **Later** — embeddings for "more like the ones you saved" (~$0.10 one-time
    for the corpus). Also fixes the fuzzy-title weakness `relevance.py`
    acknowledges, and enables cross-source dedup.

@@ -28,13 +28,17 @@ Current measured quality for profile `tech`:
 
 ```
 spearman                  +0.619
-recall fit>=80 in top150   0.440   [59/134]
+recall fit>=80 in top150   0.433   [58/134]
 
 TOP 20 QUALITY vs BASELINE
-  rules (match_score)      mean fit  69.3    8/20 at fit>=80
-  recency (old behaviour)  mean fit  35.2    1/20 at fit>=80
-  random                   mean fit  47.6    5/20 at fit>=80
+  rules (match_score)      mean fit  69.3    8.0/20 at fit>=80
+  recency (newest first)   mean fit  48.9    5.0/20 at fit>=80
+  random (mean of 500)     mean fit  46.6    3.0/20 at fit>=80
 ```
+
+The two baseline rows read 1/20 and 5/20 in the first draft of this document.
+Both were wrong — see §4.6. The rules tier beats the status quo 8 to 5, not
+8 to 1.
 
 Reproduce with:
 
@@ -51,11 +55,17 @@ quality — see §4.
 
 ## 2. What is already ruled out — do not redo
 
-**Weight tuning is exhausted.** A sweep over the whole plausible space —
+**Hand-tuning weights is exhausted.** A sweep over the whole plausible space —
 `base` 22–55, location penalty 0 to −55, tech cap 18–34, `MATCH_FLOOR` 0–40 —
 moves recall only between **0.468 and 0.484**. `base` cannot affect rank
 correlation at all (adding a constant does not reorder). If a weight change
 appears to move Spearman a lot, you have hit trap §4.1, not a real effect.
+
+  Do not extend this to "the features are at capacity", which is what the
+  first draft of this document did. A sweep only explores the shapes
+  `criteria.json` can express and cannot represent an interaction. §3 fits a
+  model on the identical features and gets 12.7/20 against the rules' 8.0, so
+  there is a great deal left in them — just not reachable by hand.
 
 **Reasoning tokens stay ON for extraction.** Measured: 4.9x cheaper and 3.9x
 faster with them off, but against a 98.6% self-consistency floor they shift
@@ -73,38 +83,66 @@ stable.
 
 ---
 
-## 3. Start here: is it the features or the weights?
+## 3. ANSWERED: it is the weights
 
-**Run this before spending a cent on new extraction fields.** It costs zero LLM
-calls and it decides the whole direction of the work.
+This section used to say "run this before spending a cent on new extraction
+fields". It has been run — `jobs/tools/learned-ranker-probe.py`, zero LLM
+calls, about twenty minutes — and it came back on the cheaper side.
 
-Fit a simple model — logistic regression or a small gradient-boosted tree — on
-the **existing 17 fields**, with the 917 labelled postings as ground truth
-(`fit_score >= 80` as the positive class). Then compare its precision@20
-against the hand-tuned rules' 8/20.
+Fitting a model on **exactly the inputs `score_job()` reads**, cross-validated
+against the same 917 labels:
 
-- **Learned model does much better than 8/20** → the features are fine and
-  hand-tuned weights are the bottleneck. Skip new extraction fields entirely
-  and go straight to the learned ranker (roadmap step 3 in `SCORING.md`). This
-  is the cheaper outcome.
-- **Learned model is also ~8/20** → the 17 coarse fields genuinely cannot
-  express what the LLM reads from prose. New fields are the right investment,
-  and §5 is your list.
+| ranking | precision@20 | avg precision |
+|---|---|---|
+| rules (`match_score`), hand-tuned | 8.0 | 0.347 |
+| **learned, identical features** | **12.7 ± 1.0** | **0.498 ± 0.015** |
+| learned, + the unused `job_facts` columns | 11.6 ± 1.4 | 0.480 ± 0.025 |
+| learned, + tf-idf over the full description | 14.7 ± 1.3 | 0.520 ± 0.031 |
 
-Dependencies are open for this — the repo is stdlib+psycopg by discipline, but
-an experiment script under `jobs/tools/` that imports scikit-learn is fine and
-does not commit the pipeline to anything. Keep it read-only.
+Out-of-fold, 10× 5-fold, seed 11. Paired bootstrap of the difference against
+the rules: **+0.167 average precision [+0.099, +0.240]**.
 
-Feature extraction for this is already done for you: `match.load_facts(conn)`
-returns every posting as a dict with the facts plus `location_is_nyc` /
-`location_is_remote`.
+Reproduce with:
+
+```bash
+python3 -m venv /tmp/mlvenv
+/tmp/mlvenv/bin/pip install scikit-learn 'psycopg[binary]'
+set -a && . ~/.hermes/.env && set +a
+/tmp/mlvenv/bin/python jobs/tools/learned-ranker-probe.py --profile tech
+```
+
+**What follows from it:**
+
+- **The features were never the bottleneck.** The same 17 fields, weighted by
+  fitting rather than by hand, close most of the gap. §5 is not the next move.
+- **The unused `job_facts` columns are worthless here.** `employment_type`,
+  `visa_sponsorship`, `comp_*`, `years_experience_max` are already extracted
+  and free to adopt — and they make the model slightly *worse*.
+  `visa_sponsorship` is 96% `unknown`, `comp_*` is 13% populated.
+- **The prose adds little.** The text arm first scored 0.534 and its top
+  positive terms were `18808` and `18808 ljbffr` — a republisher's footer on
+  41 `google_jobs` postings that happen to be 34% `fit>=80` against a 13.9%
+  base rate. It had learned which board scraped the page. Stripped, the arm
+  falls to 0.520, within one standard deviation of structured-only. The probe
+  now strips it; see `_BOILERPLATE` and read the term list before the number.
+- **Why §2's sweep misled.** A weight sweep only explores the shapes
+  `criteria.json` can express — a base, a per-level penalty, a capped additive
+  boost. It cannot represent an interaction, so exhausting it says nothing
+  about what the features contain. "Tuning is exhausted" and "the features are
+  at capacity" are different claims and only the first was measured.
+
+**Next move: build the learned ranker** (`SCORING.md` roadmap step 3), trained
+on `fit_score` for cold start and swapped to `job_events` labels as they
+accumulate.
 
 ---
 
-## 4. Measurement traps — all five of these bit during the last session
+## 4. Measurement traps — all seven of these bit on this codebase
 
 These cost more time than the actual engineering. Every one produced a
-plausible-looking number that was wrong.
+plausible-looking number that was wrong. 4.1–4.5 were found during the scoring
+rework; 4.6 and 4.7 were found afterwards, reading the tool that reports the
+others.
 
 ### 4.1 Do not compute metrics over a floor-filtered sample
 `job_matches` only holds rows at or above `MATCH_FLOOR`. Joining it to
@@ -140,17 +178,63 @@ justified a wrong decision. Both are fixed; any new tool must send
 ### 4.5 Set quality bars relative to a baseline
 `MIN_SPEARMAN = 0.6` / `MIN_RECALL = 0.8` in `calibrate-match.py` were invented
 during design, before any measurement. Recall "fails" against a number that was
-never grounded, while the same ranking is 8x better than the system it
+never grounded, while the same ranking is a real improvement on the system it
 replaced. **Use precision@20 against the recency baseline as your objective**,
-not the PASS/FAIL line.
+not the PASS/FAIL line — but read §4.6 first, because the baseline itself was
+wrong.
+
+### 4.6 Check the direction of your baseline, and average it
+The `recency` row in `calibrate-match.py` sorted `first_seen` **ascending**
+until 2026-07-26, so what it called "the old behaviour" was the 20 **oldest**
+postings in the corpus — an ordering no user was ever served. It scored 1/20
+where true newest-first scores 5/20. The `random` row alongside it used a
+single seed that drew 5/20 against a 500-seed mean of 3.1.
+
+Together those two errors produced a conclusion that was stated as fact in
+`SCORING.md`: that the rules tier was *8x* the status quo, and that recency was
+*worse than random*. Neither is true. The honest figures are 8 / 5 / 3.1, and
+newest-first is modestly better than random rather than worse. Both are fixed.
+
+The general lesson: a baseline is the most load-bearing number in a quality
+measurement, because every decision is a comparison against it — and it is
+usually the number nobody checks, precisely because it is "just the thing we
+already do". Sanity-check its direction, and average anything stochastic.
+A single draw of 20 from a ~15% base rate has a standard deviation of ~1.5
+hits, so one seed can land anywhere from 1 to 6 and any of those reads as fact.
+
+### 4.7 Pin the row order, not just the seed
+`load_pairs` and `load_facts` issue SELECTs with no `ORDER BY`, and a seeded
+`random.sample` over an unordered list is not reproducible. Two runs of
+`calibrate-match.py` against an *unchanged* database reported recall 0.440 and
+0.433, and a random baseline of 3.1 and 2.9.
+
+Those gaps are small enough to shrug at, which is exactly the problem: they are
+the same size as the effects this tool exists to detect, so a real +0.007 and
+a row-order shuffle are indistinguishable. Both tools now sort by `job_id`
+before anything indexes into the list. If you add a third, sort it too — a
+pinned seed over an unpinned sequence is not a pinned experiment.
 
 ---
 
-## 5. Candidate extraction fields, ranked
+## 5. Candidate extraction fields, ranked — SHELVED, §3 says do not
 
-Only pursue these if §3 says features are the bottleneck. Ordered by expected
-value, and every one is a hypothesis rather than a recommendation — the reason
-to test is that the current schema has no way to express what the LLM keys on.
+**§3 has been run and it says the features are not the bottleneck.** Do not
+start here. This section is kept because the hypotheses may become worth
+testing once the learned ranker has taken the weighting gain and the ceiling
+moves again — and because the probe's `--terms` output is now real evidence
+about which of them would pay, where the list below is five guesses.
+
+The prose terms the text arm leans on, after boilerplate stripping, do line up
+with hypotheses 1 and 5: `solutions`, `customer-facing`, `customers`,
+`integrations`, `end-to-end`, `ship`, `agents`, `ai coding` on the positive
+side; `senior`, `staff`, `mentor`, `lead`, `devops`, `infrastructure`,
+`pipelines`, `ml` on the negative. Note how much of that the existing schema
+*already* encodes — `customer_facing`, `role_archetype`, `seniority_level`,
+`ai_involvement` — which is the same finding from the other direction: the
+signal is present and the hand-tuned weights are not extracting it.
+
+Ordered by expected value, and every one is a hypothesis rather than a
+recommendation.
 
 1. **`role_blend`** — does the posting combine production engineering with
    customer-facing or applied-AI work? `persona.json` calls `bridge_solutions`
@@ -238,6 +322,7 @@ population and hence anything computed from `job_matches`.
 | `jobs/match.py` | `score_job()` is pure and unit-tested; the ranking function |
 | `jobs/config/criteria.json` | weights, with calibration history in `_comment` keys |
 | `jobs/tools/calibrate-match.py` | the quality gate, incl. the baseline block |
+| `jobs/tools/learned-ranker-probe.py` | §3's experiment; needs scikit-learn in a throwaway venv, read-only, zero LLM calls |
 | `jobs/tools/compare-extract.py` | field-level agreement; always run `--arms off-off` first |
 | `jobs/tools/cost-test.py` | `--stage extract` measures the extraction prompt |
 | `jobs/tests/test_match.py` | 18 tests; keep them passing, they pin the hard-exclude short-circuit |
@@ -246,11 +331,16 @@ population and hence anything computed from `job_matches`.
 
 ## 9. The one-paragraph version
 
-The rules tier ranks 8x better than what it replaced but reaches only 40%
-precision@20, and weight tuning is exhausted. Before adding extraction fields,
-fit a learned model on the existing 17 features against the 917 labelled
-postings: if it beats 8/20, the weights were the bottleneck and you should
-build the learned ranker instead; if it does not, the features genuinely are
-the ceiling and §5 is the list. Either way the objective is precision@20 versus
-the recency baseline, not the invented 0.8 recall threshold — and read §4
-before trusting any number you measure.
+The rules tier reaches 8/20 precision@20 against 5/20 for the recency it
+replaced and 3.0/20 for random — a real gain, smaller than this document first
+claimed. Hand-tuned weight *sweeping* is exhausted, but that turned out not to
+mean what it looked like: a learned model on **exactly the same 17 fields**
+reaches 12.7/20 and +0.167 average precision over the rules, paired CI
+[+0.099, +0.240]. So the features were never the ceiling, the weighting
+function was. Adding extraction fields (§5) is shelved; the next move is the
+learned ranker in `SCORING.md` roadmap step 3, trained on `fit_score` for cold
+start and on `job_events` as engagement accumulates. Measure it with average
+precision and report precision@20 — p@20 is the objective but it is a count of
+twenty things and cannot resolve the differences you will be deciding on. Read
+§4 before trusting any number you measure; three of its six traps were found
+after the conclusions they invalidated had already been written down as fact.
