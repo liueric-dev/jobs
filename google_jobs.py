@@ -62,6 +62,31 @@ def normalize_job(job, mode):
     Note the fallback branch of google_source_id() depends on the apply URL,
     which a contributor controls. That is still client-derived-but-recomputed,
     never client-supplied.
+
+    KNOWN BUG, not fixed here -- `posted_at` slides.
+        Google reports publication as a coarse relative string ("23 days ago"),
+        and parse_relative_posted_at resolves it as `now - delta`. Because this
+        function runs on every ingest, the value is anchored to when the row was
+        last written rather than to when the posting was published: re-ingest
+        the same payload a week later and posted_at moves a week later too.
+
+        Two consequences. The stored date is wrong and drifts, and the app view
+        sorts on posted_at_ts, so drifted rows creep toward the top. And
+        posted_at is in HASH_FIELDS_SHORT, so a re-seen Google posting can never
+        be "unchanged" -- which is why a serpapi run reports `0 unchanged` where
+        ats.py reports thousands.
+
+        Measured 2026-07-26: 706 of 835 google_jobs rows are derived this way,
+        but only 6 have actually drifted, because Google's ranking rotates and
+        most postings are written once. A slow leak, not present damage.
+
+        The fix is to pin posted_at on first write, or anchor the offset to
+        first_seen instead of now -- NOT to round the value, since "3 days ago"
+        still resolves to a different day tomorrow. Existing rows are
+        backfillable: raw_json keeps the original string and first_seen records
+        when it was read. Row identity is unaffected either way; make_job_id
+        does not include posted_at. See ~/apps/REORG.md, "The sliding
+        posted_at".
     """
     title = job.get("title")
     company_name = job.get("company_name") or "Unknown"

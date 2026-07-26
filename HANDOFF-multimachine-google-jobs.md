@@ -212,16 +212,22 @@ No TLS/proxy needed inside the tailnet — Tailscale is WireGuard, already encry
 device-authenticated. `jobs-api`'s README makes the same call.
 
 ### Step 6 — second worker on `erics-mac-mini`
-`100.112.178.70`, online. (`erics-macbook-pro` has been offline 36 days — add later, the claim
-TTL handles intermittent workers fine.)
 
-> **STALE SINCE SLICE D (2026-07-26) — this worker needs two hand edits on the
-> mac mini, which cannot be made from the server.** The repo layout changed:
-> the pipeline used to sit under `jobs/` and is now at the repo root, so the
-> cron path `jobs/ingest/google-serpapi.py` no longer exists. Secrets also
-> moved from `~/.hermes/.env` into the repo's own `./.env`. Note this worker
-> was almost certainly already dark: slice A rotated the superuser credential
-> its `DATABASE_URL` used.
+> **NOT IN USE (confirmed 2026-07-26).** No second worker is running and none is
+> planned right now. This section is kept as a design record for whenever a
+> second machine is actually wanted — it is not a pending task, and nothing
+> here needs doing.
+>
+> If it is ever revived, the instructions below are written for the pre-slice-D
+> layout and need three updates: the script is now `ingest/google-serpapi.py`
+> (the pipeline moved from `jobs/` to the repo root), secrets come from the
+> repo's own `./.env` rather than `~/.hermes/.env`, and `pipelib` is a separate
+> installable repo. The credentials shown are also stale — slice A rotated the
+> superuser password these predate.
+
+`100.112.178.70`. (`erics-macbook-pro` has been offline 36 days — the claim TTL
+handles intermittent workers fine, so either could be added later without
+coordination.)
 
 ```bash
 git clone https://github.com/hermes-toes/jobs-script.git ~/hermes-scripts
