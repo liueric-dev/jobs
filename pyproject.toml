@@ -1,0 +1,47 @@
+# Packaging for pipelib, so consumers outside this directory tree can import it.
+#
+# WHY INSTALLED AND NOT VENDORED
+#     ~/apps/jobs-api ran the vendoring experiment and lost. It copied ~9 of
+#     these functions plus the DDL for three tables, and now carries four
+#     divergences: strip_html truncates at 5000 where text.py uses 20000,
+#     parse_relative_posted_at misses minutes and "yesterday", raw_json uses
+#     json.dumps(job)[:20000] which is the mid-string corruption bounded_json
+#     exists to prevent, and posted_at_ts/salary_text are missing entirely.
+#     Two of those change content_hash, which is row identity for ~23,500
+#     stored digests. One copy on disk is the whole point.
+#
+# WHY EDITABLE
+#     pipelib is still actively edited -- slices D and E both change dbconn.py.
+#     A non-editable install adds a "remember to reinstall" step whose failure
+#     mode is precisely the drift above, with extra ceremony.
+#
+# WHY THIS FILE IS AT THE REPO ROOT AND NOT IN pipelib/
+#     A PEP 517 project root must be an ancestor of the packages it declares.
+#     That makes this repo look like a project called "pipelib" even though it
+#     also holds jobs/ -- hence the explicit `packages` list below. Without it,
+#     setuptools flat-layout autodiscovery sees several top-level directories
+#     and refuses with "Multiple top-level packages discovered".
+#
+# TRANSITIONAL (slice C): pipelib deliberately does NOT move to ~/apps/pipelib
+#     yet. 22 files under jobs/ derive jobs/'s OWN sys.path entry from the
+#     walk-up that searches for a pipelib/ directory:
+#         sys.path.insert(0, _d)
+#         sys.path.insert(0, os.path.join(_d, "jobs"))
+#     Move pipelib out of this tree and `_d` resolves to "/", so `import schema`
+#     breaks in all 22 -- and installing pipelib does not fix that, because the
+#     broken import is the sibling one, not the pipelib one. Slice D rewrites
+#     those bootstraps and moves this file.
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pipelib"
+version = "0.1.0"
+description = "Shared mechanism for the NYC events and jobs ingestion pipelines."
+requires-python = ">=3.11"
+dependencies = ["psycopg[binary]>=3.1"]
+
+[tool.setuptools]
+packages = ["pipelib", "pipelib.tests"]

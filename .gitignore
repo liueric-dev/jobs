@@ -4,6 +4,11 @@ __pycache__/
 .venv/
 venv/
 
+# Build artefacts from `pip install -e .` (pipelib -- see pyproject.toml)
+*.egg-info/
+build/
+dist/
+
 # Secrets -- DATABASE_URL, POSTGRES_PASSWORD and every API key live in
 # ~/.hermes/.env, outside this tree. These patterns are belt-and-braces in
 # case a copy is ever made inside it. This repository is cloned to several

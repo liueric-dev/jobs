@@ -40,6 +40,13 @@ import os
 import re
 
 #: Where the secrets live. DATABASE.md is the authority on this path.
+#:
+#: TRANSITIONAL (slice C): this default is *jobs-specific*. Events moved to
+#: ~/apps/events and passes its own path explicitly, because an app whose
+#: secrets live in the harness's private directory is relocated rather than
+#: extracted. Slice D gives jobs its own .env too, at which point this default
+#: has no consumers and should be deleted rather than repointed -- a module
+#: shared by two apps has no business knowing either one's config path.
 DEFAULT_ENV_FILE = os.path.expanduser("~/.hermes/.env")
 
 _LINE = re.compile(r"""
