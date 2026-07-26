@@ -43,7 +43,7 @@ import time
 import urllib.request
 from datetime import timedelta
 
-from . import http
+from . import dbconn, http
 from .timeparse import utc_now, utc_now_str
 
 PARKS_DATASET = "enfh-gkve"  # NYC Parks Properties -- verified to carry geometry
@@ -78,6 +78,8 @@ def ensure_geocode_schema(conn):
             source TEXT NOT NULL DEFAULT 'nominatim'
         )
     """)
+    # display_name added later; backfilled on first Nominatim hit
+    dbconn.add_missing_columns(conn, "geocode_cache", [("display_name", "TEXT")])
     conn.execute("""
         CREATE TABLE IF NOT EXISTS geocode_failed (
             address TEXT PRIMARY KEY,
@@ -260,16 +262,17 @@ def _parse_bookkeeping(text):
     return datetime.strptime(text, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
 
 
-def _remember(conn, address, lat, lon, source):
+def _remember(conn, address, lat, lon, source, display_name=None):
     conn.execute(
         """
-        INSERT INTO geocode_cache (address, latitude, longitude, geocoded_at, source)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO geocode_cache (address, latitude, longitude, geocoded_at, source, display_name)
+        VALUES (%s, %s, %s, %s, %s, %s)
         ON CONFLICT (address) DO UPDATE SET
             latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude,
-            geocoded_at = EXCLUDED.geocoded_at, source = EXCLUDED.source
+            geocoded_at = EXCLUDED.geocoded_at, source = EXCLUDED.source,
+            display_name = COALESCE(EXCLUDED.display_name, geocode_cache.display_name)
         """,
-        (address, lat, lon, utc_now_str(), source),
+        (address, lat, lon, utc_now_str(), source, display_name),
     )
     conn.execute("DELETE FROM geocode_failed WHERE address = %s", (address,))
 
@@ -341,7 +344,72 @@ def geocode(conn, address, *, allow_remote=True, debug=False):
     if not allow_remote:
         return None, None
 
+    lat, lon, _ = _nominatim(conn, address, debug=debug)
+    return lat, lon
+
+
+def geocode_with_address(conn, address, *, allow_remote=True, debug=False):
+    """Resolve `address` to (lat, lon, display_name), or (None, None, None).
+
+    Same resolution order as geocode() -- positive cache, park lookup,
+    negative cache, Nominatim -- but also captures the formatted display
+    name (street address string) when available from Nominatim or an
+    earlier cached result.
+    """
+    if not conn or not address or not address.strip():
+        return None, None, None
+    address = address.strip()
+
+    # Check cache for cached result including display_name.
+    # If the cache entry has no display_name (e.g. from park_locations),
+    # fall through to Nominatim rather than returning a partial result.
+    row = conn.execute(
+        "SELECT latitude, longitude, display_name, source FROM geocode_cache WHERE address = %s",
+        (address,)).fetchone()
+    if row:
+        lat, lon, display_name, source = float(row[0]), float(row[1]), row[2], row[3]
+        if display_name:
+            return lat, lon, display_name
+        # Cached coordinates but no display_name (pre-upgrade or
+        # park_locations). Try Nominatim for the formatted address.
+        if allow_remote:
+            dn = _fetch_display_name(conn, address, debug=debug)
+            if dn:
+                _remember(conn, address, lat, lon, source, display_name=dn)
+                return lat, lon, dn
+        return lat, lon, None
+
+    # Park lookup (no display_name available from this path)
+    park = park_name_of(address)
+    if park:
+        found = _lookup_park(conn, park)
+        if found:
+            _remember(conn, address, found[0], found[1], "nyc_parks_properties")
+            if debug:
+                print(f"[debug] park match {address!r} -> {found}", file=sys.stderr)
+            return found[0], found[1], None
+
+    if _failure_is_current(conn, address):
+        if debug:
+            print(f"[debug] geocode skipped (failed recently): {address!r}",
+                  file=sys.stderr)
+        return None, None, None
+
+    if not allow_remote:
+        return None, None, None
+
     return _nominatim(conn, address, debug=debug)
+
+
+def _fetch_display_name(conn, address, debug=False):
+    """Call Nominatim for just the display_name, reusing coordinates cache.
+
+    Nominatim results are still stored in geocode_cache (updating the
+    display_name for any existing entry), but the caller discards the
+    coordinates — they were already resolved via park_locations.
+    """
+    _, _, dn = _nominatim(conn, address, debug=debug)
+    return dn
 
 
 def _nominatim(conn, address, debug=False):
@@ -354,7 +422,7 @@ def _nominatim(conn, address, debug=False):
         if debug:
             print("[debug] NOMINATIM_EMAIL unset -- skipping remote geocode",
                   file=sys.stderr)
-        return None, None
+        return None, None, None
 
     elapsed = time.monotonic() - _last_nominatim_call
     if elapsed < NOMINATIM_MIN_INTERVAL:
@@ -371,15 +439,16 @@ def _nominatim(conn, address, debug=False):
             data = json.loads(resp.read().decode())
         if data:
             lat, lon = float(data[0]["lat"]), float(data[0]["lon"])
-            _remember(conn, address, lat, lon, "nominatim")
+            display_name = data[0].get("display_name")
+            _remember(conn, address, lat, lon, "nominatim", display_name=display_name)
             if debug:
-                print(f"[debug] nominatim {address!r} -> ({lat}, {lon})",
-                      file=sys.stderr)
-            return lat, lon
+                print(f"[debug] nominatim {address!r} -> ({lat}, {lon})"
+                      f"  ({display_name})", file=sys.stderr)
+            return lat, lon, display_name
         _remember_failure(conn, address, "no results")
-        return None, None
+        return None, None, None
     except Exception as e:
         _remember_failure(conn, address, str(e))
         if debug:
             print(f"[debug] nominatim error for {address!r}: {e}", file=sys.stderr)
-        return None, None
+        return None, None, None

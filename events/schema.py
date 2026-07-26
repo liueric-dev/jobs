@@ -19,6 +19,8 @@ TIMESTAMP COLUMNS -- two generations, on purpose
     for why the TEXT columns cannot be compared across sources.
 """
 
+import re
+
 from pipelib import dbconn, ids
 from pipelib.upsert import GEOG_EXPR, TableSpec
 
@@ -37,6 +39,54 @@ SOURCE_SEATGEEK = "seatgeek"
 OPENDATA_SOURCES = (SOURCE_PERMITTED, SOURCE_PARKS)
 LIBRARY_SOURCES = (SOURCE_NYPL, SOURCE_QPL)
 TICKETING_SOURCES = (SOURCE_TICKETMASTER, SOURCE_SEATGEEK)
+
+# ---------------------------------------------------------------------------
+# What counts as a public event, for `nyc_permitted_events`
+#
+# This lives here, not in the ingest script, because migrate.py needs the
+# same predicate to clean up rows admitted under an older rule -- and it
+# already kept its own drifting copy of the category list. One definition,
+# two callers: the ingest filters at normalize time, the migration deletes
+# what is already stored. If they disagree, the pipeline re-admits on every
+# run exactly what the migration just deleted.
+#
+# tvpp-9vvx is a permit register. A permit becomes a public event only by
+# accident of what it is for, and no single field says which -- hence three
+# tests rather than one. Each was measured against live rows; see the module
+# docstring in nyc-events-ingest.py for the counts.
+# ---------------------------------------------------------------------------
+
+#: Facility reservations and stagehand logistics. 79% of the raw feed.
+DROPPED_CATEGORIES = frozenset({
+    "Sport - Youth", "Sport - Adult", "Theater Load in and Load Outs",
+})
+
+#: Private permits wearing a public label -- someone's own barbecue, wedding
+#: or birthday in a reservable park space, with no description, no URL and
+#: no venue. 2,438 of 6,457 surviving rows.
+#:
+#: Matched on the WHOLE title, case-folded, never as a substring: "Picnic"
+#: is a private reservation, "Picnic in the Park with the Philharmonic" is a
+#: real event and must survive.
+DROPPED_TITLES = frozenset({
+    "miscellaneous", "celebration", "picnic", "barbecue", "bbq", "party",
+    "wedding", "wedding ceremony", "birthday", "birthday party",
+    "family reunion", "reunion", "gathering", "other", "n/a", "tbd",
+})
+
+#: Park closures -- the negation of an event. All 152 live matches were
+#: reviewed individually; there were no false positives.
+CLOSURE_PATTERN = re.compile(
+    r"construction|closure|closed|maintenance|repair|renovation", re.IGNORECASE)
+
+
+def is_public_event(title, category):
+    """False for permit records that are not events anyone can attend."""
+    if category in DROPPED_CATEGORIES:
+        return False
+    title = (title or "").strip()
+    return not (title.lower() in DROPPED_TITLES or CLOSURE_PATTERN.search(title))
+
 
 #: Fields hashed for change detection. ORDER AND MEMBERSHIP ARE FROZEN --
 #: these digests are stored in events.content_hash. Verified byte-identical

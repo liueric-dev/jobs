@@ -46,6 +46,7 @@ DEPENDENCY
 """
 
 __all__ = [
+    "boroughs",
     "dbconn",
     "geocode",
     "http",

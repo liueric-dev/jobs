@@ -114,7 +114,21 @@ query CalendarEventList($adminFilters: AdminFilters, $userQueryString: String) {
 NYPL_BOROUGHS = {"Bronx": "Bronx", "New York": "Manhattan",
                  "Staten Island": "Staten Island"}
 NYPL_MAX_PAGES = 500  # safety valve; the true bound is pageInfo.pageCount
-SLEEP_NYPL = 0.4      # polite pacing; no rate limiting observed
+NYPL_FRESHNESS_HOURS = 20  # skip a borough that completed recently
+SLEEP_NYPL = 0.1      # polite pacing; no rate limiting observed
+
+# Static fallback for NYPL venues that Nominatim can't resolve by name.
+# Last verified 2026-07-25 against nypl.org/locations.
+NYPL_ADDRESS_MAP = {
+    "Stavros Niarchos Foundation Library (SNFL)": "476 5th Ave, New York, NY 10018",
+    "Thomas Yoseloff Business Center": "20 W 53rd St, New York, NY 10019",
+    "Inwood Library–Joseph and Sheila Rosenblatt Building": "4790 Broadway, New York, NY 10034",
+    "Van Cortlandt Library, Arline Schwarzman Building": "601 W 231st St, Bronx, NY 10463",
+    "Harry Belafonte 115th Street Library": "203 W 115th St, New York, NY 10026",
+    "Hunts Point Library": "877 Southern Blvd, Bronx, NY 10459",
+    "Pelham Bay Library": "3060 Middletown Rd, Bronx, NY 10461",
+    "The New York Public Library for the Performing Arts": "40 Lincoln Center Plaza, New York, NY 10023",
+}
 
 QPL_CALENDAR_URL = ("https://www.queenslibrary.org/calendar"
                     "?searchField=*&category=calendar&fromlink=calendar")
@@ -152,9 +166,13 @@ def normalize_nypl_event(item, borough_label, geo_conn):
     start_ts = to_utc(date_block.get("timeStart"))
     end_ts = to_utc(date_block.get("timeEnd"))
 
-    lat = lon = None
+    lat = lon = address_str = None
     if geo_conn and venue_name and loc.get("externalLocation") != "Virtual":
-        lat, lon = geocode.geocode(geo_conn, f"{venue_name}, New York, NY", debug=DEBUG)
+        lat, lon, address_str = geocode.geocode_with_address(
+            geo_conn, f"{venue_name}, New York, NY", debug=DEBUG)
+    # Static fallback for venues Nominatim can't resolve
+    if not address_str and venue_name:
+        address_str = NYPL_ADDRESS_MAP.get(venue_name)
 
     tags = list(item.get("audienceInterest") or []) + list(item.get("series") or [])
     categories = ", ".join(dict.fromkeys(tags)) or None  # dedupe, keep order
@@ -174,7 +192,7 @@ def normalize_nypl_event(item, borough_label, geo_conn):
         start_ts=start_ts,
         end_ts=end_ts,
         venue_name=venue_name,
-        address=None,  # NYPL's calendar API exposes no street address
+        address=address_str,  # resolved from geocode display_name
         borough=borough_label,
         latitude=lat,
         longitude=lon,
@@ -190,6 +208,12 @@ def run_nypl(conn, geo_conn, window_end):
     totals = [0, 0, 0]
     for locality, borough in NYPL_BOROUGHS.items():
         run_key = f"nypl_events:{locality}"
+        if state.is_fresh(conn, run_key, NYPL_FRESHNESS_HOURS):
+            if DEBUG:
+                print(f"[debug] nypl/{borough}: skipped (completed "
+                      f"{NYPL_FRESHNESS_HOURS}h freshness window)",
+                      file=sys.stderr)
+            continue
         page = state.resume_page(conn, run_key, start_page=1)
         while page <= NYPL_MAX_PAGES:
             result_page = nypl_fetch_page(locality, page)
@@ -352,8 +376,21 @@ def main():
             totals = [t + v for t, v in zip(totals, got)]
             state.set_watermark(conn, source, run_started_at)
         except WafBlocked as e:
-            # Checkpointed: the next run resumes from the blocked page.
-            partial.append(f"{name}: blocked by WAF ({e}) -- will resume next run")
+            # A block is only a *partial* success if there is progress to
+            # resume. QPL has never had any: it is rejected on the very
+            # first request, to the /calendar landing page that establishes
+            # the session, so it never reaches page 1 and never records a
+            # watermark. Reporting that as "will resume next run" is how a
+            # source that has contributed zero rows since it was written
+            # stayed invisible -- the job exits 0 either way.
+            if state.get_watermark(conn, source):
+                partial.append(f"{name}: blocked by WAF ({e}) -- will resume next run")
+            else:
+                partial.append(
+                    f"{name}: blocked by WAF ({e}) -- and has NEVER completed a "
+                    f"run, so this source contributes 0 events. Resuming will not "
+                    f"help; the block is at the session-establishing request. "
+                    f"Needs a real browser session, not a retry.")
         except Exception as e:
             errors.append(f"{name}: {e}")
             if DEBUG:

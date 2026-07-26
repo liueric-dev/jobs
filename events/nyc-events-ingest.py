@@ -24,15 +24,32 @@ SOURCES
         stale/archival -- confirmed-dated rows going back to 2015, nothing
         current -- so it is not a source.
 
-WHAT WE KEEP FROM permitted_events
-    The feed is dominated by parks facility reservations: `Sport - Youth`
-    (15,538 rows) and `Sport - Adult` (8,699) were 79% of it -- youth-league
-    field and court bookings with no URL, no description, and a location
-    that is a court number rather than a place. They are permit records, not
-    public events, and they crowded out everything else. They are dropped at
-    normalize time; see DROPPED_CATEGORIES. What survives is the genuinely
-    public material: Special Event, Block Party, Farmers Market, Parade,
-    Street Event, Sidewalk Sale and friends.
+WHAT WE KEEP FROM permitted_events -- three filters, all at normalize time
+    This is a permit register, not an events listing. Most of what it
+    contains is somebody reserving a space, and the distinction does not
+    show up in any single field, so it takes three passes:
+
+    1. DROPPED_CATEGORIES. `Sport - Youth` (15,538 rows) and `Sport - Adult`
+       (8,699) were 79% of the feed -- youth-league field and court bookings
+       with no URL, no description, and a location that is a court number
+       rather than a place.
+
+    2. DROPPED_TITLES. Category filtering alone left 88% of the survivors in
+       one bucket, `Special Event`, and that bucket is where the private
+       permits live: 2,438 rows titled exactly "Miscellaneous",
+       "Celebration", "Picnic", "Barbecue" or "Party" -- 38% of the source.
+       Whole-title match only, so "Picnic in the Park with the Philharmonic"
+       survives while "Picnic" does not.
+
+    3. CLOSURE_PATTERN. 152 rows are park *closures* ("Lawn Closures &
+       maintenance", "Construction", "closed") -- the negation of an event.
+
+    What survives is the genuinely public material: block parties, farmers
+    markets, parades, street festivals, health fairs, concerts in the park.
+
+    KNOWN LIMIT, not fixed here: this feed has no per-event URL and no free
+    text, so even a real event from it cannot be clicked through to. That is
+    upstream's gap, not a normalization bug -- see `description` below.
 
 GEOCODING
     permitted_events carries no coordinates -- only free-text
@@ -80,7 +97,7 @@ while _d != os.path.dirname(_d) and not os.path.isdir(os.path.join(_d, "pipelib"
 sys.path.insert(0, _d)
 
 import schema  # noqa: E402
-from pipelib import dbconn, geocode, http, state  # noqa: E402
+from pipelib import boroughs, dbconn, geocode, http, state, text  # noqa: E402
 from pipelib.timeparse import NYC, to_utc, utc_now_str  # noqa: E402
 from pipelib.upsert import prune_expired, upsert  # noqa: E402
 
@@ -92,10 +109,10 @@ WINDOW_DAYS_AHEAD = 90
 
 DATASETS = {"permitted_events": "tvpp-9vvx", "parks_events": "w3wp-dpdi"}
 
-#: Facility reservations and stagehand logistics -- not public events.
-DROPPED_CATEGORIES = frozenset({
-    "Sport - Youth", "Sport - Adult", "Theater Load in and Load Outs",
-})
+# The drop policy (DROPPED_CATEGORIES / DROPPED_TITLES / CLOSURE_PATTERN,
+# behind schema.is_public_event) lives in schema.py because migrate.py needs
+# the same predicate to delete rows admitted under an older rule. Keeping a
+# second copy here is how the category list drifted last time.
 
 
 def fetch_socrata(dataset_id, where_clauses=None, page_size=5000, max_pages=40):
@@ -104,13 +121,27 @@ def fetch_socrata(dataset_id, where_clauses=None, page_size=5000, max_pages=40):
     Returns (rows, complete). `complete` is False when the max_pages safety
     valve tripped -- the caller must not advance its watermark in that case,
     or the unfetched remainder is excluded forever.
+
+    $ORDER IS LOAD-BEARING, NOT COSMETIC. `$limit`/`$offset` without an
+    ORDER BY has no defined row order, so Socrata is free to return a
+    different arrangement for each page request -- which means a row can be
+    served twice while another is never served at all. Paging this window
+    unordered returned the right *count* (33,471) and the wrong *rows*:
+    31,306 distinct keys, silently missing 2,165 of them, 6.5%. It looks
+    healthy from every angle the script checks -- full pages, no error, a
+    plausible total -- which is why it went unnoticed. Measured directly
+    against tvpp-9vvx: with `$order=:id`, all 33,471 rows come back distinct.
+
+    `:id` rather than a data column because it is a Socrata system field,
+    guaranteed present and unique on every dataset, and stable across
+    updates to the row's contents.
     """
     base = f"https://data.cityofnewyork.us/resource/{dataset_id}.json"
     headers = {"X-App-Token": APP_TOKEN} if APP_TOKEN else None
     rows, offset, pages = [], 0, 0
 
     while True:
-        params = {"$limit": page_size, "$offset": offset}
+        params = {"$limit": page_size, "$offset": offset, "$order": ":id"}
         if where_clauses:
             params["$where"] = " AND ".join(where_clauses)
         batch = http.get_json(f"{base}?{http.urlencode(params)}",
@@ -139,7 +170,8 @@ def fetch_socrata(dataset_id, where_clauses=None, page_size=5000, max_pages=40):
 def normalize_permitted_event(row, geo_conn):
     """One permitted-event row, or None to drop it."""
     category = row.get("event_type") or row.get("eventtype")
-    if category in DROPPED_CATEGORIES:
+    title = row.get("event_name") or row.get("eventname") or "Untitled event"
+    if not schema.is_public_event(title, category):
         return None
 
     address = row.get("event_location") or row.get("eventlocation")
@@ -150,8 +182,12 @@ def normalize_permitted_event(row, geo_conn):
     return schema.blank_record(
         source=schema.SOURCE_PERMITTED,
         source_id=row.get("event_id") or row.get("eventid"),
-        title=row.get("event_name") or row.get("eventname") or "Untitled event",
-        description=category,
+        title=title,
+        # This feed carries no free text at all. The previous version stored
+        # `category` here, which made description non-NULL for all 6,457 rows
+        # while duplicating a field the row already has -- a populated column
+        # that says nothing reads as data and hides the gap. NULL is honest.
+        description=None,
         start_datetime=start,
         end_datetime=end,
         start_ts=to_utc(start),
@@ -180,6 +216,13 @@ def normalize_parks_event(row, geo_conn=None):
     stored all 1,175 rows at midnight, losing time-of-day for the entire
     source. Combining the two -- day from `startdate`, clock from
     `starttime` -- recovers it.
+
+    BOROUGH: this feed has no borough field, and every row here used to
+    store NULL -- which quietly excluded the whole source, the best free
+    programming in the table, from any borough-scoped query. `parkids` is
+    borough-prefixed and covers 943 of 1,047 rows for free; the remainder
+    are non-park venues (libraries, community gardens, health centers) with
+    coordinates but no park ID, so they fall through to point-in-polygon.
     """
     start = _combine_day_and_clock(row.get("startdate"), row.get("starttime"))
     end = _combine_day_and_clock(row.get("enddate"), row.get("endtime"))
@@ -193,6 +236,10 @@ def normalize_parks_event(row, geo_conn=None):
         except (ValueError, AttributeError):
             pass
 
+    borough = boroughs.borough_from_park_ids(row.get("parkids"))
+    if not borough and geo_conn:
+        borough = boroughs.borough_for_point(geo_conn, lat, lon, debug=DEBUG)
+
     link = row.get("link") or {}
     reg = row.get("registration_url") or {}
     # These are different things and both are worth keeping: link.url is the
@@ -203,18 +250,25 @@ def normalize_parks_event(row, geo_conn=None):
         source=schema.SOURCE_PARKS,
         source_id=row.get("guid"),
         title=row.get("title"),
-        description=row.get("description"),
+        # Stored raw, this field leaked its markup: 151 rows carried literal
+        # "&amp;"/"&nbsp;", and stripping block tags without substituting a
+        # space ran sentences together ("bike rental locations.For the
+        # summer-long celebration"). strip_html unescapes first and replaces
+        # each tag with whitespace, which fixes both.
+        description=text.strip_html(row.get("description")),
         start_datetime=start,
         end_datetime=end,
         start_ts=to_utc(start),
         end_ts=to_utc(end),
         venue_name=row.get("parknames"),
         address=row.get("location"),
+        borough=borough,
         latitude=lat,
         longitude=lon,
         categories=row.get("categories"),
         registration_url=reg.get("url"),
         source_url=link.get("url"),
+        is_free=True,
         raw_json=json.dumps(row),
     )
 
@@ -241,6 +295,8 @@ def main():
         geo_conn = dbconn.connect(autocommit=True)
         geocode.ensure_geocode_schema(geo_conn)
         geocode.refresh_park_locations(geo_conn, debug=DEBUG)
+        boroughs.ensure_borough_schema(geo_conn)
+        boroughs.refresh_boroughs(geo_conn, debug=DEBUG)
     except Exception as e:
         print(f"nyc-events: geocoding disabled ({e})", file=sys.stderr)
         geo_conn = None
@@ -255,9 +311,11 @@ def main():
     totals = {"new": 0, "updated": 0, "unchanged": 0}
     errors = []
 
+    # parks_events needs geo_conn too now -- not to geocode (the feed carries
+    # its own coordinates) but for the borough point-in-polygon fallback.
     jobs = [
         ("permitted_events", "start_date_time", normalize_permitted_event, geo_conn),
-        ("parks_events", "startdate", normalize_parks_event, None),
+        ("parks_events", "startdate", normalize_parks_event, geo_conn),
     ]
 
     for key, date_field, normalizer, geo in jobs:

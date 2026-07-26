@@ -24,10 +24,16 @@ STEPS
                    TIME-OF-DAY is sound (10am peak, zero midnights). So the
                    fix is date-from-startdate + time-from-starttime, which
                    recovers all 1,175 without refetching.
-  4. Sport purge   drop `Sport - Youth` / `Sport - Adult` -- 24,237 rows of
-                   youth-league field and court reservations with no URL, no
-                   description and no coordinates. They are permit records,
-                   not public events, and they were 79% of the source.
+  4. Non-events    drop permitted rows that are not public events, using
+                   schema.is_public_event -- the same predicate the ingest
+                   filters with. Originally the `Sport - Youth`/`Sport -
+                   Adult` purge (24,237 rows, 79% of the source); now also
+                   the generic private-permit titles ("Miscellaneous",
+                   "Celebration", "Picnic", "Barbecue", "Party" -- 2,438
+                   rows) and 152 park closures. prune_expired will not
+                   remove these on its own: it only drops rows outside the
+                   date window, so rows the pipeline has stopped writing
+                   would linger for up to 90 days.
   5. Geocode reset truncate `geocode_failed`. It had become a permanent
                    blocklist (2,720 rows, consulted with no expiry), so the
                    addresses that failed under the old facility-code parser
@@ -36,6 +42,11 @@ STEPS
                    resolve the park-coded addresses locally -- no
                    rate-limited calls. Measured coverage: 91.8% of the
                    park-coded rows worth keeping.
+  7. Watermarks    delete the two Socrata watermarks so the next scheduled
+                   run refetches the full window once and re-normalizes
+                   every stored row. Without this the parks borough and the
+                   description fixes never reach rows that have not changed
+                   upstream, because `:updated_at` filters them out.
 
 Any step that touches a hash field (start_datetime, latitude, longitude)
 recomputes content_hash with the same function the ingest scripts use, so
@@ -56,10 +67,10 @@ import schema  # noqa: E402  (events/schema.py, same directory)
 from pipelib import dbconn, geocode, ids  # noqa: E402
 from pipelib.timeparse import to_utc, utc_now_str  # noqa: E402
 
-SPORT_CATEGORIES = ("Sport - Youth", "Sport - Adult")
-#: Load-in/load-out is stagehand logistics, not a public event.
-NON_EVENT_CATEGORIES = ("Theater Load in and Load Outs",)
-DROP_CATEGORIES = SPORT_CATEGORIES + NON_EVENT_CATEGORIES
+#: Was a local copy of the category list, which had already drifted from the
+#: ingest script's. Both now read schema.is_public_event, so a row deleted
+#: here is a row the next run will not re-admit.
+DROP_CATEGORIES = tuple(sorted(schema.DROPPED_CATEGORIES))
 
 
 def step(label, n, apply_):
@@ -167,17 +178,28 @@ def _combine(date_part, time_part):
     return f"{day}T{clock}.000" if clock else str(date_part)
 
 
-# -- 4. sport purge ----------------------------------------------------------
+# -- 4. non-event purge ------------------------------------------------------
 
 def drop_non_events(conn, apply_):
-    n = conn.execute(
-        "SELECT count(*) FROM events WHERE source = %s AND categories = ANY(%s)",
-        (schema.SOURCE_PERMITTED, list(DROP_CATEGORIES))).fetchone()[0]
-    if apply_:
-        conn.execute("DELETE FROM events WHERE source = %s AND categories = ANY(%s)",
-                     (schema.SOURCE_PERMITTED, list(DROP_CATEGORIES)))
+    """Delete stored permitted rows that are not public events.
+
+    Category-only deletion is not enough. The ingest filter now also rejects
+    generic private-permit titles and park closures, and prune_expired only
+    removes rows outside the date window -- so without this, 2,590 rows the
+    pipeline will never write again would sit in the table until they aged
+    out, up to 90 days of serving somebody's wedding permit as an event.
+
+    Evaluated in Python against the same predicate the ingest uses rather
+    than as SQL, so there is exactly one definition of the rule.
+    """
+    rows = conn.execute(
+        "SELECT id, title, categories FROM events WHERE source = %s",
+        (schema.SOURCE_PERMITTED,)).fetchall()
+    doomed = [r[0] for r in rows if not schema.is_public_event(r[1], r[2])]
+    if apply_ and doomed:
+        conn.execute("DELETE FROM events WHERE id = ANY(%s)", (doomed,))
         conn.commit()
-    return step("facility reservations dropped", n, apply_)
+    return step("non-events dropped", len(doomed), apply_)
 
 
 # -- 5/6. geocoding ----------------------------------------------------------
@@ -222,6 +244,34 @@ def reset_failed_geocodes(conn, apply_):
         conn.execute("TRUNCATE geocode_failed")
         conn.commit()
     return step("stale geocode failures cleared", n, apply_)
+
+
+def reset_opendata_watermarks(conn, apply_):
+    """Force the next run to re-normalize every in-window Socrata row.
+
+    The Socrata jobs filter on `:updated_at > <last success>`, so a row that
+    has not changed upstream is never refetched -- and therefore never
+    re-normalized. Three normalizer fixes (parks borough, parks description
+    unescaping, permitted description no longer duplicating the category)
+    only reach stored rows if the rows come back through the pipeline.
+
+    Deleting the watermark is the whole fix: the next run refetches the full
+    90-day window once, content hashing reports the genuinely-changed rows as
+    updated, and the watermark re-establishes itself. Rewriting the columns
+    here instead would mean a second copy of each normalizer, which is what
+    put the borough logic out of sync in the first place.
+
+    Costs one unfiltered fetch of each dataset -- ~7k rows, well inside the
+    max_pages valve.
+    """
+    datasets = ("permitted_events", "parks_events")
+    n = conn.execute("SELECT count(*) FROM ingest_state WHERE dataset = ANY(%s)",
+                     (list(datasets),)).fetchone()[0]
+    if apply_ and n:
+        conn.execute("DELETE FROM ingest_state WHERE dataset = ANY(%s)",
+                     (list(datasets),))
+        conn.commit()
+    return step("Socrata watermarks reset (forces one full refetch)", n, apply_)
 
 
 def backfill_park_coords(conn, geo_conn, apply_, debug=False):
@@ -306,6 +356,9 @@ def main():
     retire_legacy_progress_tables(conn, args.apply)
     reset_failed_geocodes(geo_conn, args.apply)
     backfill_park_coords(conn, geo_conn, args.apply, debug=args.debug)
+    # Last: it makes the next scheduled run re-normalize everything the
+    # steps above just corrected, so it must not run before them.
+    reset_opendata_watermarks(conn, args.apply)
 
     after = snapshot(conn)
     print(f"\nafter:  {after}")
