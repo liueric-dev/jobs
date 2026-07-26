@@ -171,7 +171,7 @@ Google shipped anti-scraping tech ("SearchGuard") in Jan 2025 and is actively su
 
 ## The scoring layer (`score.py`)
 
-Adds `fit_score` (0-100), `primary_track`, `gap_friendly_signal`, `key_technologies`, `gap_bridging_angle`, `risk_factors`, `scored_at`, `scoring_model` columns to `jobs.jobs` via `ALTER TABLE ADD COLUMN IF NOT EXISTS` (the table already exists from the ingest scripts — `CREATE TABLE IF NOT EXISTS` is a no-op there and won't add columns).
+Adds `fit_score` (0-100), `primary_track`, `gap_friendly_signal`, `key_technologies`, `gap_bridging_angle`, `risk_factors`, `scored_at`, `scoring_model` columns to the `jobs` table via `ALTER TABLE ADD COLUMN IF NOT EXISTS` (the table already exists from the ingest scripts — `CREATE TABLE IF NOT EXISTS` is a no-op there and won't add columns).
 
 **Swappable LLM backend, zero Hermes dependency (revised 2026-07-24).** This originally shelled out to `hermes -z`. Changed because this script needs to run standalone on other (SerpApi/Apify worker) machines that shouldn't need a full Hermes install just to score jobs — and Hermes was never actually necessary for swappability, only convenient. It now calls a plain OpenAI-compatible `/chat/completions` endpoint directly via stdlib `urllib` — that wire format is a de facto standard across OpenAI itself, most free-tier providers (Groq, OpenRouter), and local model servers (Ollama, LM Studio). Swapping backends is `JOB_SCORING_BASE_URL`/`JOB_SCORING_MODEL`/`JOB_SCORING_API_KEY` env vars — no code change, no Hermes required anywhere.
 
@@ -185,7 +185,7 @@ Adds `fit_score` (0-100), `primary_track`, `gap_friendly_signal`, `key_technolog
 
 ## Data model
 
-Single shared table: `jobs.jobs` (Postgres schema `jobs`, not a separate database — same instance as the unrelated `nyc-events-ingest.py` pipeline, schema-separated so the two don't collide in `public`).
+Single shared table: `jobs` in the `jobs` database's `public` schema. Shares a Postgres instance with the unrelated `nyc-events-ingest.py` pipeline and nothing else — slice E gave each application its own database and its own role, replacing the earlier arrangement where a `jobs` schema sat inside the events database and only a per-connection `search_path` kept them apart.
 
 Key columns:
 - `id` — `sha256(platform:company_token:source_id)[:24]`, the dedup key across every source

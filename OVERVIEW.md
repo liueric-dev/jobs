@@ -26,7 +26,7 @@ flowchart TB
         F["Google Jobs<br/>via Apify"]
     end
 
-    Sources --> G[("Postgres<br/>jobs.jobs<br/>one shared table")]
+    Sources --> G[("Postgres<br/>jobs database<br/>one shared table")]
     G --> H["LLM Fit Scoring<br/>(score.py)"]
     H --> I["fit_score, primary_track,<br/>gap_bridging_angle,<br/>risk_factors"]
     I -.->|"not built yet"| J["Digest / Dashboard<br/>❓"]

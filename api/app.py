@@ -71,7 +71,7 @@ def db():
     closes without committing.
     """
     conn = psycopg.connect(qc.DATABASE_URL)
-    conn.execute("SET search_path TO jobs, public")
+    conn.execute("SET search_path TO public")
     try:
         with conn:
             yield conn
@@ -107,7 +107,7 @@ def verify_schema():
     problems = []
     with db() as conn:
         for table, privileges in qc.REQUIRED_TABLES.items():
-            qualified = f"jobs.{table}"
+            qualified = f"public.{table}"
             if conn.execute("SELECT to_regclass(%s)", (qualified,)).fetchone()[0] is None:
                 problems.append(f"{qualified}: missing")
                 continue
@@ -121,7 +121,7 @@ def verify_schema():
                 problems.append(f"{qualified}: no {', '.join(lacking)}")
 
         for sequence, privileges in qc.REQUIRED_SEQUENCES.items():
-            qualified = f"jobs.{sequence}"
+            qualified = f"public.{sequence}"
             if conn.execute("SELECT to_regclass(%s)", (qualified,)).fetchone()[0] is None:
                 problems.append(f"{qualified}: missing")
                 continue

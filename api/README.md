@@ -63,7 +63,7 @@ cp .env.example .env && chmod 600 .env    # fill in DATABASE_URL
 set -a; . .env; set +a
 
 # once, with an admin credential — the only command that issues DDL
-JOBS_ADMIN_DATABASE_URL=postgresql://admin:pass@localhost:5432/nyc_events \
+JOBS_ADMIN_DATABASE_URL=postgresql://jobs_pipeline:pass@localhost:5432/jobs \
   python3 manage_users.py init-schema
 
 uvicorn app:app --port 8420
@@ -130,7 +130,11 @@ which is a superuser, so a leaked bearer token or an injection bug would have
 yielded `COPY ... FROM PROGRAM` and full access to the unrelated
 `public.events` data.
 
-| Table (schema `jobs`) | Granted |
+Since slice E that data is not merely ungranted but **unreachable**: it lives
+in the separate `nyc_events` database, and `jobs_api` has no CONNECT there at
+all. Verified by connecting as the role and being refused at the door.
+
+| Table (database `jobs`, schema `public`) | Granted |
 |---|---|
 | `jobs` | SELECT, INSERT, UPDATE |
 | `job_ingest_state` | SELECT, INSERT, UPDATE |
@@ -142,8 +146,9 @@ yielded `COPY ... FROM PROGRAM` and full access to the unrelated
 
 No `DELETE` on anything — the code never issues one. No `CREATE`, so the
 running service cannot alter the schema the ingest pipeline owns. No grant at
-all on the ten pipeline-owned tables (`job_scores`, `job_facts`, `job_matches`,
-`profiles`, …) or on `public.events`.
+all on the seven pipeline-owned tables (`job_scores`, `job_facts`,
+`job_matches`, `profiles`, `hn_seen_comments`, `ingest_progress`, `job_events`)
+or on the `jobs_app` view, and no CONNECT to the events database.
 
 `google_jobs_query_stats` needs SELECT despite being write-only from this
 service's perspective: `log_query_stats()` uses `INSERT ... ON CONFLICT
@@ -215,7 +220,7 @@ Both are harmless among trusted devices and real once strangers can call it:
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `DATABASE_URL` | `postgresql://nyc_events@localhost:5432/nyc_events` | Postgres connection |
+| `DATABASE_URL` | `postgresql://jobs_api@localhost:5432/jobs` | Postgres connection |
 | `GOOGLE_QUERIES_FILE` | `config/google-queries.json` | query bank path |
 | `CLAIM_TTL_MINUTES` | `15` | how long a crashed contributor blocks a query |
 | `GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS` | `20` | don't re-hand-out a query that succeeded this recently |

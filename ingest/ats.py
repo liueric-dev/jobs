@@ -36,18 +36,13 @@ INSTALL:
     `hermes cron`, which refuses to run anything outside its own directory.
 
 DATABASE:
-    Reuses the same Postgres instance/database as nyc-events-ingest.py
-    (docker compose up -d in this directory) -- but NOT the same schema.
-    Tables live in a dedicated `jobs` schema (jobs.jobs, jobs.job_ingest_state)
-    rather than `public`, which is where the events pipeline's tables live.
-    Same server, same database, same negligible resource cost as one schema
-    -- this is purely so two unrelated projects sharing one Postgres
-    instance don't end up with same-named or commingled tables in `public`
-    as more of these ingest scripts get added over time. Ordinary SQL can
-    still join across schemas within the same database if that's ever
-    useful (SELECT ... FROM jobs.jobs JOIN public.events ...) -- the
-    separation is organizational, not a hard boundary like a separate
-    database would be.
+    The `jobs` database, in its `public` schema. Shares a Postgres instance
+    with the events pipeline and nothing else -- separate databases, separate
+    roles, no cross-database query. This used to be a `jobs` schema inside the
+    events database, on the argument that the separation only needed to be
+    organizational; slice E made it a boundary Postgres enforces, because a
+    convention that fails silently when forgotten is not a boundary.
+    See ../schema.py's "DATABASE, NOT SCHEMA".
 
 CONFIG:
     DATABASE_URL       -- postgres connection string

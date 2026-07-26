@@ -48,7 +48,7 @@ def utc_now():
 
 def connect(admin=False):
     conn = psycopg.connect(ADMIN_DATABASE_URL if admin else qc.DATABASE_URL)
-    conn.execute("SET search_path TO jobs, public")
+    conn.execute("SET search_path TO public")
     return conn
 
 
@@ -62,11 +62,11 @@ def cmd_init_schema(args):
         qc.ensure_schema(conn)
         present = [
             t for t in qc.REQUIRED_TABLES
-            if conn.execute("SELECT to_regclass(%s)", (f"jobs.{t}",)).fetchone()[0]
+            if conn.execute("SELECT to_regclass(%s)", (f"public.{t}",)).fetchone()[0]
         ]
     print(f"schema ready: {len(present)}/{len(qc.REQUIRED_TABLES)} tables present")
     for t in qc.REQUIRED_TABLES:
-        print(f"  {'ok     ' if t in present else 'MISSING'}  jobs.{t}")
+        print(f"  {'ok     ' if t in present else 'MISSING'}  public.{t}")
     if len(present) != len(qc.REQUIRED_TABLES):
         sys.exit(1)
 

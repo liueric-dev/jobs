@@ -22,7 +22,7 @@ do outreach — those stay manual on purpose.
 | `ingest/google-apify.py` | Google Jobs via Apify | 1 query |
 | `score.py` | LLM fit-scoring over everything above | 30 jobs |
 
-Everything lands in `jobs.jobs`, deduped on `sha256(platform:company_token:source_id)`.
+Everything lands in `jobs`, deduped on `sha256(platform:company_token:source_id)`.
 
 ## Requirements
 
@@ -76,7 +76,7 @@ intersection you have to stay inside. On any other machine you can export the
 variable instead:
 
 ```bash
-export DATABASE_URL="postgresql://nyc_events:PASSWORD@SERVER:5432/nyc_events"
+export DATABASE_URL="postgresql://jobs_pipeline:PASSWORD@SERVER:5432/jobs"
 ```
 
 Where `SERVER` is the database host — over Tailscale, its MagicDNS name
@@ -90,7 +90,7 @@ no port-forwarding.
 python3 -c "
 import os, psycopg
 c = psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=5)
-print('rows:', c.execute('SELECT count(*) FROM jobs.jobs').fetchone()[0])"
+print('rows:', c.execute('SELECT count(*) FROM jobs').fetchone()[0])"
 ```
 
 Schema is created automatically on first run — no migration step for a fresh
@@ -98,8 +98,8 @@ database.
 
 ### 4. Upgrading an existing database
 
-One migration exists, for databases that predate `jobs.job_scores` (scores used
-to be eight columns on `jobs.jobs`). It's a no-op on a fresh install and safe to
+One migration exists, for databases that predate `job_scores` (scores used
+to be eight columns on `jobs`). It's a no-op on a fresh install and safe to
 run twice:
 
 ```bash
@@ -159,7 +159,7 @@ step failed.
 helps — it uses *that machine's own* SerpApi quota, multiplying total coverage:
 
 ```bash
-export DATABASE_URL="postgresql://nyc_events:PASSWORD@homeserver.tailXXXX.ts.net:5432/nyc_events"
+export DATABASE_URL="postgresql://jobs_pipeline:PASSWORD@homeserver.tailXXXX.ts.net:5432/jobs"
 export SERPAPI_API_KEY="<this machine's own key>"
 python3 ingest/google-serpapi.py
 ```
@@ -182,16 +182,16 @@ DEBUG_PRINT_KEYS=1 python3 ingest/google-serpapi.py   # verbose per-item logging
 
 `DEBUG_PRINT_KEYS=1` is the convention across every script here.
 
-## Reading the results: `jobs.jobs_app`
+## Reading the results: the `jobs_app` view
 
-**Query the `jobs.jobs_app` view, not `jobs.jobs`.** The base table is
+**Query the `jobs_app` view, not the `jobs` table.** The base table is
 deliberately unfiltered — `ingest/ats.py` pulls entire company job boards, so
 roughly two thirds of it is roles this pipeline exists to ignore (enterprise
 sales, tax directors, clinical staff). The view is the supported read surface:
 
 ```sql
 SELECT title, company_name, job_url, posted_at_ts, match_score, fit_score
-FROM jobs.jobs_app
+FROM jobs_app
 WHERE profile = 'tech'
 ORDER BY match_score DESC, posted_at_ts DESC NULLS LAST
 LIMIT 50;
@@ -418,8 +418,8 @@ throttling you.
 
 ### Scores are per profile
 
-Scores live in `jobs.job_scores`, keyed `(job_id, profile)` — not as columns on
-`jobs.jobs`. A score isn't a property of a posting; it's one persona's opinion
+Scores live in `job_scores`, keyed `(job_id, profile)` — not as columns on
+`jobs`. A score isn't a property of a posting; it's one persona's opinion
 of it, and `jobs` is shared across every persona.
 
 The profile name comes from `config/persona.json`'s `profile` key (`tech`),
@@ -437,7 +437,7 @@ means "unscored *for this profile*."
 **Test a model before making it the default.** `tools/compare-models.py` scores
 real postings with each candidate and reports JSON reliability, latency, score
 spread, and agreement with your current model. It's read-only — it never writes
-to `jobs.jobs`, so run it as often as you like:
+to `jobs`, so run it as often as you like:
 
 ```bash
 python3 tools/compare-models.py \
@@ -468,7 +468,7 @@ extra prose, but smaller models still fail sometimes. Check `scoring_model` for
 `FAILED:` values:
 
 ```sql
-SELECT scoring_model, count(*) FROM jobs.job_scores
+SELECT scoring_model, count(*) FROM job_scores
 GROUP BY 1 ORDER BY 2 DESC;
 ```
 
@@ -477,21 +477,21 @@ GROUP BY 1 ORDER BY 2 DESC;
 ```sql
 -- Best-fit open jobs
 SELECT s.fit_score, j.title, j.company_name, j.location_raw, j.job_url
-FROM jobs.jobs j
-JOIN jobs.job_scores s ON s.job_id = j.id AND s.profile = 'tech'
+FROM jobs j
+JOIN job_scores s ON s.job_id = j.id AND s.profile = 'tech'
 WHERE j.status = 'open' AND s.fit_score IS NOT NULL
 ORDER BY s.fit_score DESC LIMIT 20;
 
 -- What came in today, by source
-SELECT platform, count(*) FROM jobs.jobs
+SELECT platform, count(*) FROM jobs
 WHERE first_seen >= to_char(now() - interval '1 day', 'YYYY-MM-DD"T"HH24:MI:SS')
 GROUP BY 1 ORDER BY 2 DESC;
 
 -- How two profiles rate the same posting
 SELECT j.title, a.fit_score AS tech, b.fit_score AS other
-FROM jobs.jobs j
-JOIN jobs.job_scores a ON a.job_id = j.id AND a.profile = 'tech'
-JOIN jobs.job_scores b ON b.job_id = j.id AND b.profile = 'other'
+FROM jobs j
+JOIN job_scores a ON a.job_id = j.id AND a.profile = 'tech'
+JOIN job_scores b ON b.job_id = j.id AND b.profile = 'other'
 ORDER BY abs(a.fit_score - b.fit_score) DESC LIMIT 20;
 ```
 

@@ -53,7 +53,7 @@ xml.etree.ElementTree parses the RSS, stdlib re/html handle field cleanup.
 
 INSTALL: lives in ~/apps/jobs alongside the rest of the jobs pipeline
 
-DATABASE: same Postgres instance/schema as ingest/ats.py (jobs.jobs table).
+DATABASE: same database and table as ingest/ats.py (the `jobs` table).
 This script creates the schema defensively too, so it works standalone.
 
 CONFIG:

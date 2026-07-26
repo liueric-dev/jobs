@@ -66,16 +66,24 @@ from pipelib.upsert import upsert as _pipelib_upsert  # noqa: E402
 #: posting's publication date from sliding. One function, three callers.
 _JOB_SPEC = schema.google_spec()
 
+#: The `jobs` database, never the events one. This fallback is also what
+#: manage_users.py's ADMIN_DATABASE_URL falls back to, so pointing it at
+#: nyc_events would run ensure_schema() there as a superuser -- which is how a
+#: default nobody reads becomes the destructive path. It carries no password,
+#: so an unset DATABASE_URL fails to authenticate rather than connecting to
+#: something plausible.
 DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
+    "DATABASE_URL", "postgresql://jobs_api@localhost:5432/jobs"
 )
 
 #: Every table this service touches, and the exact privileges it needs on each.
 #: The role in DATABASE_URL is granted these and nothing else -- no DELETE
-#: anywhere, no DDL, and no access to the ten pipeline-owned tables in the same
-#: schema or to public.events. app.py verifies this at startup instead of
-#: creating anything, because a service that faces untrusted input should not
-#: hold schema-modification rights.
+#: anywhere, no DDL, and nothing on the seven pipeline-owned tables or the
+#: jobs_app view in the same database. Events data is not merely ungranted but
+#: unreachable: it lives in another database this role cannot connect to.
+#: app.py verifies all of this at startup instead of creating anything, because
+#: a service that faces untrusted input should not hold schema-modification
+#: rights.
 #:
 #: google_jobs_query_stats needs SELECT despite being write-only from this
 #: service's point of view: log_query_stats() uses
@@ -138,7 +146,7 @@ def ensure_schema(conn):
     The three contributor tables below are genuinely this service's own -- the
     pipeline has no concept of them -- as are two of the claim columns.
     """
-    conn.execute("SET search_path TO jobs, public")
+    conn.execute("SET search_path TO public")
 
     # The pipeline's DDL, from the pipeline. Idempotent, and a no-op against a
     # database it already created. This also brings the app view and the

@@ -75,7 +75,7 @@ enough that regex against the site's `data-id` attributes is reliable
 INSTALL: lives in ~/apps/jobs alongside the rest of the jobs pipeline
 
 DATABASE: same Postgres instance/database/schema as ingest/ats.py
-(jobs.jobs table) -- see that script's docstring for the schema-vs-database
+(the `jobs` table) -- see that script's docstring for the database
 reasoning. This script creates the schema defensively too, so it works
 even if run before ingest/ats.py ever has.
 

@@ -1,4 +1,4 @@
-"""The `jobs.jobs` table -- DDL, column specs, and lifecycle helpers.
+"""The `jobs` table -- DDL, column specs, and lifecycle helpers.
 
 Owned by the jobs pipeline, deliberately not by pipelib: pipelib provides
 mechanism (upsert, retry, hashing, checkpoints, claims) and knows nothing
@@ -7,12 +7,22 @@ ingest scripts and score.py share, replacing six separately-drifting copies
 of ensure_schema() -- one of which (ingest/google-serpapi.py) described
 itself in a comment as a "Defensive duplicate of ingest/ats.py's".
 
-SCHEMA, NOT DATABASE
-    These tables live in a Postgres schema called `jobs`, inside the same
-    database as `public.events`. search_path is per-connection, so every
-    connection must set it -- pipelib.dbconn.connect(schema="jobs") does,
-    including the per-thread connections score.py opens. Getting this wrong
-    does not error; it silently reads and writes `public`.
+DATABASE, NOT SCHEMA
+    These tables own the `jobs` database and live in its `public` schema.
+    They used to be a `jobs` schema inside the events database, told apart
+    from `public.events` by a per-connection search_path -- which did not
+    error when you forgot it, it silently read and wrote `public`. The
+    boundary is now one Postgres enforces: no role granted on this database
+    can reach events data at all.
+
+    What that trades away is a mistake that used to be harmless. The two
+    applications are now distinguished ONLY by the database named in
+    DATABASE_URL, and both put unqualified tables in `public`. Point this
+    pipeline at the events database and nothing would stop it creating all 13
+    tables next to `public.events` -- so ensure_schema() refuses to run when
+    `public.events` exists. That guard, and the fact that no non-superuser
+    role can connect to nyc_events, are what make a half-finished rollback
+    (repointing .env without reverting SCHEMA, or the reverse) fail loudly.
 
 HASH FIELDS ARE PER SOURCE, DELIBERATELY
     The six scripts did NOT hash the same fields, and that is correct rather
@@ -95,7 +105,10 @@ import psycopg
 from pipelib import dbconn, ids, state
 from pipelib.upsert import TableSpec
 
-SCHEMA = "jobs"
+#: The schema these tables live in, inside the `jobs` database. Every
+#: connect(schema=...) call site reaches it through this one constant, which is
+#: what let the database split be a one-line change here rather than 22.
+SCHEMA = "public"
 TABLE = "jobs"
 WATERMARK_TABLE = "job_ingest_state"
 
@@ -236,9 +249,23 @@ def make_job_id(rec):
 
 
 def ensure_schema(conn):
-    """Create the jobs schema and tables. Idempotent."""
+    """Create the jobs tables. Idempotent.
+
+    Refuses to run against the events database. See DATABASE, NOT SCHEMA
+    above: since the split, a wrong DATABASE_URL is no longer a harmless
+    mistake -- it would create these 13 tables in `public` alongside
+    `public.events`, and nothing downstream would report it. `public.events`
+    exists in exactly one database and never in this one, so it is the cheapest
+    honest way to ask "am I where I think I am".
+    """
+    if conn.execute("SELECT to_regclass('public.events')").fetchone()[0] is not None:
+        raise RuntimeError(
+            "refusing to run: DATABASE_URL points at the events database "
+            "(public.events exists here). The jobs tables live in the `jobs` "
+            "database -- check this application's .env."
+        )
     conn.execute(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
-    conn.execute(f"SET search_path TO {SCHEMA}, public")
+    conn.execute(f"SET search_path TO {SCHEMA}")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS jobs (
             id TEXT PRIMARY KEY,
@@ -427,7 +454,7 @@ def ensure_schema(conn):
     # ensure_schema() returns, exactly like the watermark table.
     #
     # hn_seen_comments is hn-hiring.py's dedup ledger and is load-bearing for
-    # correctness: it, not jobs.jobs, is the source of truth for "this HN
+    # correctness: it, not the jobs table, is the source of truth for "this HN
     # comment was already parsed."  google_jobs_query_stats is append-only
     # history for the not-yet-built adaptive-cadence feature (see
     # DEVELOPER.md); nothing reads it yet, but both Google scripts write it
@@ -455,8 +482,8 @@ def ensure_schema(conn):
 
 #: The one supported read surface for a consumer (an app, a digest, a report).
 #:
-#: WHY A VIEW AND NOT "JUST QUERY jobs.jobs"
-#:     jobs.jobs is deliberately unfiltered. ingest/ats.py pulls entire company
+#: WHY A VIEW AND NOT "JUST QUERY THE JOBS TABLE"
+#:     The jobs table is deliberately unfiltered. ingest/ats.py pulls entire company
 #:     boards, so roughly two thirds of it is roles this pipeline exists to
 #:     ignore -- enterprise sales, tax directors, clinical staff. Querying the
 #:     table directly means every consumer re-derives the same four or five

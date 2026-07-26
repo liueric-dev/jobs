@@ -49,7 +49,7 @@ via the Apify REST API (start run, poll status, fetch dataset items).
 
 INSTALL: lives in ~/apps/jobs alongside config/google-queries.json
 
-DATABASE: same Postgres instance/schema as ingest/ats.py (jobs.jobs table
+DATABASE: same database and table as ingest/ats.py (the `jobs` table
 + job_ingest_state). Creates schema defensively, works standalone.
 
 CONFIG:
