@@ -34,13 +34,16 @@ against that pipeline's real SQL, not theorized).
 import os
 import re
 import json
+import base64
 import html as html_module
 import hashlib
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://nyc_events@localhost:5432/nyc_events"
 )
+
 GOOGLE_QUERIES_FILE = os.environ.get(
     "GOOGLE_QUERIES_FILE",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "google-queries.json"),
@@ -421,6 +424,74 @@ def parse_relative_posted_at(text):
     return (datetime.now(timezone.utc) - delta).isoformat()
 
 
+# -- Google Jobs posting identity --------------------------------------------
+#
+# THE ONE PLACE THIS SERVICE AND ~/.hermes MUST AGREE, despite sharing no code.
+# The module docstring above explains why duplication is normally safe here:
+# correctness lives in a Postgres row, not in shared application code. This is
+# the exception. source_id feeds make_id(), which IS the dedup key -- if this
+# file derives it differently from
+# ~/.hermes/scripts/pipelib/ids.py:google_source_id(), the same posting
+# submitted by a contributor and ingested locally becomes two rows, silently.
+# Any change here is a change there, in the same commit.
+#
+# WHY NOT THE RAW job_id: it is a base64 JSON blob carrying the search context
+# that produced it, including an `fc` token that rotates on every fresh fetch
+# from Google and `hl`/`gl` keys that come and go. Hashing it minted a new
+# primary key for an already-stored posting on every run -- measured at 32%
+# duplicate rows (837 rows holding 632 real postings) on the live table before
+# this was fixed. `htidocid`, inside the same blob, is the stable part.
+
+_TRACKING_PARAMS = re.compile(r"^(utm_|gclid|fbclid|ref|source$)", re.I)
+
+
+def decode_google_job_id(job_id):
+    """Google's base64 job_id blob as a dict, or None if it isn't one."""
+    if not job_id:
+        return None
+    try:
+        padded = job_id + "=" * (-len(job_id) % 4)
+        decoded = json.loads(base64.b64decode(padded))
+    except Exception:
+        return None
+    return decoded if isinstance(decoded, dict) else None
+
+
+def normalize_apply_url(url):
+    """Drop tracking params and the fragment, so one posting has one URL."""
+    if not url:
+        return ""
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return url
+    kept = [(k, v) for k, v in urllib.parse.parse_qsl(parts.query)
+            if not _TRACKING_PARAMS.match(k)]
+    return urllib.parse.urlunsplit(
+        (parts.scheme, parts.netloc, parts.path.rstrip("/"),
+         urllib.parse.urlencode(sorted(kept)), ""))
+
+
+def google_source_id(job, company_token, length=16):
+    """htidocid, else a fingerprint over (company, title, apply URL).
+
+    Location is deliberately excluded: Google reports the same remote posting
+    as "United States" on one search and "Anywhere" on another.
+    """
+    decoded = decode_google_job_id(job.get("job_id"))
+    if decoded and decoded.get("htidocid"):
+        return decoded["htidocid"]
+
+    apply_options = job.get("apply_options") or []
+    url = (apply_options[0].get("link") if apply_options else None) or job.get("share_link")
+    key = "|".join((
+        str(company_token or ""),
+        " ".join(str(job.get("title") or "").lower().split()),
+        normalize_apply_url(url),
+    ))
+    return "fp:" + hashlib.sha256(key.encode()).hexdigest()[:length]
+
+
 def normalize_job(job, mode):
     """Derives every stored field from the RAW posting payload.
 
@@ -431,23 +502,27 @@ def normalize_job(job, mode):
     arbitrary existing rows (e.g. claiming a Greenhouse posting's id and
     replacing its URL). Recomputing here means the worst a bad payload can do
     is insert junk under its own derived id, never clobber another source's.
+
+    That guarantee now rests on google_source_id() above rather than on the
+    raw job_id -- note this makes the derivation depend on a field a
+    contributor controls (the apply URL) only in the fallback branch, which is
+    still client-derived-but-recomputed, never client-supplied.
     """
     title = job.get("title")
     company_name = job.get("company_name") or "Unknown"
     location = job.get("location")
     detected = job.get("detected_extensions") or {}
     apply_options = job.get("apply_options") or []
+    company_token = slugify(company_name)
 
     is_nyc = bool(NYC_PATTERN.search(location or ""))
     is_remote = bool(REMOTE_PATTERN.search(location or "")) or mode == "remote"
 
     return {
         "platform": "google_jobs",
-        "company_token": slugify(company_name),
+        "company_token": company_token,
         "company_name": company_name,
-        "source_id": job.get("job_id") or hashlib.sha256(
-            f"{title}|{company_name}|{location}".encode()
-        ).hexdigest()[:16],
+        "source_id": google_source_id(job, company_token),
         "title": title,
         "location_raw": location,
         "department": detected.get("schedule_type"),
