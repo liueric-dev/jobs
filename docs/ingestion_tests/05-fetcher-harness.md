@@ -42,6 +42,20 @@ context, and each was verified against the code at `dd49a27`.
 Items 1, 4, 5 and 7 are all naturally expressible as cassette tests. Items 2
 and 3 need the scratch database.
 
+**Item 3 is not confined to `match.py`.** A trace of the scoring prompt done
+for task 04 found the same class in the LLM half: `score_one_job` builds its
+prompt at `score.py:421` under a `try` that has only a `finally`, and
+`run_for_profile` materialises `pool.map` through `list()`
+(`score.py:478-481`), so a `KeyError` from a malformed persona ends the whole
+profile's batch. Write-up in
+[`04-score-validation.md`](04-score-validation.md).
+
+So "no per-record isolation" is a property of the pipeline, not a quirk of one
+script — three of the nine scripts are now known to have it. Whoever builds the
+scratch database should treat it as a pipeline-wide invariant to test for,
+rather than writing a `match.py`-shaped test that happens to catch one
+instance.
+
 ## Suggested shape
 
 ```
