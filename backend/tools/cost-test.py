@@ -172,7 +172,10 @@ def main():
     else:
         persona = score.load_persona()
         profile = schema.resolve_profile(persona)
-        jobs = score.select_unscored_jobs(conn, args.n, profile, relevance.load())
+        # select_shortlist, not a relevance-tier query: narrative candidates
+        # are chosen by match_score now, so this measures the prompt the
+        # pipeline actually sends -- facts and summary, not the description.
+        jobs = score.select_shortlist(conn, args.n, profile)
         required = score.REQUIRED_FIELDS
         build = lambda j: score.build_prompt(persona, j)  # noqa: E731
     conn.close()

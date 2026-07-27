@@ -101,6 +101,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import match      # noqa: E402
 import profiles   # noqa: E402
+import relevance  # noqa: E402
 import schema     # noqa: E402
 from lib import dbconn  # noqa: E402
 
@@ -194,7 +195,9 @@ def load_sample(conn, profile_obj):
     exposes them.
     """
     pairs = cal.load_pairs(conn, profile_obj)
-    facts_by_id = {f["job_id"]: f for f in match.load_facts(conn)}
+    facts_by_id = {f["job_id"]: f
+                   for f in match.load_facts(
+                       conn, [relevance.for_profile(profile_obj)])}
 
     ids = [p["job_id"] for p in pairs]
     rows = conn.execute(

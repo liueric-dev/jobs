@@ -337,6 +337,14 @@ export JOB_SCORING_MODEL="llama3.1"
 export JOB_SCORING_API_KEY="unused"
 ```
 
+### What the scores mean
+
+`match_score` ranks; `fit_score` only annotates. Neither is comparable across
+profiles — every weight comes from that profile's own `criteria_json`, so the
+attainable range differs. [`docs/scoring.md`](../docs/scoring.md) is the full
+contract: score semantics, the provenance of every weight and threshold, the
+stage-by-stage funnel, and what happens when an LLM call fails.
+
 ### Backfilling the whole backlog
 
 `score.py` scores `SCORE_BATCH_SIZE` jobs and exits, which is right for a

@@ -78,7 +78,6 @@ import subprocess
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema      # noqa: E402
-import relevance   # noqa: E402
 import score       # noqa: E402
 from lib import dbconn  # noqa: E402
 
@@ -116,7 +115,10 @@ def fetch_jobs(n, only_scored=False):
         cols = ["id", "title", "company_name", "location_raw", "platform",
                 "description_text", "fit_score", "primary_track"]
     else:
-        jobs = score.select_unscored_jobs(conn, n, profile, relevance.load())
+        # select_shortlist, not a relevance-tier query: narrative candidates
+        # are chosen by match_score now, so the benchmark runs against the
+        # same postings the pipeline would have spent a call on.
+        jobs = score.select_shortlist(conn, n, profile)
         conn.close()
         return jobs
     conn.close()

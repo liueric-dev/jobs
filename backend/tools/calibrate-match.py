@@ -75,6 +75,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import llm         # noqa: E402
 import match       # noqa: E402
 import profiles    # noqa: E402
+import relevance   # noqa: E402
 import schema      # noqa: E402
 from lib import dbconn  # noqa: E402
 
@@ -116,7 +117,11 @@ def load_pairs(conn, profile_obj):
     labelled = {r[0]: (r[1], r[2], r[3], r[4]) for r in rows}
 
     pairs = []
-    for f in match.load_facts(conn):
+    # The same relevance union match.py applies, for the same reason: facts
+    # outlive the config that produced them, so a posting the config now
+    # rejects still has a job_facts row. Scoring it here would measure a
+    # ranking the pipeline no longer produces.
+    for f in match.load_facts(conn, [relevance.for_profile(profile_obj)]):
         if f["job_id"] not in labelled:
             continue
         fit, title, company, first_seen = labelled[f["job_id"]]

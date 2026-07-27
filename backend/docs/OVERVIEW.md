@@ -27,12 +27,25 @@ flowchart TB
     end
 
     Sources --> G[("Postgres<br/>jobs database<br/>one shared table")]
-    G --> H["LLM Fit Scoring<br/>(score.py)"]
-    H --> I["fit_score, primary_track,<br/>gap_bridging_angle,<br/>risk_factors"]
-    I -.->|"not built yet"| J["Digest / Dashboard<br/>❓"]
+
+    G -->|"regex tiers, free"| E["extract.py<br/>one LLM call per posting, EVER"]
+    E --> F[("job_facts<br/>17 profile-independent fields")]
+    F -->|"free arithmetic,<br/>× every profile"| M["match.py"]
+    M --> MM[("job_matches<br/><b>match_score — this ranks</b>")]
+    MM -->|"top 20 per profile per day"| S["score.py<br/>LLM narrative"]
+    S --> SS[("job_scores<br/>fit_score, gap_bridging_angle,<br/>risk_factors — annotates only")]
+
+    MM --> W["backend/webapp<br/>GET /v1/jobs"]
+    SS --> W
+    W -.->|"not built yet"| J["frontend/<br/>❓"]
 
     style J stroke-dasharray: 5 5
 ```
+
+*Redrawn 2026-07-27.* This diagram used to show one `score.py` box writing
+`fit_score` straight onto `jobs`. That predates the `job_facts` /
+`job_matches` / `job_scores` split — see
+[`docs/scoring.md`](../../docs/scoring.md).
 
 Everything lands in one table regardless of source, deduped by a hash of `platform + company + posting-id`. Nothing gets deleted — postings get marked `closed` when a source stops seeing them, using either an exact diff (for the ATS APIs, which return their *full* current listing every time) or a staleness timeout (for every other source, which only ever returns a sample).
 

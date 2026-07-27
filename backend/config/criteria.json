@@ -25,10 +25,12 @@
 
   "_seniority_comment": "persona.json asks for mid-level explicitly: 'not senior/staff/principal, not new-grad/intern'. senior is tolerated at a small penalty because titles are inconsistent across companies and a 5-YOE candidate is a real senior at some of them; staff and up are not.",
   "_hard_exclude_comment": "CALIBRATED 2026-07-26: only fields that are BOTH reliably extracted and genuinely disqualifying belong here. tools/compare-extract.py measures seniority_level agreeing with itself 95% of the time and role_archetype 90%, so a -100 on either turns a 1-in-10 extraction slip into a deleted job -- and that is what the worst recall failures were ('Java Full Stack with AI Integration' read as new_grad, 'Senior Software Engineer' read as ml_research, both annihilated). new_grad and principal are now large penalties instead: an extraction error costs points, not the posting. intern/director/exec stay excluded -- unambiguous in a title and never a fit.",
+  "_staff_comment": "FIXED 2026-07-27: 'staff' was the one level of the nine this block named nowhere -- not target, not tolerate, not hard_exclude -- so it fell to the distance fallback in match.py:110-119, where penalty_per_level was ALSO absent and .get(...,0) made the penalty exactly zero. add() skips a falsy delta, so a staff posting scored identically to an on-target mid one AND recorded no reason for it. Measured before the fix: senior -5, staff 0, principal -35 on otherwise-identical facts -- non-monotonic, and contradicting persona.json's 'not senior/staff/principal'. 783 of 5,146 eligible postings (15.2%) are staff. The -20 is interpolated between senior (1 level off, -5) and principal (3 levels off, -35); it is a guess like its neighbours, not a fitted value. penalty_per_level is the safety net: it changes nothing else today because staff was the only unnamed level, but it means the NEXT unnamed level is never silently free.",
   "seniority": {
     "target": ["mid"],
-    "tolerate": {"senior": -5, "junior": -12, "new_grad": -40, "principal": -35},
+    "tolerate": {"senior": -5, "junior": -12, "new_grad": -40, "principal": -35, "staff": -20},
     "hard_exclude": ["intern", "director", "exec"],
+    "penalty_per_level": 10,
     "unknown_penalty": -4
   },
 

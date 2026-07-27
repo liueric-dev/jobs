@@ -204,9 +204,29 @@ Google shipped anti-scraping tech ("SearchGuard") in Jan 2025 and is actively su
 
 **Cost discipline, non-optional**: this Apify actor's `num_results` defaults to 100 and `max_pagination` to 0 (unlimited) if left unset — an early uncapped test call cost $1.50, 30% of the entire monthly $5 free-tier credit, in one shot. Every call in `ingest/google-apify.py` hardcodes explicit `num_results`/`max_pagination` — never rely on this actor's defaults if modifying that script.
 
-## The scoring layer (`score.py`)
+## The scoring layer (`extract.py` → `match.py` → `score.py`)
 
-Adds `fit_score` (0-100), `primary_track`, `gap_friendly_signal`, `key_technologies`, `gap_bridging_angle`, `risk_factors`, `scored_at`, `scoring_model` columns to the `jobs` table via `ALTER TABLE ADD COLUMN IF NOT EXISTS` (the table already exists from the ingest scripts — `CREATE TABLE IF NOT EXISTS` is a no-op there and won't add columns).
+**Corrected 2026-07-27.** This section described scoring as eight columns
+`ALTER TABLE`'d onto `jobs` by a single `score.py`. That has not been true
+since `migrations/migrate_scores.py` ran: scoring is now four stages writing
+three tables, and `schema.LEGACY_SCORING_COLUMNS` exists only so that
+migration knows what to drop. Nothing creates those columns any more.
+
+| stage | script | writes | cost |
+|---|---|---|---|
+| eligibility | `relevance.py` | — (SQL predicate) | free |
+| extract | `extract.py` | `job_facts` — 17 profile-independent fields | one LLM call per posting, **ever** |
+| match | `match.py` | `job_matches` — `match_score`, `match_reasons` | free arithmetic |
+| narrative | `score.py` | `job_scores` — `fit_score` + prose | one LLM call per posting *shown* |
+
+The ordering rule that holds it together: **`match_score` ranks,
+`fit_score` only annotates.** Sorting by `fit_score` would put an LLM call
+back on the critical path for every posting a user might see.
+
+Full contract, weight provenance and failure behavior:
+[`docs/scoring.md`](../../docs/scoring.md). Design argument and cost model:
+[`SCORING.md`](SCORING.md). Per-script operation:
+[`docs/ingest/`](../../docs/ingest/).
 
 **Swappable LLM backend, zero Hermes dependency (revised 2026-07-24).** This originally shelled out to `hermes -z`. Changed because this script needs to run standalone on other (SerpApi/Apify worker) machines that shouldn't need a full Hermes install just to score jobs — and Hermes was never actually necessary for swappability, only convenient. It now calls a plain OpenAI-compatible `/chat/completions` endpoint directly via stdlib `urllib` — that wire format is a de facto standard across OpenAI itself, most free-tier providers (Groq, OpenRouter), and local model servers (Ollama, LM Studio). Swapping backends is `JOB_SCORING_BASE_URL`/`JOB_SCORING_MODEL`/`JOB_SCORING_API_KEY` env vars — no code change, no Hermes required anywhere.
 

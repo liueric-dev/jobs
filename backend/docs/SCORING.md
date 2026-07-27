@@ -6,6 +6,12 @@ costs, and why the work is split the way it is.
 Companion to `README.md` (operating the pipeline), `DEVELOPER.md`
 (architecture and TODOs) and `OVERVIEW.md` (how it got built).
 
+**This document is the design argument — why the work is split this way and
+what it costs.** For the contract the split produces — what a score means,
+whether two are comparable, the provenance of every weight, and what happens
+when a stage fails — see [`docs/scoring.md`](../../docs/scoring.md). For
+running an individual stage, see [`docs/ingest/`](../../docs/ingest/).
+
 ---
 
 ## The problem this design solves
@@ -285,10 +291,37 @@ is the thing you actually replaced.
 Set quality bars relative to what a change replaces. A bar invented before the
 baseline is measured tells you nothing about whether to ship.
 
-### Result as of 2026-07-26 — one threshold met, one not
+### Result as of 2026-07-27 — one threshold met, one not
 
-Measured against 917 LLM-scored postings for profile `tech`, over a fully
-extracted corpus (4,977 `job_facts` rows, 1 tombstoned):
+```
+spearman                 +0.673   (need >= 0.6)   PASS
+recall fit>=80 in top150  0.354   (need >= 0.8)   FAIL  [56/158]
+
+TOP 20 QUALITY vs BASELINE (what actually reaches a user):
+  rules (match_score)     mean fit 75.5    12.0/20 at fit>=80
+  recency (newest first)  mean fit 73.8     9.0/20 at fit>=80
+  random (mean of 500)    mean fit 49.5     3.4/20 at fit>=80
+```
+
+**These are not comparable to the 2026-07-26 figures below, and the
+difference is not evidence of anything.** Three things changed at once on
+2026-07-27, and the run was not controlled for any of them:
+
+1. `calibrate-match.py` could not execute at all between the relevance union
+   moving into `match.load_facts` and being repaired — so it now applies a
+   relevance filter it never applied before, over a different sample.
+2. `criteria.json` gained `seniority.tolerate.staff` and
+   `penalty_per_level`, which re-ranked 3,077 rows and demoted 250.
+3. The corpus grew: the `fit>=80` label set went 134 → 158.
+
+Point 3 alone explains the recall drop, per the window-relative warning
+below — "top 150" is a narrower slice of a bigger pool. Attributing any of
+this to the weight change would be exactly the kind of uncontrolled reading
+this document's measurement-traps section exists to prevent. **Re-measure
+deliberately before drawing a conclusion.**
+
+The previous figures, for the record — measured against 917 LLM-scored
+postings over a 4,977-row `job_facts` corpus (1 tombstoned):
 
 ```
 spearman                 +0.619   (need >= 0.6)   PASS

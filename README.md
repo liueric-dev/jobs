@@ -18,6 +18,9 @@ outreach — those stay manual on purpose.
 
 Start at [`backend/README.md`](backend/README.md) for setup and operation, or
 [`backend/docs/`](backend/docs/) for architecture and design history.
+[`docs/scoring.md`](docs/scoring.md) is the scoring contract — what a score
+means and where every weight came from; [`docs/ingest/`](docs/ingest/) is the
+per-script reference for all eleven entry points.
 
 ```bash
 cd backend
