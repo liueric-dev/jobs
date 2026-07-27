@@ -289,18 +289,34 @@ class TestToUtc(unittest.TestCase):
 
 
 class TestTableSpec(unittest.TestCase):
+    """`computed` is exercised with this pipeline's own expressions.
+
+    The shared version of this class used GEOG_EXPR, which is events-only and
+    is not in this repo's upsert.py -- see lib/state.py's note on what each
+    copy carries. jobs' real `computed` is the status/closed_at reopen pair
+    from schema.spec(), so that is what is tested here.
+    """
+
     def _spec(self, **kw):
         return upsert.TableSpec(
-            table="events", columns=("title", "latitude", "longitude"),
+            table="jobs", columns=("title", "location_raw", "job_url"),
             hash_fields=("title",), **kw)
 
     def test_insert_includes_computed_and_bookkeeping(self):
-        sql = self._spec(computed={"geog": upsert.GEOG_EXPR}).insert_sql()
-        self.assertIn("INSERT INTO events", sql)
-        self.assertIn("geog", sql)
-        self.assertIn("%(latitude)s", sql)   # bound, never interpolated
+        sql = self._spec(
+            computed={"status": "'open'", "closed_at": "NULL"}).insert_sql()
+        self.assertIn("INSERT INTO jobs", sql)
+        self.assertIn("status", sql)
+        self.assertIn("%(job_url)s", sql)   # bound, never interpolated
         for col in ("content_hash", "first_seen", "last_seen"):
             self.assertIn(col, sql)
+
+    def test_computed_applies_on_update_too(self):
+        """A row reappearing upstream must be reopened, not left closed."""
+        sql = self._spec(
+            computed={"status": "'open'", "closed_at": "NULL"}).update_sql()
+        self.assertIn("status='open'", sql)
+        self.assertIn("closed_at=NULL", sql)
 
     def test_update_never_touches_first_seen(self):
         sql = self._spec().update_sql()
@@ -316,9 +332,12 @@ class TestTableSpec(unittest.TestCase):
             upsert.TableSpec(table="events; DROP TABLE events",
                              columns=(), hash_fields=())
 
-    def test_geog_expr_binds_parameters(self):
-        self.assertIn("%(longitude)s", upsert.GEOG_EXPR)
-        self.assertNotIn("{", upsert.GEOG_EXPR)  # no f-string interpolation
+    def test_computed_expressions_are_not_interpolated_per_row(self):
+        """The SQL text must stop varying per row, so the plan is cacheable
+        and a value can never be spliced into the statement."""
+        sql = self._spec(
+            computed={"status": "'open'", "closed_at": "NULL"}).insert_sql()
+        self.assertNotIn("{", sql)
 
 
 class TestStickyColumns(unittest.TestCase):

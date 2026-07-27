@@ -71,15 +71,44 @@ class TestConnectSchemaHandling(unittest.TestCase):
         self.assertEqual(rec.commits, 0)
 
 
-class TestDefaultDatabaseUrl(unittest.TestCase):
+class TestNoDatabaseUrlDefault(unittest.TestCase):
+    """This copy of dbconn has NO default, which is its one deliberate
+    divergence from ~/apps/events/lib/dbconn.py.
 
-    def test_default_carries_no_password(self):
-        """What makes falling back inert rather than dangerous."""
-        self.assertNotIn(":", dbconn.DEFAULT_DATABASE_URL.split("//")[1].split("@")[0])
+    The shared library's single default named the EVENTS database. That was
+    correct for events and dangerous here: the two applications are told
+    apart only by the database in DATABASE_URL and both use unqualified names
+    in `public`, so a jobs process falling back would not error -- it would
+    create its 13 tables next to `public.events`.
+    """
 
-    def test_default_is_the_events_database(self):
-        """Jobs must never reach its database by fallback, only explicitly."""
-        self.assertTrue(dbconn.DEFAULT_DATABASE_URL.endswith("/nyc_events"))
+    def test_there_is_no_default_at_all(self):
+        self.assertFalse(hasattr(dbconn, "DEFAULT_DATABASE_URL"),
+                         "a default came back; see lib/dbconn.py's note")
+
+    def test_unset_raises_instead_of_guessing(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(RuntimeError) as ctx:
+                dbconn.database_url()
+        self.assertIn("DATABASE_URL is not set", str(ctx.exception))
+
+    def test_the_error_never_names_a_database_to_fall_back_to(self):
+        """The whole point is that no plausible-looking URL is offered."""
+        with patch.dict(os.environ, {}, clear=True):
+            try:
+                dbconn.database_url()
+            except RuntimeError as e:
+                self.assertNotIn("postgresql://", str(e))
+
+    def test_set_value_is_returned_unchanged(self):
+        url = "postgresql://u:secret@localhost:5432/jobs"
+        with patch.dict(os.environ, {"DATABASE_URL": url}):
+            self.assertEqual(dbconn.database_url(), url)
+
+    def test_scrub_url_does_not_raise_when_unset(self):
+        """It is what failure paths print, so it must survive the failure."""
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(dbconn.scrub_url(), "<DATABASE_URL not set>")
 
     def test_scrub_url_drops_the_credential(self):
         scrubbed = dbconn.scrub_url("postgresql://u:secret@localhost:5432/jobs")

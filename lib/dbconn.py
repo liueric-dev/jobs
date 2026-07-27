@@ -46,25 +46,61 @@ import os
 
 import psycopg
 
-#: The events default, and only events'. Jobs lives in the `jobs` database and
-#: always sets DATABASE_URL explicitly from ~/apps/jobs/.env -- there is
-#: deliberately no jobs-shaped fallback here, because a fallback that guesses
-#: the database is the one mistake this module cannot make safe.
-#: Carrying no password is what makes falling back inert rather than dangerous:
-#: pg_hba requires scram for anything arriving over TCP, so this URL cannot
-#: silently connect from anywhere either pipeline actually runs.
-DEFAULT_DATABASE_URL = (
-    "postgresql://nyc_events@localhost:5432/nyc_events"
-)
+#: THERE IS NO DEFAULT HERE, AND THAT IS THIS COPY'S ONE DELIBERATE
+#: DIVERGENCE FROM ~/apps/events/lib/dbconn.py.
+#:
+#: The shared library carried one default, and it named the EVENTS database:
+#:
+#:     postgresql://nyc_events@localhost:5432/nyc_events
+#:
+#: which was correct for the pipeline that owned it and actively dangerous
+#: here. Read FOOTGUN 2 above: the two applications are told apart only by the
+#: database named in DATABASE_URL, and both use unqualified names in `public`.
+#: A jobs process that fell back to that default would not error -- it would
+#: connect to the events database and start creating its 13 tables alongside
+#: `public.events`.
+#:
+#: Vendoring is what makes deleting it possible: while one file served both
+#: pipelines, the default had to be right for events and jobs had to remember
+#: never to rely on it. Now jobs simply cannot. An unset DATABASE_URL fails
+#: loudly at the point of the mistake instead of connecting to something
+#: plausible.
+#:
+#: Everything that runs here sets it explicitly: the systemd unit via
+#: EnvironmentFile=~/apps/jobs/.env, run-daily.py via lib.envfile, and api/
+#: from its own .env. api/query_claims.py additionally keeps a jobs-shaped
+#: literal for manage_users.py's admin path, where being wrong is caught by
+#: the role having no rights on the other database.
 
 
 def database_url():
-    return os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    """The connection string, or a hard failure.
+
+    Deliberately raises rather than guessing -- see the note above. Callers
+    that want the standard failure message use connect_or_exit().
+    """
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL is not set. It belongs in this application's own "
+            ".env (~/apps/jobs/.env for the pipeline, ~/apps/jobs/api/.env "
+            "for the service). There is deliberately no built-in default: "
+            "the only one that ever existed named the events database, and "
+            "falling back to it would create the jobs tables there.")
+    return url
 
 
 def scrub_url(url=None):
-    """Everything after the '@' -- host/db, never the password."""
-    return (url or database_url()).split("@")[-1]
+    """Everything after the '@' -- host/db, never the password.
+
+    Must not raise: this is what failure paths print. Since database_url()
+    now raises on an unset DATABASE_URL, an unset value is reported as such
+    rather than propagating out of an error handler and replacing the real
+    diagnostic with a RuntimeError from the logging code.
+    """
+    if not url:
+        url = os.environ.get("DATABASE_URL")
+    return url.split("@")[-1] if url else "<DATABASE_URL not set>"
 
 
 def connect(schema=None, url=None, autocommit=False):
@@ -142,17 +178,24 @@ def connect_or_exit(label, schema=None, url=None, autocommit=False):
 
     Matches the message every script already printed, so cron output and any
     alerting that greps for it keep working.
+
+    RuntimeError is caught alongside OperationalError because database_url()
+    now raises it when DATABASE_URL is unset. Without that, the one failure
+    this module most wants to report clearly would arrive as an uncaught
+    traceback and skip the standard `<label> FAILED:` line the failure
+    notifiers grep for.
     """
     import sys
 
     try:
         return connect(schema=schema, url=url, autocommit=autocommit)
-    except psycopg.OperationalError as e:
+    except (psycopg.OperationalError, RuntimeError) as e:
         print(f"{label} FAILED: could not connect to Postgres "
               f"({scrub_url(url)}): {e}")
         if not os.environ.get("DATABASE_URL"):
             print("  DATABASE_URL is not set -- it belongs in this "
-                  "application's own .env (~/apps/jobs/.env, "
-                  "~/apps/jobs/api/.env, or ~/apps/events/.env); "
-                  "the built-in default carries no password by design.")
+                  "application's own .env (~/apps/jobs/.env or "
+                  "~/apps/jobs/api/.env). This copy of dbconn has no "
+                  "built-in default on purpose: the only one that ever "
+                  "existed named the events database.")
         sys.exit(1)

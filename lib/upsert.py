@@ -38,26 +38,6 @@ from dataclasses import dataclass, field
 from . import ids
 from .timeparse import utc_now_str
 
-#: PostGIS point from bound lat/lon parameters, NULL when either is missing.
-#: Parameter-bound rather than interpolated: psycopg handles quoting and type
-#: coercion, a None can't produce the literal text "None" inside SQL, and the
-#: query plan is cacheable because the SQL text stops varying per row.
-#:
-#: The ::double precision casts are load-bearing, not decoration. A bare
-#: placeholder in `%(latitude)s IS NOT NULL` gives the planner nothing to
-#: infer a type from, and Postgres rejects the statement outright with
-#: "could not determine data type of parameter" -- but only for the rows
-#: where the value is actually NULL, which is exactly the geocoding-gap case.
-GEOG_EXPR = """
-    CASE WHEN %(latitude)s::double precision IS NOT NULL
-          AND %(longitude)s::double precision IS NOT NULL
-         THEN ST_SetSRID(ST_MakePoint(%(longitude)s::double precision,
-                                      %(latitude)s::double precision),
-                         4326)::geography
-         ELSE NULL END
-"""
-
-
 def _check_identifier(name):
     # Column names are developer-supplied constants, never user input, but
     # they are interpolated into SQL so a cheap assertion is worth it.
@@ -257,43 +237,3 @@ def upsert(conn, spec, records, id_fn, *, now=None, debug=False):
         print(f"[debug] {len(result.errors)} upsert errors "
               f"(samples: {result.errors[:3]})", file=sys.stderr)
     return result
-
-
-def prune_expired(conn, table, sources, cutoff, until=None, *,
-                  column="start_ts", source_column="source"):
-    """Delete rows for `sources` outside the ingest window.
-
-    Removes rows whose `column` is before `cutoff` and, when `until` is
-    given, also those after it. The upper bound matters because a window
-    enforced only at fetch time never removes what an earlier, wider run
-    already stored: NYPL had 800 rows reaching to May 2027 while every other
-    source stopped at 90 days, and filtering new rows alone would have left
-    them there forever. Pruning both ends makes the window self-healing.
-
-    Naming the sources is mandatory. Two of the three events scripts used to
-    run an unscoped `DELETE FROM events WHERE start_datetime < %s`, so each
-    silently deleted the other scripts' rows on every run -- the library
-    script was the only one that scoped correctly.
-
-    Defaults to the TIMESTAMPTZ column, so the comparison is a real instant
-    comparison. The old TEXT comparison also mis-deleted date-only values by
-    prefix ('2026-07-25' sorts before '2026-07-25T00:00:00.000'), which
-    removed same-day events on the morning they happened.
-    """
-    _check_identifier(table)
-    _check_identifier(column)
-    _check_identifier(source_column)
-    if not sources:
-        raise ValueError("prune_expired requires an explicit source list")
-
-    sql = (f"DELETE FROM {table} "
-           f"WHERE {source_column} = ANY(%(sources)s) AND ({column} < %(cutoff)s")
-    params = {"sources": list(sources), "cutoff": cutoff}
-    if until is not None:
-        sql += f" OR {column} > %(until)s"
-        params["until"] = until
-    sql += ")"
-
-    cur = conn.execute(sql, params)
-    conn.commit()
-    return cur.rowcount

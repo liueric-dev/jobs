@@ -1,32 +1,29 @@
-"""Run state: watermarks, resumable progress, and TTL claims.
+"""Run state: watermarks and TTL claims.
 
-Three mechanisms had grown up independently across the two pipelines, all
-answering "what do I not need to fetch again?".
+Two mechanisms, both answering "what do I not need to fetch again?".
 
-  * Watermarks (`ingest_state` / `job_ingest_state`) -- "dataset X last
-    succeeded at T". Identical DDL and identical upsert in both pipelines,
-    differing only in table name.
+  * Watermarks (`job_ingest_state`) -- "dataset X last succeeded at T".
 
-  * Resumable progress. nyc-library-events tracked a next-page cursor per
-    borough in `library_ingest_progress`; ticketmaster-seatgeek tracked a
-    per-date-slice page plus status and completion time in `fetch_progress`.
-    The first is the degenerate case of the second, so they are unified here
-    into one `ingest_progress` table. The two differed by an off-by-one --
-    one stored the next page, the other the last completed page -- which is
-    exactly the kind of drift worth deleting. `next_page` (the page to fetch
-    next) is the surviving convention.
+  * TTL claims -- a lease so two overlapping runs don't spend the same
+    metered API budget twice. This is what protects the SerpApi and Apify
+    quotas when a scheduled run and a manual one overlap, and it is the half
+    api/query_claims.py extends with claimed_by and claim_granted_at to
+    answer "does this contributor still own the claim they are submitting
+    against?".
 
-  * TTL claims (`google-serpapi.py`) -- a lease so two overlapping runs don't
-    spend the same metered API budget twice. Nothing about it was Google- or
-    jobs-specific; it is fully generic and lives here.
+WHAT IS NOT HERE, AND WHY THAT IS NOT DRIFT
+    ~/apps/events/lib/state.py additionally carries a resumable-pager half --
+    get_progress, resume_page, save_progress, complete_progress, is_fresh,
+    the STATUS_* constants and the `ingest_progress` table -- because its
+    library sources offer no "only what changed" filter and a full run walks
+    every page, so a run killed midway must resume rather than restart.
 
-WHY RESUME MATTERS
-    Neither library source offers a cheap "only what changed" filter, so a
-    full run walks every page of every source. Committing each page's upserts
-    and advancing the cursor immediately means a run killed on page 40 --
-    by an OOM, a reboot, or QPL's WAF -- resumes at page 40 next time instead
-    of re-walking 1..39. On clean completion the cursor resets to the start
-    page, so "finished" doesn't read as "resume at the end and stop".
+    Every jobs source is either watermarked or fully re-fetched, so nothing
+    here ever called any of it, and this copy does not carry it. The two
+    halves never overlapped even when this was one shared file.
+
+    The reverse also holds: the claim half above is absent from the events
+    copy. tools/lib-parity.sh allowlists state.py for exactly this reason.
 """
 
 from datetime import timedelta
@@ -34,24 +31,21 @@ from datetime import timedelta
 from . import dbconn
 from .timeparse import utc_now, utc_now_str
 
-STATUS_IN_PROGRESS = "in_progress"
-STATUS_COMPLETE = "complete"
-STATUS_FAILED = "failed"
-
-
 def ensure_state_schema(conn, watermark_table="ingest_state", with_claims=False):
-    """Create the watermark and progress tables if absent.
+    """Create the watermark table if absent.
 
-    `with_claims` adds the `claimed_at` column used by try_claim(). It is
-    opt-in because only the jobs pipeline leases datasets (to protect a
-    metered API budget); the events pipeline never calls try_claim, so it
-    has no reason to request the column.
+    `with_claims` adds the `claimed_at` column try_claim() needs. It stays a
+    parameter rather than becoming unconditional because ALTER TABLE takes an
+    ACCESS EXCLUSIVE lock, and a *pending* exclusive lock queues ahead of new
+    readers -- one blocked ALTER makes the whole table unreadable for
+    everyone behind it. Every caller here passes it (schema.py:448,
+    ingest/google-serpapi.py:294, ingest/google-apify.py:202), but issuing
+    DDL should stay something a caller asks for rather than something this
+    function does on its own. See dbconn.add_missing_columns for the
+    idle-transaction incident that lesson comes from.
 
-    That distinction is not cosmetic. ALTER TABLE needs an ACCESS EXCLUSIVE
-    lock, and a *pending* exclusive lock queues ahead of new readers -- so
-    one blocked ALTER makes the whole table unreadable for everyone behind
-    it. Asking for DDL a pipeline doesn't need turns any long-lived
-    transaction elsewhere into an outage. See dbconn.add_missing_columns.
+    The `ingest_progress` table the shared version also created is gone with
+    the pager half -- see the module docstring.
     """
     conn.execute(f"""
         CREATE TABLE IF NOT EXISTS {watermark_table} (
@@ -62,19 +56,6 @@ def ensure_state_schema(conn, watermark_table="ingest_state", with_claims=False)
     conn.commit()
     if with_claims:
         dbconn.add_missing_columns(conn, watermark_table, [("claimed_at", "TEXT")])
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS ingest_progress (
-            run_key TEXT PRIMARY KEY,
-            source TEXT NOT NULL,
-            next_page INTEGER NOT NULL DEFAULT 0,
-            status TEXT NOT NULL DEFAULT 'in_progress',
-            window_start TEXT,
-            window_end TEXT,
-            completed_at TEXT,
-            updated_at TEXT NOT NULL
-        )
-    """)
-    conn.commit()
 
 
 # -- watermarks --------------------------------------------------------------
@@ -104,71 +85,6 @@ def set_watermark(conn, dataset, ts=None, table="ingest_state"):
         (dataset, ts or utc_now_str()),
     )
     conn.commit()
-
-
-# -- resumable progress ------------------------------------------------------
-
-def get_progress(conn, run_key):
-    """(next_page, status, completed_at) or None."""
-    return conn.execute(
-        "SELECT next_page, status, completed_at FROM ingest_progress "
-        "WHERE run_key = %s", (run_key,)
-    ).fetchone()
-
-
-def resume_page(conn, run_key, start_page=0):
-    row = get_progress(conn, run_key)
-    return row[0] if row else start_page
-
-
-def save_progress(conn, run_key, source, next_page, status=STATUS_IN_PROGRESS,
-                  window_start=None, window_end=None):
-    now = utc_now_str()
-    conn.execute(
-        """
-        INSERT INTO ingest_progress
-            (run_key, source, next_page, status, window_start, window_end,
-             completed_at, updated_at)
-        VALUES (%(run_key)s, %(source)s, %(next_page)s, %(status)s,
-                %(window_start)s, %(window_end)s, %(completed_at)s, %(updated_at)s)
-        ON CONFLICT (run_key) DO UPDATE SET
-            next_page = EXCLUDED.next_page,
-            status = EXCLUDED.status,
-            window_start = COALESCE(EXCLUDED.window_start, ingest_progress.window_start),
-            window_end = COALESCE(EXCLUDED.window_end, ingest_progress.window_end),
-            completed_at = CASE WHEN EXCLUDED.status = 'complete'
-                                THEN EXCLUDED.completed_at
-                                ELSE ingest_progress.completed_at END,
-            updated_at = EXCLUDED.updated_at
-        """,
-        {"run_key": run_key, "source": source, "next_page": next_page,
-         "status": status, "window_start": window_start,
-         "window_end": window_end,
-         "completed_at": now if status == STATUS_COMPLETE else None,
-         "updated_at": now},
-    )
-    conn.commit()
-
-
-def complete_progress(conn, run_key, source, start_page=0, **kw):
-    """Mark done and rewind, so the next run starts from the beginning."""
-    save_progress(conn, run_key, source, start_page, STATUS_COMPLETE, **kw)
-
-
-def is_fresh(conn, run_key, freshness_hours):
-    """True only for a slice that is complete AND recently so.
-
-    Both conditions matter: a 'failed' or 'in_progress' slice is never fresh,
-    so it is always picked back up on the next run. A fresh slice is skipped
-    *before* any API call -- the point is not fetching, not deduping after.
-    """
-    row = get_progress(conn, run_key)
-    if not row or row[1] != STATUS_COMPLETE or not row[2]:
-        return False
-    from datetime import datetime, timezone
-    completed = datetime.strptime(row[2], "%Y-%m-%dT%H:%M:%S").replace(
-        tzinfo=timezone.utc)
-    return (utc_now() - completed) < timedelta(hours=freshness_hours)
 
 
 # -- TTL claims --------------------------------------------------------------
