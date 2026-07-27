@@ -1,0 +1,7 @@
+# The pipeline's only third-party dependency. Everything else it uses --
+# urllib, sqlite-free json, html.parser, unittest -- is stdlib, deliberately:
+# these scripts run unattended on several machines and every added package is
+# another thing that can be missing on one of them.
+#
+# api/ has its own requirements.txt (fastapi, uvicorn) and its own venv.
+psycopg[binary]>=3.1

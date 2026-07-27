@@ -31,7 +31,6 @@ backup*.tar.gz
 
 # Logs and scratch
 *.log
-.claude/worktrees/
 tmp/
 
 # Agent worktrees and scratch state

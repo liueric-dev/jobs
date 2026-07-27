@@ -1,0 +1,9 @@
+"""Unit tests for the jobs pipeline. Run with:
+
+    cd ~/apps/jobs/backend && python3 -m unittest discover -s tests -t .
+
+`-t .` sets the top-level directory to the repo root, which is what puts the
+pipeline modules (schema, llm, relevance, ...) on sys.path for discovery.
+That same top-level directory is what makes `from lib import ...` resolve:
+lib/ is part of this repo, not an installed package.
+"""
