@@ -4,8 +4,10 @@ Daily job-discovery automation, split into two halves.
 
 | | what | state |
 |---|---|---|
-| [`backend/`](backend/) | the pipeline that finds, dedupes and scores postings, plus the contributor API | live |
-| `frontend/` | the surfacing layer — nothing here yet | not started |
+| [`backend/`](backend/) | the pipeline that finds, dedupes and scores postings | live |
+| [`backend/webapp/`](backend/webapp/) | the API the frontend will call: Google SSO, ranked jobs, engagement | built, unrendered |
+| `frontend/` | the surfacing layer itself | not started |
+| [`docs/tasks/`](docs/tasks/) | the work breakdown for closing that gap | — |
 
 ## backend/
 
@@ -29,21 +31,38 @@ for the last run's outcome.
 
 ## frontend/
 
-Deliberately empty. `backend/score.py` scores every ingested job but nothing
-yet pulls the high-scoring results and presents them — no digest, dashboard or
-notification. That gap is the reason this directory exists; see the "No
-surfacing layer yet" entry at the top of
-[`backend/docs/DEVELOPER.md`](backend/docs/DEVELOPER.md).
+Still empty — nothing renders a job to a human yet. What changed on 2026-07-26
+is that the half below the UI now exists, so a frontend has something to call
+rather than a database to reinvent access to.
 
-Nothing outside this directory should need to change to add one: the pipeline's
-output is rows in Postgres (`job_matches` ranked per profile, `job_scores` for
-the narrated top slice), not files or an API this half owns.
+**[`backend/webapp/`](backend/webapp/)** serves it. Google SSO against an email
+allowlist, an opaque session cookie, `GET /v1/jobs` reading the `jobs_app`
+view, and `POST /v1/events` writing `job_events` — the engagement table
+`backend/docs/SCORING.md` has always attributed to "the surfacing layer" and
+which nothing had ever written.
+
+```bash
+cd backend/webapp
+.venv/bin/python -m unittest discover -s tests -t .
+.venv/bin/uvicorn app:app --port 8421
+```
+
+It runs as its own restricted Postgres role that can read the corpus and append
+engagement and rewrite nothing. See its README for setup, the Google Cloud
+Console steps, and the grant table; [`docs/tasks/`](docs/tasks/) has the work
+breakdown and the reasoning behind each decision.
 
 ## Layout note
 
 Everything the backend needs resolves relative to `backend/`, never to this
 directory or to the process's working directory — the `sys.path` inserts in
-`ingest/`, `tools/`, `migrations/` and `scripts/` each reach exactly one level
-up, and the shell scripts `cd` to their own parent. That is what made this
-split a pure move: no import changed, and the tree can be relocated again as a
-unit.
+`ingest/`, `tools/`, `migrations/`, `scripts/`, `api/` and `webapp/` each reach
+exactly one level up, and the shell scripts `cd` to their own parent. That is
+what made this split a pure move: no import changed, and the tree can be
+relocated again as a unit.
+
+`backend/` holds three things that are deliberately separate processes: the
+nightly pipeline, `api/` (the contributor work queue, expected to be
+deprecated) and `webapp/` (the frontend's backend). Each has its own `.env`,
+its own venv and its own Postgres role, and none imports another — they share
+only `schema.py` and `lib/`.

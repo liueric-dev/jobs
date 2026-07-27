@@ -7,7 +7,7 @@ Internal documentation for the job-discovery automation pipeline. If you're look
 ## Open Questions / TODOs
 
 **Highest priority:**
-- **No surfacing layer yet.** `score.py` scores every ingested job, but nothing pulls high-`fit_score` results and actually presents them (digest, dashboard, notification). Right now this pipeline collects and scores but never *delivers*. This is the next real gap to close.
+- **Surfacing layer: backend built 2026-07-26, no frontend yet.** `score.py` scores every ingested job and nothing yet *presents* the results to a human — that is still true and the gap is not closed. What now exists is the half below the UI: `backend/webapp/`, a FastAPI service with Google SSO (email allowlist, opaque session cookies), `GET /v1/jobs` reading the `jobs_app` view, and `POST /v1/events` finally writing `job_events` — the table `SCORING.md` has always listed as "written by the surfacing layer" and which nothing had ever written. It connects as a new `jobs_web` role that can read the corpus and append engagement and rewrite nothing. See `backend/webapp/README.md`, and `docs/tasks/` at the repo root for the work breakdown and the decisions behind it. **What remains is `frontend/`**, still empty: nothing renders any of this.
 
 **Needs infrastructure work, not code:**
 - Multi-machine networking isn't set up yet — the claim-based scheduler (see below) is built and tested, but running it from a second physical machine requires: (1) making the home-PC Postgres instance reachable over a private network (Tailscale recommended over exposing it to the open internet), and (2) replacing the checked-in default DB password (`nyc_events_password`) once the instance is reachable beyond localhost — that default was only ever reasonable under a "this is genuinely localhost-only" assumption.
@@ -65,6 +65,13 @@ surfacing layer named at the top of this document is what will go in it. The
 split was a pure move — every path below resolves relative to `backend/`, so no
 import, no `sys.path` insert and no shell `cd` changed.
 
+`backend/webapp/` was added the same day: the service `frontend/` will call.
+It is a sibling of `api/`, not an extension of it — `api/` is the contributor
+work queue whose role is deliberately granted nothing on the pipeline tables,
+and is expected to be deprecated. `webapp/` imports nothing from it, reaching
+`schema.py` and `lib/` through the same one-line parent insert every
+subdirectory here uses.
+
 ```
 ~/apps/jobs/backend
 ├── run-daily.py                # single cron entry point, runs everything below in order
@@ -93,6 +100,7 @@ import, no `sys.path` insert and no shell `cd` changed.
 ├── tools/                      # measurement and comparison, never part of a run
 ├── tests/                      # stdlib unittest; test_row_identity.py is the guard
 ├── api/                        # the contributor-facing service (its own README)
+├── webapp/                     # the frontend-facing service: SSO + read API
 └── docs/
     ├── DEVELOPER.md            # this file
     ├── OVERVIEW.md             # public-facing overview + diagrams + build retrospective

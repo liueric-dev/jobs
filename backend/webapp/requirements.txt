@@ -1,0 +1,18 @@
+# Five, and the intent is that it stays five.
+#
+# httpx is the only addition over api/requirements.txt, and it is there for
+# exactly one call: the POST to Google's token endpoint in auth.py. There is
+# deliberately NO JWT library -- the id_token is only ever read from that call's
+# own TLS-authenticated response, which is the case Google's documentation
+# exempts from signature verification. See auth.py's docstring; that exemption
+# is void for any flow that accepts an id_token over HTTP.
+#
+# This venv sets include-system-site-packages = false, like api/'s, so anything
+# missing here is missing at runtime and nowhere else -- api/README.md has the
+# story of the last time that cost someone an afternoon. ../schema.py and
+# ../lib/ are reached by a sys.path insert in config.py and are NOT installed.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+psycopg[binary]>=3.1
+pydantic>=2.7
+httpx>=0.27

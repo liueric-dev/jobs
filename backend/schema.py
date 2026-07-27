@@ -408,6 +408,13 @@ def ensure_schema(conn):
                  f"ON {FACTS_TABLE}(facts_version)")
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_job_events_profile "
                  f"ON {EVENTS_TABLE}(profile, occurred_at DESC)")
+    # The surfacing layer's hot path, which is a different question from the
+    # one above: "has this profile already saved or dismissed THIS job", asked
+    # once per row on every list render. (profile, occurred_at DESC) answers
+    # "recent activity" and cannot answer this one, so webapp/ would sequential-
+    # scan a growing table on every page.
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_job_events_profile_job "
+                 f"ON {EVENTS_TABLE}(profile, job_id)")
     conn.commit()
 
     _ensure_fk_update_cascade(conn)
