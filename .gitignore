@@ -33,6 +33,13 @@ backup*.tar.gz
 *.log
 tmp/
 
+# Cached model responses (backend/evals). Large, worthless to anyone else, and
+# they hold the full text of postings -- not something to put in git history by
+# accident. evals/cache.py also drops a .gitignore in the directory itself, so
+# a relocated EVAL_CACHE_DIR stays covered too.
+evals/.cache/
+backend/evals/.cache/
+
 # Agent worktrees and scratch state
 .claude/
 

@@ -17,10 +17,12 @@ Free-tier budgets are enforced client-side by ratelimit.py (LLM_MAX_RPM
 for local and paid endpoints.
 """
 
+import dataclasses
 import json
 import os
 import re
 import subprocess
+import time
 import urllib.error
 import urllib.request
 
@@ -107,6 +109,14 @@ def api_key():
             or os.environ.get("GLM_API_KEY"))
 
 
+#: Private aliases so call_detailed() can reach these while exposing keyword
+#: arguments of the same name. Bound to the functions, not their results, so
+#: they still read the environment at call time -- tests that patch os.environ
+#: between calls keep working.
+_env_backend, _env_model = backend, model
+_env_base_url, _env_api_key = base_url, api_key
+
+
 class TransientError(RuntimeError):
     """The call failed for a reason that says nothing about this prompt.
 
@@ -120,7 +130,28 @@ class TransientError(RuntimeError):
 TRANSIENT_STATUSES = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
 
 
-def call(prompt, *, timeout=DEFAULT_TIMEOUT_SECS, json_object=True):
+@dataclasses.dataclass(frozen=True)
+class Completion:
+    """One completion plus what it cost to get it.
+
+    `usage` is the provider's own block, passed through UNCHANGED and
+    therefore shaped differently per backend -- the OpenAI wire format reports
+    `prompt_tokens`/`completion_tokens`, the Claude CLI envelope reports
+    `input_tokens`/`cache_read_input_tokens`. Normalising them is a reporting
+    concern and belongs to the caller (see eval/metrics.py), not here: this
+    module deliberately knows nothing jobs-specific and nothing about prices.
+
+    `cost_usd` is only ever non-None on the claude backend, which is the only
+    one that tells us. An HTTP provider bills out of band.
+    """
+    text: str
+    model: str
+    usage: dict
+    latency_s: float
+    cost_usd: float = None
+
+
+def call(prompt, **kwargs):
     """One chat completion. Returns the message content as a string.
 
     Raises TransientError when the failure is retryable and plain
@@ -130,8 +161,36 @@ def call(prompt, *, timeout=DEFAULT_TIMEOUT_SECS, json_object=True):
     failure means that item is never attempted again.
 
     Both backends honour that contract; only the transport differs.
+
+    Kept returning a bare string because every pipeline caller wants exactly
+    that. Callers who need tokens or latency use call_detailed(); a flag that
+    changes the return type would make `content = llm.call(...)` a thing you
+    have to read the arguments to understand.
     """
-    active_model = model()
+    return call_detailed(prompt, **kwargs).text
+
+
+def call_detailed(prompt, *, model=None, base_url=None, api_key=None,
+                  backend=None, timeout=DEFAULT_TIMEOUT_SECS,
+                  json_object=True):
+    """call(), but returning a Completion with usage and latency attached.
+
+    Every override defaults to None and falls back to the module-level
+    environment lookup, so the pipeline's behaviour is unchanged and only
+    callers that pass something get something different.
+
+    The overrides exist for evaluation. Before them, pointing a tool at a
+    second model meant mutating os.environ or rebuilding the HTTP call by
+    hand, and four tools under tools/ chose the latter -- which quietly
+    dropped ratelimit.acquire() and let a sweep spend the quota the nightly
+    run depends on. Routing them back through here is the point.
+    """
+    # The keyword arguments deliberately share names with the env-lookup
+    # functions -- `model=` reads better at every call site than `model_id=`
+    # -- so those functions are reached through the aliases above, which the
+    # parameters cannot shadow.
+    active_backend = (backend or _env_backend()).strip().lower()
+    active_model = model if model is not None else _env_model()
 
     # Before the request, not after: the point is to not send the call that
     # would 429. QuotaExhausted becomes a TransientError because the prompt
@@ -141,9 +200,14 @@ def call(prompt, *, timeout=DEFAULT_TIMEOUT_SECS, json_object=True):
     except ratelimit.QuotaExhausted as e:
         raise TransientError(str(e))
 
-    if backend() == "claude":
-        return _call_claude(prompt, active_model, timeout)
-    return _call_http(prompt, active_model, timeout, json_object)
+    started = time.monotonic()
+    if active_backend == "claude":
+        text, usage, cost = _call_claude(prompt, active_model, timeout)
+    else:
+        text, usage, cost = _call_http(prompt, active_model, timeout,
+                                       json_object, base_url, api_key)
+    return Completion(text=text, model=active_model, usage=usage,
+                      latency_s=time.monotonic() - started, cost_usd=cost)
 
 
 #: CLI output that means "try again later" rather than "this prompt is bad".
@@ -204,10 +268,14 @@ def _call_claude(prompt, active_model, timeout):
     content = (env.get("result") or "").strip()
     if not content:
         raise RuntimeError("claude CLI returned an empty result")
-    return content
+    # total_cost_usd is the subscription cost the CLI attributes to this call;
+    # no HTTP provider reports anything equivalent, which is why cost_usd is
+    # None everywhere else.
+    return content, env.get("usage") or {}, env.get("total_cost_usd")
 
 
-def _call_http(prompt, active_model, timeout, json_object):
+def _call_http(prompt, active_model, timeout, json_object,
+               override_base_url=None, override_api_key=None):
     """The original OpenAI-compatible path: POST /chat/completions."""
     payload = {"model": active_model,
                "temperature": DEFAULT_TEMPERATURE,
@@ -215,11 +283,12 @@ def _call_http(prompt, active_model, timeout, json_object):
     if json_object:
         payload["response_format"] = {"type": "json_object"}
 
+    endpoint = (override_base_url or _env_base_url()).rstrip("/")
     req = urllib.request.Request(
-        f"{base_url().rstrip('/')}/chat/completions",
+        f"{endpoint}/chat/completions",
         data=json.dumps(payload).encode(), method="POST",
         headers={"Content-Type": "application/json",
-                 "Authorization": f"Bearer {api_key()}"},
+                 "Authorization": f"Bearer {override_api_key or _env_api_key()}"},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -237,7 +306,8 @@ def _call_http(prompt, active_model, timeout, json_object):
     choices = data.get("choices") or []
     if not choices:
         raise RuntimeError(f"LLM API returned no choices: {json.dumps(data)[:300]}")
-    return choices[0]["message"]["content"].strip()
+    return (choices[0]["message"]["content"].strip(),
+            data.get("usage") or {}, None)
 
 
 def parse_json(raw_text):

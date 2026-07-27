@@ -5,12 +5,30 @@ jobs/: it had one consumer pipeline, so it went to live with it. The text.py
 half of that file is now tests/test_lib_text.py in this repo.
 """
 
+import json
 import unittest
+import urllib.request
 
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import llm  # noqa: E402  (llm.py)
+
+
+class _FakeResp:
+    """Minimal stand-in for urlopen's context-manager response."""
+
+    def __init__(self, body):
+        self._body = body
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
 
 
 class TestLlmParsing(unittest.TestCase):
@@ -39,6 +57,83 @@ class TestLlmParsing(unittest.TestCase):
         self.assertTrue(llm.failed_label("m").startswith(llm.FAILED_PREFIX))
 
 
+
+
+class TestPerCallOverrides(unittest.TestCase):
+    """call_detailed()'s overrides must reach the wire without touching env.
+
+    These exist so evaluation tooling can point at a second model in-process.
+    The failure they guard against is subtle: before the overrides, tools that
+    wanted a different model rebuilt the HTTP request by hand, which silently
+    dropped ratelimit.acquire() and let a sweep spend the nightly run's quota.
+    A regression here would push them back to doing that.
+    """
+
+    def setUp(self):
+        self.captured = {}
+        self.real = urllib.request.urlopen
+        urllib.request.urlopen = self._fake
+        self.env = {k: os.environ.get(k) for k in
+                    ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL")}
+        os.environ["LLM_API_KEY"] = "envkey"
+        os.environ["LLM_BASE_URL"] = "https://env.example/v1"
+
+    def tearDown(self):
+        urllib.request.urlopen = self.real
+        for k, v in self.env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def _fake(self, req, timeout=None):
+        self.captured = {"url": req.full_url,
+                         "auth": req.get_header("Authorization"),
+                         "body": json.loads(req.data.decode())}
+        return _FakeResp(json.dumps({
+            "choices": [{"message": {"content": '{"fit_score": 71}'}}],
+            "usage": {"prompt_tokens": 1060, "completion_tokens": 240},
+        }).encode())
+
+    def test_defaults_read_environment(self):
+        self.assertEqual(llm.call("hi"), '{"fit_score": 71}')
+        self.assertEqual(self.captured["url"],
+                         "https://env.example/v1/chat/completions")
+        self.assertEqual(self.captured["auth"], "Bearer envkey")
+
+    def test_overrides_do_not_mutate_environment(self):
+        llm.call_detailed("hi", model="deepseek-v4-flash",
+                          base_url="https://api.deepseek.com/v1",
+                          api_key="sk-test")
+        self.assertEqual(self.captured["url"],
+                         "https://api.deepseek.com/v1/chat/completions")
+        self.assertEqual(self.captured["auth"], "Bearer sk-test")
+        self.assertEqual(self.captured["body"]["model"], "deepseek-v4-flash")
+        # The whole point: a second model in-process leaves the first alone.
+        self.assertEqual(os.environ["LLM_API_KEY"], "envkey")
+        self.assertEqual(os.environ["LLM_BASE_URL"], "https://env.example/v1")
+
+    def test_base_url_trailing_slash_does_not_double(self):
+        llm.call_detailed("hi", base_url="https://x.example/v1/", api_key="k")
+        self.assertEqual(self.captured["url"],
+                         "https://x.example/v1/chat/completions")
+
+    def test_completion_carries_usage_and_model(self):
+        c = llm.call_detailed("hi", model="m", api_key="k")
+        self.assertEqual(c.text, '{"fit_score": 71}')
+        self.assertEqual(c.model, "m")
+        self.assertEqual(c.usage["prompt_tokens"], 1060)
+        self.assertGreaterEqual(c.latency_s, 0)
+        # No OpenAI-compatible provider reports per-call cost; only the
+        # claude CLI envelope does. Guessing one here would be a fiction that
+        # eval/metrics.py would then report as measured.
+        self.assertIsNone(c.cost_usd)
+
+    def test_temperature_still_pinned_to_zero(self):
+        # Sampling turns a ranking into a lottery -- see llm.py's note.
+        llm.call_detailed("hi", model="m", api_key="k")
+        self.assertEqual(self.captured["body"]["temperature"],
+                         llm.DEFAULT_TEMPERATURE)
 
 
 class TestTransientClassification(unittest.TestCase):
