@@ -26,30 +26,36 @@ GUIDING PRINCIPLE -- mechanism, not schema.
     in the script that owns it. The per-source HASH_FIELDS_* tuples live in
     ../schema.py for the same reason.
 
-THERE IS A SECOND COPY OF THIS CODE, AND THAT IS DELIBERATE
-    ~/apps/events/lib is the same eight modules. Until 2026-07-26 both
-    applications imported one shared package, `~/apps/pipelib`, installed
-    editable; the two were split so that each application is standalone.
+THIS CODE WAS SHARED ONCE, AND THAT HISTORY EXPLAINS ITS SHAPE
+    Until 2026-07-26 these modules were a single package, `pipelib`, installed
+    editable and imported by this pipeline and by a second application. They
+    were vendored into each so that every application is standalone: clone it,
+    install psycopg, run it. See ~/apps/REORG.md slice G.
 
-    The cost of the split is drift, and this repo has already paid it once:
-    api/ used to carry its own copy of these functions and accumulated four
-    divergences -- strip_html truncating at 5000 where text.py uses 20000,
-    parse_relative_posted_at missing minutes and "yesterday", raw_json using
-    json.dumps(job)[:20000] (the mid-string corruption bounded_json exists
-    to prevent), and posted_at_ts/salary_text missing entirely. Two of those
-    changed content_hash, which is row identity. See ~/apps/REORG.md slice G.
+    That history is why some modules here look half-finished -- `state` has
+    watermarks and TTL claims but no resumable pager, `upsert` has no
+    PostGIS helpers, `dbconn` has no DATABASE_URL default at all. Those parts
+    were dropped because nothing here ever called them, or because keeping
+    them was actively unsafe. Each module says so in its own docstring.
 
-    Two things exist to catch that, and they are the reason the split is
-    survivable rather than a repeat:
+    It is also why the drift risk is worth naming. A copy that nothing checks
+    is how this project previously ended up with a `strip_html` truncating at
+    5,000 characters where the original used 20,000 -- silently changing
+    `content_hash`, which is row identity.
 
-      - ../tests/test_row_identity.py pins the digests of every function
-        that feeds a stored hash, as literals, in BOTH repos. An edit here
-        that moves row identity fails this repo's own suite immediately.
-      - ~/apps/tools/lib-parity.sh diffs the two copies and reports which
-        files have diverged, against an allowlist of intended divergences.
+    Two things in THIS repo guard against that, and neither needs any other
+    checkout to exist:
 
-    Before editing anything in here, read those two. Divergence is allowed;
-    unnoticed divergence is what went wrong last time.
+      - ../tests/test_row_identity.py pins, as literals, the digests of every
+        function whose output reaches a stored value. It was generated from
+        the shared library immediately before the split, so it encodes what
+        this database actually holds.
+      - ../tests/test_lib_contract.py specifies the behaviour of the parts
+        that reach no digest -- the http retry policy, the watermark and TTL
+        claim SQL, the DDL-avoidance rule in dbconn -- which otherwise had no
+        tests at all.
+
+    Read both before editing anything in here.
 
 WHAT MUST NEVER CHANGE WITHOUT A DELIBERATE REWRITE
     `ids.content_hash` and anything feeding it -- notably `text.strip_html`

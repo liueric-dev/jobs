@@ -11,19 +11,17 @@ Two mechanisms, both answering "what do I not need to fetch again?".
     answer "does this contributor still own the claim they are submitting
     against?".
 
-WHAT IS NOT HERE, AND WHY THAT IS NOT DRIFT
-    ~/apps/events/lib/state.py additionally carries a resumable-pager half --
-    get_progress, resume_page, save_progress, complete_progress, is_fresh,
-    the STATUS_* constants and the `ingest_progress` table -- because its
-    library sources offer no "only what changed" filter and a full run walks
-    every page, so a run killed midway must resume rather than restart.
+WHAT IS NOT HERE, AND WHY IT LOOKS HALF-FINISHED
+    The shared library this module came from also carried a resumable-pager
+    half -- get_progress, resume_page, save_progress, complete_progress,
+    is_fresh, the STATUS_* constants and an `ingest_progress` table -- for a
+    consumer whose sources offered no "only what changed" filter, where a full
+    run walked every page and a run killed midway had to resume rather than
+    restart.
 
-    Every jobs source is either watermarked or fully re-fetched, so nothing
-    here ever called any of it, and this copy does not carry it. The two
-    halves never overlapped even when this was one shared file.
-
-    The reverse also holds: the claim half above is absent from the events
-    copy. tools/lib-parity.sh allowlists state.py for exactly this reason.
+    Every source here is either watermarked or fully re-fetched, so nothing in
+    this pipeline ever called any of it, and that half was dropped when the
+    module was brought in. It is not missing; it was never used.
 """
 
 from datetime import timedelta

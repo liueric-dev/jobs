@@ -1,31 +1,29 @@
 """Frozen digests for every lib/ function that decides row identity.
 
-THIS FILE IS THE REASON VENDORING lib/ IS SAFE. READ BEFORE EDITING lib/.
+THIS FILE IS THE REASON lib/ CAN BE OWNED BY THIS REPO. READ BEFORE EDITING lib/.
 
-~/apps/events/lib and ~/apps/jobs/lib are two copies of the same eight
-modules (see lib/__init__.py and ~/apps/REORG.md slice G). Copies drift --
-this project has already proved that once, when api/ carried its own
-implementations and four of them diverged, two in ways that changed
-content_hash and therefore row identity for tens of thousands of rows.
+lib/ was a shared package until 2026-07-26 and is now this repo's own code
+(see lib/__init__.py and ~/apps/REORG.md slice G). Code that one application
+owns outright is code that can be quietly rewritten -- and this project has
+already proved what that costs, when a private reimplementation of these
+functions accumulated four divergences, two of which changed content_hash and
+therefore row identity for tens of thousands of rows.
 
-What made that dangerous was not the copy. It was that nothing detected the
-divergence: both sides ran, both sides looked right, and the disagreement
-only existed in the digests they wrote.
+What made that dangerous was not the rewriting. It was that nothing detected
+it: the code ran, it looked right, and the disagreement existed only in the
+digests it wrote.
 
 So the values below are LITERALS, not recomputations. They were generated
 against the shared library on 2026-07-26, immediately before it was split,
 and they encode what production was actually storing at that moment. A test
-that recomputes an expected value with the same function it is testing
-proves nothing; these prove the function still returns what the database
-already holds.
+that recomputes an expected value with the function under test proves
+nothing; these prove the function still returns what the database holds.
 
-THIS FILE IS IDENTICAL IN BOTH REPOS, apart from the module docstring and
-the events copy omitting the Google-only vectors. If you change a value
-here you must change it there, and you must have a migration reason -- every
-one of these digests is stored on ~11,400 rows in this repo's database and
-~12,300 in the other's.
+Every assertion is self-contained. Nothing here consults another repo, reads
+another checkout, or assumes one exists.
 
-    ~/apps/tools/lib-parity.sh   reports which lib/ files have diverged
+If you change a value here you must have a migration reason -- every one of
+these digests is stored on ~11,400 rows in this repo's database.
 """
 
 import hashlib

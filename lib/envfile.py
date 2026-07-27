@@ -1,13 +1,14 @@
 """Load a .env file into os.environ from Python.
 
-Each application passes its own path -- ~/apps/jobs/.env or ~/apps/events/.env.
+The caller passes its own path -- ~/apps/jobs/.env.
 There is deliberately no default; see the note on DEFAULT_ENV_FILE below. (This
 module was originally written to load ~/.hermes/.env, which is the file the
 history below refers to.)
 
 WHY THIS EXISTS
     Every shell entry point into these pipelines sources the env file itself
-    -- `backfill-facts.sh`, `run-backfill.sh`, `tools/learned-ranker-probe.py`'s
+    -- `scripts/backfill-facts.sh`, `scripts/run-backfill.sh`,
+    `tools/learned-ranker-probe.py`'s
     documented invocation. The two `run-daily.py` cron entry points did not:
     they called `os.environ.copy()` and trusted the caller to have exported
     everything.

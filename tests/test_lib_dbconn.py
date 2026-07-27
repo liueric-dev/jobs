@@ -59,27 +59,30 @@ class TestConnectSchemaHandling(unittest.TestCase):
         self.assertNotIn("CREATE ", joined)
 
     def test_no_schema_leaves_search_path_alone(self):
-        """Events passes no schema= and must be unaffected by any of this."""
+        """Omitting schema= must be completely inert -- no statement, no
+        commit. Callers that do not scope a connection must not silently
+        acquire one."""
         rec = self._connect()
         self.assertEqual(rec.statements, [])
         self.assertEqual(rec.commits, 0)
 
     def test_autocommit_skips_the_explicit_commit(self):
-        """The geocode cache path -- see connect()'s docstring."""
+        """For callers whose writes must survive independently of the
+        enclosing transaction -- see connect()'s docstring."""
         rec = self._connect(schema="public", autocommit=True)
         self.assertIn("SET search_path TO public", rec.statements)
         self.assertEqual(rec.commits, 0)
 
 
 class TestNoDatabaseUrlDefault(unittest.TestCase):
-    """This copy of dbconn has NO default, which is its one deliberate
-    divergence from ~/apps/events/lib/dbconn.py.
+    """dbconn deliberately has NO DATABASE_URL default.
 
-    The shared library's single default named the EVENTS database. That was
-    correct for events and dangerous here: the two applications are told
-    apart only by the database in DATABASE_URL and both use unqualified names
-    in `public`, so a jobs process falling back would not error -- it would
-    create its 13 tables next to `public.events`.
+    The shared library this module came from carried one, and it named a
+    DIFFERENT application's database. Applications on this Postgres instance
+    are told apart only by the database in DATABASE_URL, and all of them use
+    unqualified table names in `public`, so a process falling back to the
+    wrong one would not error -- it would create its 13 tables inside
+    somebody else's database.
     """
 
     def test_there_is_no_default_at_all(self):

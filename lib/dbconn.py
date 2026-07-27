@@ -8,12 +8,13 @@ FOOTGUN 1 -- the DATABASE_URL default had drifted.
     creates the first. That script could not connect even once, which is why
     its `fetch_progress` table was still missing. One default, defined here.
 
-    The default carries NO password. The real connection strings live in each
-    application's own .env -- ~/apps/events/.env and ~/apps/jobs/.env, plus
-    ~/apps/jobs/api/.env for the service -- which is also where each reads its
-    API keys from. A credential baked into a source file goes stale the moment
-    the password is rotated, and then reports itself as an authentication
-    error rather than as a configuration one.
+    There is no default at all here -- see the note below. The real
+    connection strings live in this application's own .env files,
+    ~/apps/jobs/.env for the pipeline and ~/apps/jobs/api/.env for the
+    service, which is also where each reads its API keys from. A credential
+    baked into a source file goes stale the moment the password is rotated,
+    and then reports itself as an authentication error rather than as a
+    configuration one.
 
 FOOTGUN 2 -- the wrong DATABASE_URL is silent, and is now destructive.
     This used to say something else. Until the database split, jobs/ lived in a
@@ -46,10 +47,10 @@ import os
 
 import psycopg
 
-#: THERE IS NO DEFAULT HERE, AND THAT IS THIS COPY'S ONE DELIBERATE
-#: DIVERGENCE FROM ~/apps/events/lib/dbconn.py.
+#: THERE IS NO DEFAULT HERE, AND THAT IS DELIBERATE.
 #:
-#: The shared library carried one default, and it named the EVENTS database:
+#: The shared library this module was copied from carried one default, and it
+#: named the EVENTS database, because that library served that pipeline too:
 #:
 #:     postgresql://nyc_events@localhost:5432/nyc_events
 #:
@@ -60,11 +61,11 @@ import psycopg
 #: connect to the events database and start creating its 13 tables alongside
 #: `public.events`.
 #:
-#: Vendoring is what makes deleting it possible: while one file served both
-#: pipelines, the default had to be right for events and jobs had to remember
-#: never to rely on it. Now jobs simply cannot. An unset DATABASE_URL fails
-#: loudly at the point of the mistake instead of connecting to something
-#: plausible.
+#: Owning this file outright is what makes deleting it possible: while one
+#: shared file served both pipelines the default had to be right for the other
+#: one, and this pipeline had to remember never to rely on it. Now it simply
+#: cannot. An unset DATABASE_URL fails loudly at the point of the mistake
+#: instead of connecting to something plausible.
 #:
 #: Everything that runs here sets it explicitly: the systemd unit via
 #: EnvironmentFile=~/apps/jobs/.env, run-daily.py via lib.envfile, and api/
@@ -115,9 +116,10 @@ def connect(schema=None, url=None, autocommit=False):
     not ask for DDL rights; see FOOTGUN 2 above. jobs/schema.py's
     ensure_schema() is the one place that creates.
 
-    `autocommit=True` is required for the geocode cache, whose writes must
-    survive independently of whatever transaction the caller is running --
-    see ~/apps/events/geocode.py.
+    `autocommit=True` exists for callers whose writes must survive
+    independently of whatever transaction is running around them, such as a
+    cache that should persist even if the enclosing batch rolls back. Nothing
+    in this pipeline currently passes it.
     """
     conn = psycopg.connect(url or database_url())
     if autocommit:
