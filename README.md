@@ -42,7 +42,7 @@ pip install 'psycopg[binary]'
 ```bash
 git clone <this repo> ~/apps/jobs
 cd ~/apps/jobs
-python3 -m pip install --user -e ~/apps/pipelib
+python3 -m pip install --user 'psycopg[binary]'
 ```
 
 > **Layout note:** this repo holds both halves of the jobs application. The
@@ -51,17 +51,43 @@ python3 -m pip install --user -e ~/apps/pipelib
 > `~/apps/REORG.md` merged them, because duplicating the posting-identity and
 > normalisation code across the two had produced 32% duplicate rows.
 >
-> `pipelib`, the library shared with `~/apps/events`, is a separate repo at
-> `~/apps/pipelib` and is imported as an installed package -- hence the `pip
-> install` above. Scripts here need no `sys.path` manipulation to reach it.
-> Note `api/` keeps its own venv with `include-system-site-packages = false`,
-> so it needs its own `pip install -e ~/apps/pipelib`; see `api/README.md`.
+> **`lib/` is part of this repo and there is nothing to install for it.** The
+> mechanism layer -- connections, HTTP with backoff, hashing, watermarks,
+> upsert -- was a shared package (`~/apps/pipelib`) until slice G vendored it
+> into both applications so each is standalone. `api/` uses the same `lib/`
+> through the one `sys.path` insert it already needed for `../schema.py`, so
+> its `include-system-site-packages = false` venv no longer needs anything
+> extra either.
+>
+> **`~/apps/events/lib` is a second copy of those modules.** Some divergence
+> is deliberate (this copy has the TTL-claim half of `state.py` and no
+> `DEFAULT_DATABASE_URL`; events has the pager half and keeps the default).
+> Before trusting a change to `lib/`, run both guards:
+>
+> ```bash
+> python3 -m unittest discover -s tests -t .   # includes test_row_identity.py
+> ./tools/lib-parity.sh                        # drift against ~/apps/events/lib
+> ```
+>
+> `tests/test_row_identity.py` holds **literal** digests for every function
+> whose output reaches a stored value, generated from the shared library
+> immediately before the split. `content_hash`, `strip_html` and the
+> `posted_at` parsing decide whether a re-seen posting counts as changed
+> across ~11,400 rows.
 
 ### 2. Point it at the database
 
-The pipeline needs a `DATABASE_URL`. **No credential is stored in this repo** —
-the default is passwordless and will fail against a password-protected server,
-which is intentional.
+The pipeline needs a `DATABASE_URL`. **No credential is stored in this repo,
+and since slice G there is no default at all** — `lib/dbconn.database_url()`
+raises if the variable is unset.
+
+That is deliberate and it is this copy's one intended divergence from
+`~/apps/events/lib/dbconn.py`. The shared library carried a single default and
+it named the *events* database. The two applications are told apart only by the
+database in `DATABASE_URL` and both use unqualified table names in `public`, so
+a jobs process that fell back would not error — it would create its 13 tables
+alongside `public.events`. Failing loudly beats connecting to something
+plausible.
 
 This pipeline reads it from `./.env`, which it loads itself — copy
 `.env.example` and fill it in:
@@ -71,7 +97,7 @@ cp .env.example .env && chmod 600 .env
 ```
 
 That file is read by both `systemd`'s `EnvironmentFile=` and
-`pipelib.envfile`, which do not parse identically; `.env.example` documents the
+`lib.envfile`, which do not parse identically; `.env.example` documents the
 intersection you have to stay inside. On any other machine you can export the
 variable instead:
 

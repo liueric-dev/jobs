@@ -67,7 +67,7 @@
     "core_ml_research": -60
   },
 
-  "_location_comment": "Reads jobs.location_is_nyc / location_is_remote, which pipelib.text already computes for free at ingest, plus job_facts.remote_policy for the onsite-elsewhere case. Neither NYC nor remote is a hard exclude rather than a penalty: a commutable-but-unclassified location is a data gap, not a bad job. CALIBRATED 2026-07-26: softened from -45/-55. The LLM largely ignores location when judging fit, so a heavy penalty here pushed genuinely good postings out of the shortlist for a reason the persona never asked to be decisive.",
+  "_location_comment": "Reads jobs.location_is_nyc / location_is_remote, which lib.text already computes for free at ingest, plus job_facts.remote_policy for the onsite-elsewhere case. Neither NYC nor remote is a hard exclude rather than a penalty: a commutable-but-unclassified location is a data gap, not a bad job. CALIBRATED 2026-07-26: softened from -45/-55. The LLM largely ignores location when judging fit, so a heavy penalty here pushed genuinely good postings out of the shortlist for a reason the persona never asked to be decisive.",
   "location": {
     "accept_nyc": true,
     "accept_remote": true,

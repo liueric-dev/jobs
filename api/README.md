@@ -33,11 +33,12 @@ runs. It stayed latent only because this service has never been deployed.
 
 The fix was to move the pipeline out of `~/.hermes` too and put both halves in
 one repo. This directory now imports `../schema.py`, `../google_jobs.py` and
-`pipelib` directly.
+`../lib/` directly — one `sys.path` insert in `query_claims.py` reaches all
+three.
 
 **What is still deliberately not shared: the claim SQL.** `try_claim_query`,
 `holds_claim`, `mark_success` and `release_claim` are a superset of
-`pipelib.state`'s — they add `claimed_by` and `claim_granted_at`, because this
+`lib.state`'s — they add `claimed_by` and `claim_granted_at`, because this
 service must answer "does this contributor still own the claim they are
 submitting against?", which the pipeline never asks. The two still coordinate
 through the **same Postgres row** (`job_ingest_state`, keyed
@@ -55,10 +56,6 @@ that way. Set `GOOGLE_QUERIES_FILE` if you do want to serve a different bank.
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/pip install -e ~/apps/pipelib   # REQUIRED: this venv has
-                                          # include-system-site-packages=false,
-                                          # so the user-site pipelib the
-                                          # pipeline uses is invisible here
 cp .env.example .env && chmod 600 .env    # fill in DATABASE_URL
 set -a; . .env; set +a
 
@@ -68,6 +65,16 @@ JOBS_ADMIN_DATABASE_URL=postgresql://jobs_pipeline:pass@localhost:5432/jobs \
 
 uvicorn app:app --port 8420
 ```
+
+**There used to be a third install line here, and its absence is the point.**
+This venv sets `include-system-site-packages = false`, so while the mechanism
+layer was a shared pip-installed package it was invisible in here and needed
+its own `pip install -e ~/apps/pipelib`. Forgetting it produced an
+`ImportError` **only under uvicorn** and nowhere else — not in the pipeline,
+not in the tests, not in a bare `python3` here. Slice G vendored that code to
+`../lib/`, which `query_claims.py` reaches with the same `sys.path` insert it
+already needed for `../schema.py`. `requirements.txt` is now the complete
+dependency list.
 
 Schema creation is a **deliberate, separate step**, not something the service
 does at startup. `init-schema` is additive only — it never drops or rewrites

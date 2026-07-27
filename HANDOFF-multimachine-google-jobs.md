@@ -32,7 +32,7 @@ key.
 
 ## What turned out to be true
 
-**The coordination layer already existed and was correct.** `pipelib.state.try_claim()` does an
+**The coordination layer already existed and was correct.** `lib.state.try_claim()` (then `pipelib.state`) does an
 atomic `INSERT … ON CONFLICT … WHERE claimed_at IS NULL OR expired RETURNING`; Postgres
 row-locking makes "two machines never get the same query" a real guarantee. `api/`
 already implements the contributor-worker model the future app needs. **Neither needed
@@ -120,7 +120,7 @@ But 14.5% of its volume is three spam reposters (`remote zest jobs` 53, `vmysmar
   filter works, which is why the first version reported "INCONCLUSIVE" against a clear positive.
 
 ### Step 2 — stable posting identity ✅
-- **`pipelib/ids.py`** — added `decode_google_job_id()`, `normalize_apply_url()`,
+- **`pipelib/ids.py`** (now `lib/ids.py` — slice G) — added `decode_google_job_id()`, `normalize_apply_url()`,
   `google_source_id()`. `htidocid` when available, else `fp:<sha256>` over
   (company_token, normalized title, apply URL with `utm_*`/`gclid`/`fbclid` stripped).
   **Location is deliberately excluded from the fingerprint** — it's the field Google reports
@@ -130,11 +130,11 @@ But 14.5% of its volume is three spam reposters (`remote zest jobs` 53, `vmysmar
   posting, so they must derive the key identically or one posting becomes two rows.
 - **`~/apps/jobs/api/query_claims.py`** — at the time, the same three functions
   **reimplemented**, because that was a separate repo deliberately sharing no code with
-  `~/.hermes`. Slice D of the reorg ended that: `api/` now imports the same `pipelib`
+  `~/.hermes`. Slice D of the reorg ended that: `api/` now imports the same mechanism layer
   functions the pipeline does, and the reimplementations are gone. Measured on merge, the
   vendored copies had drifted **six** ways, two of which changed `content_hash` — which is
   the concrete argument against re-splitting them.
-- **`pipelib/tests/test_pipelib.py`** — `TestGoogleJobIdentity`, 8 tests, pinned against two
+- **`pipelib/tests/test_pipelib.py`** (now `tests/test_lib.py` — slice G) — `TestGoogleJobIdentity`, 8 tests, pinned against two
   **verbatim real blobs** from the live table (the 15Five posting at 18:17:53 and 19:47:41 —
   same `htidocid`, different `fc`, one has `hl` and one doesn't).
 
@@ -203,7 +203,7 @@ CREATE INDEX IF NOT EXISTS idx_job_sources_query ON job_sources(query_slug, fetc
 ```
 
 - DDL in `schema.py:ensure_schema()`, next to `google_jobs_query_stats`.
-- `pipelib.upsert.upsert()` returns only counts today. Add `UpsertResult.records:
+- `lib.upsert.upsert()` returns only counts today. Add `UpsertResult.records:
   list[(id, outcome)]`, appended in the three existing branches. Purely additive —
   `__iter__`/`__add__` keep the `n, u, unc = upsert(...)` shape working in all six ingest
   scripts. **Don't break that; every ingest script uses it.**
@@ -247,7 +247,7 @@ device-authenticated. `jobs-api`'s README makes the same call.
 > If it is ever revived, the instructions below are written for the pre-slice-D
 > layout and need three updates: the script is now `ingest/google-serpapi.py`
 > (the pipeline moved from `jobs/` to the repo root), secrets come from the
-> repo's own `./.env` rather than `~/.hermes/.env`, and `pipelib` is a separate
+> repo's own `./.env` rather than `~/.hermes/.env`, and `pipelib` was a separate
 > installable repo. The credentials shown are also stale — slice A rotated the
 > superuser password these predate.
 
@@ -258,7 +258,7 @@ coordination.)
 ```bash
 git clone https://github.com/hermes-toes/jobs-script.git ~/hermes-scripts
 cd ~/hermes-scripts && pip3 install 'psycopg[binary]'
-pip3 install -e ~/apps/pipelib     # or clone pipelib too -- it is a separate repo now
+# (slice G: no longer needed -- lib/ is part of this repo)
 ```
 `~/hermes-scripts/.env` there (mode 600), **its own** SerpApi key:
 ```
@@ -286,8 +286,8 @@ Cron — **SerpApi step only** (the other five sources are free HTTP with no per
 | File | State |
 |---|---|
 | `tools/verify-date-filter.py` | **new**, run, verified |
-| `pipelib/ids.py` | modified — identity helpers |
-| `pipelib/tests/test_pipelib.py` | modified — `TestGoogleJobIdentity` (92/92 pass) |
+| `pipelib/ids.py` (now `lib/ids.py`) | modified — identity helpers |
+| `pipelib/tests/test_pipelib.py` (now `tests/test_lib.py`) | modified — `TestGoogleJobIdentity` (92/92 pass) |
 | `ingest/google-serpapi.py` | modified — `normalize_job()` |
 | `ingest/google-apify.py` | modified — `normalize_job()`, dropped unused `hashlib` |
 | `migrate_google_ids.py` | **new**, dry-run verified, **not applied** |
