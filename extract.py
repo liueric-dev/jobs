@@ -60,8 +60,8 @@ import llm
 import profiles
 import relevance
 import schema
-from pipelib import dbconn
-from pipelib.timeparse import utc_now_str
+from lib import dbconn
+from lib.timeparse import utc_now_str
 
 EXTRACT_BATCH_SIZE = int(os.environ.get("EXTRACT_BATCH_SIZE", "40"))
 EXTRACT_MAX_WORKERS = int(os.environ.get("EXTRACT_MAX_WORKERS", "3"))

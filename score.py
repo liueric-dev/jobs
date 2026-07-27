@@ -174,8 +174,8 @@ import schema  # schema.py
 import profiles  # profiles.py
 import relevance  # relevance.py -- kept for the cost tools
 import llm  # llm.py
-from pipelib import dbconn
-from pipelib.timeparse import utc_now_str
+from lib import dbconn
+from lib.timeparse import utc_now_str
 
 PERSONA_FILE = os.environ.get(
     "JOB_SCORING_PERSONA_FILE",

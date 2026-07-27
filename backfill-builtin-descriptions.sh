@@ -57,7 +57,7 @@ import os, sys
 sys.path.insert(0, ".")
 sys.path.insert(0, "jobs")
 import schema
-from pipelib import dbconn
+from lib import dbconn
 conn = dbconn.connect_or_exit("builtin-remaining", schema=schema.SCHEMA)
 print(conn.execute(
     f"""SELECT count(*) FROM {schema.TABLE}

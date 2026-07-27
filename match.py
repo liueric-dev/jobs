@@ -50,8 +50,8 @@ import llm
 import profiles
 import relevance
 import schema
-from pipelib import dbconn
-from pipelib.timeparse import utc_now_str
+from lib import dbconn
+from lib.timeparse import utc_now_str
 
 #: A delta this negative disqualifies outright rather than being summed. Using
 #: a magnitude rather than a separate config key means "never show me research
@@ -79,7 +79,7 @@ def score_job(facts, criteria):
     touching the pipeline.
 
     `facts` is a job_facts row plus the two location booleans that already
-    live on the `jobs` table -- pipelib.text computes those at ingest for free, so
+    live on the `jobs` table -- lib.text computes those at ingest for free, so
     re-deriving them from an LLM would be paying for something we have.
     """
     reasons = []

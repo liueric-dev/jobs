@@ -14,7 +14,7 @@ its own SQL for that reason. But the rest of what this file had copied was not
 protected by any row: nine functions and the DDL for three tables, which had
 drifted six ways by the time slice D measured them --
 
-    strip_html truncated at 5000 where pipelib uses 20000
+    strip_html truncated at 5000 where lib/text.py uses 20000
     parse_relative_posted_at knew neither minutes, "an hour ago", nor
         "yesterday", and returned None where the pipeline returned a timestamp
     raw_json sliced serialized JSON mid-string instead of bounded_json
@@ -31,7 +31,7 @@ been deployed. So the two are now co-located in one repo and this file imports
 what it used to copy.
 
 WHAT IS STILL DELIBERATELY SEPARATE: the claim SQL (try_claim_query,
-holds_claim, mark_success, release_claim). It is a superset of pipelib.state's
+holds_claim, mark_success, release_claim). It is a superset of lib.state's
 -- it adds claimed_by and claim_granted_at -- because this service must answer
 "does this contributor still own the claim they are submitting against?", a
 question the pipeline never asks. Keep it operating on the same row with the
@@ -49,17 +49,19 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 # api/ sits one level below the pipeline modules it shares code with. Python
-# puts THIS file's directory on sys.path, not its parent. pipelib needs nothing
-# here either -- but note this venv has include-system-site-packages = false,
-# so it needs its own `pip install -e ~/apps/pipelib`; the user-site copy the
-# pipeline uses is invisible in here.
+# puts THIS file's directory on sys.path, not its parent, so the parent is
+# added by hand. That one insert reaches BOTH ../schema.py and ../lib/, which
+# is why there is nothing to install: this venv sets
+# include-system-site-packages = false, and before lib/ was vendored that meant
+# the shared library needed a second editable install in here, whose only
+# symptom when forgotten was an ImportError under uvicorn and nowhere else.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema  # noqa: E402  (../schema.py -- the pipeline owns the jobs DDL)
 from google_jobs import normalize_job  # noqa: E402,F401  (re-exported; app.py calls it)
-from pipelib import dbconn  # noqa: E402
-from pipelib.timeparse import utc_now_str  # noqa: E402
-from pipelib.upsert import upsert as _pipelib_upsert  # noqa: E402
+from lib import dbconn  # noqa: E402
+from lib.timeparse import utc_now_str  # noqa: E402
+from lib.upsert import upsert as _lib_upsert  # noqa: E402
 
 #: The same spec both Google ingest scripts build, so all three write
 #: identical rows -- including the sticky posted_at that keeps a re-submitted
@@ -415,7 +417,7 @@ def choose_date_chip(last_run_str):
 #
 # The comment those copies carried was right about the stakes and wrong about
 # the remedy. It said source_id feeds make_id(), which IS the dedup key, so
-# deriving it differently from pipelib.ids.google_source_id() silently turns
+# deriving it differently from lib.ids.google_source_id() silently turns
 # one posting into two rows -- and concluded "any change here is a change
 # there, in the same commit". That is a rule a person has to remember. One
 # import is a rule the interpreter enforces.
@@ -423,22 +425,22 @@ def choose_date_chip(last_run_str):
 def upsert(conn, records):
     """Write postings exactly the way the pipeline's ingest scripts do.
 
-    This is now literally the same code path -- pipelib.upsert with the same
+    This is now literally the same code path -- lib.upsert with the same
     TableSpec (schema.HASH_FIELDS_SHORT) and the same id function -- rather
     than a reimplementation of it. Rows written through this API are therefore
     indistinguishable from locally-ingested ones by construction, not by two
     files agreeing.
 
-    What that buys beyond tidiness: pipelib.upsert opens a SAVEPOINT per
+    What that buys beyond tidiness: lib.upsert opens a SAVEPOINT per
     record. The hand-rolled version this replaces did not, and on Postgres a
     single failed statement aborts the whole transaction -- so one malformed
     posting in a contributor's batch of 50 took the other 49 with it, returned
     a 500, wrote no submission_log row, never called mark_success, and spent
     the contributor's SerpApi credit for nothing.
 
-    Returns (new, updated, unchanged); pipelib's UpsertResult unpacks to that
+    Returns (new, updated, unchanged); lib's UpsertResult unpacks to that
     triple, and also carries .errors, which the caller may report.
     """
-    result = _pipelib_upsert(conn, _JOB_SPEC, records, schema.make_job_id)
+    result = _lib_upsert(conn, _JOB_SPEC, records, schema.make_job_id)
     conn.commit()
     return result

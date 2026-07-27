@@ -2,7 +2,7 @@
 
 Run:  python3 tests/test_ats_descriptions.py
 
-stdlib unittest, same as tests/test_match.py and pipelib/tests.
+stdlib unittest, same as tests/test_match.py.
 
 WHY THESE TESTS EXIST
     Every one of these pins a bug that was live in the database, not a
@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "ingest"))
 
 import ats  # noqa: E402
-from pipelib import text  # noqa: E402
+from lib import text  # noqa: E402
 
 COMPANY = {"token": "acme", "name": "Acme", "is_nyc_hq": True,
            "is_ai_focused": False}

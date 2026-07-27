@@ -1,6 +1,6 @@
 """The `jobs` table -- DDL, column specs, and lifecycle helpers.
 
-Owned by the jobs pipeline, deliberately not by pipelib: pipelib provides
+Owned by the jobs pipeline, deliberately not by lib/: lib provides
 mechanism (upsert, retry, hashing, checkpoints, claims) and knows nothing
 about what a job listing is. This module is the single definition the six
 ingest scripts and score.py share, replacing six separately-drifting copies
@@ -94,7 +94,7 @@ TIMESTAMPS STAY TEXT HERE
     `WHERE last_seen < %s`, `watermark > cutoff` -- and "" is the "never
     run" sentinel that must sort before every real timestamp. Converting
     these to timestamptz would silently break the self-healing gap logic in
-    google-serpapi's choose_date_chip(). pipelib.timeparse.utc_now_str()
+    google-serpapi's choose_date_chip(). lib.timeparse.utc_now_str()
     produces exactly this format and is the only thing that should.
 """
 
@@ -102,8 +102,8 @@ import os
 
 import psycopg
 
-from pipelib import dbconn, ids, state
-from pipelib.upsert import TableSpec
+from lib import dbconn, ids, state
+from lib.upsert import TableSpec
 
 #: The schema these tables live in, inside the `jobs` database. Every
 #: connect(schema=...) call site reaches it through this one constant, which is
@@ -416,7 +416,7 @@ def ensure_schema(conn):
     # add_missing_columns (which checks the catalog first) rather than a bare
     # ADD COLUMN IF NOT EXISTS, because the latter still takes an ACCESS
     # EXCLUSIVE lock on every run even when it changes nothing -- see
-    # pipelib/dbconn.py and the idle-transaction incident in DATABASE.md.
+    # lib/dbconn.py and the idle-transaction incident in DATABASE.md.
     #
     #   posted_at_ts -- sortable absolute time. posted_at is TEXT, is in every
     #     HASH_FIELDS_* tuple (so its format is frozen), and holds three
@@ -637,7 +637,7 @@ def close_missing(conn, platform, token, seen_ids, now=None):
     for the company, which is correct only if the fetch is trustworthy, so
     it raises instead. The original relied on the caller remembering.
     """
-    from pipelib.timeparse import utc_now_str
+    from lib.timeparse import utc_now_str
     if not seen_ids:
         raise ValueError(
             "close_missing requires a non-empty seen_ids -- an empty fetch "
@@ -662,7 +662,7 @@ def close_stale(conn, platform, stale_days, now=None):
     where absence from any single fetch means nothing.
     """
     from datetime import timedelta
-    from pipelib.timeparse import utc_now, utc_now_str
+    from lib.timeparse import utc_now, utc_now_str
     now = now or utc_now_str()
     cutoff = (utc_now() - timedelta(days=stale_days)).strftime("%Y-%m-%dT%H:%M:%S")
     cur = conn.execute(
@@ -678,7 +678,7 @@ def close_stale(conn, platform, stale_days, now=None):
 
 def prune_old_closed(conn, days):
     from datetime import timedelta
-    from pipelib.timeparse import utc_now
+    from lib.timeparse import utc_now
     cutoff = (utc_now() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
     cur = conn.execute(
         "DELETE FROM jobs WHERE status = 'closed' AND closed_at IS NOT NULL "

@@ -85,14 +85,14 @@ from datetime import datetime, timedelta, timezone
 
 # ingest/ and tools/ sit one level below the pipeline modules they import
 # (schema, relevance, llm, ...). Python puts THIS file's directory on sys.path,
-# not its parent, so the parent is added by hand. pipelib needs nothing -- it is
-# an installed package (pip install --user -e ~/apps/pipelib).
+# not its parent, so the parent is added by hand. That same insert is what
+# reaches lib/ -- there is nothing to install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema  # noqa: E402  (schema.py)
-from pipelib import dbconn, http, ids, state, text  # noqa: E402
-from pipelib.timeparse import utc_now_str  # noqa: E402
-from pipelib.upsert import upsert  # noqa: E402
+from lib import dbconn, http, ids, state, text  # noqa: E402
+from lib.timeparse import utc_now_str  # noqa: E402
+from lib.upsert import upsert  # noqa: E402
 
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 

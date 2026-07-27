@@ -33,7 +33,7 @@ import json
 import argparse
 
 import schema  # schema.py
-from pipelib import dbconn
+from lib import dbconn
 
 
 def default_profile():

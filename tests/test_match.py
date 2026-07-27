@@ -2,7 +2,7 @@
 
 Run:  python3 tests/test_match.py
 
-stdlib unittest, same as pipelib/tests -- pytest is not installed and is not
+stdlib unittest -- pytest is not installed and is not
 worth a dependency here.
 
 WHY THESE TESTS AND NOT OTHERS

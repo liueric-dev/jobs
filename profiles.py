@@ -42,7 +42,7 @@ from dataclasses import dataclass
 
 import relevance
 import schema
-from pipelib.timeparse import utc_now_str
+from lib.timeparse import utc_now_str
 
 #: The seed persona, imported once by migrate_profiles.py. Not read at runtime.
 PERSONA_FILE = os.environ.get(

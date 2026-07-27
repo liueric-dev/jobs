@@ -4,5 +4,6 @@
 
 `-t .` sets the top-level directory to the repo root, which is what puts the
 pipeline modules (schema, llm, relevance, ...) on sys.path for discovery.
-pipelib needs nothing -- it is an installed package.
+That same top-level directory is what makes `from lib import ...` resolve:
+lib/ is part of this repo, not an installed package.
 """

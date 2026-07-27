@@ -46,7 +46,7 @@ import sys
 
 import profiles
 import schema
-from pipelib import dbconn
+from lib import dbconn
 
 CRITERIA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "config", "criteria.json")

@@ -95,14 +95,14 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 # ingest/ and tools/ sit one level below the pipeline modules they import
 # (schema, relevance, llm, ...). Python puts THIS file's directory on sys.path,
-# not its parent, so the parent is added by hand. pipelib needs nothing -- it is
-# an installed package (pip install --user -e ~/apps/pipelib).
+# not its parent, so the parent is added by hand. That same insert is what
+# reaches lib/ -- there is nothing to install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import match      # noqa: E402
 import profiles   # noqa: E402
 import schema     # noqa: E402
-from pipelib import dbconn  # noqa: E402
+from lib import dbconn  # noqa: E402
 
 
 def _sibling(name):

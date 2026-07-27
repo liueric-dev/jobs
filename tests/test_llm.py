@@ -1,8 +1,8 @@
 """Tests for llm.py -- JSON extraction and transient-failure classification.
 
-Split out of pipelib/tests/test_text_llm.py when llm.py moved from pipelib
-into jobs/: it has one consumer pipeline, so it lives with it. The text.py
-half of that file stayed behind in pipelib/tests/test_text.py.
+Split out of the shared library's test_text_llm.py when llm.py moved into
+jobs/: it had one consumer pipeline, so it went to live with it. The text.py
+half of that file is now tests/test_lib_text.py in this repo.
 """
 
 import unittest

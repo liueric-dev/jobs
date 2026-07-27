@@ -52,13 +52,14 @@ seven steps at once on missing DATABASE_URL and missing API keys, because
 `hermes cron` sanitises secrets out of the subprocess environment and nothing
 had put the file back. Anything already exported takes precedence over the
 file, so the unit's EnvironmentFile= wins and a one-off run can still
-override a single key. See pipelib/envfile.py.
+override a single key. See lib/envfile.py.
 
-The .env file is read by both systemd and pipelib.envfile, which do not parse
+The .env file is read by both systemd and lib.envfile, which do not parse
 identically -- stay inside the intersection documented in .env.example.
 
 INSTALL: lives at ~/apps/jobs alongside the nine scripts listed in STEPS.
-    python3 -m pip install --user -e ~/apps/pipelib
+    python3 -m pip install --user 'psycopg[binary]'
+    Nothing else. lib/ is part of this repo, not an installed package.
 
 SCHEDULE: a systemd user timer, not `hermes cron`. The Hermes scheduler
 resolves the script path and requires path.relative_to(HERMES_HOME/scripts),
@@ -82,7 +83,7 @@ import os
 import sys
 import subprocess
 
-from pipelib import envfile
+from lib import envfile
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 

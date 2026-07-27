@@ -20,7 +20,7 @@ THE BUG THIS REPAIRS
     google_jobs_query_stats.new_count was measuring cache expiry, not job
     novelty -- see the note on truncation below.
 
-    pipelib/ids.py:google_source_id() is the fix; this script repairs the rows
+    lib/ids.py:google_source_id() is the fix; this script repairs the rows
     written before it existed.
 
 WHY A SCRIPT AND NOT ensure_schema()
@@ -63,7 +63,7 @@ import sys
 from collections import defaultdict
 
 import schema  # schema.py
-from pipelib import dbconn, ids
+from lib import dbconn, ids
 
 PLATFORM = "google_jobs"
 

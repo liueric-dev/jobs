@@ -26,7 +26,7 @@ WHAT IT DOES: runs one query three ways -- unfiltered, `date_posted:today`,
     raw job_id. The raw blob embeds a volatile per-search `fc` token that
     rotates on every fresh fetch, so raw ids NEVER match across calls and
     every set would look disjoint. This is the same bug the ingest pipeline
-    has been storing rows under; see pipelib.ids.decode_google_job_id.
+    has been storing rows under; see lib.ids.decode_google_job_id.
 
 THE VERDICT IS READ OFF posted_at, NOT OFF SET OVERLAP. The first version of
 this script asked whether today ⊆ month ⊆ unfiltered and reported

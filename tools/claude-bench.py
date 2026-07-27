@@ -73,14 +73,14 @@ import subprocess
 
 # ingest/ and tools/ sit one level below the pipeline modules they import
 # (schema, relevance, llm, ...). Python puts THIS file's directory on sys.path,
-# not its parent, so the parent is added by hand. pipelib needs nothing -- it is
-# an installed package (pip install --user -e ~/apps/pipelib).
+# not its parent, so the parent is added by hand. That same insert is what
+# reaches lib/ -- there is nothing to install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema      # noqa: E402
 import relevance   # noqa: E402
 import score       # noqa: E402
-from pipelib import dbconn  # noqa: E402
+from lib import dbconn  # noqa: E402
 
 #: How long to let one claude -p invocation run. Batches of 20 can take
 #: 60-90s on haiku; sonnet is slower. 180s gives headroom without hanging

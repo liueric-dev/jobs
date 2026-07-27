@@ -18,8 +18,8 @@ WHY THIS MODULE EXISTS
     So the rule is not "keep these three in sync". It is that there is one
     copy and the question cannot come up.
 
-WHY NOT IN pipelib
-    pipelib's membership rule is mechanism, never schema, and this is schema:
+WHY NOT IN lib/
+    lib/ is mechanism, never schema, and this is schema:
     it names this application's columns. It is shared between the pipeline and
     the API because those are two halves of one application, which is exactly
     what slice D merged them into one repo to express. events must never import
@@ -33,7 +33,7 @@ WHY THE APIFY AND SERPAPI PAYLOADS CAN SHARE ONE FUNCTION
     row while both key it the same way.
 """
 
-from pipelib import ids, text
+from lib import ids, text
 
 #: Ceiling on the stored raw payload. Deliberately a separate constant from
 #: text.MAX_DESCRIPTION_CHARS even though both are currently 20000: that one
@@ -57,7 +57,7 @@ def normalize_job(job, mode):
     embeds a per-search token that rotates on every fresh fetch, so using it
     minted a new primary key for an already-stored posting on every run -- 32%
     duplicate rows (837 rows holding 632 real postings) on the live table. See
-    the Google Jobs section of pipelib/ids.py for the full autopsy.
+    the Google Jobs section of lib/ids.py for the full autopsy.
 
     Note the fallback branch of google_source_id() depends on the apply URL,
     which a contributor controls. That is still client-derived-but-recomputed,

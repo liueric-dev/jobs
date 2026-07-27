@@ -39,7 +39,7 @@ import collections
 import json
 
 import schema
-from pipelib import dbconn, text
+from lib import dbconn, text
 
 BATCH = 1000
 

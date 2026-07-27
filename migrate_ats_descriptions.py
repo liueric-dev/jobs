@@ -27,7 +27,7 @@ WHY THIS RECOMPUTES content_hash TOO -- THE PART THAT IS EASY TO MISS
     that is no longer there, so the next ingest sees 9,752 "changes" and
     rewrites all of them. Harmless but a lie: the run report would claim
     thousands of postings changed upstream on a day when none did, which is
-    exactly the signal that report exists to give. pipelib/text.py's docstring
+    exactly the signal that report exists to give. lib/text.py's docstring
     records the last time this happened (217 of 242 weworkremotely rows).
 
     The hash is rebuilt from the row's OWN stored columns with only
@@ -66,7 +66,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "ing
 
 import ats  # noqa: E402  (ingest/ats.py -- the normalizers themselves)
 import schema  # noqa: E402
-from pipelib import dbconn, ids  # noqa: E402
+from lib import dbconn, ids  # noqa: E402
 
 ATS_PLATFORMS = ("greenhouse", "ashby", "lever")
 

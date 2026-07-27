@@ -70,7 +70,7 @@ import schema      # noqa: E402
 import relevance   # noqa: E402
 import score       # noqa: E402
 import llm         # noqa: E402
-from pipelib import dbconn  # noqa: E402
+from lib import dbconn  # noqa: E402
 
 #: Progress is the whole point of this script, and it will normally be run
 #: as `nohup ... > backfill.log &`. Python block-buffers stdout when it is

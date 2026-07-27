@@ -50,14 +50,14 @@ import concurrent.futures
 
 # ingest/ and tools/ sit one level below the pipeline modules they import
 # (schema, relevance, llm, ...). Python puts THIS file's directory on sys.path,
-# not its parent, so the parent is added by hand. pipelib needs nothing -- it is
-# an installed package (pip install --user -e ~/apps/pipelib).
+# not its parent, so the parent is added by hand. That same insert is what
+# reaches lib/ -- there is nothing to install.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema  # noqa: E402  (schema.py)
 import score   # noqa: E402  (score.py -- for build_prompt and load_persona)
 import llm     # noqa: E402  (llm.py)
-from pipelib import dbconn  # noqa: E402
+from lib import dbconn  # noqa: E402
 
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 
