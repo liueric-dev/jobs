@@ -991,8 +991,37 @@ Report: [`docs/ingest/workday.md`](../../ingest/workday.md). New:
 `backend/evals/workday_fixtures.py`, `backend/tests/test_workday_fixtures.py`. Wired into
 `run-daily.py`'s `STEPS` by the orchestrator, after `ats-discover.py`.
 
-**Measured: 220 requests, 462s, 149 rows written, 0 dropped, 0 blocked.** Full suite green
-at **663**.
+**Measured (run 3, the committed code): ~400 requests, 861s, 329 rows, 0 dropped, 0
+blocked, 1 closure detected.** Full suite green at **663**.
+
+**Correction, 2026-07-28:** the run log and commit `fabe381` first quoted **run 1** — 220
+requests, 462s, 149 rows. The committed code already carried two later fixes; only the
+report lagged. Corrected in `162845b`. The deltas are the evidence and are worth keeping:
+
+| run | detail-fetched | gate-surviving | wall-clock | what changed |
+|---|---|---|---|---|
+| 1 | 149 (11%) | 4 | 462s | first end-to-end run |
+| 2 | 122, 3 tenants | 4 | 420s | Nordstrom shortfall: `total` 867, collected 865 — ordinary churn, fatal under a strict check |
+| 3 | **329 (24%)** | **14** | **861s** | `locationsText` facility fix; one-page reconciliation threshold |
+
+### The best thing this task produced is a bug in its own first run
+
+**Run 1 was silently dropping 161 of NewYork-Presbyterian's postings** — real NYC hospital
+jobs, exactly the population the cohort exists for — while printing `4/4 tenants ok`.
+
+That is CLAUDE.md's *"silence is this system's failure mode"* caught in this task's own
+output, by the task itself, after it had already reported success once. It is also why the
+reconciliation threshold is **one page** rather than zero: run 2 showed that an exact-match
+check fails on ordinary mid-walk churn (`total` 867, collected 865), so a strict check
+would have turned a healthy board into a permanent alert while the real 161-row loss went
+unnoticed.
+
+### A scaling constraint this task did not solve, and says so
+
+**~14 minutes of nightly window at four tenants**, sequential at 1.5s apart. At the ~50
+tenants `18-ingest-workday-cxs.md:97` anticipates, that does not fit a nightly window. The
+delay, the concurrency or the per-tenant cadence has to change. Recorded as a real
+constraint rather than deferred silently.
 
 ### The `limit` landmine is an exception, not a clamp
 
@@ -1009,8 +1038,8 @@ comes back short does not get to write, let alone close.
 
 ### The upstream gate, quantified
 
-**1,366 postings reachable per night from four tenants.** The gate takes detail fetching
-down to **11%** of that — ~8 minutes of nightly window. Without it the same run is 1,366
+**~1,360 postings reachable per night from four tenants.** The gate takes detail fetching
+down to **24%** of that — ~14 minutes of nightly window. Without it the same run is 1,366
 detail requests and **34 minutes**, for four tenants, growing linearly with the tenant
 count task 16's backlog will produce. That is the whole reason this source is gated
 upstream rather than pulled whole and filtered after.
