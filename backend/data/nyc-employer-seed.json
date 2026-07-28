@@ -1,0 +1,2640 @@
+{
+  "_comment": "Seed list of NYC employers for ATS token discovery (task 16). This file BOOTSTRAPS the ats_seed table; it is not the source of truth. Once migrations/migrate_company_ats.py has loaded it, adding an employer is an INSERT (or `tools/ats-discover.py --add-employer`), never an edit here followed by a deploy -- 16-ats-token-discovery.md:34, 'store as a simple seeded table, not a config file'. Re-running the loader is idempotent and never deletes rows added directly to the table.",
+  "_why_weighted_non_tech": "docs/pursuit-gate-volume.md measured 90% of the corpus arriving from greenhouse + ashby alone, and Google Jobs contributing 4.8%. The broad-industry, non-tech NYC employers the Pursuit cohort targets are absent from every configured source. So this list is deliberately ~97% non-tech: health, education, government, nonprofit, finance, insurance, media, retail, real estate, professional services, transport, arts and hospitality. The ten tech entries are present only as a positive control -- they are companies already known to run Greenhouse or Ashby, so a run that finds nothing for them has a probe bug, not an empty market.",
+  "_what_a_row_means": "employer_name is the display name and the identity of a never_found row. careers_url is a STARTING POINT, not an assertion: it is hand-assembled and employers move these paths constantly, so the probe falls back to {origin}/careers and {origin}/jobs before concluding anything. A 404 on all three is recorded as missing_page, which is explicitly NOT the same as 'this employer has no ATS'. sector drives is_non_tech, which is what the coverage fraction in docs/ats-token-discovery.md is computed over.",
+  "_sources_not_yet_included": "Adzuna top_companies (task 15) is listed at 16-ats-token-discovery.md:32 as a discovery source and is NOT represented here: task 15 is blocked on an Adzuna app_id/app_key that requires registering an account, and nobody has. It is a pluggable input rather than a missing one -- see adzuna_top_companies() in tools/ats-discover.py, which is the stub that switches on once credentials exist. Apify's discovery actors (igolaizola/greenhouse-companies, wickfeed/ats-company-discovery) are the other bootstrap route named by the task and are likewise not used here; the task itself says to own the maintenance rather than build a dependency on them.",
+  "employers": [
+    {
+      "employer_name": "American Museum of Natural History",
+      "careers_url": "https://www.amnh.org/about/careers",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Brooklyn Botanic Garden",
+      "careers_url": "https://www.bbg.org/about/employment",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Brooklyn Museum",
+      "careers_url": "https://www.brooklynmuseum.org/about/careers",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Carnegie Hall",
+      "careers_url": "https://www.carnegiehall.org/About/Employment",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Guggenheim Museum",
+      "careers_url": "https://www.guggenheim.org/careers",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Museum of Modern Art",
+      "careers_url": "https://www.moma.org/about/careers/",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York Botanical Garden",
+      "careers_url": "https://www.nybg.org/about/careers/",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York Philharmonic",
+      "careers_url": "https://nyphil.org/about-us/careers/",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New-York Historical Society",
+      "careers_url": "https://www.nyhistory.org/employment",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Roundabout Theatre Company",
+      "careers_url": "https://www.roundabouttheatre.org/about-us/employment/",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Metropolitan Museum of Art",
+      "careers_url": "https://www.metmuseum.org/about-the-met/careers",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Metropolitan Opera",
+      "careers_url": "https://www.metopera.org/about/jobs/",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Public Theater",
+      "careers_url": "https://publictheater.org/about/jobs/",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Whitney Museum of American Art",
+      "careers_url": "https://whitney.org/about/job-postings",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Wildlife Conservation Society",
+      "careers_url": "https://www.wcs.org/about-us/careers",
+      "sector": "arts_culture",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Achievement First",
+      "careers_url": "https://www.achievementfirst.org/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Adelphi University",
+      "careers_url": "https://www.adelphi.edu/human-resources/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Ascend Public Charter Schools",
+      "careers_url": "https://www.ascendlearning.org/careers",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Bank Street College of Education",
+      "careers_url": "https://www.bankstreet.edu/about-bank-street/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Barnard College",
+      "careers_url": "https://barnard.edu/human-resources/careers",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Baruch College",
+      "careers_url": "https://www.baruch.cuny.edu/hr/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Borough of Manhattan Community College",
+      "careers_url": "https://www.bmcc.cuny.edu/hr/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Bronx Community College",
+      "careers_url": "https://www.bcc.cuny.edu/human-resources/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Brooklyn College",
+      "careers_url": "https://www.brooklyn.edu/human-resources/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Brooklyn Laboratory Charter Schools",
+      "careers_url": "https://brooklynlabschool.org/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "City College of New York",
+      "careers_url": "https://www.ccny.cuny.edu/hr/employment",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "College of Staten Island",
+      "careers_url": "https://www.csi.cuny.edu/campus-life/human-resources/employment",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Columbia University",
+      "careers_url": "https://opportunities.columbia.edu/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Cooper Union",
+      "careers_url": "https://cooper.edu/about/careers",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Democracy Prep Public Schools",
+      "careers_url": "https://democracyprep.org/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Fordham University",
+      "careers_url": "https://www.fordham.edu/about/careers-at-fordham/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Hofstra University",
+      "careers_url": "https://www.hofstra.edu/human-resources/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Hunter College",
+      "careers_url": "https://hunter.cuny.edu/human-resources/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "John Jay College of Criminal Justice",
+      "careers_url": "https://www.jjay.cuny.edu/human-resources/employment",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "KIPP NYC",
+      "careers_url": "https://www.kippnyc.org/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Kingsborough Community College",
+      "careers_url": "https://www.kbcc.cuny.edu/hr/employment.html",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "LaGuardia Community College",
+      "careers_url": "https://www.laguardia.edu/hr/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Lehman College",
+      "careers_url": "https://www.lehman.edu/human-resources/employment.php",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Long Island University",
+      "careers_url": "https://www.liu.edu/employment",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Manhattan School of Music",
+      "careers_url": "https://www.msmnyc.edu/about/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Marymount Manhattan College",
+      "careers_url": "https://www.mmm.edu/offices/human-resources/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Department of Education",
+      "careers_url": "https://www.schools.nyc.gov/careers",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York University",
+      "careers_url": "https://www.nyu.edu/about/careers-at-nyu.html",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Pace University",
+      "careers_url": "https://www.pace.edu/human-resources/careers-pace",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Parsons School of Design",
+      "careers_url": "https://www.newschool.edu/human-resources/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Pratt Institute",
+      "careers_url": "https://www.pratt.edu/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Queens College",
+      "careers_url": "https://www.qc.cuny.edu/hr/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Rockefeller University",
+      "careers_url": "https://www.rockefeller.edu/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "School of Visual Arts",
+      "careers_url": "https://sva.edu/about/employment",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "St. John's University",
+      "careers_url": "https://www.stjohns.edu/about/administrative-offices/human-resources/careers",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Success Academy Charter Schools",
+      "careers_url": "https://jobs.successacademies.org/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Teach For America",
+      "careers_url": "https://www.teachforamerica.org/about-us/careers",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Teachers College Columbia University",
+      "careers_url": "https://www.tc.columbia.edu/human-resources/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The City University of New York",
+      "careers_url": "https://www.cuny.edu/employment/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Juilliard School",
+      "careers_url": "https://www.juilliard.edu/about/employment",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The New School",
+      "careers_url": "https://www.newschool.edu/human-resources/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Touro University",
+      "careers_url": "https://www.touro.edu/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Uncommon Schools",
+      "careers_url": "https://uncommonschools.org/careers/",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Yeshiva University",
+      "careers_url": "https://www.yu.edu/human-resources/careers",
+      "sector": "education",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "AllianceBernstein",
+      "careers_url": "https://www.alliancebernstein.com/corporate/en/careers.html",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Amalgamated Bank",
+      "careers_url": "https://www.amalgamatedbank.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "American Express",
+      "careers_url": "https://www.americanexpress.com/en-us/careers/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Apollo Global Management",
+      "careers_url": "https://www.apollo.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Apple Bank",
+      "careers_url": "https://www.applebank.com/about-us/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Ares Management",
+      "careers_url": "https://www.aresmgmt.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Bank of New York Mellon",
+      "careers_url": "https://jobs.bny.com/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Bethpage Federal Credit Union",
+      "careers_url": "https://www.bethpagefcu.com/about/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Betterment",
+      "careers_url": "https://www.betterment.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "BlackRock",
+      "careers_url": "https://careers.blackrock.com/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Blackstone",
+      "careers_url": "https://www.blackstone.com/careers/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Citigroup",
+      "careers_url": "https://jobs.citi.com/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "D. E. Shaw Group",
+      "careers_url": "https://www.deshaw.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Dime Community Bank",
+      "careers_url": "https://www.dime.com/about-us/careers/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Evercore",
+      "careers_url": "https://www.evercore.com/careers/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Federal Reserve Bank of New York",
+      "careers_url": "https://www.newyorkfed.org/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Flushing Bank",
+      "careers_url": "https://www.flushingbank.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Goldman Sachs",
+      "careers_url": "https://www.goldmansachs.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Intercontinental Exchange",
+      "careers_url": "https://www.ice.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "JPMorgan Chase",
+      "careers_url": "https://careers.jpmorgan.com/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Jane Street",
+      "careers_url": "https://www.janestreet.com/join-jane-street/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "KKR",
+      "careers_url": "https://www.kkr.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Lazard",
+      "careers_url": "https://www.lazard.com/careers/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Marsh McLennan",
+      "careers_url": "https://careers.marshmclennan.com/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Millennium Management",
+      "careers_url": "https://www.mlp.com/careers/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Moelis & Company",
+      "careers_url": "https://www.moelis.com/careers/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Moody's",
+      "careers_url": "https://careers.moodys.com/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Morgan Stanley",
+      "careers_url": "https://www.morganstanley.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Municipal Credit Union",
+      "careers_url": "https://www.nymcu.org/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Nasdaq",
+      "careers_url": "https://www.nasdaq.com/about/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Neuberger Berman",
+      "careers_url": "https://www.nb.com/en/global/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Point72",
+      "careers_url": "https://careers.point72.com/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Ridgewood Savings Bank",
+      "careers_url": "https://www.ridgewoodbank.com/careers",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "S&P Global",
+      "careers_url": "https://careers.spglobal.com/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Two Sigma",
+      "careers_url": "https://careers.twosigma.com/careers/",
+      "sector": "finance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Brooklyn Public Library",
+      "careers_url": "https://www.bklynlibrary.org/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "City of New York",
+      "careers_url": "https://www.nyc.gov/careers/index.page",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Empire State Development",
+      "careers_url": "https://esd.ny.gov/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Metropolitan Transportation Authority",
+      "careers_url": "https://new.mta.info/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "NYC Department of Buildings",
+      "careers_url": "https://www.nyc.gov/site/buildings/about/careers.page",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Nassau County",
+      "careers_url": "https://www.nassaucountyny.gov/1780/Employment",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New Jersey Transit",
+      "careers_url": "https://www.njtransit.com/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Campaign Finance Board",
+      "careers_url": "https://www.nyccfb.info/about/jobs/",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Comptroller",
+      "careers_url": "https://comptroller.nyc.gov/about/careers/",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Council",
+      "careers_url": "https://council.nyc.gov/jobs/",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Department of Consumer and Worker Protection",
+      "careers_url": "https://www.nyc.gov/site/dca/about/careers.page",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Department of Correction",
+      "careers_url": "https://www.nyc.gov/site/doc/about/careers.page",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Department of Design and Construction",
+      "careers_url": "https://www.nyc.gov/site/ddc/about/careers.page",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Department of Environmental Protection",
+      "careers_url": "https://www.nyc.gov/site/dep/about/careers.page",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Department of Parks and Recreation",
+      "careers_url": "https://www.nycgovparks.org/opportunities/jobs",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Department of Sanitation",
+      "careers_url": "https://www.nyc.gov/assets/dsny/site/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Department of Social Services",
+      "careers_url": "https://www.nyc.gov/site/hra/about/careers.page",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Department of Transportation",
+      "careers_url": "https://www.nyc.gov/html/dot/html/about/careers.shtml",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Economic Development Corporation",
+      "careers_url": "https://edc.nyc/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Fire Department",
+      "careers_url": "https://www.nyc.gov/site/fdny/jobs/career-opportunities.page",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Housing Authority",
+      "careers_url": "https://www.nyc.gov/site/nycha/about/careers.page",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York City Housing Development Corporation",
+      "careers_url": "https://www.nychdc.com/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York Power Authority",
+      "careers_url": "https://www.nypa.gov/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York Public Library",
+      "careers_url": "https://www.nypl.org/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York State Department of Labor",
+      "careers_url": "https://dol.ny.gov/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York State Insurance Fund",
+      "careers_url": "https://ww3.nysif.com/en/AboutNYSIF/Careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York State Office of Information Technology Services",
+      "careers_url": "https://its.ny.gov/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Port Authority of New York and New Jersey",
+      "careers_url": "https://www.panynj.gov/port-authority/en/careers.html",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Queens Public Library",
+      "careers_url": "https://www.queenslibrary.org/about-us/careers",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Westchester County",
+      "careers_url": "https://humanresources.westchestergov.com/",
+      "sector": "government",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Amida Care",
+      "careers_url": "https://www.amidacareny.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "ArchCare",
+      "careers_url": "https://www.archcare.org/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Bronx Care Health System",
+      "careers_url": "https://www.bronxcare.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Brookdale Hospital",
+      "careers_url": "https://www.onebrooklynhealth.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Callen-Lorde Community Health Center",
+      "careers_url": "https://callen-lorde.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Catholic Health Long Island",
+      "careers_url": "https://www.chsli.org/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Centers Health Care",
+      "careers_url": "https://www.centershealthcare.com/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Cityblock Health",
+      "careers_url": "https://www.cityblock.com/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Community Healthcare Network",
+      "careers_url": "https://www.chnnyc.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Elderplan",
+      "careers_url": "https://www.elderplan.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "EmblemHealth",
+      "careers_url": "https://www.emblemhealth.com/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Fidelis Care",
+      "careers_url": "https://www.fideliscare.org/Careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Hackensack Meridian Health",
+      "careers_url": "https://www.hackensackmeridianhealth.org/en/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Healthfirst",
+      "careers_url": "https://healthfirst.org/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Hospital for Special Surgery",
+      "careers_url": "https://www.hss.edu/careers.asp",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Housing Works",
+      "careers_url": "https://www.housingworks.org/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Institute for Family Health",
+      "careers_url": "https://institute.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Interfaith Medical Center",
+      "careers_url": "https://www.onebrooklynhealth.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "MJHS Health System",
+      "careers_url": "https://www.mjhs.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Maimonides Medical Center",
+      "careers_url": "https://maimo.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Memorial Sloan Kettering Cancer Center",
+      "careers_url": "https://careers.mskcc.org/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "MetroPlusHealth",
+      "careers_url": "https://metroplus.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Metropolitan Jewish Health",
+      "careers_url": "https://www.mjhs.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Montefiore Medical Center",
+      "careers_url": "https://jobs.montefiore.org/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Mount Sinai Health System",
+      "careers_url": "https://jobs.mountsinai.org/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "NYC Department of Health and Mental Hygiene",
+      "careers_url": "https://www.nyc.gov/site/doh/about/employment.page",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "NYC Health + Hospitals",
+      "careers_url": "https://www.nychealthandhospitals.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "NYC Health + Hospitals/Bellevue",
+      "careers_url": "https://www.nychealthandhospitals.org/bellevue/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "NYU Langone Health",
+      "careers_url": "https://nyulangone.org/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "NewYork-Presbyterian",
+      "careers_url": "https://careers.nyp.org/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Northeast Provider Solutions",
+      "careers_url": "https://www.wmchealth.org/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Northwell Health",
+      "careers_url": "https://jobs.northwell.edu/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Nuvance Health",
+      "careers_url": "https://www.nuvancehealth.org/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "One Medical",
+      "careers_url": "https://www.onemedical.com/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Oscar Health",
+      "careers_url": "https://www.hioscar.com/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Planned Parenthood of Greater New York",
+      "careers_url": "https://www.plannedparenthood.org/planned-parenthood-greater-new-york/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "RWJBarnabas Health",
+      "careers_url": "https://www.rwjbh.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Richmond University Medical Center",
+      "careers_url": "https://www.rumcsi.org/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Ryan Health",
+      "careers_url": "https://www.ryanhealth.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "SOMOS Community Care",
+      "careers_url": "https://somoscommunitycare.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "SUNY Downstate Health Sciences University",
+      "careers_url": "https://www.downstate.edu/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Selfhelp Community Services",
+      "careers_url": "https://selfhelp.net/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Spring Health",
+      "careers_url": "https://www.springhealth.com/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Staten Island University Hospital",
+      "careers_url": "https://jobs.northwell.edu/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Stony Brook Medicine",
+      "careers_url": "https://www.stonybrookmedicine.edu/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Sun River Health",
+      "careers_url": "https://www.sunriver.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Talkspace",
+      "careers_url": "https://www.talkspace.com/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Floating Hospital",
+      "careers_url": "https://thefloatinghospital.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "VNS Health",
+      "careers_url": "https://www.vnshealth.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Village Care",
+      "careers_url": "https://www.villagecare.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Visiting Nurse Association Health Group",
+      "careers_url": "https://www.vnahg.org/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Weill Cornell Medicine",
+      "careers_url": "https://careers.weill.cornell.edu/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Westchester Medical Center",
+      "careers_url": "https://www.wmchealth.org/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Wyckoff Heights Medical Center",
+      "careers_url": "https://www.wyckoffhospital.org/careers",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Zocdoc",
+      "careers_url": "https://www.zocdoc.com/about/careers/",
+      "sector": "health",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Aramark",
+      "careers_url": "https://careers.aramark.com/",
+      "sector": "hospitality",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Compass Group USA",
+      "careers_url": "https://careers.compassgroupcareers.com/",
+      "sector": "hospitality",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Highgate Hotels",
+      "careers_url": "https://www.highgate.com/careers/",
+      "sector": "hospitality",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Hilton",
+      "careers_url": "https://jobs.hilton.com/",
+      "sector": "hospitality",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Hyatt Hotels",
+      "careers_url": "https://careers.hyatt.com/",
+      "sector": "hospitality",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Loews Hotels",
+      "careers_url": "https://www.loewshotels.com/careers",
+      "sector": "hospitality",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Marriott International",
+      "careers_url": "https://careers.marriott.com/",
+      "sector": "hospitality",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Sodexo",
+      "careers_url": "https://us.sodexo.com/careers.html",
+      "sector": "hospitality",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Standard Hotels",
+      "careers_url": "https://www.standardhotels.com/careers",
+      "sector": "hospitality",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Plaza Hotel",
+      "careers_url": "https://www.theplazany.com/careers/",
+      "sector": "hospitality",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "AIG",
+      "careers_url": "https://www.aig.com/careers",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Arch Capital Group",
+      "careers_url": "https://www.archgroup.com/careers/",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Assurant",
+      "careers_url": "https://www.assurant.com/careers",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Brown & Brown",
+      "careers_url": "https://www.bbinsurance.com/careers/",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Chubb",
+      "careers_url": "https://careers.chubb.com/",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Everest Group",
+      "careers_url": "https://www.everestglobal.com/careers",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Global Indemnity",
+      "careers_url": "https://www.globalindemnity.com/careers",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Guardian Life",
+      "careers_url": "https://www.guardianlife.com/careers",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Lemonade",
+      "careers_url": "https://www.lemonade.com/careers",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "MetLife",
+      "careers_url": "https://jobs.metlife.com/",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Mutual of America",
+      "careers_url": "https://www.mutualofamerica.com/careers",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York Life",
+      "careers_url": "https://www.newyorklife.com/careers",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "TIAA",
+      "careers_url": "https://www.tiaa.org/public/about-tiaa/careers",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Travelers",
+      "careers_url": "https://careers.travelers.com/",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Zurich North America",
+      "careers_url": "https://www.zurichna.com/careers",
+      "sector": "insurance",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Axios",
+      "careers_url": "https://www.axios.com/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Bloomberg",
+      "careers_url": "https://www.bloomberg.com/company/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Business Insider",
+      "careers_url": "https://www.businessinsider.com/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "BuzzFeed",
+      "careers_url": "https://www.buzzfeed.com/about/jobs",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Condé Nast",
+      "careers_url": "https://www.condenast.com/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Fox Corporation",
+      "careers_url": "https://www.foxcareers.com/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "HarperCollins Publishers",
+      "careers_url": "https://www.harpercollins.com/pages/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Hearst",
+      "careers_url": "https://www.hearst.com/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Horizon Media",
+      "careers_url": "https://www.horizonmedia.com/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Interpublic Group",
+      "careers_url": "https://www.interpublic.com/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Live Nation Entertainment",
+      "careers_url": "https://www.livenationentertainment.com/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Macmillan Publishers",
+      "careers_url": "https://us.macmillan.com/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Madison Square Garden Entertainment",
+      "careers_url": "https://www.msgentertainment.com/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Major League Baseball",
+      "careers_url": "https://www.mlb.com/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "NBCUniversal",
+      "careers_url": "https://www.nbcunicareers.com/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "National Basketball Association",
+      "careers_url": "https://careers.nba.com/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "National Football League",
+      "careers_url": "https://www.nfl.com/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York Public Radio",
+      "careers_url": "https://www.nypublicradio.org/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Ogilvy",
+      "careers_url": "https://www.ogilvy.com/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Omnicom Group",
+      "careers_url": "https://www.omnicomgroup.com/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Paramount",
+      "careers_url": "https://www.paramount.com/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Penguin Random House",
+      "careers_url": "https://www.penguinrandomhouse.com/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Publicis Groupe",
+      "careers_url": "https://www.publicisgroupe.com/en/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Scholastic",
+      "careers_url": "https://www.scholastic.com/aboutscholastic/careers.htm",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Simon & Schuster",
+      "careers_url": "https://www.simonandschuster.com/about/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Sirius XM",
+      "careers_url": "https://careers.siriusxm.com/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Daily Beast",
+      "careers_url": "https://www.thedailybeast.com/company/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The New York Times",
+      "careers_url": "https://www.nytco.com/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "VaynerMedia",
+      "careers_url": "https://vaynermedia.com/careers/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Vox Media",
+      "careers_url": "https://www.voxmedia.com/pages/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "WPP",
+      "careers_url": "https://www.wpp.com/careers",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Warner Bros. Discovery",
+      "careers_url": "https://careers.wbd.com/",
+      "sector": "media",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Association to Benefit Children",
+      "careers_url": "https://www.a-b-c.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Big Brothers Big Sisters of NYC",
+      "careers_url": "https://www.bigsnyc.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Bowery Residents' Committee",
+      "careers_url": "https://www.brc.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Breaking Ground",
+      "careers_url": "https://breakingground.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Brooklyn Defender Services",
+      "careers_url": "https://bds.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "CAMBA",
+      "careers_url": "https://camba.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Catholic Charities of New York",
+      "careers_url": "https://catholiccharitiesny.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Center for Employment Opportunities",
+      "careers_url": "https://ceoworks.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Children's Aid",
+      "careers_url": "https://www.childrensaidnyc.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "City Harvest",
+      "careers_url": "https://www.cityharvest.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Coalition for the Homeless",
+      "careers_url": "https://www.coalitionforthehomeless.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "DonorsChoose",
+      "careers_url": "https://www.donorschoose.org/about/jobs.html",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Food Bank For New York City",
+      "careers_url": "https://www.foodbanknyc.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Girls Who Code",
+      "careers_url": "https://girlswhocode.com/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "God's Love We Deliver",
+      "careers_url": "https://www.glwd.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Good Shepherd Services",
+      "careers_url": "https://goodshepherds.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Goodwill NYNJ",
+      "careers_url": "https://goodwillnynj.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Graham Windham",
+      "careers_url": "https://www.graham-windham.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Grameen America",
+      "careers_url": "https://www.grameenamerica.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Henry Street Settlement",
+      "careers_url": "https://www.henrystreet.org/about/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Hetrick-Martin Institute",
+      "careers_url": "https://hmi.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Jewish Board of Family and Children's Services",
+      "careers_url": "https://jewishboard.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Legal Aid Society",
+      "careers_url": "https://legalaidnyc.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Legal Services NYC",
+      "careers_url": "https://www.legalservicesnyc.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Lincoln Center for the Performing Arts",
+      "careers_url": "https://www.lincolncenter.org/about/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "NPower",
+      "careers_url": "https://www.npower.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York Foundling",
+      "careers_url": "https://www.nyfoundling.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "New York Legal Assistance Group",
+      "careers_url": "https://nylag.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Nonprofit New York",
+      "careers_url": "https://www.nonprofitnewyork.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Per Scholas",
+      "careers_url": "https://perscholas.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Project Renewal",
+      "careers_url": "https://www.projectrenewal.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Pursuit",
+      "careers_url": "https://www.pursuit.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Rising Ground",
+      "careers_url": "https://www.risingground.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Robin Hood Foundation",
+      "careers_url": "https://www.robinhood.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "SCO Family of Services",
+      "careers_url": "https://sco.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Safe Horizon",
+      "careers_url": "https://www.safehorizon.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Samaritan Daytop Village",
+      "careers_url": "https://www.samaritanvillage.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Sanctuary for Families",
+      "careers_url": "https://sanctuaryforfamilies.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Services for the UnderServed",
+      "careers_url": "https://sus.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Sheltering Arms",
+      "careers_url": "https://shelteringarmsny.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Bronx Defenders",
+      "careers_url": "https://www.bronxdefenders.org/join-us/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Door",
+      "careers_url": "https://door.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Fortune Society",
+      "careers_url": "https://fortunesociety.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "The Osborne Association",
+      "careers_url": "https://www.osborneny.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Trinity Church Wall Street",
+      "careers_url": "https://trinitywallstreet.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "UJA-Federation of New York",
+      "careers_url": "https://www.ujafedny.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "United Way of New York City",
+      "careers_url": "https://www.unitedwaynyc.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Win NYC",
+      "careers_url": "https://winnyc.org/careers/",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "YMCA of Greater New York",
+      "careers_url": "https://ymcanyc.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Year Up United",
+      "careers_url": "https://www.yearup.org/careers",
+      "sector": "nonprofit",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Accenture",
+      "careers_url": "https://www.accenture.com/us-en/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Alvarez & Marsal",
+      "careers_url": "https://www.alvarezandmarsal.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "BDO USA",
+      "careers_url": "https://www.bdo.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Bain & Company",
+      "careers_url": "https://www.bain.com/careers/",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Boston Consulting Group",
+      "careers_url": "https://careers.bcg.com/",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Cravath, Swaine & Moore",
+      "careers_url": "https://www.cravath.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Davis Polk & Wardwell",
+      "careers_url": "https://www.davispolk.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Debevoise & Plimpton",
+      "careers_url": "https://www.debevoise.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Deloitte US",
+      "careers_url": "https://www2.deloitte.com/us/en/careers.html",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "EY US",
+      "careers_url": "https://www.ey.com/en_us/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "FTI Consulting",
+      "careers_url": "https://www.fticonsulting.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Grant Thornton",
+      "careers_url": "https://www.grantthornton.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "KPMG US",
+      "careers_url": "https://www.kpmguscareers.com/",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Kirkland & Ellis",
+      "careers_url": "https://www.kirkland.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "McKinsey & Company",
+      "careers_url": "https://www.mckinsey.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Paul, Weiss",
+      "careers_url": "https://www.paulweiss.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "PwC US",
+      "careers_url": "https://www.pwc.com/us/en/careers.html",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Skadden",
+      "careers_url": "https://www.skadden.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Sullivan & Cromwell",
+      "careers_url": "https://www.sullcrom.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Weil, Gotshal & Manges",
+      "careers_url": "https://www.weil.com/careers",
+      "sector": "professional_services",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "AECOM",
+      "careers_url": "https://aecom.jobs/",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Brookfield Properties",
+      "careers_url": "https://careers.brookfieldproperties.com/",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "CBRE",
+      "careers_url": "https://careers.cbre.com/",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Cushman & Wakefield",
+      "careers_url": "https://careers.cushmanwakefield.com/",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Douglas Elliman",
+      "careers_url": "https://www.elliman.com/careers",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Gensler",
+      "careers_url": "https://www.gensler.com/careers",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "JLL",
+      "careers_url": "https://www.jll.com/en-us/careers",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Related Companies",
+      "careers_url": "https://www.related.com/careers",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "SL Green Realty",
+      "careers_url": "https://slgreen.com/careers/",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Silverstein Properties",
+      "careers_url": "https://www.silversteinproperties.com/careers/",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Skanska USA",
+      "careers_url": "https://www.usa.skanska.com/careers/",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Skidmore, Owings & Merrill",
+      "careers_url": "https://www.som.com/careers/",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Tishman Speyer",
+      "careers_url": "https://tishmanspeyer.com/careers",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Turner Construction",
+      "careers_url": "https://www.turnerconstruction.com/careers",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Vornado Realty Trust",
+      "careers_url": "https://www.vno.com/careers",
+      "sector": "real_estate",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Baked by Melissa",
+      "careers_url": "https://bakedbymelissa.com/pages/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Barnes & Noble",
+      "careers_url": "https://www.barnesandnobleinc.com/careers/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Bloomingdale's",
+      "careers_url": "https://www.bloomingdalesjobs.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Chobani",
+      "careers_url": "https://www.chobani.com/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Coach",
+      "careers_url": "https://careers.tapestry.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Danone North America",
+      "careers_url": "https://careers.danone.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Duane Reade",
+      "careers_url": "https://jobs.walgreens.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Estée Lauder Companies",
+      "careers_url": "https://www.elcompanies.com/en/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Fairway Market",
+      "careers_url": "https://www.fairwaymarket.com/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Foot Locker",
+      "careers_url": "https://careers.footlocker.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Fresh Direct",
+      "careers_url": "https://www.freshdirect.com/careers/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Glossier",
+      "careers_url": "https://www.glossier.com/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Kate Spade New York",
+      "careers_url": "https://careers.tapestry.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Key Food Stores",
+      "careers_url": "https://www.keyfood.com/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "L'Oréal USA",
+      "careers_url": "https://careers.loreal.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Macy's",
+      "careers_url": "https://www.macysjobs.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Nordstrom",
+      "careers_url": "https://careers.nordstrom.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "PVH Corp",
+      "careers_url": "https://www.pvh.com/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Peloton Interactive",
+      "careers_url": "https://www.onepeloton.com/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Pepsi Bottling Ventures",
+      "careers_url": "https://www.pepsicojobs.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Ralph Lauren",
+      "careers_url": "https://careers.ralphlauren.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Saks Fifth Avenue",
+      "careers_url": "https://www.saksfifthavenue.com/c/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Shake Shack",
+      "careers_url": "https://www.shakeshack.com/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Stop & Shop",
+      "careers_url": "https://stopandshop.com/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Sweetgreen",
+      "careers_url": "https://www.sweetgreen.com/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Tapestry",
+      "careers_url": "https://careers.tapestry.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Tiffany & Co.",
+      "careers_url": "https://careers.tiffany.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Union Square Hospitality Group",
+      "careers_url": "https://www.ushg.com/careers/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Warby Parker",
+      "careers_url": "https://www.warbyparker.com/careers",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Wegmans",
+      "careers_url": "https://jobs.wegmans.com/",
+      "sector": "retail",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Bombas",
+      "careers_url": "https://bombas.com/pages/careers",
+      "sector": "tech",
+      "is_non_tech": false,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Datadog",
+      "careers_url": "https://careers.datadoghq.com/",
+      "sector": "tech",
+      "is_non_tech": false,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "DoubleVerify",
+      "careers_url": "https://doubleverify.com/careers/",
+      "sector": "tech",
+      "is_non_tech": false,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Etsy",
+      "careers_url": "https://careers.etsy.com/",
+      "sector": "tech",
+      "is_non_tech": false,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Justworks",
+      "careers_url": "https://www.justworks.com/careers",
+      "sector": "tech",
+      "is_non_tech": false,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "MongoDB",
+      "careers_url": "https://www.mongodb.com/careers",
+      "sector": "tech",
+      "is_non_tech": false,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Ramp",
+      "careers_url": "https://ramp.com/careers",
+      "sector": "tech",
+      "is_non_tech": false,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Squarespace",
+      "careers_url": "https://www.squarespace.com/about/careers",
+      "sector": "tech",
+      "is_non_tech": false,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Vimeo",
+      "careers_url": "https://vimeo.com/jobs",
+      "sector": "tech",
+      "is_non_tech": false,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Yext",
+      "careers_url": "https://www.yext.com/careers",
+      "sector": "tech",
+      "is_non_tech": false,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Amtrak",
+      "careers_url": "https://careers.amtrak.com/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Con Edison",
+      "careers_url": "https://www.coned.com/en/careers",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Delta Air Lines",
+      "careers_url": "https://careers.delta.com/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "FedEx",
+      "careers_url": "https://careers.fedex.com/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Hornblower Group",
+      "careers_url": "https://www.hornblower.com/careers/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "JetBlue Airways",
+      "careers_url": "https://careers.jetblue.com/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "NYC Ferry",
+      "careers_url": "https://www.ferry.nyc/careers/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "National Grid US",
+      "careers_url": "https://careers.nationalgrid.com/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "PSEG Long Island",
+      "careers_url": "https://www.pseg.com/careers",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Revel Transit",
+      "careers_url": "https://gorevel.com/careers",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "UPS",
+      "careers_url": "https://www.jobs-ups.com/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "United Airlines",
+      "careers_url": "https://careers.united.com/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Veolia North America",
+      "careers_url": "https://jobs.veolianorthamerica.com/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "Waste Management",
+      "careers_url": "https://careers.wm.com/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    },
+    {
+      "employer_name": "XPO Logistics",
+      "careers_url": "https://jobs.xpo.com/",
+      "sector": "transport_utilities",
+      "is_non_tech": true,
+      "seed_source": "hand-assembled NYC largest-employer roster (2026-07-28)"
+    }
+  ]
+}

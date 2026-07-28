@@ -420,3 +420,80 @@ task 05's SQL against the result, compare. Hours, not a package. Raised as a fol
 The agent reported it could not run the test suite because "pytest isn't installed".
 The suite is `python3 -m unittest discover -s backend/tests` and runs fine; its only
 change was one markdown file, so nothing was at risk either way.
+
+---
+
+## 2026-07-28 — 16 landed, on the second pass: the first non-tech NYC employers
+
+Report: [`docs/ats-token-discovery.md`](../../ats-token-discovery.md). New:
+`backend/ats_discovery.py` (pure, no I/O), `data/nyc-employer-seed.json` (376
+employers), `migrations/migrate_company_ats.py`, `tools/ats-discover.py`, and a nightly
+`--due-only` step at the head of `run-daily.py`. **Suite 413 → 426.**
+
+`company_ats` is the table tasks 17, 18 and 20 read instead of `config/companies.json`.
+
+### It was sent back once, and the check that caught it
+
+The agent reported itself finished. It was not: the report contained a literal
+`## RESULTS_PLACEHOLDER`, and **`company_ats` had zero rows** while 33 employers were
+marked `found`. Committing that would have left three downstream tasks reading an empty
+table — and "no NYC employer uses an ATS" is exactly the plausible-looking zero this
+codebase keeps generating. Verifying against the database rather than the report is
+what caught it. Second pass filled both, plus the cassette bullet task 09 had added to
+16's file after 16 started.
+
+### 7 validated tokens, 1,513 open jobs, every one non-tech
+
+| employer | sector | ATS | open jobs |
+|---|---|---|---|
+| NewYork-Presbyterian | health | workday `nyp` **wd1** | 367 |
+| Nordstrom | retail | workday `nordstrom` **wd501** | 862 |
+| Memorial Sloan Kettering | health | workday `msk` **wd108** | 87 |
+| Moelis & Company | finance | workday `moelis` **wd1** | 43 |
+| National Football League | media | greenhouse | 66 |
+| Per Scholas | nonprofit | greenhouse | 38 |
+| PepsiCo | retail | icims | 50 |
+
+This is the direct answer to task 05's finding that the target population is absent from
+every configured source. It is also small — 1.9% of the seeded roster — and the reason
+it is small is the next section.
+
+**The data-centre column earns itself immediately.** `wd1`, `wd108`, `wd501` — nobody
+would guess the last two, and `18-ingest-workday-cxs.md:54` is right that a wrong one
+returns a 404 indistinguishable from a tenant with no openings. Task 18 can treat that
+as confirmed rather than anticipated.
+
+### The best thing this pass produced is a negative result about itself
+
+The roster carried ten tech employers with tokens **already verified** in
+`config/companies.json`, as a positive control. Four were conclusively probed. **The
+method found zero of the four.**
+
+`careers.datadoghq.com` returns 139,063 bytes of HTML containing `greenhouse.io`
+nowhere. MongoDB's is 564,983 bytes, same result. Their boards render client-side, so
+there is no ATS URL in the document a plain fetch receives.
+
+**So `not_found` — 139 employers, the largest bucket — does not mean "this employer has
+no ATS".** It means "no ATS URL in the HTML we were served", and on this evidence it is
+wrong more often than right. Every coverage figure is a floor. Critically,
+`company_ats.validation_note` records that **on the row itself**, so tasks 17, 18 and 20
+cannot read those rows as settled fact about the New York labour market.
+
+A discovery pass that had not carried a control would have reported "139 NYC employers
+have no ATS" as a finding.
+
+### Silence is not a result — the part that was right the first time
+
+`last_probe_outcome` is one of seven values partitioned into conclusive (`found`,
+`not_found`) and inconclusive (`blocked`, `unreachable`, `missing_page`, `no_url`,
+`skipped`), with a test asserting the partition is disjoint and complete. **Only a
+conclusive outcome may write `never_found`.** Under a boolean, the 30 `blocked`
+employers would have become "no ATS here", silently and permanently.
+
+Coverage is quoted over **both** denominators — 1.9% of 366 seeded, 3.6% of 193 probed —
+and the tool refuses to print one without the other. The probed-subset figure alone
+overstates by 1.9x.
+
+Probing stopped deliberately at 280 of 376: `blocked` climbed 16 → 30 as coverage grew,
+and this host also runs the nightly ATS pulls and `google-serpapi.py`. The 96 unprobed
+are first in line for the nightly backfill.

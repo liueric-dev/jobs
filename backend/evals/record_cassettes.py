@@ -176,6 +176,96 @@ def record_builtin_nyc():
     return f"1 listing page ({len(records)} cards), 1 detail page"
 
 
+#: One (platform, token, extra, why) per ATS the task-16 validator can check,
+#: plus the non-resolving cases. Recorded through tools/ats-discover.py's own
+#: validate(), so the request is by construction the request the discovery
+#: tool makes -- change the endpoint and re-recording follows it for free.
+#:
+#: WHY A NON-RESOLVING TOKEN IS THE POINT. The validator exists to stop
+#: trusting a regex match found in a stale footer link. Exercised only against
+#: boards that resolve, it would pass while being unable to tell a live board
+#: from a dead one -- so the two 404 cases below are the ones that make the
+#: rest of the cassette mean anything.
+ATS_VALIDATION_PROBES = (
+    ("greenhouse", "kickstarter", {},
+     "smallest greenhouse board in config/companies.json"),
+    ("greenhouse", "no-such-board-xyzzy", {},
+     "DOES NOT RESOLVE -- 404, must classify `dead`, never `never_found`"),
+    ("lever", "finix", {},
+     "the only lever token in config/companies.json"),
+    ("ashby", "runway", {},
+     "smallest ashby board in config/companies.json"),
+    ("workday", "nvidia", {"workday_dc": "wd5",
+                           "workday_site": "NVIDIAExternalCareerSite"},
+     "the limit=20 landmine, on the very tenant CLAUDE.md cites: `total` "
+     "reports 2,000 and one page returns 20. Ask for 100 and Workday returns "
+     "an EMPTY array with no error -- so this cassette is what stops a future "
+     "edit to the limit from silently validating every tenant as dead"),
+    ("workday", "nvidia", {"workday_dc": "wd1",
+                           "workday_site": "NVIDIAExternalCareerSite"},
+     "WRONG DATA CENTRE, right tenant -- wd1 instead of wd5. This is the "
+     "18-ingest-workday-cxs.md:54 failure: a guessed dc 404s, and a 404 here "
+     "is indistinguishable from a tenant with no open roles unless the dc is "
+     "stored and used. Hence workday_dc being its own column"),
+    ("smartrecruiters", "Ubisoft", {},
+     "200 with totalFound=0 -- SmartRecruiters does NOT 404 an unknown "
+     "company, it returns an empty page. The shape that would read as a live "
+     "board if the validator only checked the status code"),
+    ("icims", "no-such-tenant-xyzzy", {},
+     "iCIMS publishes no JSON feed (why task 20 reaches for Firecrawl), so "
+     "validity is 'the portal exists and lists jobs'. This one does not"),
+    ("recruitee", "no-such-tenant-xyzzy", {},
+     "404 on a per-tenant subdomain"),
+    ("workable", "no-such-account-xyzzy", {},
+     "the widget endpoint's refusal shape"),
+)
+
+
+def _load_discover_cli():
+    """tools/ats-discover.py, by path -- its filename has a hyphen.
+
+    The recipe drives the REAL validate()/validation_request() pair rather
+    than a copy of the URLs, for the reason this module's docstring gives:
+    a cassette recorded against a reimplementation records the
+    reimplementation.
+    """
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "tools", "ats-discover.py")
+    spec = importlib.util.spec_from_file_location("ats_discover_cli", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def record_ats_validation():
+    """One validation probe per ATS, including tokens that do not resolve.
+
+    Free: every endpoint here is the same public, unauthenticated feed the
+    employer's own careers page calls. Ten requests, paced by the tool's own
+    rate limiter, one per host except the two Workday tenants.
+    """
+    cli = _load_discover_cli()
+    fetcher = cli.Fetcher(delay=1.0, host_delay=2.0, timeout=20)
+    results = []
+    with cassettes.recording(
+            "ats-validation", source="8 ATS vendor APIs",
+            recorded_by=RECORDED_BY,
+            note="tools/ats-discover.py validate() against one token per "
+                 "validatable ATS, plus four that do not resolve (a 404 "
+                 "greenhouse board, a wrong Workday data centre, an unknown "
+                 "iCIMS tenant, an unknown Recruitee tenant) and one that "
+                 "answers 200 with an empty list (SmartRecruiters). The "
+                 "validator is what stops the pipeline trusting a regex match "
+                 "from a stale footer link; recorded only against boards that "
+                 "resolve, it could not tell live from dead."):
+        for platform, token, extra, _why in ATS_VALIDATION_PROBES:
+            status, jobs, note = cli.validate(
+                fetcher, platform, {"token": token, **extra})
+            results.append(f"{platform}:{token}={status}")
+    return f"{len(results)} validation probes -- " + ", ".join(results)
+
+
 def record_google_serpapi():
     """ONE SerpApi search. Metered."""
     serp = load_ingest("google-serpapi")
@@ -237,6 +327,7 @@ FREE = {
     "ats-greenhouse-no-content": record_ats_greenhouse_no_content,
     "ats-lever": record_ats_lever,
     "ats-ashby": record_ats_ashby,
+    "ats-validation": record_ats_validation,
     "hn-hiring": record_hn_hiring,
     "wwr-feeds": record_wwr_feeds,
     "builtin-nyc": record_builtin_nyc,

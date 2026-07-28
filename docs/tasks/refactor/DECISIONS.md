@@ -31,6 +31,65 @@ so a model standing in for it makes the measurement circular — the defect
 which treats `sonnet-batch-1` as ground truth. Reversible only in the sense that the
 labels can be collected later.
 
+### 16 — `not_found` does not mean "no ATS", and the positive control is why we know
+
+The seed roster carried ten tech employers with tokens already verified in
+`config/companies.json`, as a control. Four were conclusively probed. **The regex method
+found zero of the four.** Checked by hand: `careers.datadoghq.com` returns 139,063 bytes
+of HTML containing the string `greenhouse.io` nowhere; MongoDB's is 564,983 bytes, same
+result. Their boards render client-side, so no ATS URL exists in the document a plain
+fetch receives.
+
+`not_found` is the largest bucket at 139 employers, and on this evidence it is wrong far
+more often than it is right. Every coverage number in `docs/ats-token-discovery.md` is
+therefore a **floor**, and `company_ats.validation_note` carries that caveat *on the row
+itself* so tasks 17, 18 and 20 cannot read those rows as settled fact. Not reversible —
+it is a property of the method, and it is the most useful thing the pass produced.
+
+### 16 — Seven outcome values, partitioned, instead of a boolean
+
+`ats_seed.last_probe_outcome` is one of seven (`ats_discovery.py:57-70`), split into
+CONCLUSIVE (`found`, `not_found`) and INCONCLUSIVE (`blocked`, `unreachable`,
+`missing_page`, `no_url`, `skipped`), with a test asserting the partition is disjoint and
+complete. **Only a conclusive outcome may write `status='never_found'`** — a 403 never
+produces one. Rejected: a found/not-found boolean, under which the 30 `blocked`
+employers would have become "no ATS here", silently and permanently. Not reversible in
+intent; this is the defence against CLAUDE.md's named failure mode.
+
+`skipped` is a per-host cascade: many NYC agencies share `www.nyc.gov`, so one 403 there
+suppresses all of them at once, and they are recorded as inconclusive rather than absent.
+
+### 16 — An `unvalidated` status the task's schema did not have
+
+`16-ats-token-discovery.md:69` offers `valid | dead | never_found`, with no value for
+"we found a token but the ATS did not answer". Both available choices are wrong: `valid`
+asserts something unverified, `dead` discards a real finding. Added `unvalidated`.
+ADP, Jobvite and Oracle Cloud are detected-only — they publish no feed this tool can
+call — and are recorded because "which large NYC employers are on Oracle/ADP" is exactly
+the skew the task asks to be reported. Reversible.
+
+### 16 — Both denominators, always, and the tool refuses to print one alone
+
+Coverage is quoted over all 366 seeded non-tech employers **and** over the 193
+conclusively probed: 1.9% versus 3.6%. Quoting the probed subset alone would overstate
+by 1.9x. Rejected: reporting the flattering figure, or reporting one with a footnote.
+The tool will not emit one without the other. Reversible, but should not be.
+
+### 16 — The probe was stopped at 280 of 376, deliberately
+
+`blocked` climbed from 16 to 30 as coverage grew — the pipeline's documented failure
+mode arriving in real time — and this host's IP also runs the nightly ATS pulls and
+`google-serpapi.py`. Stopping was a decision to protect that, not a run that finished.
+The 96 unprobed carry `last_probe_outcome IS NULL` and are first in line for the nightly
+backfill, which walks least-recently-probed first. Reversible.
+
+### 16 — The Workday data-centre column earns itself immediately
+
+The four Workday tenants found use `wd1`, `wd108` and `wd501`. Nobody would guess
+`wd108` or `wd501`, and `18-ingest-workday-cxs.md:54` is right that a wrong data centre
+returns a 404 indistinguishable from a tenant with no openings. Task 18 should treat
+this as confirmed rather than anticipated.
+
 ### 22 — Drop JobSpy. The cause is global, not this IP
 
 JobSpy returns zero rows from this machine — 0/20 queries, no exceptions, every request

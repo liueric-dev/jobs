@@ -111,6 +111,38 @@ REQUIRED_ENV = ("DATABASE_URL",)
 #: the top of each ranking. Running score before match would write narratives
 #: for yesterday's ordering.
 STEPS = [
+    # -- ATS token discovery (task 16) ------------------------------------
+    #
+    # Both entries are discovery, not ingest, and both run BEFORE ingest/ats.py
+    # so a token learned this morning is pulled the same night.
+    #
+    # ONE step, two phases -- `--nightly` runs both in a single process. They
+    # answer different questions at very different costs, but they cannot be
+    # two STEPS entries: `volumes` below is keyed by script name, so a second
+    # entry for the same script would overwrite the first's written/dropped
+    # counts and report one line for both. That is precisely the "ran and
+    # wrote nothing" vs "ran and dropped everything" distinction this summary
+    # exists to preserve.
+    #
+    #   MONTHLY, and only when the ats-discovery watermark says it is due:
+    #     re-validate every known token. "Are the boards we know about still
+    #     alive, and has anything gone stale?" -- ONE request per token,
+    #     against APIs that expect programmatic traffic. This is the monthly
+    #     re-probe task 16 asks for, and the only thing that catches the
+    #     failure it is designed against: not a 404, but a feed still serving
+    #     postings filled six months ago.
+    #
+    #   NIGHTLY: probe up to --limit employers that have no conclusive answer
+    #     yet -- newly seeded ones, and ones a WAF refused last time. Capped
+    #     so the nightly cost is a few minutes, least-recently-probed first,
+    #     so the backlog drains over successive nights and the step then goes
+    #     quiet on its own.
+    #
+    # A full careers-page sweep of the whole roster (`--apply --all`) is ~50
+    # minutes of outward HTTP against several hundred employer sites. It is
+    # deliberately NOT scheduled: that is a first-run and occasional-refresh
+    # operation, run by hand, not something to spend every month unattended.
+    ["tools/ats-discover.py", "--apply", "--nightly", "--limit", "40"],
     "ingest/ats.py",
     "ingest/builtin-nyc.py",
     "ingest/weworkremotely.py",
