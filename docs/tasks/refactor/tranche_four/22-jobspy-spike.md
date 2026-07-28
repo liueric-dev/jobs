@@ -1,6 +1,6 @@
 # 22 — JobSpy spike
 
-**Status:** todo. **Depends on:** nothing. **Blocks:** 23.
+**Status:** DONE, `66c9d18`. **Depends on:** nothing. **Blocks:** 23.
 **This is a spike, not a build. Timebox it to two days plus a two-week observation.**
 
 Find out whether a self-hosted scraper works well enough from a residential IP to be

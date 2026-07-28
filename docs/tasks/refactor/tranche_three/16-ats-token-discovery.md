@@ -1,6 +1,6 @@
 # 16 — ATS token discovery
 
-**Status:** todo. **Depends on:** nothing. **Blocks:** 17, 18, 20.
+**Status:** DONE, `49d51bf`. **Depends on:** nothing. **Blocks:** 17, 18, 20.
 **Estimated yield:** none directly — unblocks ~150–350/day.
 
 Find which NYC employers run which ATS. The endpoints are trivial; **this** is the

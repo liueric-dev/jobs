@@ -1,6 +1,6 @@
 # 01 — Pin the production model
 
-**Status:** todo. **Depends on:** nothing. **Blocks:** 04, 06, and every cost or
+**Status:** DONE, `28f1d0e`. **Depends on:** nothing. **Blocks:** 04, 06, and every cost or
 quality figure produced after them.
 
 Make the repo give one answer to "what model runs in production," and make the code

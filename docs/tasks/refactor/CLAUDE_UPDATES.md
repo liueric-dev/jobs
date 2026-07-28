@@ -981,3 +981,68 @@ source silently marks its own live corpus dead.
 `grep -rn "docs/ingest" --include='*.py'` finds no writer anywhere in the repo. The file is
 now hand-written and says so, and says what it supersedes. Task 34 still owns the decision
 for the rest of the directory.
+
+---
+
+## 2026-07-28 — 18 landed (`fabe381`): the gate is the point, and it declined to report a yield
+
+Report: [`docs/ingest/workday.md`](../../ingest/workday.md). New:
+`backend/ingest/workday.py`, `backend/tests/test_workday_ingest.py` (+77). Changed:
+`backend/evals/workday_fixtures.py`, `backend/tests/test_workday_fixtures.py`. Wired into
+`run-daily.py`'s `STEPS` by the orchestrator, after `ats-discover.py`.
+
+**Measured: 220 requests, 462s, 149 rows written, 0 dropped, 0 blocked.** Full suite green
+at **663**.
+
+### The `limit` landmine is an exception, not a clamp
+
+`_check_page_limit()` **raises** rather than doing `min(limit, 20)`. Above 20 the CXS
+endpoint returns an empty `jobPostings` array with HTTP 200 and no error — byte-identical
+to "no more results" — so silently correcting the caller would preserve the bug in the
+caller's head while the run reported success and ingested nothing. That is the right
+reading of a landmine whose entire danger is that it looks like success.
+
+### A shortfall writes nothing at all
+
+Collected rows are reconciled against the `total` the API itself reported, and a run that
+comes back short does not get to write, let alone close.
+
+### The upstream gate, quantified
+
+**1,366 postings reachable per night from four tenants.** The gate takes detail fetching
+down to **11%** of that — ~8 minutes of nightly window. Without it the same run is 1,366
+detail requests and **34 minutes**, for four tenants, growing linearly with the tenant
+count task 16's backlog will produce. That is the whole reason this source is gated
+upstream rather than pulled whole and filtered after.
+
+### It refused to report a yield, and that is the right call
+
+Only **4 of 149** postings survive the full gate. The report says, correctly, that this is
+not a yield: the gate is today's SWE-shaped `config/relevance.json`, whose two active
+profiles are built from "engineer", "developer", "SRE". Four hospital, bank and retail
+postings matching it *is exactly right and exactly useless* — those profiles are not who
+this source exists for.
+
+The task file's 80–200/day assumes the Pursuit retarget. **The number must be re-measured
+after task 13, and it is not evidence about the source until it is.** Contrast task 14,
+which could measure honestly because its estimate did not depend on the retarget.
+
+### It carried task 16's finding instead of re-learning it
+
+`test_never_found_does_not_mean_no_ats`, and `test_upsert_is_never_unpacked_as_a_bare_three_tuple`.
+
+### The defect it found: task files' `Status:` headers are stale, and they mislead
+
+Task 18 reported task 04 as "still `todo`" because
+`tranche_one/04-quota-baseline.md` says `**Status:** todo`. **04 landed in `c3275be`.**
+Every landed task file still carried a `todo` header; `README.md`'s status column was the
+only correct index, and nothing said so.
+
+**Fixed in this commit:** all fourteen landed task files now read `**Status:** DONE,
+<commit>`. This is exactly the drift `docs/` is supposed to prevent, and it cost one agent
+a wrong conclusion in a shipped report.
+
+Half-right, though, and worth recording: **task 04 has no standalone `docs/` report.** Its
+findings went into `backend/docs/SCORING.md`. So an agent told to check its work against
+"task 04's budget" finds no such document. Task 34 should decide whether 04's numbers get
+promoted to `docs/`.

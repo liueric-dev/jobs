@@ -1,6 +1,6 @@
 # 07 — Metrics and the golden set
 
-**Status:** todo. **Depends on:** 06. **Blocks:** 12, 29, 30.
+**Status:** DONE, `3a8b42c`. **Depends on:** 06. **Blocks:** 12, 29, 30.
 
 **This task is [`docs/ingestion_tests/03-metrics-and-golden-set.md`](../../ingestion_tests/03-metrics-and-golden-set.md).**
 Do not rewrite it — the three-quantity design there is correct and better specified

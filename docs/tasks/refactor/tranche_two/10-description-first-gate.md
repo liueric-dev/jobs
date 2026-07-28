@@ -1,6 +1,6 @@
 # 10 — Description-first relevance gate
 
-**Status:** todo. **Depends on:** 05. **Blocks:** 12, 13, all of Phase 3.
+**Status:** DONE, `7d94bb1`. **Depends on:** 05. **Blocks:** 12, 13, all of Phase 3.
 
 Make the gate find postings whose title says nothing about AI and whose description
 says everything.

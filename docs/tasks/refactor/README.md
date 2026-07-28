@@ -53,7 +53,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | 15 | USAJobs and Adzuna ingest | two free APIs | 35–95 |
 | 16 | [ATS token discovery](tranche_three/16-ats-token-discovery.md) | seed list bootstrap, regex probe, `company_ats` table — **7 validated non-tech NYC tokens, 1,513 open jobs**; done |
 | 17 | [Retarget `ats.py`](tranche_three/17-retarget-ats-ingest.md) | roster from `company_ats`; **six vendors** (3 new); closure conditional on reconciliation — done, [`docs/ingest/ats.md`](../../ingest/ats.md) | 50–150 |
-| 18 | Workday CXS ingest | `/wday/cxs/` + **upstream relevance gating** | 80–200 |
+| 18 | [Workday CXS ingest](tranche_three/18-ingest-workday-cxs.md) | `/wday/cxs/` + **upstream relevance gating** — done; 1,366 reachable/night from 4 tenants at 11% detail cost. **Yield deliberately not reported until task 13**, [`docs/ingest/workday.md`](../../ingest/workday.md) | re-measure |
 | 19 | JSON-LD parser | `extruct` over career pages; `validThrough` closure | 30–60 |
 | 20 | iCIMS via Firecrawl | reserved 1,000 credits/month | 20–40 |
 | 21 | Nonprofit boards | Idealist and peers | 10–25 |

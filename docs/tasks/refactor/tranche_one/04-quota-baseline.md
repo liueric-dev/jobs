@@ -1,6 +1,6 @@
 # 04 — Quota and wall-clock baseline
 
-**Status:** todo. **Depends on:** 01. **Blocks:** 12 (the `FACTS_VERSION` bump), and
+**Status:** DONE, `c3275be`. **Depends on:** 01. **Blocks:** 12 (the `FACTS_VERSION` bump), and
 the sizing of all of Phase 3.
 
 Replace a cost model denominated in dollars with one denominated in the things that

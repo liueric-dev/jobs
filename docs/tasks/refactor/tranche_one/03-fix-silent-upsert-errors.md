@@ -1,6 +1,6 @@
 # 03 — Stop discarding upsert errors
 
-**Status:** todo. **Depends on:** 02 (for the register entry). **Blocks:** all of
+**Status:** DONE, `e353e3e`. **Depends on:** 02 (for the register entry). **Blocks:** all of
 Phase 3.
 
 Every ingest script throws away per-record upsert failures. Fix it in one place

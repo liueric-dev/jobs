@@ -7,13 +7,14 @@ Written 2026-07-28 to hand this run to a fresh session. Read this first, then
 
 ## State at handoff
 
-**Branch `webapp-service`, HEAD `597662b`, suite at 604 tests** (task files say 263; it
-has grown — 604 is the floor now). **Note:** a full `unittest discover` currently reports
-failures in `test_workday_ingest`, which is `task-18-workday`'s **incomplete in-flight
-work**, not a regression. `test_relevance`, `test_extract` and `test_match` are green.
+**Branch `webapp-service`, HEAD `fabe381`, suite green at 663 tests** (task files say 263; it
+has grown — 663 is the floor now). **The whole suite passes** — `python3 -m unittest
+discover -s backend/tests` from the repo root. Working tree is clean apart from untracked
+`scripts/`, which predates this run and is not ours.
 
-Working tree state depends on which of the in-flight agents below have written;
-`scripts/` is untracked, predates this run, and is not ours.
+`backend/webapp/tests/` is a separate matter: **`fastapi` is not installed here**, so five
+modules fail to import and always have. Not a regression, and not covered by the count
+above.
 
 Ten tasks committed, one experiment, plus the two conversational decisions:
 
@@ -32,6 +33,7 @@ Ten tasks committed, one experiment, plus the two conversational decisions:
 | 07 | golden-set tooling (no labels) | `3a8b42c` |
 | 14 | NYC Open Data ingest | `7221620` |
 | 17 | retarget `ats.py`, 3 new platforms | `597662b` |
+| 18 | Workday CXS, gated upstream | `fabe381` |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -67,21 +69,12 @@ line, and never-extracted-first-then-FIFO selection.
 **`FACTS_VERSION` was deliberately NOT bumped. Task 12 must carry it.** The debt is
 recorded at `schema.py:158`.
 
-## In flight — verify or discard
+## Nothing is in flight
 
-Agents spawned in the session after `943d899`, each with an explicit do-not-touch list.
-**Check `git status` first**; the previous handoff's two in-flight agents left nothing at
-all, so assume nothing.
-
-- **`task-18-workday`** — task 18, Workday CXS with upstream relevance gating. New file
-  under `ingest/`.
-
-**None of them may touch `run-daily.py`'s `STEPS`** — several would collide. Each reports
-the line it wants added; the orchestrator wires it at commit time. 14's entry is wired; 17 needed none
-(`ats.py` was already there); **18's is not.** Check `STEPS` against what is in `backend/ingest/`.
-
-**`backend/evals/record_cassettes.py` is resolved** — task 17's commit carried both its
-own and task 14's registrations.
+All six agents this session completed, were verified against the code and the database,
+and were committed. **The tree is clean.** `run-daily.py`'s `STEPS` is fully wired —
+`ingest/workday.py` and `ingest/nyc-open-data.py` were added by the orchestrator, and
+`ats.py` was already there.
 
 ## How this run works
 
@@ -166,41 +159,83 @@ Each of these is a documented claim that is **wrong about the code as it now sta
 
 ## Recommended next steps
 
-1. **Resolve the in-flight work** — verify or discard, as above, and **wire the ingest
-   steps into `run-daily.py`**, which no subagent was allowed to do.
-2. **Task 11** — 10 has landed, so this is unblocked. Archetype superset, `role_track`,
-   missingness. The majority-of-3 decision gives it `job_facts.vote_unanimity` as a
-   stability signal to record per row.
-3. **Task 13**, also unblocked by 10 — and it is what makes the `pursuit` profile real.
-   The profile exists but is `active=False` with **labelled placeholder** persona and
-   criteria. Activating it is a deliberate act with a volume consequence: **+573 rows,
-   13.2/day**. The weights are a cohort product call, not an implementation one.
-4. **The ChatGPT-DOM defect.** Job `ff9f9d9f9643e185af0f48ca`'s `description_text` begins
+**Two tasks are now the whole critical path, and both are held on human judgement, not on
+code.**
+
+1. **Task 13 — the cohort criteria profile.** It is what makes everything else this
+   session built *mean* anything. The `pursuit` profile exists (`7d94bb1`) but ships
+   `active=False` with **labelled placeholder** persona and criteria, because the weights
+   are a cohort product call. Until it lands: task 10's gate is inert in production, and
+   **task 18 cannot report a yield at all** — its 4-of-149 measures today's SWE-shaped
+   `relevance.json`, not Workday. Activating the profile is a deliberate act worth **+573
+   rows, 13.2/day**.
+2. **Task 29 — the labelling session.** 07's tooling is built and produced zero labels by
+   design. The form is at `/v1/label` behind the existing Google SSO. What is missing is
+   ~10 Builders and an afternoon.
+
+Then, in order:
+
+3. **Task 11** — archetype superset, `role_track`, missingness. Unblocked by 10, and
+   `job_facts.vote_unanimity` now gives it a per-row stability signal to record.
+4. **Task 12** — and it **must** carry the `FACTS_VERSION` bump for the majority-of-3
+   change. See `schema.py:158`. One re-extraction pays for both; do not bump separately.
+5. **Task 08** — score validation; needs 07's tooling but not its human labels.
+6. **Tasks 19, 21** — the remaining unblocked Phase 3 ingest. 15 and 20 need credentials.
+   **Do not trust their estimates** — see the finding below.
+7. **The ChatGPT-DOM defect.** Job `ff9f9d9f9643e185af0f48ca`'s `description_text` begins
    `data-testid="conversation-turn-136"` — some ingest path captured a browser DOM rather
    than a posting body, and it is silently poisoning extraction input. Found by task 10,
-   out of its scope, has no task of its own.
-5. **Task 12** — and it **must** carry the `FACTS_VERSION` bump for the majority-of-3
-   change. See `schema.py:158`. One re-extraction pays for both; do not bump separately.
-6. **Task 08** — score validation; needs 07's tooling but not its human labels.
-7. **Tasks 19, 21** — the remaining unblocked Phase 3 ingest. 15 and 20 need credentials.
-8. **Task 23, descoped** — 2 provider adapters not 8, no JobSpy adapter, no canary, no
-   router step 2. But see the reprioritisation argument in `DECISIONS.md`: on the
-   evidence, **25 is where the 12x yield difference lives and it is a config edit**, and
-   **24 is 7,500 searches/month against code already written and tested**. 23 lists
-   `contributor.py` as one adapter among eight; it may be the product.
+   out of its scope, still has no task of its own.
+8. **Task 23, descoped** — but see the reprioritisation argument in `DECISIONS.md`: on the
+   evidence **25 is where the 12x yield difference lives and it is a config edit**, and
+   **24 is 7,500 searches/month against code already written and tested**.
+
+## What this session measured, and what it means
+
+Three numbers landed that change how the rest of the plan should be read.
+
+**The Phase 3 estimates are not reliable.** Task 14 measured **1.8 relevant/day against an
+estimate of 20–60**. Task 05 measured 43/day resolving to ≈3/day usable. Task 18 declined
+to report one at all, correctly. Tasks 15, 19, 20 and 21 are sized from the same table by
+the same method. **Measure before building.**
+
+**The gate is not the bottleneck; sourcing is.** Task 10 raised hand-checked precision from
+task 05's 6.7% to 10.0% — a real improvement, and still 90% junk. Its own report says the
+bottleneck is sourcing rather than gating, and task 14's 1.8/day is the same finding from
+the other side.
+
+**Extraction capacity is no longer the constraint.** The drain loop replaced a hard 40/day
+ceiling with ~1,260 calls/hour of headroom against 43–80/day of intake. Whatever binds
+next, it is not this.
 
 ## How this session ran it, and what worked
 
-Five subagents concurrently, each with an explicit file-ownership list, orchestrator
-verifying and committing. Two mechanics worth keeping:
+**Six subagents, run in parallel, orchestrator verifying and committing.** Nothing was
+committed by a subagent. Every task was checked against the code and the database before
+its commit. Four mechanics worth keeping:
 
+- **Every agent gets an explicit file-ownership list.** Five ran concurrently with one
+  genuine collision all session (`record_cassettes.py`, below).
 - **`run-daily.py`'s `STEPS` is orchestrator-only.** It is the one file every ingest task
   wants to edit. Agents report the line they want; the orchestrator wires it.
+- **Take the baseline before the first agent starts.** Tier-count-by-platform for every
+  active profile, and the test count. Task 10's "the author's profile is unaffected" claim
+  was only checkable because that snapshot existed — and by the time it was checked, a
+  concurrent agent had added 1,030 rows on a new platform, which would otherwise have
+  looked like a regression.
 - **The handoff is rolling, not terminal.** This file, `DECISIONS.md`, `CLAUDE_UPDATES.md`
-  and `README.md` are updated in the same turn as each commit. The previous handoff was
-  written once, at the end, from a context that was already spent — which is why it read
-  as recall rather than as a record. Update at every commit boundary and the session can
-  end anywhere.
+  and `README.md` were updated in the same turn as every commit. The previous handoff was
+  written once at the end, from a context already spent, which is why it read as recall
+  rather than record.
+
+**Five of six agents completed without sending a report at all.** They go idle silently.
+Do not wait for a summary; check the artifacts. That is now the norm rather than the
+exception.
+
+**The one real collision:** `backend/evals/record_cassettes.py` accumulated two agents'
+changes at once. Task 14's commit deliberately excluded it rather than ship task 17's
+half-finished work under 14's number, and 17's commit carried both. The general fix is the
+one `STEPS` already has — shared files get a single owner, named in advance.
 
 ## Pending follow-ups with no task of their own
 

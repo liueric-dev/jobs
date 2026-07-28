@@ -1,6 +1,6 @@
 # 06 — Re-run self-consistency at n=120
 
-**Status:** todo. **Depends on:** 01. **Blocks:** 07, 11, 12, 13.
+**Status:** DONE, `5092568`. **Depends on:** 01. **Blocks:** 07, 11, 12, 13.
 
 Establish whether `deepseek-v4-flash` really disagrees with itself 24% of the time on
 `seniority_level`, or whether that was an artifact of seventeen jobs.

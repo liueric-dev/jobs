@@ -1,6 +1,6 @@
 # 02 — Triage the ingest audit defects
 
-**Status:** todo. **Depends on:** nothing. **Blocks:** all of Phase 3.
+**Status:** DONE, `36d83f5`. **Depends on:** nothing. **Blocks:** all of Phase 3.
 
 `docs/ingestion_tests/README.md:7` records that the `docs/ingest/` audit "found 16
 defects at `dd49a27`." They are scattered across eleven generated documents, mostly

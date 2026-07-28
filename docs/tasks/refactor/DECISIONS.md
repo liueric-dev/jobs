@@ -757,3 +757,46 @@ It claimed `generated: 2026-07-27` and no generator exists anywhere in the repo.
 than preserving a provenance claim nothing can back, the file is hand-written, says so,
 and names what it supersedes. Task 34 still owns the directory-wide decision — this is one
 file declining to keep asserting something false in the meantime. Reversible.
+
+### 18 — `limit > 20` raises instead of clamping
+
+`min(limit, 20)` would preserve the bug in the caller's head and produce a run that quietly
+disagrees with the code that asked for it. The landmine's danger is precisely that
+exceeding the cap *looks like success* — HTTP 200, empty array, no error — so it earns an
+exception at the request site. Rejected: silent clamping, and clamping with a warning
+(warnings in this pipeline are read the morning after, if at all). Reversible.
+
+### 18 — A run short of the API's own `total` writes nothing, rather than writing what it got
+
+Partial writes would be defensible for an append-only source; they are not here, because
+this ingest also drives closure. Rejected: write the rows and skip only closure, which
+splits one reconciliation decision into two places that can disagree. Reversible.
+
+### 18 — No yield figure reported, deliberately
+
+4 of 149 postings survive today's gate, and the report refuses to call that a yield: the
+gate is SWE-shaped, and the task file's 80–200/day estimate assumes the Pursuit retarget
+that task 13 has not done. Publishing 4/149 would have put a number in `docs/` that
+measures `config/relevance.json`, not Workday. Rejected: quoting it with a caveat, which is
+how a number survives its caveat and gets cited bare. **Must be re-measured after task 13.**
+Not reversible: it is a refusal to measure, correctly reasoned.
+
+### 18 — The upstream gate is justified by a measured ratio, not by principle
+
+1,366 postings reachable per night from four tenants; detail fetching at 11% of that, ~8
+minutes against 34 unguarded. The ratio is what makes the gate worth its complexity, and it
+grows with the tenant count. Reversible, and should not be.
+
+### 00 — Task files' `**Status:**` headers were stale and misled a task
+
+Every landed task file still read `**Status:** todo`; `README.md`'s column was the only
+correct index and nothing said so. Task 18 consequently reported task 04 as undone in a
+shipped report. All fourteen landed files now read `**Status:** DONE, <commit>`.
+Reversible, and the standing instruction is that the header moves in the same commit as
+the task's own docs entry.
+
+### 00 — Task 04 has no standalone `docs/` report
+
+Its findings went into `backend/docs/SCORING.md` instead, so an agent asked to check
+against "task 04's budget" finds no such document — which is half of why task 18 concluded
+04 was undone. Recorded for task 34 to decide whether to promote them. Reversible.

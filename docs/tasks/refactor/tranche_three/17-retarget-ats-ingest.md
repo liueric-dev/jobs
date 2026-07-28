@@ -1,6 +1,6 @@
 # 17 — Retarget `ats.py`
 
-**Status:** todo. **Depends on:** 16. **Blocks:** nothing.
+**Status:** DONE, `597662b`. **Depends on:** 16. **Blocks:** nothing.
 **Estimated yield:** 50–150 relevant postings/day.
 
 The code is fine. The company list is wrong. This task changes the list and adds the

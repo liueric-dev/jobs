@@ -1,6 +1,6 @@
 # 09 — Fetcher harness
 
-**Status:** todo. **Depends on:** 02. **Blocks:** all of Phase 3 — see below.
+**Status:** DONE, `68f026f`. **Depends on:** 02. **Blocks:** all of Phase 3 — see below.
 
 **This task is [`docs/ingestion_tests/05-fetcher-harness.md`](../../ingestion_tests/05-fetcher-harness.md).**
 HTTP cassettes and a scratch database for the non-LLM scripts.

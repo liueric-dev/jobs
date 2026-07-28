@@ -1,6 +1,6 @@
 # 05 — Corpus volume under a widened gate
 
-**Status:** todo. **Depends on:** nothing. **Blocks:** 04's projection, 10, 12.
+**Status:** DONE, `e4bddd3`. **Depends on:** nothing. **Blocks:** 04's projection, 10, 12.
 
 Answer one question with SQL and no LLM calls: **how many postings would a
 Pursuit-targeted gate admit, per day?**

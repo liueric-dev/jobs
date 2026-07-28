@@ -1,6 +1,6 @@
 # 18 — Workday CXS ingest, and upstream gating
 
-**Status:** todo. **Depends on:** 09, 16, 10. **Blocks:** nothing.
+**Status:** DONE, `fabe381`. **Depends on:** 09, 16, 10. **Blocks:** nothing.
 **Estimated yield:** 80–200 relevant postings/day.
 
 The highest-value source in the plan and the only one with real engineering risk.

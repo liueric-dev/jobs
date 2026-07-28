@@ -1,6 +1,6 @@
 # 14 — NYC Open Data ingest
 
-**Status:** todo. **Depends on:** 09, 10. **Blocks:** nothing.
+**Status:** DONE, `7221620`. **Depends on:** 09, 10. **Blocks:** nothing.
 **Estimated yield:** 20–60 relevant postings/day.
 
 The single best free NYC source: full descriptions, salary, and an explicit closure
