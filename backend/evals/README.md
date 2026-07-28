@@ -36,6 +36,10 @@ python3 -m evals run --task extract --corpus evals/fixtures/corpus-v1.jsonl \
 # 3. Measure cost and latency honestly -- never from cache.
 python3 -m evals run --task extract --corpus evals/fixtures/corpus-v1.jsonl \
     --model "$SPEC" --no-cache
+
+# 4. Ask the same model the same thing three times: how stable is it?
+python3 -m evals selfcheck --model "$SPEC" --repeat 3 \
+    --corpus evals/fixtures/corpus-v2.jsonl
 ```
 
 `.env` is loaded the same way `run-daily.py` loads it, with the same
@@ -57,10 +61,34 @@ Parsing splits on the **first two** `@` only. `tools/compare-models.py:213`
 splits on every `@` and treats the last field as the key, which truncates any
 key containing one; base URLs do not contain a bare `@`, keys routinely do.
 
+## Self-consistency, and the cache bug that would fake it
+
+`selfcheck` runs the corpus N times and reports how often the model agrees
+with **itself** — the floor under every other number here. A model that
+disagrees with itself 15% of the time cannot be scored at 80% against human
+labels and called 80% accurate.
+
+The cache is content-addressed, and a self-consistency run asks the same
+model the same prompt on purpose. Without disambiguation repeat 2 reads back
+repeat 1's stored answer and the run reports **100% agreement** — on exactly
+the quantity it was built to measure, with no error and nothing in the output
+to suggest anything is wrong. Two defences: `cache.key_for()` takes a
+`repeat_index` that enters the digest, and `runner.run_repeated()` turns
+caching off by default whenever `repeat > 1`. `tests/test_evals.py`
+demonstrates the failure rather than only asserting the fix — with the index
+removed the same run reports 100%, and the test pins that.
+
+Read the numbers in `docs/ingestion_tests/README.md`. Three columns, because
+they answer different questions: `agree2` (repeat 1 vs 2) is comparable to a
+two-run figure and carries a valid Wilson interval; `unan` is all N
+identical; `pair` uses every pair and gets no interval, because pairs from
+one record are not independent trials.
+
 ## What is cached, and what is never cached
 
 The cache is keyed on `sha256(backend, model, base_url, temperature,
-json_object, prompt)` and stores the **raw response text, pre-`parse_json`** —
+json_object, prompt[, repeat_index])` and stores the **raw response text,
+pre-`parse_json`** —
 fences, chatter, truncation and all. That is what makes it possible to iterate
 on `llm.parse_json()` and on coercion code against real malformed answers.
 
@@ -115,6 +143,7 @@ Prose fields (`summary`) are not compared at all. Two correct summaries differ.
 | `corpus.py` | fixtures, stratified sampling, read-only production snapshot |
 | `cache.py` | content-addressed response store |
 | `runner.py` | executes a task over a corpus; records provenance |
+| `metrics.py` | per-field comparison rules, Wilson intervals, platform split |
 | `report.py` | human table and JSONL; enforces the cost/latency rule |
 | `tasks/` | thin adapters over the real `build_prompt`/`normalize` |
 
@@ -122,13 +151,33 @@ Tasks are adapters on purpose. The prompt text and coercion rules stay in
 `extract.py` and `score.py`; a copy here would drift, and an eval that
 measures a copy of the prompt measures nothing.
 
+## The frozen corpora
+
+| Fixture | Snapshotted | n | Cited by |
+|---|---|---|---|
+| `corpus-v1.jsonl` | 2026-07-27 | 120 | task 04's quota and wall-clock figures |
+| `corpus-v2.jsonl` | 2026-07-28 | 120 | task 06's n=115 self-consistency figures |
+
+Both are pinned by the sha256 of their sorted `job_id` list, as literals in
+`tests/test_evals.py`. A fixture regenerated in place would silently change
+what every published figure was measured on, and the figures would still be
+sitting in the docs, unchanged and now wrong. Never mutate one — snapshot a
+new version.
+
+They overlap by only 17 records: greenhouse and ashby ingest continuously, so
+a day's gap replaces most of the clean end, while `lever` (**9 rows in all of
+production**), `hn_whoishiring` and `weworkremotely` move slowly. That makes
+v2 close to an independent sample rather than a re-run of v1.
+
 ## Status
 
-Phase 1 (substrate) is built and tested. Still to come:
+Phase 1 (substrate) is built and tested. Phase 2 is partly landed:
+`metrics.py` and the `selfcheck` subcommand exist and the self-consistency
+floor is measured. Still to come:
 
-- **Phase 2** — golden set and per-field agreement metrics. `metrics.py`,
-  `labels.py` and the labelling CLI do not exist yet. `tasks/extract.py`
-  already declares `FIELD_KINDS` and `PRIORITY_FIELDS` for them to read.
+- **Phase 2 (rest)** — the golden set. `labels.py` and the labelling CLI do
+  not exist yet. `tasks/extract.py` already declares `FIELD_KINDS` and
+  `PRIORITY_FIELDS`, and `metrics.py` reads them.
 - **Phase 3** — `score.py` output validation (`score.py:359-361` stores
   `fit_score` and `primary_track` with no coercion) plus a `score` task.
 - **Phase 4** — the six non-LLM fetchers: recorded HTTP fixtures and a scratch

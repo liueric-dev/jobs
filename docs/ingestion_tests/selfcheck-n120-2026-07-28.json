@@ -1,0 +1,3967 @@
+{
+  "fields": {
+    "advanced_degree_required": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7961166989641515,
+            1.0
+          ],
+          "agree2_k": 15,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 15,
+          "pairwise": 1.0,
+          "unan_k": 15,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7961166989641515,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8388748419471806,
+            1.0
+          ],
+          "agree2_k": 20,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 20,
+          "pairwise": 1.0,
+          "unan_k": 20,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8388748419471806,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8453609810751531,
+            1.0
+          ],
+          "agree2_k": 21,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 21,
+          "pairwise": 1.0,
+          "unan_k": 21,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8453609810751531,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 16,
+          "pairwise": 1.0,
+          "unan_k": 16,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8063923194655637,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ],
+        "agree2_k": 34,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 34,
+        "pairwise": 1.0,
+        "unan_k": 34,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9547219145675847,
+          1.0
+        ],
+        "agree2_k": 81,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 81,
+        "pairwise": 1.0,
+        "unan_k": 81,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9547219145675847,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9676757685506868,
+          0.9999999999999999
+        ],
+        "agree2_k": 115,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 115,
+        "pairwise": 1.0,
+        "unan_k": 115,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9676757685506868,
+          0.9999999999999999
+        ]
+      }
+    },
+    "ai_involvement": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [
+            [
+              "builds_llm_features <-> core_ml_research",
+              1
+            ],
+            [
+              "builds_llm_features <-> uses_ai_tools",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.9215686274509804,
+          "unan_k": 15,
+          "unanimous": 0.8823529411764706,
+          "unanimous_ci": [
+            0.6566364940511413,
+            0.9671202262362073
+          ]
+        },
+        "builtin": {
+          "agree2": 0.8666666666666667,
+          "agree2_ci": [
+            0.6211801716767764,
+            0.9626387408969346
+          ],
+          "agree2_k": 13,
+          "flips": [
+            [
+              "builds_llm_features <-> uses_ai_tools",
+              1
+            ],
+            [
+              "none <-> uses_ai_tools",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 15,
+          "pairwise": 0.9111111111111112,
+          "unan_k": 13,
+          "unanimous": 0.8666666666666667,
+          "unanimous_ci": [
+            0.6211801716767764,
+            0.9626387408969346
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8388748419471806,
+            1.0
+          ],
+          "agree2_k": 20,
+          "flips": [
+            [
+              "builds_llm_features <-> uses_ai_tools",
+              2
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 20,
+          "pairwise": 0.9333333333333333,
+          "unan_k": 18,
+          "unanimous": 0.9,
+          "unanimous_ci": [
+            0.6989663547715128,
+            0.9721335187862319
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.9411764705882353,
+          "agree2_ci": [
+            0.7301796936242461,
+            0.9895395990150025
+          ],
+          "agree2_k": 16,
+          "flips": [
+            [
+              "builds_llm_features <-> uses_ai_tools",
+              1
+            ],
+            [
+              "none <-> uses_ai_tools",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.9215686274509803,
+          "unan_k": 15,
+          "unanimous": 0.8823529411764706,
+          "unanimous_ci": [
+            0.6566364940511413,
+            0.9671202262362073
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 0.8571428571428571,
+          "agree2_ci": [
+            0.6536393971937906,
+            0.9501898750027473
+          ],
+          "agree2_k": 18,
+          "flips": [
+            [
+              "builds_llm_features <-> core_ml_research <-> none",
+              1
+            ],
+            [
+              "builds_llm_features <-> none",
+              1
+            ],
+            [
+              "builds_llm_features <-> none <-> uses_ai_tools",
+              1
+            ],
+            [
+              "builds_llm_features <-> uses_ai_tools",
+              1
+            ],
+            [
+              "core_ml_research <-> none",
+              1
+            ],
+            [
+              "none <-> uses_ai_tools",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 21,
+          "pairwise": 0.7777777777777779,
+          "unan_k": 15,
+          "unanimous": 0.7142857142857143,
+          "unanimous_ci": [
+            0.5004361928391441,
+            0.8618613704787788
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [
+            [
+              "none <-> uses_ai_tools",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 16,
+          "pairwise": 0.9583333333333333,
+          "unan_k": 15,
+          "unanimous": 0.9375,
+          "unanimous_ci": [
+            0.7167126242970107,
+            0.9888806552353576
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.9705882352941176,
+        "agree2_ci": [
+          0.8508442670731406,
+          0.9947890937237309
+        ],
+        "agree2_k": 33,
+        "flips": [
+          [
+            "builds_llm_features <-> uses_ai_tools",
+            2
+          ],
+          [
+            "builds_llm_features <-> core_ml_research",
+            1
+          ],
+          [
+            "none <-> uses_ai_tools",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 34,
+        "pairwise": 0.9215686274509803,
+        "unan_k": 30,
+        "unanimous": 0.8823529411764706,
+        "unanimous_ci": [
+          0.7337915722962817,
+          0.9532855333511766
+        ]
+      },
+      "messy": {
+        "agree2": 0.9382716049382716,
+        "agree2_ci": [
+          0.8635075236315787,
+          0.9733474879029708
+        ],
+        "agree2_k": 76,
+        "flips": [
+          [
+            "builds_llm_features <-> uses_ai_tools",
+            4
+          ],
+          [
+            "none <-> uses_ai_tools",
+            3
+          ],
+          [
+            "builds_llm_features <-> core_ml_research <-> none",
+            1
+          ],
+          [
+            "builds_llm_features <-> none",
+            1
+          ],
+          [
+            "builds_llm_features <-> none <-> uses_ai_tools",
+            1
+          ],
+          [
+            "core_ml_research <-> none",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 81,
+        "pairwise": 0.9012345679012346,
+        "unan_k": 70,
+        "unanimous": 0.8641975308641975,
+        "unanimous_ci": [
+          0.7729693623122125,
+          0.9224453655826947
+        ]
+      },
+      "overall": {
+        "agree2": 0.9478260869565217,
+        "agree2_ci": [
+          0.8908294548072233,
+          0.9758714509381745
+        ],
+        "agree2_k": 109,
+        "flips": [
+          [
+            "builds_llm_features <-> uses_ai_tools",
+            6
+          ],
+          [
+            "none <-> uses_ai_tools",
+            4
+          ],
+          [
+            "builds_llm_features <-> core_ml_research",
+            1
+          ],
+          [
+            "builds_llm_features <-> core_ml_research <-> none",
+            1
+          ],
+          [
+            "builds_llm_features <-> none",
+            1
+          ],
+          [
+            "builds_llm_features <-> none <-> uses_ai_tools",
+            1
+          ],
+          [
+            "core_ml_research <-> none",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 115,
+        "pairwise": 0.9072463768115941,
+        "unan_k": 100,
+        "unanimous": 0.8695652173913043,
+        "unanimous_ci": [
+          0.7959024584651849,
+          0.9193361530722793
+        ]
+      }
+    },
+    "comp_currency": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.9411764705882353,
+          "agree2_ci": [
+            0.7301796936242461,
+            0.9895395990150025
+          ],
+          "agree2_k": 16,
+          "flips": [
+            [
+              "CAD <-> None",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.9607843137254903,
+          "unan_k": 16,
+          "unanimous": 0.9411764705882353,
+          "unanimous_ci": [
+            0.7301796936242461,
+            0.9895395990150025
+          ]
+        },
+        "builtin": {
+          "agree2": 0.9333333333333333,
+          "agree2_ci": [
+            0.7018347012621998,
+            0.9881331045067315
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "None <-> USD",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 15,
+          "pairwise": 0.9555555555555555,
+          "unan_k": 14,
+          "unanimous": 0.9333333333333333,
+          "unanimous_ci": [
+            0.7018347012621998,
+            0.9881331045067315
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.95,
+          "agree2_ci": [
+            0.763868806553258,
+            0.9911185511992047
+          ],
+          "agree2_k": 19,
+          "flips": [
+            [
+              "None <-> USD",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 20,
+          "pairwise": 0.9666666666666666,
+          "unan_k": 19,
+          "unanimous": 0.95,
+          "unanimous_ci": [
+            0.763868806553258,
+            0.9911185511992047
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8453609810751531,
+            1.0
+          ],
+          "agree2_k": 21,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 21,
+          "pairwise": 1.0,
+          "unan_k": 21,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8453609810751531,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 16,
+          "pairwise": 1.0,
+          "unan_k": 16,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8063923194655637,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.9705882352941176,
+        "agree2_ci": [
+          0.8508442670731406,
+          0.9947890937237309
+        ],
+        "agree2_k": 33,
+        "flips": [
+          [
+            "CAD <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 34,
+        "pairwise": 0.980392156862745,
+        "unan_k": 33,
+        "unanimous": 0.9705882352941176,
+        "unanimous_ci": [
+          0.8508442670731406,
+          0.9947890937237309
+        ]
+      },
+      "messy": {
+        "agree2": 0.9753086419753086,
+        "agree2_ci": [
+          0.9143727407780347,
+          0.9932024125763359
+        ],
+        "agree2_k": 79,
+        "flips": [
+          [
+            "None <-> USD",
+            2
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 81,
+        "pairwise": 0.9835390946502056,
+        "unan_k": 79,
+        "unanimous": 0.9753086419753086,
+        "unanimous_ci": [
+          0.9143727407780347,
+          0.9932024125763359
+        ]
+      },
+      "overall": {
+        "agree2": 0.9739130434782609,
+        "agree2_ci": [
+          0.9260993818824759,
+          0.9910889552655666
+        ],
+        "agree2_k": 112,
+        "flips": [
+          [
+            "None <-> USD",
+            2
+          ],
+          [
+            "CAD <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 115,
+        "pairwise": 0.9826086956521738,
+        "unan_k": 112,
+        "unanimous": 0.9739130434782609,
+        "unanimous_ci": [
+          0.9260993818824759,
+          0.9910889552655666
+        ]
+      }
+    },
+    "comp_max": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 0.9333333333333333,
+          "agree2_ci": [
+            0.7018347012621998,
+            0.9881331045067315
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "301600 <-> 5800 <-> None",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "int",
+          "n": 15,
+          "pairwise": 0.9333333333333333,
+          "unan_k": 14,
+          "unanimous": 0.9333333333333333,
+          "unanimous_ci": [
+            0.7018347012621998,
+            0.9881331045067315
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8388748419471806,
+            1.0
+          ],
+          "agree2_k": 20,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 20,
+          "pairwise": 1.0,
+          "unan_k": 20,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8388748419471806,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8453609810751531,
+            1.0
+          ],
+          "agree2_k": 21,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 21,
+          "pairwise": 1.0,
+          "unan_k": 21,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8453609810751531,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 16,
+          "pairwise": 1.0,
+          "unan_k": 16,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8063923194655637,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ],
+        "agree2_k": 34,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 34,
+        "pairwise": 1.0,
+        "unan_k": 34,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ]
+      },
+      "messy": {
+        "agree2": 0.9876543209876543,
+        "agree2_ci": [
+          0.9333311840195164,
+          0.9978173499414611
+        ],
+        "agree2_k": 80,
+        "flips": [
+          [
+            "301600 <-> 5800 <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 81,
+        "pairwise": 0.9876543209876543,
+        "unan_k": 80,
+        "unanimous": 0.9876543209876543,
+        "unanimous_ci": [
+          0.9333311840195164,
+          0.9978173499414611
+        ]
+      },
+      "overall": {
+        "agree2": 0.991304347826087,
+        "agree2_ci": [
+          0.9523832736556862,
+          0.9984633510941191
+        ],
+        "agree2_k": 114,
+        "flips": [
+          [
+            "301600 <-> 5800 <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 115,
+        "pairwise": 0.991304347826087,
+        "unan_k": 114,
+        "unanimous": 0.991304347826087,
+        "unanimous_ci": [
+          0.9523832736556862,
+          0.9984633510941191
+        ]
+      }
+    },
+    "comp_min": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 0.9333333333333333,
+          "agree2_ci": [
+            0.7018347012621998,
+            0.9881331045067315
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "234000 <-> 4500 <-> None",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "int",
+          "n": 15,
+          "pairwise": 0.9333333333333333,
+          "unan_k": 14,
+          "unanimous": 0.9333333333333333,
+          "unanimous_ci": [
+            0.7018347012621998,
+            0.9881331045067315
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8388748419471806,
+            1.0
+          ],
+          "agree2_k": 20,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 20,
+          "pairwise": 1.0,
+          "unan_k": 20,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8388748419471806,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8453609810751531,
+            1.0
+          ],
+          "agree2_k": 21,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 21,
+          "pairwise": 1.0,
+          "unan_k": 21,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8453609810751531,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 16,
+          "pairwise": 1.0,
+          "unan_k": 16,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8063923194655637,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ],
+        "agree2_k": 34,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 34,
+        "pairwise": 1.0,
+        "unan_k": 34,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ]
+      },
+      "messy": {
+        "agree2": 0.9876543209876543,
+        "agree2_ci": [
+          0.9333311840195164,
+          0.9978173499414611
+        ],
+        "agree2_k": 80,
+        "flips": [
+          [
+            "234000 <-> 4500 <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 81,
+        "pairwise": 0.9876543209876543,
+        "unan_k": 80,
+        "unanimous": 0.9876543209876543,
+        "unanimous_ci": [
+          0.9333311840195164,
+          0.9978173499414611
+        ]
+      },
+      "overall": {
+        "agree2": 0.991304347826087,
+        "agree2_ci": [
+          0.9523832736556862,
+          0.9984633510941191
+        ],
+        "agree2_k": 114,
+        "flips": [
+          [
+            "234000 <-> 4500 <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 115,
+        "pairwise": 0.991304347826087,
+        "unan_k": 114,
+        "unanimous": 0.991304347826087,
+        "unanimous_ci": [
+          0.9523832736556862,
+          0.9984633510941191
+        ]
+      }
+    },
+    "customer_facing": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 0.8666666666666667,
+          "agree2_ci": [
+            0.6211801716767764,
+            0.9626387408969346
+          ],
+          "agree2_k": 13,
+          "flips": [
+            [
+              "False <-> True",
+              3
+            ]
+          ],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 15,
+          "pairwise": 0.8666666666666668,
+          "unan_k": 12,
+          "unanimous": 0.8,
+          "unanimous_ci": [
+            0.5481455128483065,
+            0.9295245065301844
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8388748419471806,
+            1.0
+          ],
+          "agree2_k": 20,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 20,
+          "pairwise": 1.0,
+          "unan_k": 20,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8388748419471806,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.9411764705882353,
+          "agree2_ci": [
+            0.7301796936242461,
+            0.9895395990150025
+          ],
+          "agree2_k": 16,
+          "flips": [
+            [
+              "False <-> True",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 17,
+          "pairwise": 0.9607843137254903,
+          "unan_k": 16,
+          "unanimous": 0.9411764705882353,
+          "unanimous_ci": [
+            0.7301796936242461,
+            0.9895395990150025
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 0.9047619047619048,
+          "agree2_ci": [
+            0.7108586092608176,
+            0.9734812325619255
+          ],
+          "agree2_k": 19,
+          "flips": [
+            [
+              "False <-> True",
+              2
+            ]
+          ],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 21,
+          "pairwise": 0.9365079365079365,
+          "unan_k": 19,
+          "unanimous": 0.9047619047619048,
+          "unanimous_ci": [
+            0.7108586092608176,
+            0.9734812325619255
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [
+            [
+              "False <-> True",
+              2
+            ]
+          ],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 16,
+          "pairwise": 0.9166666666666666,
+          "unan_k": 14,
+          "unanimous": 0.875,
+          "unanimous_ci": [
+            0.639771727342413,
+            0.9650225122567595
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.9705882352941176,
+        "agree2_ci": [
+          0.8508442670731406,
+          0.9947890937237309
+        ],
+        "agree2_k": 33,
+        "flips": [
+          [
+            "False <-> True",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 34,
+        "pairwise": 0.980392156862745,
+        "unan_k": 33,
+        "unanimous": 0.9705882352941176,
+        "unanimous_ci": [
+          0.8508442670731406,
+          0.9947890937237309
+        ]
+      },
+      "messy": {
+        "agree2": 0.9506172839506173,
+        "agree2_ci": [
+          0.8797976976951905,
+          0.9806306944459662
+        ],
+        "agree2_k": 77,
+        "flips": [
+          [
+            "False <-> True",
+            7
+          ]
+        ],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 81,
+        "pairwise": 0.9423868312757203,
+        "unan_k": 74,
+        "unanimous": 0.9135802469135802,
+        "unanimous_ci": [
+          0.8322008336612947,
+          0.9575074166600406
+        ]
+      },
+      "overall": {
+        "agree2": 0.9565217391304348,
+        "agree2_ci": [
+          0.9022421506531108,
+          0.9812878988931687
+        ],
+        "agree2_k": 110,
+        "flips": [
+          [
+            "False <-> True",
+            8
+          ]
+        ],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 115,
+        "pairwise": 0.9536231884057971,
+        "unan_k": 107,
+        "unanimous": 0.9304347826086956,
+        "unanimous_ci": [
+          0.8687112719351276,
+          0.9643313462085071
+        ]
+      }
+    },
+    "employment_type": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.7647058823529411,
+          "agree2_ci": [
+            0.5273820188043501,
+            0.9044495567791988
+          ],
+          "agree2_k": 13,
+          "flips": [
+            [
+              "full_time <-> unknown",
+              3
+            ],
+            [
+              "contract <-> full_time",
+              1
+            ],
+            [
+              "contract <-> full_time <-> unknown",
+              1
+            ],
+            [
+              "contract <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.7450980392156863,
+          "unan_k": 11,
+          "unanimous": 0.6470588235294118,
+          "unanimous_ci": [
+            0.41300363485218694,
+            0.8269027960275627
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7961166989641515,
+            1.0
+          ],
+          "agree2_k": 15,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 15,
+          "pairwise": 1.0,
+          "unan_k": 15,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7961166989641515,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.85,
+          "agree2_ci": [
+            0.6395811352592431,
+            0.9476312541037835
+          ],
+          "agree2_k": 17,
+          "flips": [
+            [
+              "full_time <-> unknown",
+              2
+            ],
+            [
+              "contract <-> full_time",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 20,
+          "pairwise": 0.9,
+          "unan_k": 17,
+          "unanimous": 0.85,
+          "unanimous_ci": [
+            0.6395811352592431,
+            0.9476312541037835
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.9411764705882353,
+          "agree2_ci": [
+            0.7301796936242461,
+            0.9895395990150025
+          ],
+          "agree2_k": 16,
+          "flips": [
+            [
+              "full_time <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.9607843137254901,
+          "unan_k": 16,
+          "unanimous": 0.9411764705882353,
+          "unanimous_ci": [
+            0.7301796936242461,
+            0.9895395990150025
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8453609810751531,
+            1.0
+          ],
+          "agree2_k": 21,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 21,
+          "pairwise": 1.0,
+          "unan_k": 21,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8453609810751531,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 0.8888888888888888,
+          "agree2_ci": [
+            0.565000294423344,
+            0.980109112361455
+          ],
+          "agree2_k": 8,
+          "flips": [
+            [
+              "full_time <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 9,
+          "pairwise": 0.925925925925926,
+          "unan_k": 8,
+          "unanimous": 0.8888888888888888,
+          "unanimous_ci": [
+            0.565000294423344,
+            0.980109112361455
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.639771727342413,
+            0.9650225122567595
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "full_time <-> unknown",
+              2
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 16,
+          "pairwise": 0.9166666666666667,
+          "unan_k": 14,
+          "unanimous": 0.875,
+          "unanimous_ci": [
+            0.639771727342413,
+            0.9650225122567595
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.8529411764705882,
+        "agree2_ci": [
+          0.6987194350454783,
+          0.9355055855521753
+        ],
+        "agree2_k": 29,
+        "flips": [
+          [
+            "full_time <-> unknown",
+            4
+          ],
+          [
+            "contract <-> full_time",
+            1
+          ],
+          [
+            "contract <-> full_time <-> unknown",
+            1
+          ],
+          [
+            "contract <-> unknown",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 34,
+        "pairwise": 0.8529411764705881,
+        "unan_k": 27,
+        "unanimous": 0.7941176470588235,
+        "unanimous_ci": [
+          0.632016119488364,
+          0.8965047310096808
+        ]
+      },
+      "messy": {
+        "agree2": 0.9259259259259259,
+        "agree2_ci": [
+          0.8476712613403236,
+          0.9656103695876189
+        ],
+        "agree2_k": 75,
+        "flips": [
+          [
+            "full_time <-> unknown",
+            5
+          ],
+          [
+            "contract <-> full_time",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 81,
+        "pairwise": 0.9506172839506171,
+        "unan_k": 75,
+        "unanimous": 0.9259259259259259,
+        "unanimous_ci": [
+          0.8476712613403236,
+          0.9656103695876189
+        ]
+      },
+      "overall": {
+        "agree2": 0.9043478260869565,
+        "agree2_ci": [
+          0.8368077057238426,
+          0.9457474810171478
+        ],
+        "agree2_k": 104,
+        "flips": [
+          [
+            "full_time <-> unknown",
+            9
+          ],
+          [
+            "contract <-> full_time",
+            2
+          ],
+          [
+            "contract <-> full_time <-> unknown",
+            1
+          ],
+          [
+            "contract <-> unknown",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 115,
+        "pairwise": 0.9217391304347825,
+        "unan_k": 102,
+        "unanimous": 0.8869565217391304,
+        "unanimous_ci": [
+          0.8161609755177398,
+          0.9327359236214875
+        ]
+      }
+    },
+    "gap_friendly_language": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7961166989641515,
+            1.0
+          ],
+          "agree2_k": 15,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 15,
+          "pairwise": 1.0,
+          "unan_k": 15,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7961166989641515,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8388748419471806,
+            1.0
+          ],
+          "agree2_k": 20,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 20,
+          "pairwise": 1.0,
+          "unan_k": 20,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8388748419471806,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8453609810751531,
+            1.0
+          ],
+          "agree2_k": 21,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 21,
+          "pairwise": 1.0,
+          "unan_k": 21,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8453609810751531,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 16,
+          "pairwise": 1.0,
+          "unan_k": 16,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8063923194655637,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ],
+        "agree2_k": 34,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 34,
+        "pairwise": 1.0,
+        "unan_k": 34,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9547219145675847,
+          1.0
+        ],
+        "agree2_k": 81,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 81,
+        "pairwise": 1.0,
+        "unan_k": 81,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9547219145675847,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9676757685506868,
+          0.9999999999999999
+        ],
+        "agree2_k": 115,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 115,
+        "pairwise": 1.0,
+        "unan_k": 115,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9676757685506868,
+          0.9999999999999999
+        ]
+      }
+    },
+    "ml_research_required": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7961166989641515,
+            1.0
+          ],
+          "agree2_k": 15,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 15,
+          "pairwise": 1.0,
+          "unan_k": 15,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7961166989641515,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8388748419471806,
+            1.0
+          ],
+          "agree2_k": 20,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 20,
+          "pairwise": 1.0,
+          "unan_k": 20,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8388748419471806,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8453609810751531,
+            1.0
+          ],
+          "agree2_k": 21,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 21,
+          "pairwise": 1.0,
+          "unan_k": 21,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8453609810751531,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 16,
+          "pairwise": 1.0,
+          "unan_k": 16,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8063923194655637,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ],
+        "agree2_k": 34,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 34,
+        "pairwise": 1.0,
+        "unan_k": 34,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9547219145675847,
+          1.0
+        ],
+        "agree2_k": 81,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 81,
+        "pairwise": 1.0,
+        "unan_k": 81,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9547219145675847,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9676757685506868,
+          0.9999999999999999
+        ],
+        "agree2_k": 115,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 115,
+        "pairwise": 1.0,
+        "unan_k": 115,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9676757685506868,
+          0.9999999999999999
+        ]
+      }
+    },
+    "remote_policy": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.8235294117647058,
+          "agree2_ci": [
+            0.5897054143116588,
+            0.9380887336237901
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "onsite <-> unknown",
+              2
+            ],
+            [
+              "remote_anywhere <-> remote_local",
+              2
+            ],
+            [
+              "remote_anywhere <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.8039215686274509,
+          "unan_k": 12,
+          "unanimous": 0.7058823529411765,
+          "unanimous_ci": [
+            0.4686688993346016,
+            0.8672001038970478
+          ]
+        },
+        "builtin": {
+          "agree2": 0.8666666666666667,
+          "agree2_ci": [
+            0.6211801716767764,
+            0.9626387408969346
+          ],
+          "agree2_k": 13,
+          "flips": [
+            [
+              "hybrid <-> remote_local",
+              1
+            ],
+            [
+              "hybrid <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 15,
+          "pairwise": 0.9111111111111112,
+          "unan_k": 13,
+          "unanimous": 0.8666666666666667,
+          "unanimous_ci": [
+            0.6211801716767764,
+            0.9626387408969346
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.75,
+          "agree2_ci": [
+            0.531299122381256,
+            0.8881382985923343
+          ],
+          "agree2_k": 15,
+          "flips": [
+            [
+              "onsite <-> unknown",
+              4
+            ],
+            [
+              "remote_anywhere <-> remote_local",
+              3
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 20,
+          "pairwise": 0.7666666666666667,
+          "unan_k": 13,
+          "unanimous": 0.65,
+          "unanimous_ci": [
+            0.43285427668523624,
+            0.818808175898918
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.7647058823529411,
+          "agree2_ci": [
+            0.5273820188043501,
+            0.9044495567791988
+          ],
+          "agree2_k": 13,
+          "flips": [
+            [
+              "onsite <-> unknown",
+              4
+            ],
+            [
+              "remote_anywhere <-> remote_local",
+              3
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.7254901960784315,
+          "unan_k": 10,
+          "unanimous": 0.5882352941176471,
+          "unanimous_ci": [
+            0.36005442642999785,
+            0.7838894320978518
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 0.8571428571428571,
+          "agree2_ci": [
+            0.6536393971937906,
+            0.9501898750027473
+          ],
+          "agree2_k": 18,
+          "flips": [
+            [
+              "remote_anywhere <-> remote_local",
+              2
+            ],
+            [
+              "hybrid <-> remote_local",
+              1
+            ],
+            [
+              "remote_anywhere <-> remote_local <-> unknown",
+              1
+            ],
+            [
+              "remote_anywhere <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 21,
+          "pairwise": 0.8253968253968254,
+          "unan_k": 16,
+          "unanimous": 0.7619047619047619,
+          "unanimous_ci": [
+            0.5490882631704924,
+            0.8937198697736354
+          ]
+        },
+        "lever": {
+          "agree2": 0.7777777777777778,
+          "agree2_ci": [
+            0.4525889691069889,
+            0.9367748928821533
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "onsite <-> unknown",
+              3
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 9,
+          "pairwise": 0.7777777777777778,
+          "unan_k": 6,
+          "unanimous": 0.6666666666666666,
+          "unanimous_ci": [
+            0.3542021355803963,
+            0.879416181613089
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.639771727342413,
+            0.9650225122567595
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "hybrid <-> remote_anywhere",
+              3
+            ],
+            [
+              "remote_anywhere <-> remote_local",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 16,
+          "pairwise": 0.8333333333333334,
+          "unan_k": 12,
+          "unanimous": 0.75,
+          "unanimous_ci": [
+            0.5050168346449122,
+            0.8981793250878696
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.7941176470588235,
+        "agree2_ci": [
+          0.632016119488364,
+          0.8965047310096808
+        ],
+        "agree2_k": 27,
+        "flips": [
+          [
+            "onsite <-> unknown",
+            6
+          ],
+          [
+            "remote_anywhere <-> remote_local",
+            5
+          ],
+          [
+            "remote_anywhere <-> unknown",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 34,
+        "pairwise": 0.7647058823529411,
+        "unan_k": 22,
+        "unanimous": 0.6470588235294118,
+        "unanimous_ci": [
+          0.4791396311978174,
+          0.785120794051205
+        ]
+      },
+      "messy": {
+        "agree2": 0.8271604938271605,
+        "agree2_ci": [
+          0.7305386248522877,
+          0.8941559612227986
+        ],
+        "agree2_k": 67,
+        "flips": [
+          [
+            "onsite <-> unknown",
+            7
+          ],
+          [
+            "remote_anywhere <-> remote_local",
+            6
+          ],
+          [
+            "hybrid <-> remote_anywhere",
+            3
+          ],
+          [
+            "hybrid <-> remote_local",
+            2
+          ],
+          [
+            "hybrid <-> unknown",
+            1
+          ],
+          [
+            "remote_anywhere <-> remote_local <-> unknown",
+            1
+          ],
+          [
+            "remote_anywhere <-> unknown",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 81,
+        "pairwise": 0.8230452674897122,
+        "unan_k": 60,
+        "unanimous": 0.7407407407407407,
+        "unanimous_ci": [
+          0.6359565111747224,
+          0.8237244106541145
+        ]
+      },
+      "overall": {
+        "agree2": 0.8173913043478261,
+        "agree2_ci": [
+          0.7369174890728354,
+          0.87734625965934
+        ],
+        "agree2_k": 94,
+        "flips": [
+          [
+            "onsite <-> unknown",
+            13
+          ],
+          [
+            "remote_anywhere <-> remote_local",
+            11
+          ],
+          [
+            "hybrid <-> remote_anywhere",
+            3
+          ],
+          [
+            "hybrid <-> remote_local",
+            2
+          ],
+          [
+            "remote_anywhere <-> unknown",
+            2
+          ],
+          [
+            "hybrid <-> unknown",
+            1
+          ],
+          [
+            "remote_anywhere <-> remote_local <-> unknown",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 115,
+        "pairwise": 0.8057971014492752,
+        "unan_k": 82,
+        "unanimous": 0.7130434782608696,
+        "unanimous_ci": [
+          0.6245398291343714,
+          0.7877741939872255
+        ]
+      }
+    },
+    "role_archetype": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.8823529411764706,
+          "agree2_ci": [
+            0.6566364940511413,
+            0.9671202262362073
+          ],
+          "agree2_k": 15,
+          "flips": [
+            [
+              "data <-> other",
+              1
+            ],
+            [
+              "other <-> solutions",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.9215686274509803,
+          "unan_k": 15,
+          "unanimous": 0.8823529411764706,
+          "unanimous_ci": [
+            0.6566364940511413,
+            0.9671202262362073
+          ]
+        },
+        "builtin": {
+          "agree2": 0.8,
+          "agree2_ci": [
+            0.5481455128483065,
+            0.9295245065301844
+          ],
+          "agree2_k": 12,
+          "flips": [
+            [
+              "other <-> pm",
+              2
+            ],
+            [
+              "backend <-> ml_research <-> other",
+              1
+            ],
+            [
+              "other <-> security",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 15,
+          "pairwise": 0.8,
+          "unan_k": 11,
+          "unanimous": 0.7333333333333333,
+          "unanimous_ci": [
+            0.4804956594401943,
+            0.8910254667430761
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.9,
+          "agree2_ci": [
+            0.6989663547715128,
+            0.9721335187862319
+          ],
+          "agree2_k": 18,
+          "flips": [
+            [
+              "ai_integration <-> backend",
+              1
+            ],
+            [
+              "data <-> other",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 20,
+          "pairwise": 0.9333333333333332,
+          "unan_k": 18,
+          "unanimous": 0.9,
+          "unanimous_ci": [
+            0.6989663547715128,
+            0.9721335187862319
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.8235294117647058,
+          "agree2_ci": [
+            0.5897054143116588,
+            0.9380887336237901
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "backend <-> data",
+              1
+            ],
+            [
+              "other <-> pm",
+              1
+            ],
+            [
+              "other <-> solutions",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.8823529411764706,
+          "unan_k": 14,
+          "unanimous": 0.8235294117647058,
+          "unanimous_ci": [
+            0.5897054143116588,
+            0.9380887336237901
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 0.7619047619047619,
+          "agree2_ci": [
+            0.5490882631704924,
+            0.8937198697736354
+          ],
+          "agree2_k": 16,
+          "flips": [
+            [
+              "backend <-> other",
+              2
+            ],
+            [
+              "ai_integration <-> forward_deployed <-> other",
+              1
+            ],
+            [
+              "backend <-> fullstack <-> ml_research",
+              1
+            ],
+            [
+              "devops <-> fullstack",
+              1
+            ],
+            [
+              "forward_deployed <-> other",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 21,
+          "pairwise": 0.7777777777777779,
+          "unan_k": 15,
+          "unanimous": 0.7142857142857143,
+          "unanimous_ci": [
+            0.5004361928391441,
+            0.8618613704787788
+          ]
+        },
+        "lever": {
+          "agree2": 0.8888888888888888,
+          "agree2_ci": [
+            0.565000294423344,
+            0.980109112361455
+          ],
+          "agree2_k": 8,
+          "flips": [
+            [
+              "data <-> other",
+              1
+            ],
+            [
+              "other <-> solutions",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 9,
+          "pairwise": 0.8518518518518519,
+          "unan_k": 7,
+          "unanimous": 0.7777777777777778,
+          "unanimous_ci": [
+            0.4525889691069889,
+            0.9367748928821533
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.639771727342413,
+            0.9650225122567595
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "backend <-> data",
+              1
+            ],
+            [
+              "other <-> pm",
+              1
+            ],
+            [
+              "other <-> security",
+              1
+            ],
+            [
+              "other <-> solutions",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 16,
+          "pairwise": 0.8333333333333333,
+          "unan_k": 12,
+          "unanimous": 0.75,
+          "unanimous_ci": [
+            0.5050168346449122,
+            0.8981793250878696
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.8529411764705882,
+        "agree2_ci": [
+          0.6987194350454783,
+          0.9355055855521753
+        ],
+        "agree2_k": 29,
+        "flips": [
+          [
+            "other <-> solutions",
+            2
+          ],
+          [
+            "backend <-> data",
+            1
+          ],
+          [
+            "data <-> other",
+            1
+          ],
+          [
+            "other <-> pm",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 34,
+        "pairwise": 0.9019607843137254,
+        "unan_k": 29,
+        "unanimous": 0.8529411764705882,
+        "unanimous_ci": [
+          0.6987194350454783,
+          0.9355055855521753
+        ]
+      },
+      "messy": {
+        "agree2": 0.8395061728395061,
+        "agree2_ci": [
+          0.7445295089488065,
+          0.9037384577328867
+        ],
+        "agree2_k": 68,
+        "flips": [
+          [
+            "other <-> pm",
+            3
+          ],
+          [
+            "backend <-> other",
+            2
+          ],
+          [
+            "data <-> other",
+            2
+          ],
+          [
+            "other <-> security",
+            2
+          ],
+          [
+            "other <-> solutions",
+            2
+          ],
+          [
+            "ai_integration <-> backend",
+            1
+          ],
+          [
+            "ai_integration <-> forward_deployed <-> other",
+            1
+          ],
+          [
+            "backend <-> data",
+            1
+          ],
+          [
+            "backend <-> fullstack <-> ml_research",
+            1
+          ],
+          [
+            "backend <-> ml_research <-> other",
+            1
+          ],
+          [
+            "devops <-> fullstack",
+            1
+          ],
+          [
+            "forward_deployed <-> other",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 81,
+        "pairwise": 0.8395061728395066,
+        "unan_k": 63,
+        "unanimous": 0.7777777777777778,
+        "unanimous_ci": [
+          0.6758471376953772,
+          0.8545539259532811
+        ]
+      },
+      "overall": {
+        "agree2": 0.8434782608695652,
+        "agree2_ci": [
+          0.7661124698334693,
+          0.8986387103013506
+        ],
+        "agree2_k": 97,
+        "flips": [
+          [
+            "other <-> pm",
+            4
+          ],
+          [
+            "other <-> solutions",
+            4
+          ],
+          [
+            "data <-> other",
+            3
+          ],
+          [
+            "backend <-> data",
+            2
+          ],
+          [
+            "backend <-> other",
+            2
+          ],
+          [
+            "other <-> security",
+            2
+          ],
+          [
+            "ai_integration <-> backend",
+            1
+          ],
+          [
+            "ai_integration <-> forward_deployed <-> other",
+            1
+          ],
+          [
+            "backend <-> fullstack <-> ml_research",
+            1
+          ],
+          [
+            "backend <-> ml_research <-> other",
+            1
+          ],
+          [
+            "devops <-> fullstack",
+            1
+          ],
+          [
+            "forward_deployed <-> other",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 115,
+        "pairwise": 0.8579710144927536,
+        "unan_k": 92,
+        "unanimous": 0.8,
+        "unanimous_ci": [
+          0.7177361124382664,
+          0.8628693486921457
+        ]
+      }
+    },
+    "seniority_level": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.8235294117647058,
+          "agree2_ci": [
+            0.5897054143116588,
+            0.9380887336237901
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "mid <-> senior",
+              4
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.8431372549019608,
+          "unan_k": 13,
+          "unanimous": 0.7647058823529411,
+          "unanimous_ci": [
+            0.5273820188043501,
+            0.9044495567791988
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7961166989641515,
+            1.0
+          ],
+          "agree2_k": 15,
+          "flips": [
+            [
+              "director <-> exec",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 15,
+          "pairwise": 0.9555555555555556,
+          "unan_k": 14,
+          "unanimous": 0.9333333333333333,
+          "unanimous_ci": [
+            0.7018347012621998,
+            0.9881331045067315
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.85,
+          "agree2_ci": [
+            0.6395811352592431,
+            0.9476312541037835
+          ],
+          "agree2_k": 17,
+          "flips": [
+            [
+              "mid <-> senior",
+              2
+            ],
+            [
+              "junior <-> mid",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 20,
+          "pairwise": 0.9,
+          "unan_k": 17,
+          "unanimous": 0.85,
+          "unanimous_ci": [
+            0.6395811352592431,
+            0.9476312541037835
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.8235294117647058,
+          "agree2_ci": [
+            0.5897054143116588,
+            0.9380887336237901
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "director <-> senior",
+              2
+            ],
+            [
+              "mid <-> senior",
+              2
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.8431372549019608,
+          "unan_k": 13,
+          "unanimous": 0.7647058823529411,
+          "unanimous_ci": [
+            0.5273820188043501,
+            0.9044495567791988
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 0.8095238095238095,
+          "agree2_ci": [
+            0.5999943530979508,
+            0.9233243494723822
+          ],
+          "agree2_k": 17,
+          "flips": [
+            [
+              "mid <-> senior",
+              3
+            ],
+            [
+              "senior <-> staff",
+              2
+            ],
+            [
+              "None <-> mid",
+              1
+            ],
+            [
+              "principal <-> staff",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 21,
+          "pairwise": 0.7777777777777777,
+          "unan_k": 14,
+          "unanimous": 0.6666666666666666,
+          "unanimous_ci": [
+            0.4537345197425524,
+            0.8280524739491653
+          ]
+        },
+        "lever": {
+          "agree2": 0.8888888888888888,
+          "agree2_ci": [
+            0.565000294423344,
+            0.980109112361455
+          ],
+          "agree2_k": 8,
+          "flips": [
+            [
+              "junior <-> mid",
+              1
+            ],
+            [
+              "mid <-> senior",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 9,
+          "pairwise": 0.8518518518518519,
+          "unan_k": 7,
+          "unanimous": 0.7777777777777778,
+          "unanimous_ci": [
+            0.4525889691069889,
+            0.9367748928821533
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 0.8125,
+          "agree2_ci": [
+            0.5699111903802586,
+            0.9340840092857187
+          ],
+          "agree2_k": 13,
+          "flips": [
+            [
+              "mid <-> senior",
+              3
+            ],
+            [
+              "principal <-> staff",
+              1
+            ],
+            [
+              "senior <-> staff",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 16,
+          "pairwise": 0.7916666666666667,
+          "unan_k": 11,
+          "unanimous": 0.6875,
+          "unanimous_ci": [
+            0.44404355834740666,
+            0.8583535614521796
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.8235294117647058,
+        "agree2_ci": [
+          0.6648626260015724,
+          0.9165103095462768
+        ],
+        "agree2_k": 28,
+        "flips": [
+          [
+            "mid <-> senior",
+            6
+          ],
+          [
+            "director <-> senior",
+            2
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 34,
+        "pairwise": 0.8431372549019607,
+        "unan_k": 26,
+        "unanimous": 0.7647058823529411,
+        "unanimous_ci": [
+          0.6000386207746361,
+          0.8756301446736042
+        ]
+      },
+      "messy": {
+        "agree2": 0.8641975308641975,
+        "agree2_ci": [
+          0.7729693623122125,
+          0.9224453655826947
+        ],
+        "agree2_k": 70,
+        "flips": [
+          [
+            "mid <-> senior",
+            9
+          ],
+          [
+            "senior <-> staff",
+            3
+          ],
+          [
+            "junior <-> mid",
+            2
+          ],
+          [
+            "principal <-> staff",
+            2
+          ],
+          [
+            "None <-> mid",
+            1
+          ],
+          [
+            "director <-> exec",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 81,
+        "pairwise": 0.8518518518518519,
+        "unan_k": 63,
+        "unanimous": 0.7777777777777778,
+        "unanimous_ci": [
+          0.6758471376953772,
+          0.8545539259532811
+        ]
+      },
+      "overall": {
+        "agree2": 0.8521739130434782,
+        "agree2_ci": [
+          0.775970508393773,
+          0.9056098155419282
+        ],
+        "agree2_k": 98,
+        "flips": [
+          [
+            "mid <-> senior",
+            15
+          ],
+          [
+            "senior <-> staff",
+            3
+          ],
+          [
+            "director <-> senior",
+            2
+          ],
+          [
+            "junior <-> mid",
+            2
+          ],
+          [
+            "principal <-> staff",
+            2
+          ],
+          [
+            "None <-> mid",
+            1
+          ],
+          [
+            "director <-> exec",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 115,
+        "pairwise": 0.8492753623188404,
+        "unan_k": 89,
+        "unanimous": 0.7739130434782608,
+        "unanimous_ci": [
+          0.6893343969366545,
+          0.8407836327911129
+        ]
+      }
+    },
+    "tech_stack": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.47058823529411764,
+          "agree2_ci": [
+            0.2616510644240944,
+            0.6903676493999558
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": 0.5718954248366013,
+          "kind": "set",
+          "n": 17,
+          "pairwise": 0.5294117647058824,
+          "unan_k": 6,
+          "unanimous": 0.35294117647058826,
+          "unanimous_ci": [
+            0.1730972039724375,
+            0.5869963651478132
+          ]
+        },
+        "builtin": {
+          "agree2": 0.9333333333333333,
+          "agree2_ci": [
+            0.7018347012621998,
+            0.9881331045067315
+          ],
+          "agree2_k": 14,
+          "flips": [],
+          "jaccard": 0.9777777777777777,
+          "kind": "set",
+          "n": 15,
+          "pairwise": 0.9111111111111111,
+          "unan_k": 13,
+          "unanimous": 0.8666666666666667,
+          "unanimous_ci": [
+            0.6211801716767764,
+            0.9626387408969346
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.45,
+          "agree2_ci": [
+            0.2581978582556243,
+            0.6579146575496577
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": 0.802144660894661,
+          "kind": "set",
+          "n": 20,
+          "pairwise": 0.55,
+          "unan_k": 9,
+          "unanimous": 0.45,
+          "unanimous_ci": [
+            0.2581978582556243,
+            0.6579146575496577
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.8235294117647058,
+          "agree2_ci": [
+            0.5897054143116588,
+            0.9380887336237901
+          ],
+          "agree2_k": 14,
+          "flips": [],
+          "jaccard": 0.9408793820558526,
+          "kind": "set",
+          "n": 17,
+          "pairwise": 0.8431372549019608,
+          "unan_k": 14,
+          "unanimous": 0.8235294117647058,
+          "unanimous_ci": [
+            0.5897054143116588,
+            0.9380887336237901
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 0.7619047619047619,
+          "agree2_ci": [
+            0.5490882631704924,
+            0.8937198697736354
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": 0.8594818761485428,
+          "kind": "set",
+          "n": 21,
+          "pairwise": 0.746031746031746,
+          "unan_k": 14,
+          "unanimous": 0.6666666666666666,
+          "unanimous_ci": [
+            0.4537345197425524,
+            0.8280524739491653
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": 1.0,
+          "kind": "set",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 0.6875,
+          "agree2_ci": [
+            0.44404355834740666,
+            0.8583535614521796
+          ],
+          "agree2_k": 11,
+          "flips": [],
+          "jaccard": 0.9191708754208756,
+          "kind": "set",
+          "n": 16,
+          "pairwise": 0.6666666666666666,
+          "unan_k": 9,
+          "unanimous": 0.5625,
+          "unanimous_ci": [
+            0.331785563988119,
+            0.7690134759450765
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.6470588235294118,
+        "agree2_ci": [
+          0.4791396311978174,
+          0.785120794051205
+        ],
+        "agree2_k": 22,
+        "flips": [],
+        "jaccard": 0.7563874034462269,
+        "kind": "set",
+        "n": 34,
+        "pairwise": 0.6862745098039216,
+        "unan_k": 20,
+        "unanimous": 0.5882352941176471,
+        "unanimous_ci": [
+          0.42221593878812513,
+          0.7363403163612884
+        ]
+      },
+      "messy": {
+        "agree2": 0.7283950617283951,
+        "agree2_ci": [
+          0.6228457676019475,
+          0.8132617736202826
+        ],
+        "agree2_k": 59,
+        "flips": [],
+        "jaccard": 0.8946347319804111,
+        "kind": "set",
+        "n": 81,
+        "pairwise": 0.740740740740741,
+        "unan_k": 54,
+        "unanimous": 0.6666666666666666,
+        "unanimous_ci": [
+          0.5585283506058687,
+          0.7597122875833262
+        ]
+      },
+      "overall": {
+        "agree2": 0.7043478260869566,
+        "agree2_ci": [
+          0.6154327036904664,
+          0.7800521756302491
+        ],
+        "agree2_k": 81,
+        "flips": [],
+        "jaccard": 0.8537616087616083,
+        "kind": "set",
+        "n": 115,
+        "pairwise": 0.7246376811594203,
+        "unan_k": 74,
+        "unanimous": 0.6434782608695652,
+        "unanimous_ci": [
+          0.5526015803624652,
+          0.7250792923520796
+        ]
+      }
+    },
+    "visa_sponsorship": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.8235294117647058,
+          "agree2_ci": [
+            0.5897054143116588,
+            0.9380887336237901
+          ],
+          "agree2_k": 14,
+          "flips": [
+            [
+              "not_offered <-> unknown",
+              3
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 0.8823529411764707,
+          "unan_k": 14,
+          "unanimous": 0.8235294117647058,
+          "unanimous_ci": [
+            0.5897054143116588,
+            0.9380887336237901
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7961166989641515,
+            1.0
+          ],
+          "agree2_k": 15,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 15,
+          "pairwise": 1.0,
+          "unan_k": 15,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7961166989641515,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.95,
+          "agree2_ci": [
+            0.763868806553258,
+            0.9911185511992047
+          ],
+          "agree2_k": 19,
+          "flips": [
+            [
+              "offered <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 20,
+          "pairwise": 0.9666666666666666,
+          "unan_k": 19,
+          "unanimous": 0.95,
+          "unanimous_ci": [
+            0.763868806553258,
+            0.9911185511992047
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8453609810751531,
+            1.0
+          ],
+          "agree2_k": 21,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 21,
+          "pairwise": 1.0,
+          "unan_k": 21,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8453609810751531,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 16,
+          "pairwise": 1.0,
+          "unan_k": 16,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8063923194655637,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.9117647058823529,
+        "agree2_ci": [
+          0.7703951343719113,
+          0.9695340563253514
+        ],
+        "agree2_k": 31,
+        "flips": [
+          [
+            "not_offered <-> unknown",
+            3
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 34,
+        "pairwise": 0.9411764705882352,
+        "unan_k": 31,
+        "unanimous": 0.9117647058823529,
+        "unanimous_ci": [
+          0.7703951343719113,
+          0.9695340563253514
+        ]
+      },
+      "messy": {
+        "agree2": 0.9876543209876543,
+        "agree2_ci": [
+          0.9333311840195164,
+          0.9978173499414611
+        ],
+        "agree2_k": 80,
+        "flips": [
+          [
+            "offered <-> unknown",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 81,
+        "pairwise": 0.991769547325103,
+        "unan_k": 80,
+        "unanimous": 0.9876543209876543,
+        "unanimous_ci": [
+          0.9333311840195164,
+          0.9978173499414611
+        ]
+      },
+      "overall": {
+        "agree2": 0.9652173913043478,
+        "agree2_ci": [
+          0.9139670361373622,
+          0.9863921572097987
+        ],
+        "agree2_k": 111,
+        "flips": [
+          [
+            "not_offered <-> unknown",
+            3
+          ],
+          [
+            "offered <-> unknown",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 115,
+        "pairwise": 0.9768115942028985,
+        "unan_k": 111,
+        "unanimous": 0.9652173913043478,
+        "unanimous_ci": [
+          0.9139670361373622,
+          0.9863921572097987
+        ]
+      }
+    },
+    "years_experience_max": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7961166989641515,
+            1.0
+          ],
+          "agree2_k": 15,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 15,
+          "pairwise": 1.0,
+          "unan_k": 15,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7961166989641515,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8388748419471806,
+            1.0
+          ],
+          "agree2_k": 20,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 20,
+          "pairwise": 1.0,
+          "unan_k": 20,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8388748419471806,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8453609810751531,
+            1.0
+          ],
+          "agree2_k": 21,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 21,
+          "pairwise": 1.0,
+          "unan_k": 21,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8453609810751531,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 16,
+          "pairwise": 1.0,
+          "unan_k": 16,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8063923194655637,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ],
+        "agree2_k": 34,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 34,
+        "pairwise": 1.0,
+        "unan_k": 34,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8984854458466761,
+          0.9999999999999999
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9547219145675847,
+          1.0
+        ],
+        "agree2_k": 81,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 81,
+        "pairwise": 1.0,
+        "unan_k": 81,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9547219145675847,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9676757685506868,
+          0.9999999999999999
+        ],
+        "agree2_k": 115,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 115,
+        "pairwise": 1.0,
+        "unan_k": 115,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9676757685506868,
+          0.9999999999999999
+        ]
+      }
+    },
+    "years_experience_min": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.9411764705882353,
+          "agree2_ci": [
+            0.7301796936242461,
+            0.9895395990150025
+          ],
+          "agree2_k": 16,
+          "flips": [
+            [
+              "5 <-> None",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "int",
+          "n": 17,
+          "pairwise": 0.9607843137254901,
+          "unan_k": 16,
+          "unanimous": 0.9411764705882353,
+          "unanimous_ci": [
+            0.7301796936242461,
+            0.9895395990150025
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7961166989641515,
+            1.0
+          ],
+          "agree2_k": 15,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 15,
+          "pairwise": 1.0,
+          "unan_k": 15,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7961166989641515,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8388748419471806,
+            1.0
+          ],
+          "agree2_k": 20,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 20,
+          "pairwise": 1.0,
+          "unan_k": 20,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8388748419471806,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8156818649911483,
+            1.0
+          ],
+          "agree2_k": 17,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 17,
+          "pairwise": 1.0,
+          "unan_k": 17,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8156818649911483,
+            1.0
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8453609810751531,
+            1.0
+          ],
+          "agree2_k": 21,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 21,
+          "pairwise": 1.0,
+          "unan_k": 21,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8453609810751531,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7008549515804559,
+            1.0
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 9,
+          "pairwise": 1.0,
+          "unan_k": 9,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7008549515804559,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 16,
+          "pairwise": 1.0,
+          "unan_k": 16,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8063923194655637,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.9705882352941176,
+        "agree2_ci": [
+          0.8508442670731406,
+          0.9947890937237309
+        ],
+        "agree2_k": 33,
+        "flips": [
+          [
+            "5 <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 34,
+        "pairwise": 0.9803921568627452,
+        "unan_k": 33,
+        "unanimous": 0.9705882352941176,
+        "unanimous_ci": [
+          0.8508442670731406,
+          0.9947890937237309
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9547219145675847,
+          1.0
+        ],
+        "agree2_k": 81,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 81,
+        "pairwise": 1.0,
+        "unan_k": 81,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9547219145675847,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 0.991304347826087,
+        "agree2_ci": [
+          0.9523832736556862,
+          0.9984633510941191
+        ],
+        "agree2_k": 114,
+        "flips": [
+          [
+            "5 <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 115,
+        "pairwise": 0.9942028985507247,
+        "unan_k": 114,
+        "unanimous": 0.991304347826087,
+        "unanimous_ci": [
+          0.9523832736556862,
+          0.9984633510941191
+        ]
+      }
+    }
+  },
+  "model": {
+    "backend": "http",
+    "base_url": "",
+    "model": "deepseek-v4-flash"
+  },
+  "model_label": "deepseek-v4-flash",
+  "n_comparable": 115,
+  "n_records": 120,
+  "not_ok": [],
+  "platform_counts": {
+    "ashby": 17,
+    "builtin": 15,
+    "google_jobs": 20,
+    "greenhouse": 17,
+    "hn_whoishiring": 21,
+    "lever": 9,
+    "weworkremotely": 16
+  },
+  "repeat": 3,
+  "task": "extract",
+  "whole_record": {
+    "k": 25,
+    "n": 115,
+    "rate": 0.21739130434782608
+  }
+}

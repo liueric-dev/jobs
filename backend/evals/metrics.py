@@ -1,0 +1,275 @@
+"""Per-field comparison rules, and the arithmetic that turns them into a number.
+
+PROMOTED, NOT REWRITTEN
+    The comparison rules come from tools/compare-extract.py:52-60 -- its
+    SCALAR_FIELDS list and its jaccard(). What is added here is the kind
+    lookup (evals/tasks/extract.py:23 FIELD_KINDS, so the rule lives beside
+    the field list), grouping by platform, and an interval.
+
+COMPARISON RUNS AFTER normalize()
+    Comparing raw model output would score formatting: "Mid-Level" and "mid"
+    are the same answer and extract._enum() already knows it. Every value
+    reaching this module has been through tasks/extract.py parse(), which is
+    the exact dict job_facts would have stored.
+
+TWO AGREEMENT NUMBERS, BECAUSE THEY ANSWER DIFFERENT QUESTIONS
+    `agree2` is repeat 1 against repeat 2 -- exactly the protocol that
+    produced the provisional n=17 figures (two extractions, identical
+    prompt, identical parameters). It is the number those are comparable
+    to, and it is a clean Bernoulli trial per record, so a Wilson interval
+    on it is valid.
+
+    `unanimous` is all N repeats identical. It is strictly the harder
+    question and it is what distinguishes "flips between two values" from
+    "unstable across three" -- but it is NOT comparable to a figure measured
+    over two runs, and the calibration thresholds in
+    backend/config/criteria.json were set against two-run numbers. Reporting
+    only unanimity would trip a gate that was drawn for a different quantity.
+
+    `pairwise` -- the mean over all C(N,2) pairs -- estimates the same
+    quantity as `agree2` using more data, so it is reported as a point
+    estimate. It gets no interval: the C(N,2) pairs from one record are not
+    independent trials, and a Wilson interval over 3n dependent pairs would
+    be narrower than the evidence supports.
+
+WILSON, NOT NORMAL APPROXIMATION
+    At the sample sizes a per-platform cell actually has -- 9 records for
+    lever, because 9 is every lever row in production -- the normal
+    approximation gives intervals that run past 1.0 and are meaningless at
+    the boundary. Wilson is well behaved at small n and at proportions near
+    1, which is where every number in this measurement sits.
+
+A RECORD NOT OK IN EVERY REPEAT IS NOT SILENTLY DROPPED
+    If repeat 1 parses and repeat 2 tombstones, excluding the record would
+    flatter the model by hiding its least stable answers. Field agreement is
+    computed over records usable in every repeat, and the count that were
+    not is reported beside it -- never folded away.
+"""
+
+import json
+import math
+
+#: greenhouse and ashby are the "clean ATS" end that the README hypothesises
+#: the 95% figure actually describes. Everything else is the messy end.
+#: Grouped here rather than at the call site so the clean-vs-messy gap is
+#: computed from one definition.
+CLEAN_PLATFORMS = ("greenhouse", "ashby")
+
+Z95 = 1.959963984540054
+
+
+def wilson(k, n, z=Z95):
+    """Wilson score interval for k successes in n trials. (lo, hi).
+
+    Returns (0.0, 1.0) for n == 0 rather than raising: an empty cell is a
+    real outcome of a stratified corpus and the table still has to print.
+    """
+    if n <= 0:
+        return 0.0, 1.0
+    p = k / n
+    denom = 1.0 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = (z / denom) * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+    return max(0.0, centre - half), min(1.0, centre + half)
+
+
+def _as_set(value):
+    """tech_stack as normalize() stores it: a JSON array in a string.
+
+    Tolerates a list, a None and a non-JSON string, because the point of
+    this harness is measuring real malformed answers rather than assuming
+    they do not occur.
+    """
+    if value is None:
+        return set()
+    if isinstance(value, (list, tuple, set)):
+        return {str(v) for v in value}
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        return {str(value)}
+    if isinstance(parsed, list):
+        return {str(v) for v in parsed}
+    return {str(parsed)}
+
+
+def jaccard(a, b):
+    """tools/compare-extract.py:99. Two empty sets agree."""
+    sa, sb = _as_set(a), _as_set(b)
+    if not sa and not sb:
+        return 1.0
+    return len(sa & sb) / len(sa | sb)
+
+
+def compare(kind, a, b):
+    """Agreement between two values of one field, in [0, 1].
+
+    `int` compares None as distinct from 0 -- "the posting did not say" and
+    "the posting said zero" are different facts and `==` already keeps them
+    apart, which is why this is not special-cased.
+    """
+    if kind == "set":
+        return jaccard(a, b)
+    return 1.0 if a == b else 0.0
+
+
+def exact(kind, a, b):
+    """Agreement as a yes/no, including for `set`.
+
+    The three headline columns must all mean the same thing or the table is
+    unreadable: a `set` field whose agree2 is an exact-match rate and whose
+    pairwise column is a graded Jaccard mean invites reading 32% and 67% as
+    a contradiction. Jaccard is reported in its own column instead, which is
+    also the figure the provisional "tech_stack 90% (Jaccard)" is comparable
+    to.
+    """
+    return compare(kind, a, b) == 1.0
+
+
+def _identical(kind, values):
+    return all(exact(kind, values[0], v) for v in values[1:])
+
+
+def _pairs(values):
+    for i in range(len(values)):
+        for j in range(i + 1, len(values)):
+            yield values[i], values[j]
+
+
+def _flips(kind, per_record_values):
+    """Which value pairs a field actually flips between, most common first.
+
+    A rate says how often the model disagrees with itself; this says what
+    the disagreement IS, and for `ai_involvement` those are different
+    findings with different consequences. `uses_ai_tools` flipping to
+    `builds_llm_features` is two adjacent readings of the same posting and
+    the cohort's targeting survives it. Either of them flipping to `none` is
+    a job leaving the opportunity space between one night and the next.
+
+    Only for kinds whose values are small and hashable. `set` is excluded:
+    the interesting quantity there is Jaccard, and listing every distinct
+    tech_stack pair would be a wall of noise.
+    """
+    if kind not in ("enum", "bool", "int"):
+        return []
+    counts = {}
+    for values in per_record_values:
+        distinct = sorted({str(v) for v in values})
+        if len(distinct) < 2:
+            continue
+        key = " <-> ".join(distinct)
+        counts[key] = counts.get(key, 0) + 1
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+
+
+def field_cell(kind, per_record_values):
+    """Aggregate one field over a list of per-record repeat-value tuples."""
+    n = len(per_record_values)
+    agree2_k = 0
+    unan_k = 0
+    pair_sum = 0.0
+    jac_sum = 0.0
+    for values in per_record_values:
+        if len(values) >= 2 and exact(kind, values[0], values[1]):
+            agree2_k += 1
+        if _identical(kind, values):
+            unan_k += 1
+        scores = [1.0 if exact(kind, a, b) else 0.0 for a, b in _pairs(values)]
+        if scores:
+            pair_sum += sum(scores) / len(scores)
+        if kind == "set":
+            js = [jaccard(a, b) for a, b in _pairs(values)]
+            if js:
+                jac_sum += sum(js) / len(js)
+    cell = {
+        "kind": kind,
+        "n": n,
+        "flips": _flips(kind, per_record_values),
+        "agree2_k": agree2_k,
+        "agree2": (agree2_k / n) if n else None,
+        "agree2_ci": wilson(agree2_k, n),
+        "unan_k": unan_k,
+        "unanimous": (unan_k / n) if n else None,
+        "unanimous_ci": wilson(unan_k, n),
+        "pairwise": (pair_sum / n) if n else None,
+        "jaccard": (jac_sum / n) if (n and kind == "set") else None,
+    }
+    return cell
+
+
+def selfcheck(runs, records, field_kinds, *, skip_kinds=("prose",)):
+    """Per-field and per-platform self-consistency across N repeat runs.
+
+    `runs` is a list of runner.Run over the SAME records in the same order.
+    `records` supplies the platform for each position.
+    """
+    if len(runs) < 2:
+        raise ValueError("self-consistency needs at least 2 repeats")
+    lengths = {len(r.results) for r in runs}
+    if len(lengths) != 1 or lengths.pop() != len(records):
+        raise ValueError("every repeat must cover the same records")
+
+    from . import runner as runner_mod
+
+    platforms = {}
+    comparable = []          # indices usable in every repeat
+    not_ok = []              # (job_id, [status per repeat])
+    for i, rec in enumerate(records):
+        statuses = [run.results[i].status for run in runs]
+        if all(s == runner_mod.OK for s in statuses):
+            comparable.append(i)
+        elif any(s != runner_mod.SKIPPED for s in statuses):
+            # All-SKIPPED is the pipeline declining to send the record at
+            # all -- not a model failure, and extract.py would not have
+            # asked either. Anything else is instability worth naming.
+            not_ok.append((runs[0].results[i].job_id, statuses))
+        platforms[i] = rec.get("platform") or "unknown"
+
+    fields = {}
+    for field, kind in sorted(field_kinds.items()):
+        if kind in skip_kinds:
+            continue
+        by_platform_values = {}
+        overall_values = []
+        for i in comparable:
+            values = tuple((run.results[i].normalized or {}).get(field)
+                           for run in runs)
+            overall_values.append(values)
+            by_platform_values.setdefault(platforms[i], []).append(values)
+        fields[field] = {
+            "overall": field_cell(kind, overall_values),
+            "by_platform": {p: field_cell(kind, v)
+                            for p, v in sorted(by_platform_values.items())},
+            "clean": field_cell(kind, [
+                v for i, v in zip(comparable, overall_values)
+                if platforms[i] in CLEAN_PLATFORMS]),
+            "messy": field_cell(kind, [
+                v for i, v in zip(comparable, overall_values)
+                if platforms[i] not in CLEAN_PLATFORMS]),
+        }
+
+    # Whole-record identity over the compared fields only: `summary` is prose
+    # and is never compared, so including it would make this 0 by
+    # construction and say nothing.
+    scored = [(f, k) for f, k in sorted(field_kinds.items())
+              if k not in skip_kinds]
+    whole_k = 0
+    for i in comparable:
+        norms = [run.results[i].normalized or {} for run in runs]
+        if all(_identical(k, tuple(nz.get(f) for nz in norms))
+               for f, k in scored):
+            whole_k += 1
+
+    return {
+        "repeat": len(runs),
+        "n_records": len(records),
+        "n_comparable": len(comparable),
+        "not_ok": not_ok,
+        "platform_counts": {p: sum(1 for i in comparable
+                                   if platforms[i] == p)
+                            for p in sorted(set(platforms.values()))},
+        "fields": fields,
+        "whole_record": {"k": whole_k, "n": len(comparable),
+                         "rate": (whole_k / len(comparable))
+                                 if comparable else None},
+    }

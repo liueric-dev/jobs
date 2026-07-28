@@ -20,7 +20,8 @@ import urllib.request
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evals import cache, corpus, models, report, runner, tasks  # noqa: E402
+from evals import (cache, corpus, metrics, models, report,  # noqa: E402
+                   runner, tasks)
 
 _GOOD = json.dumps({
     "seniority_level": "Mid-Level",           # deliberately off-vocabulary
@@ -331,6 +332,250 @@ class TestReport(_RunnerCase):
             if row["status"] != runner.SKIPPED:
                 self.assertTrue(row["prompt_sha"])
             self.assertNotIn("api_key", json.dumps(row))
+
+
+class _VaryingEndpoint:
+    """Returns a different `seniority_level` on each call for one job.
+
+    This is what a temperature-0 model that does not agree with itself
+    actually looks like from the harness's side, and it is the only way to
+    tell a real disagreement apart from a cache hit in a test.
+    """
+
+    def __init__(self, flip_on="Build services."):
+        self.calls = 0
+        self.flip_on = flip_on
+        self._seen = {}
+
+    def __call__(self, req, timeout=None):
+        self.calls += 1
+        prompt = json.loads(req.data.decode())["messages"][0]["content"]
+        body = json.loads(_GOOD)
+        if self.flip_on in prompt:
+            n = self._seen.get(self.flip_on, 0)
+            self._seen[self.flip_on] = n + 1
+            body["seniority_level"] = ["junior", "mid", "senior"][n % 3]
+        return _FakeResp(json.dumps({
+            "choices": [{"message": {"content": json.dumps(body)}}],
+            "usage": {"prompt_tokens": 1060, "completion_tokens": 240},
+        }).encode())
+
+
+class TestRepeatCacheKey(unittest.TestCase):
+    """The disambiguation whose absence is a silent, total false pass.
+
+    The store is content-addressed. Without a repeat index in the key,
+    repeat 2 of a self-consistency run reads back repeat 1's stored answer
+    and every field reports 100% agreement -- on the exact quantity being
+    measured, with no error raised and nothing in the output to suggest it.
+    Measured with the disambiguation removed, the run below reports 100%;
+    with it, 33%. These tests exist so that difference cannot regress
+    unnoticed.
+    """
+
+    def test_repeat_index_changes_the_digest(self):
+        spec = models.parse("m@https://x/v1@k")
+        digests = [cache.key_for(spec, "same prompt", repeat_index=i)
+                   for i in range(4)]
+        self.assertEqual(len(set(digests)), 4,
+                         "each repeat must get its own cache entry, or a "
+                         "self-consistency run measures the cache")
+
+    def test_index_zero_is_the_plain_key(self):
+        # So an ordinary run and the first pass of a repeat run share
+        # entries, and adding --repeat does not invalidate a paid-for cache.
+        spec = models.parse("m@https://x/v1@k")
+        self.assertEqual(cache.key_for(spec, "p"),
+                         cache.key_for(spec, "p", repeat_index=0))
+
+
+class TestRepeatedRuns(_RunnerCase):
+    def setUp(self):
+        super().setUp()
+        self.stub = _VaryingEndpoint()
+        urllib.request.urlopen = self.stub
+
+    def test_repeat_defaults_to_no_cache_and_calls_live_every_pass(self):
+        runs = runner.run_repeated(self.task, self.spec, self.records,
+                                   repeat=3, workers=2)
+        self.assertEqual(len(runs), 3)
+        self.assertEqual(self.stub.calls, 9)      # 3 eligible x 3 passes
+        self.assertEqual(cache.stats()[0], 0)
+        for run in runs:
+            self.assertFalse(run.replayed_any)
+
+    def test_disagreement_survives_caching_being_forced_on(self):
+        """The regression test for the false pass.
+
+        With caching ON and per-repeat keys, every pass still calls live and
+        the flipping field still reads as unstable: 3 records comparable,
+        one of them flipping, so 2/3.
+        """
+        runs = runner.run_repeated(self.task, self.spec, self.records,
+                                   repeat=3, use_cache=True, workers=2)
+        self.assertEqual(self.stub.calls, 9)
+        stats = metrics.selfcheck(runs, self.records, self.task.field_kinds)
+        cell = stats["fields"]["seniority_level"]["overall"]
+        self.assertEqual(cell["n"], 3)
+        self.assertEqual(cell["unan_k"], 2)
+        self.assertEqual(cell["agree2_k"], 2)
+
+    def test_without_disambiguation_the_run_reports_a_perfect_score(self):
+        """The failure this guards against, demonstrated rather than asserted.
+
+        Reverting cache.key_for to ignore repeat_index is simulated here.
+        The endpoint is asked 3 times instead of 9, every later pass replays
+        the first, and the flipping field reports 100% agreement -- a number
+        that looks like excellent news and means nothing. If this test ever
+        stops showing 100%, the understanding of the cache encoded in
+        cache.key_for's docstring is wrong.
+        """
+        real = cache.key_for
+        cache.key_for = lambda spec, prompt, *, repeat_index=0, **kw: real(
+            spec, prompt, **kw)
+        try:
+            runs = runner.run_repeated(self.task, self.spec, self.records,
+                                       repeat=3, use_cache=True, workers=2)
+        finally:
+            cache.key_for = real
+        self.assertEqual(self.stub.calls, 3, "later passes replayed pass 1")
+        stats = metrics.selfcheck(runs, self.records, self.task.field_kinds)
+        cell = stats["fields"]["seniority_level"]["overall"]
+        self.assertEqual(cell["agree2"], 1.0)
+        self.assertEqual(cell["unanimous"], 1.0)
+        self.assertEqual(stats["whole_record"]["rate"], 1.0)
+
+    def test_repeat_one_still_uses_the_cache(self):
+        runs = runner.run_repeated(self.task, self.spec, self.records,
+                                   repeat=1, workers=2)
+        self.assertTrue(runs[0].use_cache)
+
+
+class TestFixtureIdentity(unittest.TestCase):
+    """The eval sets are pinned by sorted job_id, as a literal.
+
+    CLAUDE.md's measurement discipline: pin eval sets by sorted job_id,
+    never recycle them. A fixture regenerated in place would silently
+    change what every published figure was measured on -- and the figures
+    would still be sitting in the docs, unchanged and now wrong. This is the
+    same argument tests/test_row_identity.py makes about content hashes.
+    """
+
+    FIXTURES = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "evals", "fixtures")
+
+    #: v1: the 2026-07-27 snapshot. task 04's figures cite it.
+    #: v2: the 2026-07-28 snapshot the n=120 self-consistency run used.
+    DIGESTS = {
+        "corpus-v1.jsonl":
+            "e0276c616203dd2eecea575e74a2c4ce45e7eb59d225693a14945883fec09ae9",
+        "corpus-v2.jsonl":
+            "cbf8cfe73896d1ba35a45f9e4dd476900662c9f809c48191e987ece5f4e7a6e3",
+    }
+
+    def test_frozen_corpora_have_not_moved(self):
+        import hashlib
+        for name, want in self.DIGESTS.items():
+            path = os.path.join(self.FIXTURES, name)
+            ids = sorted(r["id"] for r in corpus.load(path))
+            self.assertEqual(len(ids), 120, name)
+            got = hashlib.sha256("\n".join(ids).encode()).hexdigest()
+            self.assertEqual(got, want,
+                             f"{name} is not the fixture the published "
+                             f"figures were measured on")
+
+    def test_v2_reaches_every_platform(self):
+        # The property the per-platform pool query exists for: a naive
+        # most-recent sample returned zero hn_whoishiring and zero
+        # weworkremotely rows (corpus.py:115).
+        counts = corpus.summarize(
+            corpus.load(os.path.join(self.FIXTURES, "corpus-v2.jsonl")))
+        self.assertEqual(len(counts["platforms"]), 7)
+        for platform, n in counts["platforms"].items():
+            self.assertGreater(n, 0, platform)
+
+
+class TestMetrics(unittest.TestCase):
+    def test_wilson_is_narrower_at_larger_n(self):
+        lo17, hi17 = metrics.wilson(13, 17)      # the provisional figure
+        lo120, hi120 = metrics.wilson(92, 120)   # the same rate at n=120
+        self.assertLess(hi120 - lo120, hi17 - lo17)
+        # The n=17 interval is why nothing was to be re-tuned on it.
+        self.assertLess(lo17, 0.60)
+        self.assertGreater(hi17, 0.88)
+
+    def test_wilson_never_leaves_the_unit_interval(self):
+        for k, n in ((0, 5), (5, 5), (9, 9), (0, 1), (1, 1)):
+            lo, hi = metrics.wilson(k, n)
+            self.assertGreaterEqual(lo, 0.0)
+            self.assertLessEqual(hi, 1.0)
+
+    def test_none_is_distinct_from_zero_for_ints(self):
+        # "the posting did not say" and "the posting said zero" are
+        # different facts, and an eval that conflates them overstates
+        # agreement on exactly the fields most often absent.
+        self.assertEqual(metrics.compare("int", None, 0), 0.0)
+        self.assertEqual(metrics.compare("int", None, None), 1.0)
+
+    def test_jaccard_reads_the_json_string_normalize_stores(self):
+        self.assertEqual(metrics.jaccard('["a","b"]', '["b","a"]'), 1.0)
+        self.assertEqual(metrics.jaccard('["a","b"]', '["a"]'), 0.5)
+        self.assertEqual(metrics.jaccard(None, "[]"), 1.0)
+
+    def test_agree2_uses_only_the_first_two_repeats(self):
+        # It is the column comparable to the two-run n=17 protocol, so a
+        # third pass must not move it.
+        cell = metrics.field_cell("enum", [("a", "a", "b"), ("a", "b", "b")])
+        self.assertEqual(cell["agree2_k"], 1)
+        self.assertEqual(cell["unan_k"], 0)
+
+    def test_unanimity_is_never_above_agree2(self):
+        cell = metrics.field_cell("enum", [("a", "a", "b"), ("a", "a", "a")])
+        self.assertLessEqual(cell["unanimous"], cell["agree2"])
+
+    def test_flips_name_the_values_not_just_the_rate(self):
+        # A rate says how often the model disagrees with itself; this says
+        # what the disagreement is. For ai_involvement the difference
+        # decides whether a job leaves the cohort's opportunity space or
+        # merely moves within it.
+        cell = metrics.field_cell("enum", [
+            ("none", "uses_ai_tools", "none"),
+            ("none", "uses_ai_tools", "none"),
+            ("builds_llm_features", "uses_ai_tools", "uses_ai_tools"),
+            ("none", "none", "none")])
+        self.assertEqual(cell["flips"],
+                         [("none <-> uses_ai_tools", 2),
+                          ("builds_llm_features <-> uses_ai_tools", 1)])
+
+    def test_set_fields_get_no_flip_wall(self):
+        cell = metrics.field_cell("set", [('["a"]', '["b"]', '["c"]')])
+        self.assertEqual(cell["flips"], [])
+
+    def test_truncated_flip_lists_say_so(self):
+        """A silent truncation hid the seventh ai_involvement pattern once.
+
+        That pattern crossed the `none` boundary, so the count the gate
+        decision rests on came out one record short. The marker is the fix.
+        """
+        rows = [(f"v{i}", f"w{i}", f"v{i}") for i in range(20)]
+        stats = {
+            "repeat": 3, "n_records": 20, "n_comparable": 20, "not_ok": [],
+            "platform_counts": {"greenhouse": 20},
+            "whole_record": {"k": 0, "n": 20, "rate": 0.0},
+            "fields": {"seniority_level": {
+                "overall": metrics.field_cell("enum", rows),
+                "by_platform": {"greenhouse": metrics.field_cell("enum", rows)},
+                "clean": metrics.field_cell("enum", rows),
+                "messy": metrics.field_cell("enum", [])}},
+        }
+        run = runner.Run(task="extract", model_label="m", model_identity={},
+                         results=[], use_cache=False)
+        out = report.render_selfcheck(stats, [run])
+        self.assertIn("more pattern(s)", out)
+
+    def test_selfcheck_rejects_a_single_run(self):
+        with self.assertRaises(ValueError):
+            metrics.selfcheck([], [], {})
 
 
 if __name__ == "__main__":

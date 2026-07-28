@@ -68,11 +68,30 @@ class Entry:
         return dataclasses.replace(self, replayed=True)
 
 
-def key_for(spec, prompt, *, json_object=True, temperature=None):
+def key_for(spec, prompt, *, json_object=True, temperature=None,
+            repeat_index=0):
     """Stable digest for one (model, prompt) pair.
 
     `spec` is an evals.models.ModelSpec; only its cache_identity() is used,
     which excludes the API key.
+
+    REPEAT INDEX, AND WHY OMITTING IT WOULD BE A SILENT FALSE PASS
+        This store is content-addressed: same model, same prompt, same
+        digest. A self-consistency measurement asks the same model the same
+        prompt N times on purpose, so without disambiguation repeat 2 reads
+        back repeat 1's stored answer and the run reports 100% agreement --
+        on the exact quantity it was built to measure, with no error and
+        nothing in the output to suggest anything went wrong. It is the most
+        convincing possible wrong number.
+
+        Index 0 adds nothing to the material, so an ordinary single run and
+        the first pass of a repeat run share entries and no existing cache
+        is invalidated. Every later pass gets its own key.
+
+        Belt and braces: runner.run_repeated() also turns caching OFF by
+        default when repeat > 1, because the measurement is about live
+        variance. This keying is what makes --repeat with caching forced on
+        (for testing the harness itself) mean something rather than lie.
     """
     if temperature is None:
         import llm
@@ -81,6 +100,8 @@ def key_for(spec, prompt, *, json_object=True, temperature=None):
                 "temperature": temperature,
                 "json_object": bool(json_object),
                 "prompt": prompt}
+    if repeat_index:
+        material["repeat_index"] = int(repeat_index)
     # sort_keys so a dict reordering never silently re-keys the whole cache.
     blob = json.dumps(material, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()

@@ -3,6 +3,7 @@
     python3 -m evals corpus snapshot --n 200 --out evals/fixtures/corpus-v1.jsonl
     python3 -m evals corpus info evals/fixtures/corpus-v1.jsonl
     python3 -m evals run --task extract --model "$SPEC" --corpus <path> --n 20
+    python3 -m evals selfcheck --model "$SPEC" --n 120 --repeat 3
     python3 -m evals cache stats
 
 Run from backend/, which is what puts the pipeline modules (extract, llm,
@@ -119,6 +120,73 @@ def cmd_run(args):
     return 0
 
 
+def cmd_selfcheck(args):
+    """Same corpus, same prompt, N times -- what does the model owe itself?
+
+    Separate from `run` rather than a flag on it because the output is a
+    different thing: `run` reports whether a model is usable at all, this
+    reports whether it is stable, and the second is only meaningful as a
+    floor beside anything measured against labels.
+    """
+    try:
+        spec = models_mod.parse(args.model)
+    except models_mod.SpecError as e:
+        print(f"evals selfcheck FAILED: {e}", file=sys.stderr)
+        return 2
+
+    if args.repeat < 2:
+        print("evals selfcheck FAILED: --repeat must be at least 2",
+              file=sys.stderr)
+        return 2
+
+    task = tasks_mod.get(args.task)
+    records = corpus_mod.load(args.corpus)
+    if args.n:
+        records = records[:args.n]
+    if not records:
+        print("evals selfcheck FAILED: corpus is empty", file=sys.stderr)
+        return 1
+
+    # `--cache` is deliberately opt-IN and named for what it does to the
+    # measurement. Caching a repeat run makes every later pass replay the
+    # first and reports 100% agreement; the per-repeat cache key stops the
+    # collision, but a replayed answer still has no live variance in it.
+    use_cache = bool(args.cache)
+    print(f"evals selfcheck: task={task.name} model={spec.label} "
+          f"n={len(records)} repeat={args.repeat} "
+          f"cache={'on (per-repeat keys)' if use_cache else 'off'}",
+          flush=True)
+
+    def progress(pass_i, done, total, result):
+        if args.verbose:
+            print(f"  [pass {pass_i + 1}] [{done}/{total}] {result.job_id} "
+                  f"{result.status}"
+                  + (f" ({result.reason})" if result.reason else ""),
+                  file=sys.stderr)
+
+    try:
+        runs = runner_mod.run_repeated(task, spec, records,
+                                       repeat=args.repeat,
+                                       use_cache=use_cache,
+                                       workers=args.workers,
+                                       progress=progress)
+    except models_mod.SpecError as e:
+        print(f"evals selfcheck FAILED: {e}", file=sys.stderr)
+        return 2
+
+    from evals import metrics, report
+    for i, run in enumerate(runs):
+        print(f"--- pass {i + 1} ---")
+        print(report.render(run))
+
+    stats = metrics.selfcheck(runs, records, task.field_kinds)
+    print(report.render_selfcheck(stats, runs))
+    if args.out:
+        report.write_selfcheck_json(args.out, stats, runs)
+        print(f"wrote {args.out}")
+    return 0
+
+
 def cmd_cache_stats(args):
     count, total = cache_mod.stats()
     print(f"{cache_mod.cache_dir()}: {count} entries, {total/1e6:.1f} MB")
@@ -159,6 +227,23 @@ def main(argv=None):
     run_p.add_argument("--out", default=None, help="write results as JSONL")
     run_p.add_argument("--verbose", action="store_true")
     run_p.set_defaults(func=cmd_run)
+
+    sc = sub.add_parser("selfcheck",
+                        help="same corpus N times: model self-consistency")
+    sc.add_argument("--task", default="extract")
+    sc.add_argument("--model", required=True,
+                    help="MODEL@BASE_URL@KEY, MODEL, or claude:MODEL")
+    sc.add_argument("--corpus", default="evals/fixtures/corpus-v2.jsonl")
+    sc.add_argument("--n", type=int, default=None)
+    sc.add_argument("--repeat", type=int, default=3,
+                    help="passes over the corpus; 3 gives a majority")
+    sc.add_argument("--workers", type=int, default=runner_mod.DEFAULT_WORKERS)
+    sc.add_argument("--cache", action="store_true",
+                    help="replay from cache (per-repeat keys). Off by "
+                         "default: this measures live variance")
+    sc.add_argument("--out", default=None, help="write the table as JSON")
+    sc.add_argument("--verbose", action="store_true")
+    sc.set_defaults(func=cmd_selfcheck)
 
     cache_p = sub.add_parser("cache", help="inspect the replay cache")
     cache_sub = cache_p.add_subparsers(dest="cache_cmd", required=True)

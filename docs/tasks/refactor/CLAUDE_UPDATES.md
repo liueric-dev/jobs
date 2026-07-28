@@ -565,3 +565,72 @@ Also useful: the **production tier gate is already the best filter for this sour
 (74 kept, 8/9 recall, 10.8% precision). Task 05's widened AI-vocabulary gate is worse on
 both axes here, and its AI+entry+location composite discards two-thirds of the genuine
 rows.
+
+---
+
+## 2026-07-28 — 06 landed: **the gate says stop**
+
+`python3 -m evals selfcheck --repeat 3` now exists, `corpus-v2.jsonl` is frozen at n=120
+(115 comparable, all seven platforms), and `corpus-v1.jsonl` is untouched — task 04's
+figures cite it. **Suite 426 → 429.** Full results in
+`docs/ingestion_tests/selfcheck-n120-2026-07-28.json`.
+
+### The gate: two branches fire at once
+
+`ai_involvement`, pairwise agreement by platform:
+
+| platform | | |
+|---|---|---|
+| lever | 100% | n=9 |
+| weworkremotely | 95.8% | |
+| google_jobs | 93.3% | |
+| greenhouse / ashby | 92.2% | the clean sources |
+| builtin | 91.1% | |
+| **hn_whoishiring** | **77.8%** | the messy source |
+
+Below 90% on the messy platform — the row of task 06's own gate table that reads **"stop.
+Tasks 10 and 13 need rethinking."** And the clean-versus-messy gap is **14.4 points**,
+over the 10-point threshold, so Phase 3 also needs a per-source quality budget and task
+12's re-extraction must be measured before *and* after.
+
+**Tasks 10, 11 and 13 are held.** The remediation is a design decision, not an
+implementation one.
+
+### Was 76% real? No — and n=17 was wrong in both directions
+
+| | n=17 | n=115 | |
+|---|---|---|---|
+| `seniority_level` | 76% | **85.2%** | pessimistic |
+| `role_archetype` | 90% | **84.3%** | optimistic |
+| `ai_involvement` | 94% | **90.7%** | optimistic |
+| whole record identical | 0 of 17 | **21.7%** | pessimistic |
+
+The lesson is not that the old numbers were wrong; it is that at n=17 they could not have
+been right in either direction. What survives — and sharpens — is the structural finding:
+the clean/messy gap is real and large.
+
+Comparisons use the **pairwise** two-run metric, because the n=17 study ran twice. The
+report also carries unanimous-of-3, which is stricter by construction; quoting that
+against the old figures would have manufactured a decline that is an artifact of the
+metric rather than a property of the model.
+
+### The trap was real, and is now guarded by a test
+
+The eval cache is content-addressed, so without a repeat index in the key, repeat 2 reads
+back repeat 1's stored answer and the run reports **perfect agreement** — a total silent
+false pass on the exact quantity being measured, presenting as excellent news. A test now
+asserts the digests differ per repeat. One refinement worth keeping: `repeat_index=0`
+yields the *same* digest as an ordinary run, so adding `--repeat` does not invalidate a
+cache someone already paid for.
+
+### `criteria.json` was calibrated against figures that do not reproduce
+
+`_hard_exclude_comment` justified its penalty design with "seniority_level 95%,
+role_archetype 90%". Measured: **85.2%** [77.6–90.6] and **84.3%** [76.6–89.9] — both old
+figures fall outside the new intervals. The slip rate a `-100` penalty amplifies is
+nearer 1-in-7 than the 1-in-10 and 1-in-20 quoted there and in `docs/scoring.md:374`.
+
+The design is unchanged and the correction strengthens it; only the numbers were wrong.
+The comment records what it *used to say* rather than quietly replacing it, and
+`docs/ingestion_tests/README.md` keeps the n=17 figures under a "Superseded" heading with
+a per-field verdict rather than deleting them.

@@ -31,6 +31,59 @@ so a model standing in for it makes the measurement circular — the defect
 which treats `sonnet-batch-1` as ground truth. Reversible only in the sense that the
 labels can be collected later.
 
+### 06 — THE GATE: the stop branch, and the >10-point gap branch, both fire
+
+Measured 2026-07-28, n=120 (115 comparable), `--repeat 3`, `deepseek-v4-flash` at
+temperature 0, on frozen `corpus-v2.jsonl`. All seven platforms represented.
+
+`ai_involvement` pairwise agreement by platform: lever 100% (n=9), weworkremotely 95.8%,
+google_jobs 93.3%, greenhouse and ashby 92.2%, builtin 91.1%, **hn_whoishiring 77.8%**.
+
+Against task 06's own gate table: `ai_involvement` is **below 90% on the messy
+platform**, which is the row that reads *"stop. Tasks 10 and 13 need rethinking."* And
+the clean-versus-messy gap is **14.4 points**, over the 10-point threshold, which
+additionally requires Phase 3 to carry a per-source quality budget and task 12's
+re-extraction to be measured before *and* after.
+
+Both branches fire. Tasks 10, 11 and 13 are held pending a design decision that belongs
+to the repo owner, not to this run.
+
+### 06 — Was 76% real? No, and the n=17 sample erred in both directions
+
+| | n=17 | n=115 | |
+|---|---|---|---|
+| `seniority_level` | 76% | **85.2%** | pessimistic |
+| `role_archetype` | 90% | **84.3%** | optimistic |
+| `ai_involvement` | 94% | **90.7%** | optimistic |
+| whole record identical | 0 of 17 | **21.7%** | pessimistic |
+
+The useful lesson is not that the old numbers were wrong but that at n=17 they could not
+have been right in either direction. The structural finding — a large clean-versus-messy
+gap — is what survives, and it sharpened.
+
+Comparisons are drawn against the *pairwise* two-run metric, since the n=17 study ran
+twice. The report also carries unanimous-of-3, which is stricter by construction;
+quoting it against the old figures would have manufactured a decline that is an artifact
+of the metric.
+
+### 06 — `criteria.json`'s calibration figures were corrected, and the design was not
+
+`_hard_exclude_comment` justified its penalty design with "seniority_level agreeing with
+itself 95% and role_archetype 90%". Neither reproduces: 85.2% [77.6–90.6] and 84.3%
+[76.6–89.9], with 95% and 90% falling outside the respective intervals. The slip rate a
+-100 penalty amplifies is nearer 1-in-7 than the quoted 1-in-10 and 1-in-20. **The design
+is unchanged and the correction strengthens it** — only the numbers were wrong. The
+comment records what it used to say rather than quietly replacing it. Not reversible; it
+is a correction of fact.
+
+### 06 — `repeat_index=0` shares cache keys with an ordinary run
+
+The cache is content-addressed, so a repeat index had to enter the key or repeat 2 would
+read back repeat 1's answer and report perfect agreement — a silent total false pass on
+the quantity being measured. A test asserts the digests differ per repeat. The refinement
+worth recording: `repeat_index=0` produces the *same* digest as a non-repeat run, so
+adding `--repeat` does not invalidate a cache someone already paid for. Reversible.
+
 ### EXP — Build task 23, sharply descoped. Google Jobs yields when it is asked properly
 
 16 SerpApi searches on Pursuit-shaped queries: 131 results, 74 passing the production

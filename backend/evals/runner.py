@@ -14,6 +14,13 @@ TRANSIENT FAILURES ARE NOT CACHED AND NOT COUNTED
     endpoint being busy. It is recorded as `deferred`, which is exactly what
     extract.py does with the same signal (extract.py:365).
 
+REPEATS ARE NOT CACHE HITS
+    run_repeated() exists for self-consistency: the same prompt, N times,
+    on purpose. The cache is content-addressed, so that is exactly the shape
+    a cache turns into a false 100%. Two defences, both here: caching is off
+    by default when repeat > 1, and every pass carries a repeat_index into
+    cache.key_for so the two never collide even when caching is forced on.
+
 CONCURRENCY MATCHES THE PIPELINE
     Same ThreadPoolExecutor shape and the same default worker count as
     extract.py, because latency measured at a concurrency the pipeline never
@@ -74,14 +81,16 @@ class Run:
         return out
 
 
-def _one(task, spec, record, *, use_cache, refresh, json_object, call_kwargs):
+def _one(task, spec, record, *, use_cache, refresh, json_object, call_kwargs,
+         repeat_index=0):
     """Execute a single record. Never raises for a per-record failure."""
     job_id = record.get("id")
     if not task.eligible(record):
         return Result(job_id=job_id, status=SKIPPED, reason="ineligible")
 
     prompt = task.build_prompt(record)
-    digest = cache_mod.key_for(spec, prompt, json_object=json_object)
+    digest = cache_mod.key_for(spec, prompt, json_object=json_object,
+                               repeat_index=repeat_index)
 
     entry = None
     if use_cache and not refresh:
@@ -122,11 +131,15 @@ def _one(task, spec, record, *, use_cache, refresh, json_object, call_kwargs):
 
 
 def run(task, spec, records, *, use_cache=True, refresh=False,
-        workers=DEFAULT_WORKERS, json_object=True, progress=None):
+        workers=DEFAULT_WORKERS, json_object=True, progress=None,
+        repeat_index=0):
     """Execute `task` over `records` with `spec`. Returns a Run.
 
     Results come back in corpus order regardless of completion order, so two
     runs over the same fixture produce byte-identical reports.
+
+    `repeat_index` only reaches the cache key (cache.key_for). 0 is the
+    ordinary run and shares entries with every previous one.
     """
     if use_cache:
         cache_mod.ensure_gitignored()
@@ -143,7 +156,8 @@ def run(task, spec, records, *, use_cache=True, refresh=False,
         futures = {
             pool.submit(_one, task, spec, rec, use_cache=use_cache,
                         refresh=refresh, json_object=json_object,
-                        call_kwargs=call_kwargs): i
+                        call_kwargs=call_kwargs,
+                        repeat_index=repeat_index): i
             for i, rec in enumerate(records)
         }
         done = 0
@@ -157,3 +171,40 @@ def run(task, spec, records, *, use_cache=True, refresh=False,
     return Run(task=task.name, model_label=spec.label,
                model_identity=spec.cache_identity(), results=results,
                use_cache=use_cache)
+
+
+def run_repeated(task, spec, records, *, repeat=3, use_cache=None,
+                 refresh=False, workers=DEFAULT_WORKERS, json_object=True,
+                 progress=None):
+    """Execute the same task/corpus `repeat` times. Returns a list of Runs.
+
+    CACHING IS OFF BY DEFAULT WHENEVER repeat > 1
+        The quantity being measured is live run-to-run variance. A replayed
+        answer has no variance by construction, so a cached repeat run
+        measures the cache. `use_cache=None` means "decide from repeat";
+        pass True explicitly to override, and the per-repeat cache key
+        (cache.key_for's repeat_index) keeps that honest.
+
+    RUNS ARE SEQUENTIAL, NOT INTERLEAVED
+        Concurrency inside one pass already matches the pipeline
+        (DEFAULT_WORKERS). Running three passes at once would triple the
+        offered load and measure the endpoint under a concurrency the
+        pipeline never uses -- and a provider that degrades under load would
+        show up as model instability, which is precisely the confusion this
+        measurement exists to avoid.
+    """
+    if repeat < 1:
+        raise ValueError("repeat must be >= 1")
+    if use_cache is None:
+        use_cache = repeat == 1
+
+    runs = []
+    for i in range(repeat):
+        def _progress(done, total, result, _i=i):
+            if progress:
+                progress(_i, done, total, result)
+        runs.append(run(task, spec, records, use_cache=use_cache,
+                        refresh=refresh, workers=workers,
+                        json_object=json_object, progress=_progress,
+                        repeat_index=i))
+    return runs
