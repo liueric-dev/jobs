@@ -583,3 +583,59 @@ when tempted to tidy it up. **Task 12 must not be run without it.**
 Its 40/day paragraph is task 04's finding and the reason the code changed, so it is kept
 and annotated rather than replaced. CLAUDE.md's rule for hand-written docs: write at
 decision time, mark stale, fix at phase boundaries. Reversible.
+
+### 10 — Include lists accept a list of lists, and that is what bought the precision
+
+Task 05's AI vocabulary alone is 93% junk over 2,975 rows, so lifting it verbatim — which
+the task file asks for — would have shipped a gate at 6.7% precision. Include lists now
+accept either a flat list (one OR group, the historical shape, unchanged for every list in
+`config/relevance.json`) or a list of lists meaning "at least one term from every group",
+which is how the cohort gate says "AI vocabulary AND an entry-level signal". Precision
+10.0% strict rather than 6.7%. A single group keeps the un-suffixed parameter name, which
+is what preserves byte-identity of the emitted SQL. Reversible.
+
+### 10 — Task 05's regex was extended, not lifted verbatim, against the task file's instruction
+
+The task file says lift it directly. It is incomplete: no bare `\yai\y`, no `ai-driven`,
+no `ai-enabled`, and the entry-level list lacks `\yintern\y`. The task file's instruction
+was written before anyone had hand-checked the pattern. Reversible.
+
+### 10 — The invariant is verified by byte-diff against HEAD, not by inspection
+
+The pre-change module was loaded side by side with the new one and both were asked for SQL
+across seven config shapes; all seven identical, `union_sql` included. Then pinned in the
+suite as a golden string. Rejected: asserting the tier counts match, which would have
+proved only that this corpus does not distinguish them. The golden string is deliberately
+brittle — anything that changes it changes which postings get extracted, and that should
+require somebody to look at it. Reversible, and should not be.
+
+### 10 — The cohort profile ships `active=False`, and that is load-bearing
+
+`profiles.load_active` filters on `active`, so the profile is invisible to `union_sql`,
+`extract.py` and `match.py`. This is what makes "production extraction volume does not
+move" provable rather than argued, and it is why the gate could land before task 13 exists.
+`persona_json` and `criteria_json` are placeholders labelled as such in their own text
+rather than plausible-looking invented weights — an invented weight would be indavertently
+inherited by task 13. **Activating this profile is a deliberate act with a volume
+consequence: +573 rows, 13.2/day.** Reversible by one column.
+
+### 10 — Both tier arms repeat the whole `row_ok`
+
+Otherwise an excluded title merely drops from tier 1 to tier 2 rather than to tier 3, and
+`max_tier_to_score = 2` would still admit it. The exclusion lists encode judgement that has
+to hold on both include paths, not just the located one. Irreversible in the sense that
+getting it wrong is silent. Reversible as code.
+
+### 10 — A `COALESCE(description_text, '')` guard on the include path
+
+37 rows have no description, and `NULL ~* pattern` is `NULL`, not `FALSE` — so an
+unguarded include path makes the whole tier expression `NULL` for those rows. Same guard
+`description_exclude` already carries, for the same reason. Reversible.
+
+### 10 — The precision figure is reported strictly, with the generous reading beside it
+
+10.0% strict / 23.3% generous, n=30, sample pinned by `md5(id)`. Same convention task 05
+set. The headline says the gate "is better than the one task 05 measured and it is still
+mostly noise" rather than leading with the improvement — task 12's extraction volume
+projection consumes this number and a flattering one would mis-size it. Not reversible:
+it is a measurement.

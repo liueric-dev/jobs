@@ -40,7 +40,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 
 | | Task | Lands | |
 |---|---|---|---|
-| 10 | Description-first relevance gate | AI-tool vocabulary matched against `description_text`, not just titles | todo |
+| 10 | [Description-first relevance gate](tranche_two/10-description-first-gate.md) | AI-tool vocabulary matched against `description_text` — **876 rows eligible for the cohort, 573 newly, 13.2/day; precision 10.0% vs task 05's 6.7%**, [`docs/pursuit-description-gate.md`](../../pursuit-description-gate.md) | done |
 | 11 | Archetype superset, `role_track`, missingness | non-software archetypes; track clustering; `is_missing` per nullable field | todo |
 | 12 | `FACTS_VERSION` bump and re-extract | one bump carrying 11's changes; full corpus re-extraction | todo |
 | 13 | Cohort criteria profile | entry-level target, `uses_ai_tools` weighted above `builds_llm_features` | todo |

@@ -748,3 +748,76 @@ moved with them. It does not, because **task 12 owns the next bump and must carr
 change** — one re-extraction paying for both instead of two burn-downs a week apart. The
 debt is recorded at the constant itself (`schema.py:158`) with a warning not to bump it
 "to tidy up" without doing task 12's measurement, since the bump re-extracts ~5,300 rows.
+
+---
+
+## 2026-07-28 — 10 landed (`7d94bb1`): the gate reads descriptions, and it is still mostly noise
+
+Report: [`docs/pursuit-description-gate.md`](../../pursuit-description-gate.md). New:
+`backend/migrations/migrate_pursuit_profile.py`. Changed: `backend/relevance.py`,
+`backend/tools/relevance-report.py`, `backend/tests/test_relevance.py` (+20).
+
+Harvey's **User Operations Specialist** — *"working fluency with AI tools (e.g. ChatGPT,
+Claude, Gemini); you use them, not just know of them"* — sits at tier 3 under the shared
+config and **tier 1** under the cohort gate. That is the task's Definition-of-done example
+and it was found in the live table rather than constructed.
+
+**876 rows eligible for the cohort (tier ≤ 2), 573 of them newly, 13.2/day.**
+
+### The honest number: 10.0% strict, against task 05's 6.7%
+
+Hand-checked n=30, sample pinned by `md5(id)`. The conjunctive gate is **better** than the
+vocabulary alone that task 05 measured — and it is still 90% junk. The report says so in
+its own headline rather than in a footnote: *"the gate is better than the one task 05
+measured and it is still mostly noise… the bottleneck is sourcing, not gating."*
+
+That is the second time this run has produced a truthful low number where a flattering one
+was available (task 05's 6.7% was the first). It matters because task 12's extraction
+volume projection consumes this figure directly.
+
+### The invariant was verified two ways, not asserted
+
+With `description_include` absent, null or empty, `tier_sql` emits the **identical string
+and identical params**. The agent loaded the pre-change module side by side with the new
+one and diffed the emitted SQL across seven config shapes — production config, `DISABLED`,
+include-only, include+exclude, excludes-without-include, locations-configured, and
+`union_sql` — then pinned it in the suite as a golden string.
+
+Deliberately brittle, and correctly so: anything that changes that string changes which
+postings get extracted, and that should require somebody to look at the string.
+
+**`frontend` and `tech` tier counts are unchanged on every platform**, confirmed against
+the baseline taken before any agent ran.
+
+### Include groups: the mechanism that bought the precision
+
+An include list is now either a flat list of strings — one OR group, the historical shape,
+still what every list in `config/relevance.json` uses — or a **list of lists**, meaning a
+row must match at least one term from every group. That is how the cohort gate expresses
+"AI vocabulary AND an entry-level signal".
+
+A single group keeps the un-suffixed parameter name (`rel_include`, not `rel_include1`),
+which is what makes the byte-identity above possible at all.
+
+### The cohort profile is inactive, and that is the safety mechanism
+
+`profiles.load_active` filters on `active`, so an inactive profile is invisible to
+`union_sql`, `extract.py` and `match.py`. Production extraction volume **provably** cannot
+move until a human activates it. `persona_json` and `criteria_json` are placeholders that
+say so in their own text — task 13 owns the real cohort criteria and it is a product call,
+not an implementation one.
+
+### Four defects found outside scope, recorded not fixed
+
+1. `title_exclude` has `\yauditor\y` but not `\yaudit\y` — an *IT Audit Analyst* clears the
+   gate. Same class: `\yclinician\y`/`\ytherapist\y`/`\yphysician\y` but not
+   `\ypsychologist\y`.
+2. "Hybrid Development Representative" evades both `sales development` and `\ysdr\y`,
+   despite the posting saying outright it is the entry point into the sales org. Three
+   near-duplicates landed in one 30-row sample.
+3. A Singapore posting is tagged `location_is_remote = TRUE` and reaches tier 1 for an NYC
+   cohort. Ingest-side location tagging, not relevance.
+4. **One `description_text` contains scraped ChatGPT web-UI markup** — job
+   `ff9f9d9f9643e185af0f48ca` begins with `data-testid="conversation-turn-136"`. Something
+   in that ingest path captured a browser DOM rather than a posting body. Worth a task of
+   its own; it is silently poisoning extraction input.
