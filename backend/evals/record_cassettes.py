@@ -40,6 +40,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import extract                                                # noqa: E402
 from evals import cassettes                                   # noqa: E402
 from evals.ingest_modules import load as load_ingest          # noqa: E402
 from lib import envfile                                       # noqa: E402
@@ -96,6 +97,81 @@ def record_ats_greenhouse_no_content():
         data = http.get_json(
             "https://api.greenhouse.io/v1/boards/kickstarter/jobs")
     return f"{len(data.get('jobs', []))} postings, no content field"
+
+
+def record_ats_greenhouse_domsoup():
+    """A LIVE greenhouse posting whose `content` is a pasted browser DOM.
+
+    THE FIXTURE FOR TASK 35, and it is a recording rather than a constructed
+    string for the reason HANDOFF.md:571-574 states: fixtures written from a
+    specification test the specification. Nobody would invent
+    `[&:has([data-writing-block])>*]:pointer-events-auto` -- and that exact
+    token is the defect, because the ">" inside the class attribute is what
+    ends lib/text.strip_html()'s `<[^>]+>` early and spills the rest of the
+    tag into description_text as prose.
+
+    Two postings from the same board on the same day:
+
+        8035268  Product Analyst (Maternity-Leave Replacement)  -- the poisoned
+                 one. Its `content` is a rendered ChatGPT conversation someone
+                 pasted into Greenhouse's job-description editor. That it is
+                 Greenhouse, a structured ATS API, is the whole point: the
+                 markup is in the EMPLOYER's field, so no scraper is at fault
+                 and no per-source fix would have caught it.
+        8087797  Senior Data Scientist -- an ordinary posting, so the same test
+                 can show the gate leaves a real job description alone without
+                 a synthetic control.
+
+    THE SINGLE-JOB ENDPOINT, not fetch_greenhouse(). The whole taboola board is
+    95 postings and 875 KB, of which one posting is the evidence;
+    `ats-greenhouse.json` already pins that fetch_greenhouse() pages and
+    unescapes correctly. This recipe pins what greenhouse_description() does to
+    one pathological `content`, at 1/80th of the disk. Same precedent as
+    record_ats_greenhouse_no_content() above, which also builds its own request.
+    """
+    from lib import http
+    ats = load_ingest("ats")
+    urls = {
+        "poisoned": "https://boards-api.greenhouse.io/v1/boards/taboola/jobs/"
+                    "8035268?content=true",
+        "clean": "https://boards-api.greenhouse.io/v1/boards/taboola/jobs/"
+                 "8087797?content=true",
+    }
+    bodies = {}
+    with cassettes.recording(
+            "ats-greenhouse-domsoup", source="boards-api.greenhouse.io",
+            recorded_by=RECORDED_BY,
+            note="Two taboola postings. 8035268's `content` is a pasted "
+                 "ChatGPT web UI -- the input extract.py's markup gate exists "
+                 "to reject; 8087797 is an ordinary posting from the same "
+                 "board as the control. Recorded for task 35."):
+        for label, url in urls.items():
+            bodies[label] = http.get_json(url)
+            time.sleep(1.0)
+
+    # REFUSE TO RECORD BYTES THAT NO LONGER CARRY THE DEFECT. A cassette that
+    # has quietly stopped reproducing its own failure reads like coverage and
+    # is worse than none -- the lesson task 18 wrote down (HANDOFF.md:565-570).
+    # If Taboola fixes this job description, this recipe must fail loudly so
+    # the fixture is re-sourced rather than silently downgraded to two clean
+    # postings that assert nothing.
+    ratios = {}
+    for label, body in bodies.items():
+        description = ats.greenhouse_description(body.get("content")) or ""
+        ratios[label] = extract.markup_ratio(
+            extract.prompt_description({"description_text": description}))
+    if ratios["poisoned"] < extract.MARKUP_REJECT_RATIO:
+        raise RuntimeError(
+            f"taboola 8035268 now scores {ratios['poisoned']:.4f}, below the "
+            f"{extract.MARKUP_REJECT_RATIO} gate -- the employer has fixed the "
+            f"posting and these bytes are no longer evidence for task 35. Find "
+            f"another contaminated posting before re-recording.")
+    if ratios["clean"] >= extract.MARKUP_REJECT_RATIO:
+        raise RuntimeError(
+            f"the control posting 8087797 now scores {ratios['clean']:.4f} and "
+            f"would itself be rejected; it is no longer a control.")
+    return (f"2 postings: 8035268 markup_ratio={ratios['poisoned']:.4f} "
+            f"(rejected), 8087797 markup_ratio={ratios['clean']:.4f} (kept)")
 
 
 def record_ats_lever():
@@ -576,6 +652,7 @@ def record_google_apify():
 FREE = {
     "ats-greenhouse": record_ats_greenhouse,
     "ats-greenhouse-no-content": record_ats_greenhouse_no_content,
+    "ats-greenhouse-domsoup": record_ats_greenhouse_domsoup,
     "ats-lever": record_ats_lever,
     "ats-ashby": record_ats_ashby,
     "ats-workable": record_ats_workable,

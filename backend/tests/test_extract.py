@@ -40,7 +40,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import extract  # noqa: E402
 import llm  # noqa: E402
 import schema  # noqa: E402
-from evals import scratchdb  # noqa: E402
+from evals import cassettes, ingest_modules, scratchdb  # noqa: E402
 from lib import dbconn, envfile  # noqa: E402
 
 #: The pipeline's own .env, the way run-daily.py loads it -- see
@@ -239,6 +239,230 @@ class CallCountTests(unittest.TestCase):
             job("hn_whoishiring"), call=lambda p: "not json at all")
         self.assertEqual(outcome, extract.REJECTED)
         self.assertIsNone(facts)
+
+
+#: The one taboola posting whose greenhouse `content` is a pasted ChatGPT web
+#: UI, and an ordinary posting from the same board on the same day. Real bytes:
+#: python3 evals/record_cassettes.py ats-greenhouse-domsoup
+DOMSOUP_CASSETTE = "ats-greenhouse-domsoup"
+DOMSOUP_POISONED = ("https://boards-api.greenhouse.io/v1/boards/taboola/jobs/"
+                    "8035268?content=true")
+DOMSOUP_CLEAN = ("https://boards-api.greenhouse.io/v1/boards/taboola/jobs/"
+                 "8087797?content=true")
+
+
+@unittest.skipUnless(
+    cassettes.available(DOMSOUP_CASSETTE),
+    f"cassette {DOMSOUP_CASSETTE} not recorded; "
+    f"python3 evals/record_cassettes.py {DOMSOUP_CASSETTE}")
+class InputSanityCassetteTests(unittest.TestCase):
+    """The gate, driven from the bytes greenhouse actually served.
+
+    WHY A CASSETTE AND NOT A STRING IN THIS FILE. The contaminating token is
+    `[&:has([data-writing-block])>*]:pointer-events-auto`, and what makes it
+    dangerous is a detail nobody writing a fixture from a description would
+    include: the ">" inside the class attribute ends lib/text.strip_html()'s
+    `<[^>]+>` early, so the remainder of the tag is emitted as prose. A
+    hand-written "some markup" fixture tests the sentence "some markup", which
+    is the trap HANDOFF.md:571-574 names -- all three failure modes task 18
+    found live were invisible to its four constructed fixtures.
+
+    It also runs the REAL ingest function (ats.greenhouse_description) rather
+    than a copy, so the chain under test is the production one: greenhouse
+    bytes -> the double unescape -> strip_html -> description_text -> the gate.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.ats = ingest_modules.load("ats")
+        from lib import http
+        with cassettes.replay(DOMSOUP_CASSETTE):
+            cls.poisoned = http.get_json(DOMSOUP_POISONED)
+            cls.clean = http.get_json(DOMSOUP_CLEAN)
+
+    def _job(self, body, platform="greenhouse"):
+        return {"id": str(body["id"]), "title": body.get("title"),
+                "company_name": "Taboola", "location_raw": "New York",
+                "platform": platform,
+                "description_text": self.ats.greenhouse_description(
+                    body.get("content"))}
+
+    def test_the_markup_survived_strip_html_in_the_first_place(self):
+        """The defect is upstream of extraction and this pins where.
+
+        If strip_html() is ever fixed to handle ">" inside an attribute value,
+        this test fails -- and that is the correct signal, not a nuisance: it
+        means the leak is gone at the source and the gate below is guarding
+        something that can no longer happen through this path.
+        """
+        description = self._job(self.poisoned)["description_text"]
+        self.assertIn("data-testid=", description)
+        self.assertIn("pointer-events-auto", description)
+
+    def test_a_pasted_browser_dom_is_rejected_without_an_llm_call(self):
+        calls = []
+        outcome, facts, passes, unanimity = extract.extract_facts(
+            self._job(self.poisoned),
+            call=lambda prompt: calls.append(prompt) or response())
+        self.assertEqual(outcome, extract.REJECTED)
+        self.assertIsNone(facts)
+        self.assertEqual(passes, 0)
+        # THE POINT. score.py's REJECTED normally means "the model answered
+        # and the answer was unusable"; here the model is never reached.
+        self.assertEqual(calls, [])
+
+    def test_an_ordinary_posting_from_the_same_board_is_untouched(self):
+        """The control, and it is a real posting rather than a synthetic one.
+
+        A gate measured only against the inputs it was built to reject cannot
+        report a false-positive rate. This is one real greenhouse posting,
+        fetched from the same board on the same day as the poisoned one, going
+        all the way through to an extraction.
+        """
+        calls = []
+        outcome, facts, passes, unanimity = extract.extract_facts(
+            self._job(self.clean),
+            call=lambda prompt: calls.append(prompt) or response())
+        self.assertEqual(outcome, extract.EXTRACTED)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(extract.markup_ratio(calls[0]), 0.0)
+        # And the posting itself reached the model, not just the instructions.
+        self.assertIn("Taboola", calls[0])
+
+    def test_the_gate_is_a_cliff_not_a_slope_between_these_two(self):
+        """Both ratios, printed as one assertion, so the margin is visible.
+
+        The threshold's justification is the GAP it sits in, not the value
+        itself. If a re-recording narrows that gap the number to change is
+        extract.MARKUP_REJECT_RATIO, and this is where you find out.
+        """
+        poisoned = extract.markup_ratio(
+            extract.prompt_description(self._job(self.poisoned)))
+        clean = extract.markup_ratio(
+            extract.prompt_description(self._job(self.clean)))
+        self.assertEqual(clean, 0.0)
+        self.assertGreater(poisoned, extract.MARKUP_REJECT_RATIO * 5,
+                           f"poisoned={poisoned}, clean={clean}")
+
+
+class MarkupRatioTests(unittest.TestCase):
+    """The predicate itself: what it counts, and what it deliberately does not.
+
+    Every string here is either lifted verbatim from a row in the live table
+    (the job_id is named) or is the shape a measured false positive took. None
+    of them is invented -- see the cassette class above for why that matters.
+    """
+
+    def test_an_ordinary_posting_scores_zero(self):
+        self.assertEqual(extract.markup_ratio(
+            "We are hiring a senior backend engineer. You will own our "
+            "Python services and work with Postgres and Kafka."), 0.0)
+
+    def test_html_attribute_soup_is_counted(self):
+        # ff9f9d9f9643e185af0f48ca, the reported row, at its first leak.
+        ratio = extract.markup_ratio(
+            '*]:pointer-events-auto R6Vx5W_threadScrollVars '
+            'data-testid="conversation-turn-136" data-turn="assistant">')
+        self.assertGreater(ratio, 0.5)
+
+    def test_tailwind_class_residue_with_no_data_attribute_is_counted(self):
+        # e93ddca38b45bb929e6e46cd (Databricks). A marker blocklist built from
+        # `data-testid=` / `pointer-events-auto` -- the query HANDOFF.md:410
+        # used -- scores this at zero and lets it through.
+        self.assertGreater(extract.markup_ratio('p]:pt-0 [&>p]:mb-2 [&>p]:my-0">'),
+                           0.5)
+
+    def test_bracketed_prose_is_not_markup(self):
+        """`[ONSITE]:` is Who's Hiring convention, not a Tailwind variant.
+
+        415fcb871b101301330b9a67 is a real hn_whoishiring posting written this
+        way, and it was a false positive until `\\]:` was tightened to
+        `\\]:[a-z]`. It is the only false positive the sweep has ever produced,
+        so it is the one worth a test.
+        """
+        self.assertEqual(extract.markup_ratio(
+            "HPC Hardware & Infra Sysadmin [ONSITE]: We are looking for a "
+            "system administrator to help run Sherlock."), 0.0)
+
+    def test_an_empty_or_missing_description_is_not_markup(self):
+        # Not the gate's problem: _eligible_sql already excludes empty
+        # descriptions, and answering 1.0 here would make "" look poisoned.
+        self.assertEqual(extract.markup_ratio(""), 0.0)
+        self.assertEqual(extract.markup_ratio(None), 0.0)
+        self.assertFalse(extract.is_unusable_input({}))
+        self.assertFalse(extract.is_unusable_input({"description_text": None}))
+
+    def test_the_gate_judges_the_prompt_window_not_the_stored_text(self):
+        """Markup past MAX_DESCRIPTION_CHARS reaches no model, so it is not
+        grounds for a tombstone. build_prompt and the gate read the same slice
+        through prompt_description() so the two cannot drift."""
+        clean = "We are hiring an engineer. " * 200
+        self.assertGreater(len(clean), extract.MAX_DESCRIPTION_CHARS)
+        soup = ' data-testid="x" [&>p]:mb-2 var(--y) ' * 40
+        self.assertTrue(extract.is_unusable_input({"description_text": soup + clean}))
+        self.assertFalse(extract.is_unusable_input({"description_text": clean + soup}))
+
+    def test_a_light_nick_of_markup_does_not_tombstone_a_real_posting(self):
+        """cc7d1b61574ffdac2d112a8d: eleven characters of stray Tailwind in an
+        otherwise complete Fireblocks job description, ratio 0.0040. Rejecting
+        a readable posting is the failure mode that matters more than missing
+        this one, so the threshold is set above it deliberately."""
+        prose = "What you'll own: the mobile product end-to-end. " * 60
+        posting = f"You define what gets built and why. _*]:min-w-0 {prose}"
+        ratio = extract.markup_ratio(posting)
+        self.assertGreater(ratio, 0.0)
+        self.assertLess(ratio, extract.MARKUP_REJECT_RATIO)
+        self.assertFalse(extract.is_unusable_input({"description_text": posting}))
+
+    def test_the_threshold_sits_in_the_measured_gap(self):
+        """0.01 is sqrt(0.0040 * 0.0247), the geometric midpoint between the
+        worst clean row and the mildest poisoned one in the 2026-07-28 sweep.
+        A future edit that moves it out of that interval is moving it onto one
+        of the two populations rather than between them."""
+        self.assertGreater(extract.MARKUP_REJECT_RATIO, 0.0040)
+        self.assertLess(extract.MARKUP_REJECT_RATIO, 0.0247)
+
+
+class InputRejectionTombstoneTests(unittest.TestCase):
+    """A gate that fires invisibly is the failure mode it was added to end."""
+
+    def test_the_tombstone_says_it_was_the_input(self):
+        label = f"{extract.INPUT_REJECT_LABEL}/deepseek-v4-flash@example.com"
+        # Still a FAILED: tombstone: match.py:285 excludes these with
+        # NOT LIKE 'FAILED:%' and evals/corpus.py:171 buckets them the same
+        # way, so the reason rides along without moving either predicate.
+        self.assertTrue(llm.failed_label(label).startswith(llm.FAILED_PREFIX))
+        self.assertIn(extract.INPUT_REJECT_LABEL, llm.failed_label(label))
+
+    def test_a_model_failure_is_not_labelled_as_an_input_failure(self):
+        # The distinction is the whole value of the label: both outcomes are
+        # REJECTED, but only one of them is evidence about the model.
+        self.assertNotIn(extract.INPUT_REJECT_LABEL,
+                         llm.failed_label("deepseek-v4-flash@example.com"))
+
+    def test_rejection_counts_as_progress_for_the_drain_loop(self):
+        """A batch of nothing but poisoned rows must not read as a down endpoint.
+
+        drain_loop breaks on `EXTRACTED + REJECTED == 0`, so an input rejection
+        has to land in REJECTED and not in DEFERRED. Getting that backwards
+        would stop the night's drain on the first contaminated batch and leave
+        every posting behind it unextracted -- and it would report itself as
+        "no-progress", i.e. as a rate-limited endpoint, which is the wrong
+        thing to go and investigate.
+        """
+        soup = {"id": "j1", "platform": "greenhouse", "title": "Analyst",
+                "description_text": '*]:pointer-events-auto data-testid="x">'}
+        batches = [[soup, soup], []]
+
+        def run_batch(jobs):
+            return Counter(extract.extract_facts(j)[0] for j in jobs)
+
+        totals, ran, stopped = extract.drain_loop(
+            lambda: batches.pop(0), run_batch, deadline_secs=60)
+        self.assertEqual(totals[extract.REJECTED], 2)
+        self.assertEqual(totals[extract.DEFERRED], 0)
+        # DRAINED, not NO_PROGRESS: the batch learned something.
+        self.assertEqual(stopped, extract.DRAINED)
 
 
 #: The fourteen values docs/role-track-derivation.md added to the original
@@ -923,6 +1147,51 @@ class SchemaAndSelectionTests(unittest.TestCase):
             # remaining() must agree with what selection can see, or the
             # summary line reports a backlog no batch will ever burn down.
             self.assertEqual(extract.remaining(conn, cfgs), len(picked))
+
+    def test_an_input_rejection_tombstones_and_counts_as_unusable(self):
+        """extract_one_job end to end on a poisoned row: no call, a labelled
+        tombstone, and a REJECTED that main() prints as `unusable`.
+
+        The three claims are one claim. A gate whose rejection does not reach
+        the summary line is invisible, and a gate whose rejection does not
+        reach job_facts is re-run every night forever.
+        """
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._insert_job(conn, "soup", "2026-07-01T00:00:00")
+            conn.execute(
+                "UPDATE jobs SET description_text = %s WHERE id = 'soup'",
+                ('*]:pointer-events-auto data-testid="conversation-turn-136" '
+                 'data-turn="assistant"> We are hiring an engineer.',))
+            conn.commit()
+
+            job_row = extract.select_unextracted_jobs(
+                conn, 10, [dict(extract.relevance.DISABLED)])[0]
+            self.assertEqual(job_row["id"], "soup")
+
+            def must_not_be_called(prompt):
+                self.fail("the gate let a poisoned posting reach the model")
+
+            outcome, facts, passes, _ = extract.extract_facts(
+                job_row, call=must_not_be_called)
+            self.assertEqual(outcome, extract.REJECTED)
+
+            # This is what main() sums into the `unusable` field of its
+            # summary line (extract.py's print at the end of main()).
+            self.assertEqual(Counter([outcome])[extract.REJECTED], 1)
+
+            extract.mark_extract_failed(
+                conn, "soup",
+                f"{extract.INPUT_REJECT_LABEL}/test-model")
+            stored = conn.execute(
+                "SELECT facts_version, extraction_model FROM job_facts "
+                "WHERE job_id = 'soup'").fetchone()
+            self.assertEqual(stored[0], schema.FACTS_VERSION)
+            self.assertTrue(stored[1].startswith(llm.FAILED_PREFIX))
+            self.assertIn(extract.INPUT_REJECT_LABEL, stored[1])
+
+            # And it is out of the backlog, so it costs nothing tomorrow.
+            cfgs = [dict(extract.relevance.DISABLED)]
+            self.assertEqual(extract.remaining(conn, cfgs), 0)
 
     def test_a_tombstone_is_not_reselected(self):
         with scratchdb.scratch_schema() as (conn, _name):

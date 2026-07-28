@@ -100,6 +100,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | | Task | Lands | |
 |---|---|---|---|
 | 34 | [Documentation cleanup](34-documentation-cleanup.md) | archive, promote, regenerate — by document type | todo |
+| 35 | [Extraction input sanity](tranche_six/35-extraction-input-sanity.md) | reject browser-DOM markup before it becomes facts; 0 false positives in 13,282 | done |
 
 ---
 

@@ -43,6 +43,20 @@ FAILURE HANDLING IS score.py'S, DELIBERATELY UNCHANGED
     retried nightly forever, and a 429 gets nothing written so it is. Getting
     that backwards permanently discards jobs that were never evaluated.
 
+NOT EVERYTHING THAT ARRIVES IS A JOB POSTING
+    An ingest path that captures the wrong bytes used to get them laundered
+    into structured facts, because nothing between the database and the model
+    had any opinion about what it was reading. Eight rows in this corpus carry
+    residual browser markup in description_text -- one of them a scraped
+    ChatGPT web UI that extracted as role_archetype='data' at facts_version=3,
+    another 2,700 characters of a staffing firm's navigation menu that
+    extracted as 'ml_research' and reached a job_scores row.
+
+    So there is now a gate immediately before build_prompt(): a posting whose
+    prompt window is more than MARKUP_REJECT_RATIO markup is REJECTED without
+    a call. It sits there and not in the eligibility SQL on purpose -- see the
+    block above the gate.
+
 SOME SOURCES GET THREE CALLS, NOT ONE
     "One LLM call per job" above is now "one call per job on six of the seven
     platforms". Task 06 measured this model disagreeing with ITSELF at
@@ -81,6 +95,7 @@ USAGE
 """
 
 import os
+import re
 import sys
 import json
 import time
@@ -357,8 +372,162 @@ JOB POSTING TO EXTRACT FROM:
 """
 
 
+# ---------------------------------------------------------------------------
+# THE INPUT-SANITY GATE
+#
+# Until this existed, extraction had NO opinion about what it was reading. The
+# whole of input preparation was one slice of description_text, and the only
+# content predicate anywhere was `coalesce(j.description_text,'') <> ''`
+# (_eligible_sql above). Anything non-empty went to the model, and whatever
+# came back was stored as fact.
+#
+# What that laundered, found live: job ff9f9d9f9643e185af0f48ca (Taboola,
+# "Product Analyst") whose description_text is a scraped ChatGPT web UI. It was
+# re-extracted at facts_version=3 and produced CONFIDENT facts from that markup
+# -- role_archetype='data', role_track='data_and_analytics'. Job
+# 53cbf3ae21a12bff1ff73476 is 2,700 characters of a staffing firm's navigation
+# menu and produced 'senior'/'ml_research'/'core_ml_research', and that one got
+# as far as a job_scores row. Nothing in the pipeline noticed either.
+#
+# The gate is here, and not in _eligible_sql, deliberately: a WHERE clause would
+# remove these rows from remaining() instead of reporting them, and silence is
+# this system's failure mode. Rejecting at extract_facts() costs zero LLM calls,
+# writes a tombstone at the current FACTS_VERSION so the row is not retried
+# nightly, and shows up in the `unusable` count on the summary line.
+# ---------------------------------------------------------------------------
+
+#: Residual HTML/CSS that survived lib/text.strip_html() -- one alternative per
+#: shape, each of which is markup and none of which is prose.
+#:
+#: THIS IS A STRIPPER LEAK, NOT A SCRAPER BUG, and that is why the gate belongs
+#: to extraction rather than to any one ingest script. strip_html() removes tags
+#: with `re.sub(r"<[^>]+>", " ", text)` (lib/text.py:119), which is correct until
+#: an attribute VALUE contains ">". Modern Tailwind class names do:
+#:
+#:     <section class="... [&:has([data-writing-block])>*]:pointer-events-auto ...
+#:                                                     ^ the regex ends the tag HERE
+#:
+#: so everything after that ">" -- the rest of the class list, then
+#: `data-testid="conversation-turn-136"`, then the real closing ">" -- is emitted
+#: as TEXT. Every contaminated row in the corpus is that one mechanism, and it
+#: fires source-independently: on greenhouse, where an employer pasted a rendered
+#: page into their own JD editor (the markup is in the API's `content` field --
+#: see ingest/ats.py:584,716, it is not something this pipeline added), and on
+#: google_jobs, where a careers page was scraped.
+#:
+#: `\]:[a-z]` and not `\]:`. The looser form matches "[ONSITE]: We are looking
+#: for..." -- standard Who's Hiring prose -- and hn_whoishiring row
+#: 415fcb871b101301330b9a67 is exactly that. Requiring a lowercase letter with no
+#: space after the colon keeps the Tailwind variant boundary ("*]:pointer-events-
+#: auto", "[&_hr]:my-3") and drops the prose. It was a measured false positive
+#: before the tightening, which is the only reason this note can be specific.
+_MARKUP_RESIDUE = re.compile(
+    r'[A-Za-z][A-Za-z0-9_-]*="'   # an HTML attribute assignment: data-testid="
+    r"|var\(--"                   # a CSS custom-property reference
+    r"|\[&"                       # a Tailwind arbitrary-variant selector
+    r"|\[--"                      # a Tailwind arbitrary custom property
+    r"|\]:[a-z]"                  # a Tailwind variant -> utility boundary
+    r"|!important"
+    r"|--tw-"
+)
+
+#: Reject when leaked markup is at least this fraction of the prompt window.
+#:
+#: MEASURED, NOT CHOSEN. tools/audit-description-markup.py sweeps the signature
+#: above over every described posting; on 2026-07-28, 13,282 rows, it scored
+#: exactly 0.0 on all but eight, and those eight split with a gap in the middle:
+#:
+#:     0.593  6fc72985f864b17e3c4c2513  greenhouse   Fireblocks
+#:     0.137  516d19374b2b9caf27ac6cf3  greenhouse   Affirm
+#:     0.129  ff9f9d9f9643e185af0f48ca  greenhouse   Taboola      <- the reported one
+#:     0.080  1074b7f0354bc3cceed49194  greenhouse   Per Scholas
+#:     0.064  e93ddca38b45bb929e6e46cd  greenhouse   Databricks
+#:     0.045  7bdfba1a4e254be44463737c  google_jobs  SpeedyApply
+#:     0.025  53cbf3ae21a12bff1ff73476  google_jobs  Get Hire Technologies
+#:     - - - - - - - - - - - - - - - - gap - - - - - - - - - - - - - - - - - -
+#:     0.004  cc7d1b61574ffdac2d112a8d  greenhouse   twelve stray characters
+#:     0.000  the other 13,274
+#:
+#: 0.01 is the GEOMETRIC MIDPOINT of that gap -- sqrt(0.0040 * 0.0247) = 0.0099 --
+#: so it clears the worst clean row by 2.5x and the mildest poisoned one by 2.5x
+#: rather than sitting against either. FALSE POSITIVES OVER THE FULL TABLE: 0.
+#:
+#: It deliberately does NOT reject cc7d1b61574ffdac2d112a8d. That posting carries
+#: twelve characters of stray Tailwind in an otherwise complete job description,
+#: and tombstoning a readable posting is a worse outcome than extracting one with
+#: a nick in it. The threshold is set where a prompt stops being a posting, not
+#: where it stops being clean.
+#:
+#: CONSIDERED AND REJECTED ON MEASUREMENT, recorded so it is not proposed again:
+#:   a marker blocklist (`data-testid=`, `pointer-events-auto`) -- the query
+#:     HANDOFF.md:410-413 used. It finds 3 of the 8 contaminated rows. It misses
+#:     both google_jobs rows and both of the Tailwind-only greenhouse rows,
+#:     because those leaked class names and no data- attribute.
+#:   repeated-content density (duplicate 60-char shingles in the window) -- aimed
+#:     at the navigation-menu case. It scores 0.000 on ALL EIGHT contaminated
+#:     rows and its six highest-scoring rows are legitimate postings: six false
+#:     positives, zero true ones. It measures boilerplate, which real postings
+#:     also have.
+MARKUP_REJECT_RATIO = 0.01
+
+#: Prefixed onto the model label of an input-sanity tombstone, so
+#: "the input was not a posting" is queryable and does not sit in the same
+#: undifferentiated pile as "the model could not answer about a real posting".
+#: Without it the only trace of a gate firing is a +1 on the `unusable` counter,
+#: which is exactly the silence this gate was added to end.
+#:
+#: It goes in the model label rather than in a new column BY DESIGN. The
+#: FAILED: prefix llm.failed_label() writes is what every consumer actually
+#: tests -- match.py:285 excludes tombstones with NOT LIKE 'FAILED:%',
+#: evals/corpus.py:171 buckets them the same way -- so a suffix carries the
+#: reason without moving any predicate, and job_facts grows no column.
+INPUT_REJECT_LABEL = "input-markup"
+
+
+def prompt_description(job):
+    """The description text a prompt will actually carry.
+
+    ONE definition, two callers -- build_prompt() and the gate below -- for the
+    same reason _eligible_sql() exists. A gate that judged the whole stored
+    description while the prompt only ever sees the first MAX_DESCRIPTION_CHARS
+    would reject postings over bytes no model was ever going to read.
+    """
+    return (job.get("description_text") or "")[:MAX_DESCRIPTION_CHARS]
+
+
+def markup_ratio(text):
+    """Share of `text` occupied by whitespace-delimited tokens that are markup.
+
+    Pure -- no I/O, no clock -- in the spirit of vote_facts() and
+    match.score_job(), so the threshold above can be re-swept over a corpus
+    without a database or an LLM call.
+
+    Token-level rather than match-level: `data-testid="conversation-turn-136"` is
+    one leaked token of 38 characters, and counting the four-character signature
+    inside it would price a heavily contaminated prompt the same as a lightly
+    contaminated one. The +1s are the whitespace that split() consumed, so a
+    window that is entirely markup scores 1.0 rather than something short of it.
+    """
+    if not text:
+        return 0.0
+    leaked = sum(len(t) + 1 for t in text.split() if _MARKUP_RESIDUE.search(t))
+    return leaked / (len(text) + 1)
+
+
+def is_unusable_input(job):
+    """Is this posting's prompt window markup rather than a job posting?
+
+    Called twice per rejected job -- once by extract_facts() to decide, once by
+    extract_one_job() to label the tombstone. That is deliberate over threading a
+    reason through extract_facts()'s return tuple: it is a pure function of the
+    job dict, so two calls cannot disagree, and the alternative would have
+    widened a 4-tuple that three tests and one caller already unpack.
+    """
+    return markup_ratio(prompt_description(job)) >= MARKUP_REJECT_RATIO
+
+
 def build_prompt(job):
-    description = (job.get("description_text") or "")[:MAX_DESCRIPTION_CHARS]
+    description = prompt_description(job)
     return (
         f"{_INSTRUCTIONS}"
         f"Title: {job.get('title')}\n"
@@ -845,6 +1014,15 @@ def extract_facts(job, policy=None, call=None):
     The three-way outcome is score.py's, generalised over N passes rather
     than changed:
 
+    A FOURTH PATH RUNS FIRST AND SPENDS NOTHING. If the prompt window is
+    markup rather than a posting (is_unusable_input above), this returns
+    REJECTED before the model is reached: no call, no tokens, and a tombstone
+    at the current FACTS_VERSION so it is not retried nightly. That is the same
+    disposition an unusable RESPONSE earns, for the same reason -- it is
+    evidence about the posting and not about the endpoint -- and it means a
+    FACTS_VERSION bump gives the row one more chance, which is the right
+    behaviour if the employer has since fixed their job description.
+
       any pass usable   -> EXTRACTED, voting on the usable ones only. A
                            partial result is kept rather than thrown away:
                            the calls are paid for either way, one good pass
@@ -861,6 +1039,15 @@ def extract_facts(job, policy=None, call=None):
     would multiply the real concurrency by three against an endpoint whose
     429s are this stage's main failure mode.
     """
+    # BEFORE build_prompt(), and before `call` is even resolved, so that "this
+    # costs zero LLM calls" is structural rather than a claim in a comment.
+    if is_unusable_input(job):
+        if DEBUG_PRINT_KEYS:
+            print(f"[debug] rejecting {job['id']} ({job.get('title')!r}): "
+                  f"markup_ratio="
+                  f"{markup_ratio(prompt_description(job)):.3f}", file=sys.stderr)
+        return REJECTED, None, 0, None
+
     call = call or llm.call
     n = passes_for(job.get("platform"), policy)
     prompt = build_prompt(job)
@@ -911,10 +1098,16 @@ def extract_one_job(job, model_label, policy=None):
                       file=sys.stderr)
             return EXTRACTED
 
-        mark_extract_failed(conn, job["id"], model_label)
+        # Same tombstone, different label: an input the gate refused to send
+        # and a response the model could not produce are both REJECTED, but
+        # only one of them is evidence about the MODEL.
+        label = (f"{INPUT_REJECT_LABEL}/{model_label}"
+                 if is_unusable_input(job) else model_label)
+        mark_extract_failed(conn, job["id"], label)
         if DEBUG_PRINT_KEYS:
             print(f"[debug] unusable extraction for {job['id']} "
-                  f"({job.get('title')!r})", file=sys.stderr)
+                  f"({job.get('title')!r}) -> {llm.failed_label(label)}",
+                  file=sys.stderr)
         return REJECTED
     finally:
         conn.close()
