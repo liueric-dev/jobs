@@ -7,7 +7,8 @@ This is the *what happened* log. The *why this choice* log is
 decision outlives the run, a status update does not. The ordered index of tasks and
 their `todo`/`done` state stays in [`README.md`](README.md).
 
-Newest entries at the bottom.
+Newest entries at the bottom. **Session handed off 2026-07-28 at `5092568` — see
+[`HANDOFF.md`](HANDOFF.md) for where to pick up.**
 
 ---
 
