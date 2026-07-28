@@ -1,0 +1,2883 @@
+{
+ "blocked_hosts": [
+  "careers.marshmclennan.com",
+  "ceoworks.org",
+  "www.glwd.org",
+  "www.paramount.com"
+ ],
+ "delay": 1.5,
+ "detail_links_per_employer": 3,
+ "employers": [
+  {
+   "careers_outcome": "robots_disallowed",
+   "careers_status": null,
+   "careers_truncated": false,
+   "careers_url": "https://jobs.metlife.com/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "MetLife",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 1,
+   "sector": "insurance",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "",
+    "outcome": "robots_disallowed",
+    "sitemap_url": "https://jobs.metlife.com/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://metroplus.org/jobs",
+   "detail_outcomes": [
+    {
+     "outcome": "missing_page",
+     "url": "https://metroplus.org/job/3194/sales-representative-ii-brooklyn-bilingual-russian-or-georgian-sales-brooklyn-ny-te0014/"
+    },
+    {
+     "outcome": "missing_page",
+     "url": "https://metroplus.org/job/3217/salesforce-analyst-claims-new-york-ny-te0029/"
+    },
+    {
+     "outcome": "missing_page",
+     "url": "https://metroplus.org/job/3256/data-analyst-professional-new-york-ny-te0056/"
+    }
+   ],
+   "detail_pages_tried": 3,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "MetroPlusHealth",
+   "ld_blocks": 2,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 7,
+   "sector": "health",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://metroplus.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://new.mta.info/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Metropolitan Transportation Authority",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "government",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "",
+    "outcome": "missing_page",
+    "sitemap_url": "https://new.mta.info/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.mlp.com/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Millennium Management",
+   "ld_blocks": 3,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "finance",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.mlp.com/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.mongodb.com/careers",
+   "detail_outcomes": [
+    {
+     "outcome": "fetched",
+     "url": "https://www.mongodb.com/careers/departments/campus"
+    }
+   ],
+   "detail_pages_tried": 1,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "MongoDB",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": true,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 5,
+   "sector": "tech",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.mongodb.com/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://careers.moodys.com/",
+   "detail_outcomes": [
+    {
+     "outcome": "fetched",
+     "url": "https://careers.moodys.com/en/job/london/assistant-director-marketing-banking/49841/96314236240"
+    },
+    {
+     "outcome": "fetched",
+     "url": "https://careers.moodys.com/en/job/london/director-solution-specialist-media-solutions/49841/98423972000"
+    },
+    {
+     "outcome": "fetched",
+     "url": "https://careers.moodys.com/en/job/new-york/sr-administrative-coordinator/49841/98423971968"
+    }
+   ],
+   "detail_pages_tried": 3,
+   "detail_pages_with_jobposting": 3,
+   "employer_name": "Moody's",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [
+    {
+     "datePosted": "2026-6-10",
+     "description_len": 400,
+     "employmentType": "Full Time",
+     "fields": {
+      "baseSalary": true,
+      "datePosted": true,
+      "description": true,
+      "employmentType": true,
+      "hiringOrganization.name": true,
+      "jobLocation.address": true,
+      "title": true,
+      "validThrough": false
+     },
+     "hiringOrganization": "Moody's",
+     "identifier": "13875",
+     "location_text": "[{\"@type\": \"Place\", \"address\": {\"@type\": \"PostalAddress\", \"addressLocality\": \"London\", \"addressRegion\": \"\", \"addressCountry\": \"United Kingdom\", \"streetAddress\": \"\", \"postalCode\": \"E14 5FA\"}}]",
+     "title": "Assistant Director - Marketing (Banking)",
+     "url": "https://careers.moodys.com/en/job/london/assistant-director-marketing-banking/49841/96314236240",
+     "validThrough": ""
+    },
+    {
+     "datePosted": "2026-7-28",
+     "description_len": 400,
+     "employmentType": "Full Time",
+     "fields": {
+      "baseSalary": true,
+      "datePosted": true,
+      "description": true,
+      "employmentType": true,
+      "hiringOrganization.name": true,
+      "jobLocation.address": true,
+      "title": true,
+      "validThrough": false
+     },
+     "hiringOrganization": "Moody's",
+     "identifier": "14387",
+     "location_text": "[{\"@type\": \"Place\", \"address\": {\"@type\": \"PostalAddress\", \"addressLocality\": \"London\", \"addressRegion\": \"\", \"addressCountry\": \"United Kingdom\", \"streetAddress\": \"\", \"postalCode\": \"\"}}]",
+     "title": "Director Solution Specialist - Media Solutions",
+     "url": "https://careers.moodys.com/en/job/london/director-solution-specialist-media-solutions/49841/98423972000",
+     "validThrough": ""
+    },
+    {
+     "datePosted": "2026-7-28",
+     "description_len": 400,
+     "employmentType": "Full Time",
+     "fields": {
+      "baseSalary": true,
+      "datePosted": true,
+      "description": true,
+      "employmentType": true,
+      "hiringOrganization.name": true,
+      "jobLocation.address": true,
+      "title": true,
+      "validThrough": false
+     },
+     "hiringOrganization": "Moody's",
+     "identifier": "14384",
+     "location_text": "[{\"@type\": \"Place\", \"address\": {\"@type\": \"PostalAddress\", \"addressLocality\": \"New York\", \"addressRegion\": \"New York\", \"addressCountry\": \"United States\", \"streetAddress\": \"\", \"postalCode\": \"10007\"}}]",
+     "title": "Sr Administrative Coordinator",
+     "url": "https://careers.moodys.com/en/job/new-york/sr-administrative-coordinator/49841/98423971968",
+     "validThrough": ""
+    }
+   ],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 6,
+   "sector": "finance",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 347,
+    "job_urls_with_lastmod": 347,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://careers.moodys.com/en/employment/united-states-sales-and-marketing-jobs/49841/9382560/6252001/2",
+     "https://careers.moodys.com/en/employment/bengaluru-engineering-and-technology-jobs/49841/9382592/1269750-1267701-1277331-1277333/4",
+     "https://careers.moodys.com/en/employment/london-sales-and-marketing-jobs/49841/9382560/2635167-6269131-2648110-2643743/4"
+    ],
+    "sitemap_url": "https://careers.moodys.com/sitemap.xml",
+    "total_urls": 436
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.morganstanley.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Morgan Stanley",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "finance",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 46,
+    "job_urls_with_lastmod": 46,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.morganstanley.com/insights/podcasts/thoughts-on-the-market/fed-rate-cut-2025-jobs-inflation-matthew-hornbach-michael-gapen",
+     "https://www.morganstanley.com/about-us/diversity/institute-for-inclusion/equity-in-education-and-career-consortium",
+     "https://www.morganstanley.com/articles/morgan-stanley-india-technologists-career-opportunities"
+    ],
+    "sitemap_url": "https://www.morganstanley.com/sitemap.xml",
+    "total_urls": 4512
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.mutualofamerica.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Mutual of America",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "insurance",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 1,
+    "job_urls_with_lastmod": 1,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.mutualofamerica.com/careers"
+    ],
+    "sitemap_url": "https://www.mutualofamerica.com/sitemap.xml",
+    "total_urls": 253
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.nassaucountyny.gov/1780/Employment",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Nassau County",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "government",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 5,
+    "job_urls_with_lastmod": 4,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.nassaucountyny.gov/3312/Job-Development-Center",
+     "https://www.nassaucountyny.gov/424/Job-Development-Center",
+     "https://www.nassaucountyny.gov/4584/Find-A-Job"
+    ],
+    "sitemap_url": "https://www.nassaucountyny.gov/sitemap.xml",
+    "total_urls": 1382
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://careers.nba.com/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "National Basketball Association",
+   "ld_blocks": 2,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "media",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 47,
+    "job_urls_with_lastmod": 47,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://careers.nba.com/career-development/",
+     "https://careers.nba.com/intern-jobs",
+     "https://careers.nba.com/early-career-programs/"
+    ],
+    "sitemap_url": "https://careers.nba.com/sitemap.xml",
+    "total_urls": 86
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.njtransit.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New Jersey Transit",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": true,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "government",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "",
+    "outcome": "missing_page",
+    "sitemap_url": "https://www.njtransit.com/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.nybg.org/about/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New York Botanical Garden",
+   "ld_blocks": 10,
+   "ld_blocks_unparseable": 3,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "arts_culture",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.nybg.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://council.nyc.gov/jobs/",
+   "detail_outcomes": [
+    {
+     "outcome": "fetched",
+     "url": "https://council.nyc.gov/jobs/"
+    }
+   ],
+   "detail_pages_tried": 1,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New York City Council",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 5,
+   "sector": "government",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://council.nyc.gov/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "unreachable",
+   "careers_status": null,
+   "careers_truncated": false,
+   "careers_url": "https://www.schools.nyc.gov/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New York City Department of Education",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "education",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "unknown",
+    "outcome": "missing_page",
+    "sitemap_url": "https://www.schools.nyc.gov/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "robots_disallowed",
+   "careers_status": null,
+   "careers_truncated": false,
+   "careers_url": "https://www.nyhistory.org/employment",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New-York Historical Society",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 1,
+   "sector": "arts_culture",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "",
+    "outcome": "robots_disallowed",
+    "sitemap_url": "https://www.nyhistory.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://nylag.org/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New York Legal Assistance Group",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "nonprofit",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://nylag.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.newyorklife.com/careers",
+   "detail_outcomes": [
+    {
+     "outcome": "fetched",
+     "url": "https://www.newyorklife.com/careers/corporate/benefits"
+    },
+    {
+     "outcome": "fetched",
+     "url": "https://www.newyorklife.com/careers/corporate/career-development"
+    },
+    {
+     "outcome": "fetched",
+     "url": "https://www.newyorklife.com/careers/corporate/internships"
+    }
+   ],
+   "detail_pages_tried": 3,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New York Life",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 8,
+   "sector": "insurance",
+   "sitemap": {
+    "followed_children": 2,
+    "job_urls": 251,
+    "job_urls_with_lastmod": 251,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.newyorklife.com/careers/our-offices",
+     "https://www.newyorklife.com/careers/our-offices/ak",
+     "https://www.newyorklife.com/careers/our-offices/al"
+    ],
+    "sitemap_url": "https://www.newyorklife.com/careers/financial-professionals/find-a-recruiter/sitemap.xml",
+    "total_urls": 251
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.nypa.gov/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New York Power Authority",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": true,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "government",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 9,
+    "job_urls_with_lastmod": 9,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.nypa.gov/Canals-JobPostings",
+     "https://www.nypa.gov/Canals-JobPostings-Dev",
+     "https://www.nypa.gov/Canals-JobPostings-QA"
+    ],
+    "sitemap_url": "https://www.nypa.gov/sitemap.xml",
+    "total_urls": 1087
+   }
+  },
+  {
+   "careers_outcome": "robots_disallowed",
+   "careers_status": null,
+   "careers_truncated": false,
+   "careers_url": "https://www.nypl.org/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New York Public Library",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 1,
+   "sector": "government",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "",
+    "outcome": "robots_disallowed",
+    "sitemap_url": "https://www.nypl.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://ww3.nysif.com/en/AboutNYSIF/Careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New York State Insurance Fund",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "government",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 2,
+    "job_urls_with_lastmod": 1,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "http://ww3.nysif.com/Home/FooterPages/Column1/AboutNYSIF/Careers",
+     "http://ww3.nysif.com/~/media/Files/ADMINISTRATION/Procurement/PDF/EEO-1JobClassificationGuide(2014).ashx?la=en"
+    ],
+    "sitemap_url": "http://ww3.nysif.com/sitemap.xml",
+    "total_urls": 484
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://its.ny.gov/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New York State Office of Information Technology Services",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "government",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 5,
+    "job_urls_with_lastmod": 5,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://its.ny.gov/event/its-recruitment-team-saratoga-job-showcase",
+     "https://its.ny.gov/event/its-recruitment-team-albany-job-fair",
+     "https://its.ny.gov/event/its-recruitment-team-albany-job-fair-may-2026"
+    ],
+    "sitemap_url": "https://its.ny.gov/sitemap.xml",
+    "total_urls": 1877
+   }
+  },
+  {
+   "careers_outcome": "robots_disallowed",
+   "careers_status": null,
+   "careers_truncated": false,
+   "careers_url": "https://www.nyu.edu/about/careers-at-nyu.html",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "New York University",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 1,
+   "sector": "education",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "",
+    "outcome": "robots_disallowed",
+    "sitemap_url": "https://www.nyu.edu/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.nonprofitnewyork.org/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Nonprofit New York",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "nonprofit",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.nonprofitnewyork.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.wmchealth.org/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Northeast Provider Solutions",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "health",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.wmchealth.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.npower.org/about/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "NPower",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "nonprofit",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 70,
+    "job_urls_with_lastmod": 70,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://catalog.results4america.org/case-studies/training-for-in-demand-tech-careers-dallas-tx",
+     "https://cw39.com/jobs/harris-county-apprenticeship-success/",
+     "https://www.globenewswire.com/news-release/2026/01/08/3215757/0/en/Mizuho-Americas-and-NPower-Advance-Tech-Career-Pathways-for-New-Yorkers-Through-Path2TECH-NetSA.html"
+    ],
+    "sitemap_url": "https://www.npower.org/sitemap.xml",
+    "total_urls": 637
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.ferry.nyc/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "NYC Ferry",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 5,
+   "sector": "transport_utilities",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.ferry.nyc/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.nychealthandhospitals.org/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "NYC Health + Hospitals",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "health",
+   "sitemap": {
+    "followed_children": 1,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.nychealthandhospitals.org/position-sitemap.xml",
+    "total_urls": 3
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.nychealthandhospitals.org/bellevue/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "NYC Health + Hospitals/Bellevue",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "health",
+   "sitemap": {
+    "followed_children": 1,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.nychealthandhospitals.org/position-sitemap.xml",
+    "total_urls": 3
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.ogilvy.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Ogilvy",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "media",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 11,
+    "job_urls_with_lastmod": 11,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.ogilvy.com/careers",
+     "https://www.ogilvy.com/ideas/careers-coffee-creatives",
+     "https://www.ogilvy.com/ideas/careers-coffee-ogilvys-black-diaspora-professional-network"
+    ],
+    "sitemap_url": "https://www.ogilvy.com/sitemap.xml",
+    "total_urls": 1534
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.hioscar.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Oscar Health",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": true,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 5,
+   "sector": "health",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "unknown",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.hioscar.com/sitemap-3.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.pace.edu/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Pace University",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "education",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.pace.edu/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "blocked",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.paramount.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Paramount",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 2,
+   "sector": "media",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "",
+    "outcome": "skipped",
+    "sitemap_url": "https://www.paramount.com/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.paulweiss.com/careers",
+   "detail_outcomes": [
+    {
+     "outcome": "fetched",
+     "url": "https://www.paulweiss.com/careers/legal-support-personnel/staff-attorneys"
+    },
+    {
+     "outcome": "fetched",
+     "url": "https://www.paulweiss.com/careers/summer-program/the-summer-experience"
+    }
+   ],
+   "detail_pages_tried": 2,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Paul, Weiss",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 5,
+   "sector": "professional_services",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 66,
+    "job_urls_with_lastmod": 66,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.paulweiss.com/insights/client-news/northwell-health-to-acquire-vacant-mall-site-in-queens",
+     "https://www.paulweiss.com/insights/client-news/general-atlantic-invests-in-jobber",
+     "https://www.paulweiss.com/insights/client-news/dcp-capital-acquires-china-s-51job-in-take-private-deal-valued-at-43-billion"
+    ],
+    "sitemap_url": "https://www.paulweiss.com/sitemap.xml",
+    "total_urls": 7765
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.onepeloton.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Peloton Interactive",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "retail",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.onepeloton.com/sitemap.xml",
+    "total_urls": 54
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.penguinrandomhouse.com/careers/",
+   "detail_outcomes": [
+    {
+     "outcome": "missing_page",
+     "url": "https://www.penguinrandomhouse.com/wp-content/themes/careers/pdf/eeo_statement.pdf"
+    },
+    {
+     "outcome": "missing_page",
+     "url": "https://www.penguinrandomhouse.com/wp-content/themes/careers/pdf/pay_transparency_statement.pdf"
+    }
+   ],
+   "detail_pages_tried": 2,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Penguin Random House",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "company_ats.never_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 5,
+   "sector": "media",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.penguinrandomhouse.com/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.onebrooklynhealth.org/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Brookdale Hospital",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "health",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.onebrooklynhealth.org/sitemap.xml",
+    "total_urls": 774
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://aecom.jobs/",
+   "detail_outcomes": [
+    {
+     "outcome": "fetched",
+     "url": "https://aecom.jobs/jobs/"
+    }
+   ],
+   "detail_pages_tried": 1,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "AECOM",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": true,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 6,
+   "sector": "real_estate",
+   "sitemap": {
+    "followed_children": 2,
+    "job_urls": 4906,
+    "job_urls_with_lastmod": 4904,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://aecom.jobs/docklands-aus/senior-mechanical-engineer-building-engineering/6D3C63600A974E91BF33FCC9AA3F649A/job/",
+     "https://aecom.jobs/bangkok-tha/mechanical-engineer/6D6AB12D6303480087FF7869FCEF5AA0/job/",
+     "https://aecom.jobs/london-gbr/principal-town-planner/6D7C7E5D81834E188E0CC9552DEE8595/job/"
+    ],
+    "sitemap_url": "https://aecom.jobs/sitemaps/pages.xml",
+    "total_urls": 4908
+   }
+  },
+  {
+   "careers_outcome": "blocked",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://careers.marshmclennan.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Marsh McLennan",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "finance",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 29,
+    "job_urls_with_lastmod": 29,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://careers.marsh.com/ca/fr/students-and-early-career-opportunities-at-guy-carpenter",
+     "https://careers.marsh.com/ca/fr/student-and-early-career-opportunities-at-oliver-wyman",
+     "https://careers.marsh.com/ca/fr/guy-carpenter-students-and-early-career-open-roles-"
+    ],
+    "sitemap_url": "https://careers.marsh.com/ca/fr/sitemap.xml",
+    "total_urls": 81
+   }
+  },
+  {
+   "careers_outcome": "blocked",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://ceoworks.org/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Center for Employment Opportunities",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "nonprofit",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 87,
+    "job_urls_with_lastmod": 0,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://proxy.ceoworks.org/careers",
+     "https://proxy.ceoworks.org/releases-and-statements/100-organizations-urge-congress-to-strengthen-job-training-and-food-security-access",
+     "https://proxy.ceoworks.org/releases-and-statements/center-for-employment-opportunities-launches-more-than-a-background-campaign-to-raise-awareness-of-the-discrimination-workers-face-when-their-qualifications-for-a-job-are-ignored-because-of-their-past-criminal-convictions"
+    ],
+    "sitemap_url": "https://proxy.ceoworks.org/sitemap.xml",
+    "total_urls": 866
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://bds.org/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Brooklyn Defender Services",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": true,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "nonprofit",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://bds.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.foodbanknyc.org/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Food Bank For New York City",
+   "ld_blocks": 2,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "nonprofit",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.foodbanknyc.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "robots_disallowed",
+   "careers_status": null,
+   "careers_truncated": false,
+   "careers_url": "https://www.glwd.org/jobs",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "God's Love We Deliver",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 1,
+   "sector": "nonprofit",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "",
+    "outcome": "robots_disallowed",
+    "sitemap_url": "https://www.glwd.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.ridgewoodbank.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Ridgewood Savings Bank",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "finance",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 1,
+    "job_urls_with_lastmod": 0,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.ridgewoodbank.com/home/contact-us/careers"
+    ],
+    "sitemap_url": "https://www.ridgewoodbank.com/sitemap.xml",
+    "total_urls": 55
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://institute.org/jobs",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Institute for Family Health",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": true,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "health",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "",
+    "outcome": "missing_page",
+    "sitemap_url": "https://institute.org/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.pratt.edu/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Pratt Institute",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 5,
+   "sector": "education",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.pratt.edu/architecture/sitemap_index.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.businessinsider.com/careers",
+   "detail_outcomes": [
+    {
+     "outcome": "fetched",
+     "url": "https://www.businessinsider.com/job-search-55-experience-is-liability-2026-7"
+    }
+   ],
+   "detail_pages_tried": 1,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Business Insider",
+   "ld_blocks": 2,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "media",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 21,
+    "job_urls_with_lastmod": 21,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.businessinsider.com/google-employees-leaving-ai-openai-anthropic-big-tech-jobs-careers-2026-7",
+     "https://www.businessinsider.com/10-year-career-break-care-for-daughter-back-work-2026-6",
+     "https://www.businessinsider.com/jensen-huang-ai-job-destruction-theory-backwards-2026-7"
+    ],
+    "sitemap_url": "https://www.businessinsider.com/sitemap/latest.xml",
+    "total_urls": 439
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.bcc.cuny.edu/human-resources/employment/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Bronx Community College",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "education",
+   "sitemap": {
+    "followed_children": 1,
+    "job_urls": 263,
+    "job_urls_with_lastmod": 263,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.bcc.cuny.edu/jobtitles/academic-advising-manager/",
+     "https://www.bcc.cuny.edu/jobtitles/academic-advisor/",
+     "https://www.bcc.cuny.edu/jobtitles/academic-affairs-manager-for-special-projects/"
+    ],
+    "sitemap_url": "https://www.bcc.cuny.edu/jobtitles-sitemap.xml",
+    "total_urls": 263
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.kkr.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "KKR",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "finance",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 32,
+    "job_urls_with_lastmod": 5,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://www.kkr.com/about/our-people/alex-jobert",
+     "https://www.kkr.com/about/our-people/alexander-jobert",
+     "https://www.kkr.com/insights/gap-analysis-syndicated-market-thaw-points-opening-private-junior-debt"
+    ],
+    "sitemap_url": "https://www.kkr.com/sitemap.xml",
+    "total_urls": 1478
+   }
+  },
+  {
+   "careers_outcome": "missing_page",
+   "careers_status": 404,
+   "careers_truncated": false,
+   "careers_url": "https://careers.etsy.com/careers/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Etsy",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "tech",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 36,
+    "job_urls_with_lastmod": 36,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://careers.etsy.com/jobs/staff-design-program-manager-design-systems-brooklyn-new-york-united-states",
+     "https://careers.etsy.com/jobs/staff-site-reliability-engineer-i-search-developer-platform-dublin-ireland",
+     "https://careers.etsy.com/jobs/senior-product-design-manager-buyer-desktop-and-mobile-web-brooklyn-new-york-united-states"
+    ],
+    "sitemap_url": "https://careers.etsy.com/sitemap.xml",
+    "total_urls": 58
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://careers.bcg.com/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Boston Consulting Group",
+   "ld_blocks": 3,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 5,
+   "sector": "professional_services",
+   "sitemap": {
+    "followed_children": 2,
+    "job_urls": 802,
+    "job_urls_with_lastmod": 802,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://careers.bcg.com/ca/fr/career-growth",
+     "https://careers.bcg.com/ca/fr/early-careers",
+     "https://careers.bcg.com/ca/fr/technologie-et-ingenierie-jobs"
+    ],
+    "sitemap_url": "https://careers.bcg.com/ca/fr/sitemap2.xml",
+    "total_urls": 836
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 202,
+   "careers_truncated": false,
+   "careers_url": "https://careers.ralphlauren.com/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Ralph Lauren",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 5,
+   "sector": "retail",
+   "sitemap": {
+    "followed_children": 1,
+    "job_urls": 5,
+    "job_urls_with_lastmod": 5,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://ralphlauren.avature.net/HKEarlyCareer/emailVerified",
+     "https://ralphlauren.avature.net/HKEarlyCareer/error",
+     "https://ralphlauren.avature.net/HKEarlyCareer/resendVerificationEmail"
+    ],
+    "sitemap_url": "https://ralphlauren.avature.net/HKEarlyCareer/sitemap.xml",
+    "total_urls": 5
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://careers.aramark.com/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Aramark",
+   "ld_blocks": 2,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 5,
+   "sector": "hospitality",
+   "sitemap": {
+    "followed_children": 2,
+    "job_urls": 9,
+    "job_urls_with_lastmod": 9,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://careers.aramark.com/blog/growing-your-legal-career-at-aramark/",
+     "https://careers.aramark.com/blog/a-career-committed-to-service/",
+     "https://careers.aramark.com/blog/career-paths-for-dietitians-at-aramark/"
+    ],
+    "sitemap_url": "https://careers.aramark.com/post-sitemap.xml",
+    "total_urls": 61
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.pseg.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "PSEG Long Island",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "transport_utilities",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 2,
+    "job_urls_with_lastmod": 2,
+    "kind": "urlset",
+    "outcome": "fetched",
+    "sample_job_urls": [
+     "https://nj.pseg.com/aboutpseg/job-titles-and-descriptions",
+     "https://nj.pseg.com/saveenergyandmoney/energysavingpage/cleanenergyjobsprogram"
+    ],
+    "sitemap_url": "https://nj.pseg.com/NJ-Public_sitemap.xml",
+    "total_urls": 552
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://careers.amtrak.com/careers",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Amtrak",
+   "ld_blocks": 0,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 3,
+   "sector": "transport_utilities",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "unknown",
+    "outcome": "fetched",
+    "sitemap_url": "https://careers.amtrak.com/sitemap.xml",
+    "total_urls": 0
+   }
+  },
+  {
+   "careers_outcome": "fetched",
+   "careers_status": 200,
+   "careers_truncated": false,
+   "careers_url": "https://www.brooklyn.edu/human-resources/employment/",
+   "detail_outcomes": [],
+   "detail_pages_tried": 0,
+   "detail_pages_with_jobposting": 0,
+   "employer_name": "Brooklyn College",
+   "ld_blocks": 1,
+   "ld_blocks_unparseable": 0,
+   "looks_like_spa": false,
+   "microdata_scopes": 0,
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "postings_on_careers_page": 0,
+   "rdfa_scopes": 0,
+   "requests_used": 4,
+   "sector": "education",
+   "sitemap": {
+    "followed_children": 0,
+    "job_urls": 0,
+    "job_urls_with_lastmod": 0,
+    "kind": "sitemapindex",
+    "outcome": "fetched",
+    "sitemap_url": "https://www.brooklyn.edu/sitemap.xml",
+    "total_urls": 0
+   }
+  }
+ ],
+ "employers_planned": 55,
+ "finished_at": "2026-07-28T18:59:26+00:00",
+ "host_delay": 5.0,
+ "max_requests": 500,
+ "requests_page": 145,
+ "requests_robots": 59,
+ "requests_total": 333,
+ "sitemap_pass": [
+  {
+   "employer_name": "Moody's",
+   "job_urls_declared": 347,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.moodys.com/en/employment/united-states-sales-and-marketing-jobs/49841/9382560/6252001/2"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.moodys.com/en/employment/bengaluru-engineering-and-technology-jobs/49841/9382592/1269750-1267701-1277331-1277333/4"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.moodys.com/en/employment/london-sales-and-marketing-jobs/49841/9382560/2635167-6269131-2648110-2643743/4"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://careers.moodys.com/sitemap.xml"
+  },
+  {
+   "employer_name": "Morgan Stanley",
+   "job_urls_declared": 46,
+   "pages": [
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.morganstanley.com/insights/podcasts/thoughts-on-the-market/fed-rate-cut-2025-jobs-inflation-matthew-hornbach-michael-gapen"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.morganstanley.com/about-us/diversity/institute-for-inclusion/equity-in-education-and-career-consortium"
+    },
+    {
+     "ld_blocks": 2,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.morganstanley.com/articles/morgan-stanley-india-technologists-career-opportunities"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://www.morganstanley.com/sitemap.xml"
+  },
+  {
+   "employer_name": "Mutual of America",
+   "job_urls_declared": 1,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.mutualofamerica.com/careers"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://www.mutualofamerica.com/sitemap.xml"
+  },
+  {
+   "employer_name": "Nassau County",
+   "job_urls_declared": 5,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.nassaucountyny.gov/3312/Job-Development-Center"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.nassaucountyny.gov/424/Job-Development-Center"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.nassaucountyny.gov/4584/Find-A-Job"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://www.nassaucountyny.gov/sitemap.xml"
+  },
+  {
+   "employer_name": "National Basketball Association",
+   "job_urls_declared": 47,
+   "pages": [
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.nba.com/career-development/"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.nba.com/intern-jobs"
+    },
+    {
+     "ld_blocks": 2,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.nba.com/early-career-programs/"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://careers.nba.com/sitemap.xml"
+  },
+  {
+   "employer_name": "New York Life",
+   "job_urls_declared": 251,
+   "pages": [
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.newyorklife.com/careers/our-offices"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.newyorklife.com/careers/our-offices/ak"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.newyorklife.com/careers/our-offices/al"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://www.newyorklife.com/careers/financial-professionals/find-a-recruiter/sitemap.xml"
+  },
+  {
+   "employer_name": "New York Power Authority",
+   "job_urls_declared": 9,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": true,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.nypa.gov/Canals-JobPostings"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": true,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.nypa.gov/Canals-JobPostings-Dev"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": true,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.nypa.gov/Canals-JobPostings-QA"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://www.nypa.gov/sitemap.xml"
+  },
+  {
+   "employer_name": "New York State Insurance Fund",
+   "job_urls_declared": 2,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "http://ww3.nysif.com/Home/FooterPages/Column1/AboutNYSIF/Careers"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "http://ww3.nysif.com/~/media/Files/ADMINISTRATION/Procurement/PDF/EEO-1JobClassificationGuide(2014).ashx?la=en"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "http://ww3.nysif.com/sitemap.xml"
+  },
+  {
+   "employer_name": "New York State Office of Information Technology Services",
+   "job_urls_declared": 5,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://its.ny.gov/event/its-recruitment-team-saratoga-job-showcase"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://its.ny.gov/event/its-recruitment-team-albany-job-fair"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://its.ny.gov/event/its-recruitment-team-albany-job-fair-may-2026"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://its.ny.gov/sitemap.xml"
+  },
+  {
+   "employer_name": "NPower",
+   "job_urls_declared": 70,
+   "pages": [
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://catalog.results4america.org/case-studies/training-for-in-demand-tech-careers-dallas-tx"
+    },
+    {
+     "ld_blocks": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "blocked",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 403,
+     "url": "https://cw39.com/jobs/harris-county-apprenticeship-success/"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.globenewswire.com/news-release/2026/01/08/3215757/0/en/Mizuho-Americas-and-NPower-Advance-Tech-Career-Pathways-for-New-Yorkers-Through-Path2TECH-NetSA.html"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://www.npower.org/sitemap.xml"
+  },
+  {
+   "employer_name": "Ogilvy",
+   "job_urls_declared": 11,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.ogilvy.com/careers"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.ogilvy.com/ideas/careers-coffee-creatives"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.ogilvy.com/ideas/careers-coffee-ogilvys-black-diaspora-professional-network"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://www.ogilvy.com/sitemap.xml"
+  },
+  {
+   "employer_name": "Paul, Weiss",
+   "job_urls_declared": 66,
+   "pages": [
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.paulweiss.com/insights/client-news/northwell-health-to-acquire-vacant-mall-site-in-queens"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.paulweiss.com/insights/client-news/general-atlantic-invests-in-jobber"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.paulweiss.com/insights/client-news/dcp-capital-acquires-china-s-51job-in-take-private-deal-valued-at-43-billion"
+    }
+   ],
+   "population": "company_ats.never_found",
+   "postings": [],
+   "sitemap_url": "https://www.paulweiss.com/sitemap.xml"
+  },
+  {
+   "employer_name": "AECOM",
+   "job_urls_declared": 4906,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": true,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://aecom.jobs/docklands-aus/senior-mechanical-engineer-building-engineering/6D3C63600A974E91BF33FCC9AA3F649A/job/"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": true,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://aecom.jobs/bangkok-tha/mechanical-engineer/6D6AB12D6303480087FF7869FCEF5AA0/job/"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": true,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://aecom.jobs/london-gbr/principal-town-planner/6D7C7E5D81834E188E0CC9552DEE8595/job/"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://aecom.jobs/sitemaps/pages.xml"
+  },
+  {
+   "employer_name": "Marsh McLennan",
+   "job_urls_declared": 29,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "blocked",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.marsh.com/ca/fr/students-and-early-career-opportunities-at-guy-carpenter"
+    },
+    {
+     "ld_blocks": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "skipped",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": null,
+     "url": "https://careers.marsh.com/ca/fr/student-and-early-career-opportunities-at-oliver-wyman"
+    },
+    {
+     "ld_blocks": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "skipped",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": null,
+     "url": "https://careers.marsh.com/ca/fr/guy-carpenter-students-and-early-career-open-roles-"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://careers.marsh.com/ca/fr/sitemap.xml"
+  },
+  {
+   "employer_name": "Center for Employment Opportunities",
+   "job_urls_declared": 87,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "blocked",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://proxy.ceoworks.org/careers"
+    },
+    {
+     "ld_blocks": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "skipped",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": null,
+     "url": "https://proxy.ceoworks.org/releases-and-statements/100-organizations-urge-congress-to-strengthen-job-training-and-food-security-access"
+    },
+    {
+     "ld_blocks": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "skipped",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": null,
+     "url": "https://proxy.ceoworks.org/releases-and-statements/center-for-employment-opportunities-launches-more-than-a-background-campaign-to-raise-awareness-of-the-discrimination-workers-face-when-their-qualifications-for-a-job-are-ignored-because-of-their-past-criminal-convictions"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://proxy.ceoworks.org/sitemap.xml"
+  },
+  {
+   "employer_name": "Ridgewood Savings Bank",
+   "job_urls_declared": 1,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.ridgewoodbank.com/home/contact-us/careers"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://www.ridgewoodbank.com/sitemap.xml"
+  },
+  {
+   "employer_name": "Business Insider",
+   "job_urls_declared": 21,
+   "pages": [
+    {
+     "ld_blocks": 2,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.businessinsider.com/google-employees-leaving-ai-openai-anthropic-big-tech-jobs-careers-2026-7"
+    },
+    {
+     "ld_blocks": 2,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.businessinsider.com/10-year-career-break-care-for-daughter-back-work-2026-6"
+    },
+    {
+     "ld_blocks": 2,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.businessinsider.com/jensen-huang-ai-job-destruction-theory-backwards-2026-7"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://www.businessinsider.com/sitemap/latest.xml"
+  },
+  {
+   "employer_name": "Bronx Community College",
+   "job_urls_declared": 263,
+   "pages": [
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.bcc.cuny.edu/jobtitles/academic-advising-manager/"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.bcc.cuny.edu/jobtitles/academic-advisor/"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.bcc.cuny.edu/jobtitles/academic-affairs-manager-for-special-projects/"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://www.bcc.cuny.edu/jobtitles-sitemap.xml"
+  },
+  {
+   "employer_name": "KKR",
+   "job_urls_declared": 32,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.kkr.com/about/our-people/alex-jobert"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.kkr.com/about/our-people/alexander-jobert"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://www.kkr.com/insights/gap-analysis-syndicated-market-thaw-points-opening-private-junior-debt"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://www.kkr.com/sitemap.xml"
+  },
+  {
+   "employer_name": "Etsy",
+   "job_urls_declared": 36,
+   "pages": [
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 1,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.etsy.com/jobs/staff-design-program-manager-design-systems-brooklyn-new-york-united-states"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 1,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.etsy.com/jobs/staff-site-reliability-engineer-i-search-developer-platform-dublin-ireland"
+    },
+    {
+     "ld_blocks": 1,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 1,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.etsy.com/jobs/senior-product-design-manager-buyer-desktop-and-mobile-web-brooklyn-new-york-united-states"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [
+    {
+     "datePosted": "2026-01-26T19:48:34Z",
+     "description_len": 400,
+     "employmentType": "FULL_TIME",
+     "fields": {
+      "baseSalary": false,
+      "datePosted": true,
+      "description": true,
+      "employmentType": true,
+      "hiringOrganization.name": true,
+      "jobLocation.address": true,
+      "title": true,
+      "validThrough": true
+     },
+     "found_at": "https://careers.etsy.com/jobs/staff-design-program-manager-design-systems-brooklyn-new-york-united-states",
+     "hiringOrganization": "Etsy",
+     "identifier": "Etsy",
+     "location_text": "[{\"@type\": \"Place\", \"address\": {\"@type\": \"PostalAddress\", \"streetAddress\": \"Brooklyn\", \"addressLocality\": \"Brooklyn\", \"addressRegion\": \"New York\", \"postalCode\": \"11201\", \"addressCountry\": \"US\"}}]",
+     "title": "Staff Design Program Manager, Design Systems",
+     "url": "",
+     "validThrough": "2026-10-26T15:51:53Z"
+    },
+    {
+     "datePosted": "2026-02-12T18:52:25Z",
+     "description_len": 400,
+     "employmentType": "FULL_TIME",
+     "fields": {
+      "baseSalary": false,
+      "datePosted": true,
+      "description": true,
+      "employmentType": true,
+      "hiringOrganization.name": true,
+      "jobLocation.address": true,
+      "title": true,
+      "validThrough": true
+     },
+     "found_at": "https://careers.etsy.com/jobs/staff-site-reliability-engineer-i-search-developer-platform-dublin-ireland",
+     "hiringOrganization": "Etsy",
+     "identifier": "Etsy",
+     "location_text": "[{\"@type\": \"Place\", \"address\": {\"@type\": \"PostalAddress\", \"streetAddress\": \"Dublin\", \"addressLocality\": \"Dublin\", \"addressRegion\": \"Dublin\", \"postalCode\": null, \"addressCountry\": \"IE\"}}]",
+     "title": "Staff Site Reliability Engineer I, Search Developer Platform",
+     "url": "",
+     "validThrough": "2026-10-26T15:52:02Z"
+    },
+    {
+     "datePosted": "2026-02-26T22:48:45Z",
+     "description_len": 400,
+     "employmentType": "FULL_TIME",
+     "fields": {
+      "baseSalary": false,
+      "datePosted": true,
+      "description": true,
+      "employmentType": true,
+      "hiringOrganization.name": true,
+      "jobLocation.address": true,
+      "title": true,
+      "validThrough": true
+     },
+     "found_at": "https://careers.etsy.com/jobs/senior-product-design-manager-buyer-desktop-and-mobile-web-brooklyn-new-york-united-states",
+     "hiringOrganization": "Etsy",
+     "identifier": "Etsy",
+     "location_text": "[{\"@type\": \"Place\", \"address\": {\"@type\": \"PostalAddress\", \"streetAddress\": \"Brooklyn\", \"addressLocality\": \"Brooklyn\", \"addressRegion\": \"New York\", \"postalCode\": \"11201\", \"addressCountry\": \"US\"}}]",
+     "title": "Senior Product Design Manager, Buyer Desktop and Mobile Web",
+     "url": "",
+     "validThrough": "2026-10-26T15:52:07Z"
+    }
+   ],
+   "sitemap_url": "https://careers.etsy.com/sitemap.xml"
+  },
+  {
+   "employer_name": "Boston Consulting Group",
+   "job_urls_declared": 802,
+   "pages": [
+    {
+     "ld_blocks": 2,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.bcg.com/ca/fr/career-growth"
+    },
+    {
+     "ld_blocks": 3,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.bcg.com/ca/fr/early-careers"
+    },
+    {
+     "ld_blocks": 2,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.bcg.com/ca/fr/technologie-et-ingenierie-jobs"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://careers.bcg.com/ca/fr/sitemap2.xml"
+  },
+  {
+   "employer_name": "Ralph Lauren",
+   "job_urls_declared": 5,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://ralphlauren.avature.net/HKEarlyCareer/emailVerified"
+    },
+    {
+     "ld_blocks": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "missing_page",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 404,
+     "url": "https://ralphlauren.avature.net/HKEarlyCareer/error"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://ralphlauren.avature.net/HKEarlyCareer/resendVerificationEmail"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://ralphlauren.avature.net/HKEarlyCareer/sitemap.xml"
+  },
+  {
+   "employer_name": "Aramark",
+   "job_urls_declared": 9,
+   "pages": [
+    {
+     "ld_blocks": 2,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.aramark.com/blog/growing-your-legal-career-at-aramark/"
+    },
+    {
+     "ld_blocks": 2,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.aramark.com/blog/a-career-committed-to-service/"
+    },
+    {
+     "ld_blocks": 2,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://careers.aramark.com/blog/career-paths-for-dietitians-at-aramark/"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://careers.aramark.com/post-sitemap.xml"
+  },
+  {
+   "employer_name": "PSEG Long Island",
+   "job_urls_declared": 2,
+   "pages": [
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://nj.pseg.com/aboutpseg/job-titles-and-descriptions"
+    },
+    {
+     "ld_blocks": 0,
+     "ld_blocks_unparseable": 0,
+     "looks_like_spa": false,
+     "microdata_scopes": 0,
+     "outcome": "fetched",
+     "postings": 0,
+     "rdfa_scopes": 0,
+     "status": 200,
+     "url": "https://nj.pseg.com/saveenergyandmoney/energysavingpage/cleanenergyjobsprogram"
+    }
+   ],
+   "population": "ats_seed.not_found",
+   "postings": [],
+   "sitemap_url": "https://nj.pseg.com/NJ-Public_sitemap.xml"
+  }
+ ],
+ "sitemap_pass_at": "2026-07-28T19:18:00+00:00",
+ "sitemap_pass_blocked_hosts": [
+  "careers.marsh.com",
+  "cw39.com",
+  "proxy.ceoworks.org"
+ ],
+ "sitemap_pass_page_requests": 65,
+ "sitemap_pass_requests": 129,
+ "started_at": "2026-07-28T18:45:11+00:00",
+ "timeout": 10,
+ "user_agent": "jobs-pipeline-jsonld-probe/1.0 (+https://github.com/hermes/jobs; structured-data coverage measurement for a nonprofit job-search project; obeys robots.txt; no retries)"
+}
