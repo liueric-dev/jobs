@@ -1,0 +1,664 @@
+---
+script: docs/ingest/DEFECTS.md
+commit: dd49a27 (audit base) + 28f1d0e (current HEAD, webapp-service)
+generated: 2026-07-28
+---
+
+# Ingest audit defect register
+
+`docs/ingestion_tests/README.md:7` said the `docs/ingest/` audit "found 16
+defects at `dd49a27`," scattered across eleven generated documents with no
+single list. This is that list.
+
+**Method.** Walked all eleven `docs/ingest/*.md` files plus
+`docs/ingestion_tests/04-score-validation.md` and `05-fetcher-harness.md` (the
+two that trace defects into `score.py` and give the audit's own numbered
+"defects this would catch" table). Pulled every row from a failure-behaviour
+table describing a defect rather than intended behaviour, then grepped all
+thirteen documents for `discarded`, `defect`, `silently`, `silent`, and `never
+read` to find the rest. Every site below was re-checked against the code at
+the current commit (`git log dd49a27..HEAD` touches only `backend/llm.py`,
+`score.py`'s model-mismatch guard, and docs/tests for task 01 — no line
+numbers cited here moved as a result, confirmed by direct read).
+
+**Total: 41 entries** — more than the 16 the README named, because that count
+was itself informal (nobody had built the list yet) and because triaging
+means finding the remainder, per task 03's instruction to "audit the
+remaining sources... before assuming four is the total." 25 are genuinely new
+findings from this pass, not previously written up as a defect anywhere.
+
+**Classes** (defined in `docs/tasks/refactor/tranche_one/02-triage-audit-defects.md`):
+**silent data loss** (run reports success, rows missing or wrong — fix now),
+**loud failure** (crashes/raises — fix opportunistically, harness catches
+regressions), **cosmetic** (misleading comment, duplicated work, dead code —
+fold into task 34).
+
+**Disposition**, independent of class: **fix now**, **fix with harness**
+(needs task 09's fetcher cassettes, or task 08's eval harness, to test
+safely — do not fix blind against production), or **won't-fix** (reason
+given).
+
+---
+
+## Index
+
+| id | class | disposition | one-line |
+|---|---|---|---|
+| [D01](#d01) | silent data loss | fix now — task 03 | Per-record upsert errors discarded at 8 call sites |
+| [D02](#d02) | silent data loss | fix with harness — task 09 | `builtin-nyc.py` title/company zip can silently misattribute |
+| [D03](#d03) | silent data loss | fix with harness — task 09 | `builtin-nyc.py` salary regex unscoped, captures false positives |
+| [D04](#d04) | silent data loss | won't-fix (documented) | `weworkremotely.py` token from display name — silent duplicate rows |
+| [D05](#d05) | silent data loss | fix with harness — task 09 | `weworkremotely.py` drops items with zero counters at any verbosity |
+| [D06](#d06) | silent data loss | won't-fix (documented) | `weworkremotely.py` all-feeds-empty indistinguishable from a quiet day |
+| [D07](#d07) | silent data loss | won't-fix (mitigated) | Google sources: non-English relative dates silently lose `posted_at` |
+| [D08](#d08) | silent data loss | fix before deploy — task 24 | Contributor API: empty submit still advances the watermark |
+| [D09](#d09) | silent data loss | fix before deploy — task 24 | Contributor API: unreadable query bank silently mislabels `mode` |
+| [D10](#d10) | silent data loss | fix with harness — task 09 | `match.py`: bad `tech_stack` JSON silently becomes `[]` |
+| [D11](#d11) | silent data loss | fix with harness — task 09 | `match.py`: demoted/orphaned rows deleted with no recoverable log |
+| [D12](#d12) | silent data loss | fix with harness — task 09 | `match.py`: a typo'd `criteria.json` section silently disables itself |
+| [D13](#d13) | silent data loss | fix with harness — task 09 | `match.py`/`extract.py`: seniority vocabulary drift scores as free |
+| [D14](#d14) | silent data loss | won't-fix (documented, low current risk) | `match.py --profile` can silently prune another profile's rows |
+| [D15](#d15) | silent data loss | fix with harness — task 08 | `score.py`: `fit_score`/`primary_track` stored unvalidated (audit item 8) |
+| [D16](#d16) | loud failure | fix with harness — task 08 | `score.py`: missing `buckets` key kills a profile's whole batch |
+| [D17](#d17) | loud failure | fix with harness — task 09 | `google-apify.py`: `UnboundLocalError` on immediate-success poll (audit item 1) |
+| [D18](#d18) | loud failure | fix opportunistically | Uncaught `KeyError` on malformed config (audit item 6) |
+| [D19](#d19) | loud failure | fix opportunistically | Normalization outside the per-unit `try` in 4 scripts (audit item 7) |
+| [D20](#d20) | loud failure | fix opportunistically | `match.py`: no per-record isolation, one bad row kills the run (audit item 3) |
+| [D21](#d21) | loud failure | fix opportunistically | `hn-hiring.py`: `relevance.json` load failure crashes at import |
+| [D22](#d22) | loud failure | won't-fix (deliberate) | `ensure_schema` raises uncaught if `public.events` exists |
+| [D23](#d23) | silent data loss | fix with harness — task 09 | `hn-hiring.py`: ledger-before-upsert crash window strands comments (audit item 4) |
+| [D24](#d24) | silent data loss (unconfirmed) | won't-fix (unconfirmed; revisit if it recurs) | `extract.py`: 15 rows possibly permanently starved at `facts_version=1` |
+| [D25](#d25) | silent data loss | **fixed** — `28f1d0e` | Live model silently differed from the documented default |
+| [D26](#d26) | cosmetic | fold into task 34 | Stale "`unescape=False`" claim in two files contradicts `ats.py` |
+| [D27](#d27) | cosmetic | fold into task 34 | `ats.py`: 5 unused imports |
+| [D28](#d28) | cosmetic | fold into task 34 | `builtin-nyc.py`: 4 unused imports, `http` imported for one constant |
+| [D29](#d29) | cosmetic | fold into task 34 | `weworkremotely.py`: `parse_posted_at` called twice on the same value |
+| [D30](#d30) | cosmetic | fold into task 34 | `weworkremotely.py`: 5 unused imports |
+| [D31](#d31) | cosmetic | fold into task 34 | Inconsistent `lib.http` usage — 3 of 6 ingest scripts bypass retry/backoff |
+| [D32](#d32) | cosmetic | fold into task 34 | `hn-hiring.py`: 3 unused imports |
+| [D33](#d33) | cosmetic | fold into task 34 | `google_jobs_query_stats` accumulates, read by nothing |
+| [D34](#d34) | cosmetic | fold into task 34 | 22 orphaned `job_ingest_state` watermark rows |
+| [D35](#d35) | cosmetic | fold into task 34 | `CLAIM_TTL_MINUTES` documented but unread by `google-serpapi.py` |
+| [D36](#d36) | silent data loss | won't-fix (patched API-side) | `claimed_by` asymmetry already caused a real ownership-check bug |
+| [D37](#d37) | cosmetic | won't-fix (low stakes) | `google-apify.py`: abandoned actor runs billed and untracked |
+| [D38](#d38) | cosmetic | won't-fix (harmless) | `POST /v1/events` impression-dedup race under concurrent requests |
+| [D39](#d39) | cosmetic | fix opportunistically | `extract.py`: concurrent runs would double-spend LLM calls (no lock) |
+| [D40](#d40) | cosmetic | fix opportunistically | `score.py`: login-triggered and nightly runs can double-spend |
+| [D41](#d41) | cosmetic | fix before deploy — task 24 | Contributor API: `claim` is unmetered beyond the daily cap (self-documented gap) |
+| [D42](#d42) | cosmetic | fold into task 34 | `hn-hiring.py`: null comment items re-fetched forever (audit item 5) |
+
+---
+
+## Silent data loss — fix now, before Phase 3
+
+This is the only class that justifies delaying Phase 3, because it is the
+only class the operator cannot detect by watching the nightly run.
+
+### D01
+
+**Per-record upsert errors discarded, at every one of 8 call sites.**
+`lib/upsert.py:157-166`'s `UpsertResult.__iter__` yields `(new, updated,
+unchanged)` and never `.errors`, so `x, y, z = upsert(...)` reads naturally
+and silently drops every per-record failure. Confirmed at:
+
+- `backend/ingest/ats.py:337`
+- `backend/ingest/builtin-nyc.py:404`
+- `backend/ingest/google-serpapi.py:325`
+- `backend/ingest/weworkremotely.py:225`
+- `backend/ingest/hn-hiring.py:426-427` (reads `.new` only; `.errors` never touched)
+- `backend/ingest/google-apify.py:232`
+- `backend/api/app.py:336`
+- `backend/api/query_claims.py:444` (`upsert()` also omits `debug=`, so there
+  is no stderr fallback either)
+
+Blast radius: **all ingest** — every write path in the pipeline. A run with a
+hundred failed records and zero read errors reports success; the only symptom
+is a corpus quietly smaller than it should be. Disposition: **fix now** —
+`docs/tasks/refactor/tranche_one/03-fix-silent-upsert-errors.md` is written
+and scoped to this exact defect and all 8 sites.
+
+### D02
+
+**`builtin-nyc.py` pairs titles and companies by list index, not by
+containment**, and nothing verifies the pairing (`backend/ingest/builtin-nyc.py:316-333`).
+A card with no company anchor, or an extra `company-title` anchor anywhere
+earlier on the page, shifts every subsequent pairing by one — silently
+attaching the wrong company to the wrong title, indistinguishable from a
+correct row. Whether this has ever fired is unknown; there is no assertion,
+no counter, and no stored `raw_json` to audit against.
+
+Blast radius: one source (`builtin`). Disposition: **fix with harness** —
+needs a cassette fixture (`docs/ingestion_tests/05-fetcher-harness.md`'s
+suggested `fixtures/cassettes/`) to safely exercise a desync case without
+scraping the live site to check.
+
+### D03
+
+**`SALARY_PATTERN` is not scoped to a salary element** — it matches
+`[0-9]{1,3}K-[0-9]{1,3}K` anywhere in a builtin card window
+(`backend/ingest/builtin-nyc.py:148`, `:338`). Any "100K-150K"-shaped
+substring is captured as `salary_text`; 135 of 351 live rows have a non-empty
+value, none verified against the actual salary field. Blast radius: one
+source (`builtin`). Disposition: **fix with harness** — task 09, same
+fixture work as D02 (both need a cassette of real `builtin` HTML to change
+the regex against without scraping production to check).
+
+### D04
+
+**`weworkremotely.py`'s `company_token` is derived from the posting's display
+name**, via `slugify` (`backend/ingest/weworkremotely.py:165`), not a stable
+id the way `ingest/ats.py`'s config-sourced token is. A company that changes
+how it writes its own name in the RSS title produces a different token,
+hence a different primary key, hence a second row for the same posting.
+Nothing detects this. Blast radius: one source (`weworkremotely`).
+Disposition: **won't-fix** — no alternative stable id exists in the feed;
+documented as a known limitation, not actionable without a fuzzy-match layer
+the docstring explicitly declines to build.
+
+### D05
+
+**`weworkremotely.py` drops items via three separate `continue` statements
+with zero counters at any verbosity**: no colon in `<title>`
+(`:146-149`), a `NON_TECH_EXCLUDE_PATTERN` match (`:150-151`), and an empty
+`source_id` (`:159-161`); a fourth path, cross-listed duplicates, is also
+uncounted (`:206-211`). The summary reports only `len(all_records)`. A regex
+change to the exclude pattern that started matching legitimate engineering
+titles "would produce no signal at all" (`docs/ingest/weworkremotely.md:309-312`).
+Blast radius: one source (`weworkremotely`). Disposition: **fix with
+harness** — task 09; adding counters is low-risk but this script is one of
+the six task 09 covers, and a cassette confirms the counts match what the
+fixture actually drops before changing production output.
+
+### D06
+
+**All four `weworkremotely` feeds returning zero items with zero errors is
+indistinguishable from a quiet day.** The failure gate is `if not
+all_records and category_errors` (`backend/ingest/weworkremotely.py:219`), so
+a run where every feed answers 200 with an empty or fully-filtered body exits
+0 silently. Blast radius: one source. Disposition: **won't-fix** — the
+document's own analysis holds: `close_stale` is time-based, not diff-based,
+so this is not a mass-close risk, only a slow-news-day false negative.
+
+### D07
+
+**Non-English relative timestamps silently fail to parse.**
+`hl=en&gl=us` on the SerpApi request is "load-bearing"
+(`docs/ingest/google-serpapi.md:398-401`) — without it, Google intermittently
+returns relative dates like `"há 2 dias"`, which
+`text.parse_relative_posted_at`'s English-only regex cannot parse, losing
+`posted_at` with no visible error. Currently mitigated by the two query
+params on every call. Blast radius: google sources
+(`google-serpapi.py`, `google-apify.py` — shared `google_jobs.py` normalizer).
+Disposition: **won't-fix**, currently mitigated; revisit if the query
+parameters are ever dropped or a non-US locale is added.
+
+### D08
+
+**A contributor submitting `jobs: []` still advances the query's
+watermark.** `submit` performs no non-empty check; `qc.upsert(conn, [])`
+writes nothing, then `mark_success` runs unconditionally
+(`backend/api/app.py:336-341`), marking the query covered for the next 20
+hours. A buggy or lazy contributor worker can silently mark a query "done"
+with zero rows collected. Blast radius: one source (contributor API; never
+deployed). Disposition: **fix before deploy** — `docs/tasks/refactor/README.md`
+Phase 4 task 24 revives this service; this should be closed as part of that
+work, not before.
+
+### D09
+
+**`_mode_for_slug` silently returns `"unknown"`** when the query bank is
+unreadable at submit time (`backend/api/app.py:389-401`), which feeds
+`location_is_remote` via `normalize_job`'s `mode` parameter — a config read
+failure at exactly the wrong moment quietly corrupts a stored fact rather
+than rejecting the submission. Blast radius: one source (contributor API;
+never deployed). Disposition: **fix before deploy** — task 24.
+
+### D10
+
+**`match.py` silently coerces a `tech_stack` JSON parse failure to
+`[]`** (`backend/match.py:237-240`), losing that job's tech-match signal for
+every profile with no counter anywhere. Blast radius: all profiles (match
+stage). Disposition: **fix with harness** — task 09 (match.py fixes need the
+scratch database it builds, per its own "do not fix blind against
+production" principle); log a counter, no semantic change needed since `[]`
+is a reasonable fallback.
+
+### D11
+
+**Demoted and orphaned `job_matches` rows are deleted with no recoverable
+log of which jobs.** Only counts reach stdout
+(`backend/match.py:274`, `:298`, `:363-369`). A weight edit that demotes
+hundreds of rows reports a number with no way to see which — and the rows
+are already gone by the time anyone looks. Blast radius: all profiles (match
+stage). Disposition: **fix with harness** — task 09; log job ids at
+`DEBUG_PRINT_KEYS` verbosity at minimum, since `match.py` currently reads
+that flag nowhere.
+
+### D12
+
+**`criteria_json` structure is not validated at scoring time.** Every
+section lookup defaults via `.get()` (`backend/match.py:97`, `:122`, `:133`,
+`:139`, `:149`, `:163`, `:173`), so a typo'd section name in a profile's
+criteria silently disables that entire section's penalty rather than
+erroring. `profiles.validate()` runs before every write but nothing re-checks
+at read time. Blast radius: all profiles (match stage). Disposition: **fix
+with harness** — task 09.
+
+### D13
+
+**`match.py`'s `SENIORITY_ORDER` must stay a superset of `extract.py`'s
+`SENIORITY` vocabulary, and nothing asserts it**
+(`backend/match.py:65-66`, `:116`; `backend/extract.py:82-83`). A level
+present in one and absent from the other silently scores as free rather than
+raising. Blast radius: all profiles (match/extract coupling). Disposition:
+**fix with harness** — task 09; a shared constant or a startup assertion
+would close this cheaply, verified against the scratch database rather than
+production.
+
+### D14
+
+**`match.py --profile X` can silently prune another profile's valid match
+rows.** `prune_orphans` deletes any `job_matches` row for the run's
+profile(s) whose `job_id` is not in the loaded fact set
+(`backend/match.py:271-274`), but `load_facts` applies the relevance union
+of only the **selected** profile(s) (`:351-352`). Running
+`match.py --profile frontend` therefore loads facts filtered by `frontend`'s
+config alone, and any `frontend` match row for a job that only `tech`'s
+config admits would be pruned as an orphan. Whether this is intended is not
+determinable from the code — the union exists specifically to avoid this
+class of problem, but is applied over `active` profiles or the single
+`--profile`, never over all profiles regardless of selection. Blast radius:
+manual single-profile runs only (the nightly nine-step run always scores all
+active profiles together, so it is not exposed there). Disposition:
+**won't-fix, for now** — no task currently owns this and it has not been
+observed to fire; the reason it is left open rather than fixed is that its
+intended behavior is itself unresolved (the union exists specifically to
+avoid this class of problem, but is not applied consistently across
+`--profile` and default runs). Revisit before Phase 5's multi-tenancy work
+makes `--profile` a routine, rather than exceptional, invocation.
+
+### D15
+
+**`score.py` writes `fit_score` and `primary_track` straight from model
+output with no coercion, unlike `extract.py`'s `_enum()`/`_int_or_none()`**
+(`backend/score.py:372-373`; full write-up and SQL to run first in
+`docs/ingestion_tests/04-score-validation.md:38-83`) — this is "audit item
+8." Scoring's vocabulary is Title Case with spaces (`Core SWE`, `AI
+Integration`, ...), which is a different trap from extraction's snake_case
+one: naively reusing `extract._enum()` would *silently rewrite* every stored
+value. A drifted `primary_track` is invisible until something renders it
+(`match.py` never reads it); an out-of-range or wrongly-typed `fit_score`
+persists unclamped. Blast radius: all profiles (score stage). Disposition:
+**fix with harness** — `docs/tasks/refactor/tranche_two/08-score-validation.md`
+scopes `score.normalize()` with its own vocabulary, validated against real
+cached responses before touching production.
+
+---
+
+## Loud failure — fix opportunistically; the harness catches regressions
+
+### D16
+
+**`score.py`'s `build_prompt` hard-indexes `persona["buckets"]`, but
+`profiles.validate()` does not require the `buckets` key**
+(`backend/score.py:301-303`; `backend/profiles.py:139-142` lists only
+`background_summary`, `strengths`, `honest_gaps`, `scoring_instructions`). A
+profile saved without `buckets` validates cleanly, then raises an uncaught
+`KeyError` at scoring time. `score_one_job`'s only exception handling around
+`build_prompt` is an outer `try/finally` (`:431`, `:462`) that just closes the
+connection and re-raises; the inner `try` catches only
+`llm.TransientError`/`(RuntimeError, JSONDecodeError)` around `llm.call`
+(`:433-445`) and sits *below* the `build_prompt` call at `:432`. Because
+`run_for_profile` materializes `pool.map` through `list()` (`:490`), the
+`KeyError` takes down the **whole profile's remaining batch** — worse than a
+deferred call, because a deferral is at least recorded. Full write-up:
+`docs/ingestion_tests/04-score-validation.md:122-177`.
+
+Blast radius: one profile's entire batch per occurrence (score stage). Not
+`match.py`-class in blast radius, but the same missing-isolation defect
+class as D20. Disposition: **fix with harness** — task 08 scopes two
+independent changes: add `buckets` to `validate()`'s required keys, and
+guard `score_one_job`'s body so an unexpected exception tombstones or defers
+one job instead of killing the run.
+
+### D17
+
+**`google-apify.py`'s `run` variable is referenced before assignment when an
+actor's start response already reports `SUCCEEDED`.** `run` is bound only
+inside the polling `while` body (`backend/ingest/google-apify.py:179-190`);
+a status of `SUCCEEDED` (or anything outside `("READY", "RUNNING")`) at the
+*first* check skips the loop entirely, so `run["data"]["defaultDatasetId"]`
+at line 190 raises `UnboundLocalError` — not in the caught list at
+`:223-224` — and propagates, killing the step rather than counting as an
+ordinary query error. This is "audit item 1." Whether Apify can return
+`SUCCEEDED` synchronously from run-creation was not confirmed against the
+live API. Blast radius: one source (`google-apify`). Disposition: **fix with
+harness** — `docs/ingestion_tests/05-fetcher-harness.md` names the exact
+fixture needed: `apify-immediate-success.json`.
+
+### D18
+
+**Uncaught `KeyError` on malformed config, before the guarded load
+completes.** Two sites: `company["platform"]`/`company["token"]` in
+`backend/ingest/ats.py:320-321` (subscripted before the `try` at `:325`,
+inside the per-company loop, so one config entry missing either key kills
+the whole run); and `bucket["queries"]`/`bucket["daily_budget"]` in
+`backend/ingest/google-serpapi.py:213-214` (subscripted inside
+`pick_stale_queries_by_bucket`, which runs after `load_query_buckets`'s
+`try/except KeyError` at `:300` has already returned — the guard only covers
+the top-level `buckets` key, not per-bucket structure). This is "audit item
+6." Blast radius: one source each. Contrast: `google-apify.py`'s equivalent
+subscripting sits *inside* the function its own `try` wraps
+(`docs/ingest/google-apify.md:303-307`), so it is the better-guarded of the
+two Google scripts. Disposition: fix opportunistically — move the
+subscripting inside the guarded load, matching the apify script's pattern.
+
+### D19
+
+**Normalization/parsing happens outside the per-unit `try` block in four of
+six ingest scripts**, so one malformed record's exception kills the entire
+run rather than one unit. This is "audit item 7."
+
+- `backend/ingest/ats.py:334` — normalize call outside the fetch-only `try`
+  at `:325-332`.
+- `backend/ingest/builtin-nyc.py:390` — `parse_page` outside the fetch-only
+  `try` at `:382-388`.
+- `backend/ingest/google-serpapi.py:324` — normalize outside the `try` at
+  `:314-322`.
+- `backend/ingest/google-apify.py:231` — normalize outside the `try` at
+  `:221-229`.
+
+`weworkremotely.py` gets this right — its parse call is inside the `try` at
+`:196-198` (`docs/ingest/weworkremotely.md:295-296`). Blast radius: one
+source each, four sources total. Disposition: fix opportunistically — move
+each normalize/parse call inside its script's existing `try`.
+
+### D20
+
+**`match.py` has no per-record isolation anywhere in the stage** — the only
+write path in the pipeline without `lib/upsert.py`'s per-record SAVEPOINT.
+`score_job` is called unguarded at `backend/match.py:290`; a non-numeric
+`criteria.json` weight raises an uncaught `TypeError` at `total += delta`
+(`:92`). The `executemany` at `:304-316` is a single statement with no
+per-row isolation, so one bad tuple aborts the whole batch. Any exception
+propagates out of `match_profile` and kills the run **for all profiles**,
+including ones already computed but not yet committed. This is "audit item
+3," and `docs/ingestion_tests/05-fetcher-harness.md:45-57` notes the same
+class recurs in `score.py` (D16) — three of nine pipeline scripts now known
+to lack it, making this "a pipeline-wide invariant to test for," not a quirk
+of one script.
+
+Blast radius: all profiles, all of `job_matches` (match stage — the only
+stage with no external call, which is also the reason isolation was skipped
+here in the first place, per the doc's own speculation). Disposition: fix
+opportunistically — no task currently owns this specifically; the fetcher
+harness (task 09) is the natural place to add regression coverage once a
+scratch database exists.
+
+### D21
+
+**`hn-hiring.py` has a hard, unguarded import-time dependency on
+`config/relevance.json`.** `relevance.load()` runs at module import
+(`backend/ingest/hn-hiring.py:90`, `:152`, into module-level `ROLE_PATTERN` at
+`:164`). `_python_role_pattern` guards only `re.error` from pattern
+translation (`:158-161`), not the file read itself. A config file that
+cannot be read or parsed crashes at import, before `main()` runs and before
+the standard `FAILED:` reporting convention applies. Blast radius: one
+source (`hn_whoishiring`). Disposition: fix opportunistically.
+
+### D22
+
+**`schema.ensure_schema` raises an uncaught `RuntimeError` if
+`public.events` exists in the target database**
+(`backend/schema.py:261-266`; nothing catches it at `backend/ingest/ats.py:301`,
+and by the same call pattern, every other ingest script). Blast radius: all
+ingest (shared `ensure_schema` call). Disposition: **won't-fix** —
+`docs/ingestion_tests/05-fetcher-harness.md:19-22` names this "FOOTGUN 2" in
+`lib/dbconn.py` and explicitly calls it a *feature* to keep, since it is
+what stops a script from running against a database still holding the
+legacy `events` table shape.
+
+### D23
+
+**A crash between the `hn-hiring.py` ledger commit and the `jobs` upsert
+commit permanently strands comments.** The ledger commits once, after the
+whole comment loop (`backend/ingest/hn-hiring.py:422`); the `jobs` upsert
+commits separately, at the end of its own batch
+(`backend/lib/upsert.py:235`). A crash between the two leaves comments
+marked seen in `hn_seen_comments` with no corresponding `jobs` row — and
+because the ledger is what gates re-fetching, a subsequent normal run would
+skip them permanently; only `--reparse` recovers them. This is "audit item
+4." No test covers this and no evidence in the journal that it has
+occurred. Blast radius: one source (`hn_whoishiring`), unconfirmed
+frequency. Disposition: **fix with harness** — task 09 lists this as
+naturally expressible as a cassette test (crash-injection between the two
+commits).
+
+### D24
+
+**15 `job_facts` rows are possibly permanently starved at
+`facts_version=1`.** They match `select_unextracted_jobs`'s `NOT EXISTS ...
+facts_version >= 2` predicate and so should be re-extracted
+(`backend/extract.py:184-186`), but `ORDER BY j.first_seen DESC LIMIT 40`
+puts the newest eligible rows first every run — if newer eligible rows
+keep arriving ahead of them in the queue, these 15 could never be reached.
+Whether they are actually starved by ordering, or simply excluded by the
+relevance union or a closed status, was not determined; confirming it
+requires running the query against live data with the current profile
+configs, which is out of scope for a read-only audit. Blast radius: one
+source (extract stage), 15 rows currently. Disposition: **won't-fix,
+unconfirmed** — no task currently owns this and the number is small (15
+rows); a one-line diagnostic query (not a fix) would settle whether it is
+real, and should be run before Phase 3's volume increase makes the answer
+harder to see, but nothing today depends on the answer.
+
+### D25 — fixed
+
+**The live extraction/scoring model silently differed from the documented
+default.** All `job_facts`/`job_scores` rows were written by
+`deepseek-v4-flash@api.deepseek.com`, while `backend/llm.py`'s
+`DEFAULT_MODEL` and `backend/README.md`'s configuration table both named
+`glm-4.5-flash` — three sources (code default, `.env`, docs) giving three
+different answers to "what runs in production," with nothing in code
+enforcing agreement. This mattered specifically because every
+self-consistency figure this refactor's decisions rest on
+(`docs/ingestion_tests/README.md`'s 76%/94% numbers) is model-specific.
+Blast radius: measurement validity across the whole pipeline (extract +
+score stages). **Status: fixed, commit `28f1d0e`**
+(`docs/tasks/refactor/tranche_one/01-pin-production-model.md`) — `llm.py`'s
+`DEFAULT_MODEL` now pins `deepseek-v4-flash`, and `llm.model_mismatch()`
+refuses to start under a different resolved model when
+`JOBS_EXPECTED_MODEL` is set, wired into both `extract.py` and `score.py`.
+
+### D36
+
+**`job_ingest_state.claimed_by`/`claim_granted_at` exist but are never set
+by `ingest/google-serpapi.py`, only by the contributor API's claim path** —
+an asymmetry that already caused a real bug: the pipeline taking over an
+expired claim leaves `claimed_by` stale as the previous contributor's id, so
+a naive `claimed_by == caller` ownership check on the API side would pass
+for a contributor whose claim had already been taken over
+(`docs/ingest/google-serpapi.md` Open Questions;
+`docs/ingest/contributor-api.md` "`holds_claim` and the takeover problem",
+`backend/api/query_claims.py:243-285`). The fix (`claim_granted_at` as a
+second condition) was applied API-side only — the root asymmetry in
+`job_ingest_state`'s write pattern still exists. Blast radius: cross-component
+(google ingest scripts + contributor API, sharing one table). Disposition:
+**won't-fix** — already patched at the point that mattered; recorded here so
+the next person touching the claim schema knows the asymmetry is load-bearing
+for that fix, not an oversight to "complete" by having the ingest scripts set
+the same columns.
+
+---
+
+## Cosmetic — fold into task 34
+
+### D26
+
+**A stale claim about `ats.py` appears in two other files and contradicts
+the code.** `backend/lib/text.py:112-114` and
+`backend/tests/test_row_identity.py:171` both say "ats.py passes
+`unescape=False`," but at this commit `normalize_lever`, `normalize_ashby`,
+and `greenhouse_description` all use the default `unescape=True`
+(`backend/ingest/ats.py:193`, `:261`, `:291`). `backend/migrations/migrate_ats_descriptions.py:6`
+uses the past tense — "ingest/ats.py **passed** `unescape=False`" — and
+appears to be the accurate account; the other two comments were not updated
+when the behavior changed.
+
+### D27
+
+**5 unused imports in `ats.py`**: `re` (`:118`), `hashlib` (`:119`),
+`urllib.request` (`:120`), `timedelta` (`:122`), `ids` (`:132`, used
+indirectly through `lib/upsert.py` but never referenced by name in this
+file).
+
+### D28
+
+**4 unused imports in `builtin-nyc.py`**: `hashlib` (`:112`), `datetime`,
+`timedelta`, `timezone` (`:116`), plus `ids` (`:126`) unreferenced. `http` is
+imported only for the `DEFAULT_TIMEOUT` constant, not its retry logic.
+
+### D29
+
+**`weworkremotely.py`'s `parse_posted_at` is called twice on the same
+input** — once directly (`:172`) and once nested inside
+`text.posted_at_timestamp` (`:173`) — producing the same value both times.
+Explicitly flagged in `docs/ingest/weworkremotely.md:412-415` as "duplicated
+work rather than a defect," with no comment explaining why the
+already-computed value at `:172` is not reused. (This is the known member
+named directly in `docs/tasks/refactor/tranche_one/02-triage-audit-defects.md:66-68`.)
+
+### D30
+
+**5 unused imports in `weworkremotely.py`**: `hashlib` (`:77`), `html as
+html_module` (`:76`), `datetime`, `timedelta` (`:83`), `ids` (`:93`). `http`
+is imported only for the `DEFAULT_TIMEOUT` constant.
+
+### D31
+
+**Retry/backoff usage is inconsistent across the six ingest scripts, with
+no comment anywhere explaining the split.** `ats.py`, `hn-hiring.py`, and
+`google-apify.py` go through `lib.http.get_json`/`post_json` and get 5
+retries with exponential backoff; `weworkremotely.py`, `builtin-nyc.py`, and
+`google-serpapi.py` call `urllib.request.urlopen` directly and get one
+attempt, no backoff, no `Retry-After`. `lib/http.py:3-5` cites exactly this
+scenario — "a single transient 503 from one ATS board failed that company
+for the day" — as the reason the module exists. `docs/ingest/weworkremotely.md`
+Open Questions: "I could not determine whether this is deliberate or an
+incomplete migration." Failures here are counted (as category/query errors),
+not silent, so this is a robustness gap rather than a correctness bug — but
+it does mean transient upstream errors cost more completeness on three of
+six sources than on the other three for no stated reason.
+
+### D32
+
+**3 unused imports in `hn-hiring.py`**: `hashlib` (`:77`), `timedelta`
+(`:81`), `ids` (`:92`).
+
+### D33
+
+**`google_jobs_query_stats` accumulates and is read by nothing.**
+Written by both `google-serpapi.py:334` and `google-apify.py:240`; the
+adaptive-cadence logic it was built for was never implemented
+(`backend/google_jobs.py:68-74`). Nothing prunes it; 32 rows currently.
+
+### D34
+
+**22 orphaned `job_ingest_state` watermark rows** keyed
+`google_jobs:query:*` do not correspond to any of the 32 slugs in
+`config/google-queries.json` — evidently from an earlier query bank.
+`pick_stale_queries_by_bucket` only ever selects `WHERE dataset =
+ANY(current_slugs)`, so they are inert but permanent; nothing prunes them.
+
+### D35
+
+**`CLAIM_TTL_MINUTES` is documented in `backend/README.md` as a
+configuration variable but `google-serpapi.py` never reads it** —
+`state.try_claim` is called without a `ttl_minutes` argument
+(`backend/ingest/google-serpapi.py:235`), so the library default
+(`DEFAULT_CLAIM_TTL_MINUTES = 15`, `backend/lib/state.py:90`) silently
+applies instead. No code comment addresses the discrepancy between the
+README and the call site.
+
+### D37
+
+**Abandoned Apify actor runs are billed and untracked.** A poll timeout
+raises at `backend/ingest/google-apify.py:187-188` and the claim is released
+immediately (`:226`), but the actor keeps running on Apify's infrastructure
+and keeps billing. The `run_id` exists only inside the exception message,
+printed under `DEBUG_PRINT_KEYS` only. No reconciliation against Apify's own
+billing exists. Disposition: won't-fix — dollar amounts here are small
+(≤$0.15/query) and the fix (persisting and polling abandoned run ids) is
+disproportionate engineering for the stakes.
+
+### D38
+
+**`POST /v1/events`'s impression-dedup has a race under concurrent
+requests.** The `NOT EXISTS` check is evaluated inside the same `INSERT`
+statement (`backend/webapp/jobs.py:307-310`), so two simultaneous impression
+posts for the same (profile, job) can both find no prior row and both
+insert. There is no unique constraint, deliberately — the table is an
+append-only log, not a state store. Disposition: won't-fix — a duplicate
+impression row is noise, not incorrect data, in an append-only log.
+
+### D39
+
+**`extract.py` has no lock or claim; two concurrent runs (the nightly
+pipeline overlapping `backend/scripts/backfill-facts.sh`) would both select
+overlapping batches and double-spend LLM calls** (`backend/extract.py:176-191`).
+`ON CONFLICT (job_id) DO UPDATE` means the second write does not error, just
+costs twice. Disposition: fix opportunistically — a `FOR UPDATE SKIP LOCKED`
+on the selection query would close this cheaply if it is ever observed to
+matter.
+
+### D40
+
+**A login-triggered `score.py` run and the nightly run can double-spend.**
+Both use the same unlocked `NOT EXISTS` anti-join
+(`backend/score.py:234-235` in `select_shortlist`); `ON CONFLICT DO UPDATE`
+prevents an error but not the duplicate LLM call. Depends on deployment,
+which has not happened. Disposition: fix opportunistically, same shape of
+fix as D39.
+
+### D41
+
+**Contributor API's `claim` endpoint has no rate limit beyond the daily
+per-contributor cap.** `backend/api/README.md:214-224` names this as a known
+gap before opening up: an unmetered claim-loop could lock the whole query
+bank and starve the operator's own nightly pipeline. The daily cap counts
+`submission_log` rows, and a claim that is never submitted writes no such
+row, so a pure claim-loop is uncapped by that mechanism. Blast radius: one
+source, never deployed. Disposition: **fix before deploy** — task 24.
+
+### D42
+
+**`hn-hiring.py` re-fetches HN items answering `null` forever.** `if not
+comment: continue` (`backend/ingest/hn-hiring.py:409-410`) returns *before*
+the ledger insert at `:412`, so an id HN answers with `null` is never marked
+seen and is refetched on every subsequent run. This is "audit item 5." Not
+data loss — the comment never produced a row either way — but a permanent,
+low-volume waste of requests with no comment explaining why null bodies
+should behave differently from the deliberate "transient failure, don't
+mark seen" convention already used for fetch errors at the same site.
+Disposition: fix with harness — task 09 lists this as naturally expressible
+as a cassette test (`fixtures/cassettes/hn-item-null.json`).
+
+---
+
+## Cross-reference to prior write-ups
+
+For readers arriving from a task file rather than this register:
+
+| Elsewhere called | Here |
+|---|---|
+| "the original" upsert-discard defect, `ats.py:337` | D01 |
+| "audit item 1" (`docs/ingestion_tests/05-fetcher-harness.md:34`) | D17 |
+| "audit item 2" (ibid., `:35`) | D01 |
+| "audit item 3" (ibid., `:36`, `:45-57`) | D20 (and D16, the same class in `score.py`) |
+| "audit item 4" (ibid., `:37`) | D23 |
+| "audit item 5" (ibid., `:38`) | D42 |
+| "audit item 6" (ibid., `:39`) | D18 |
+| "audit item 7" (ibid., `:40`) | D19 |
+| "audit item 8" (`docs/ingestion_tests/04-score-validation.md:5`) | D15 |
+| the `buckets` `KeyError`, "a second defect" (ibid., `:122-177`) | D16 |
+| `weworkremotely.py`'s duplicated `parse_posted_at` call | D29 |

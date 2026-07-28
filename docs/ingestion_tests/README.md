@@ -4,8 +4,10 @@ Work breakdown for `backend/evals/` — the harness that makes model, prompt and
 cost decisions on the LLM stages *measurable* instead of argued.
 
 It exists because of [`docs/ingest/`](../ingest/): an audit of every ingestion
-path that found 16 defects at `dd49a27`. Rather than hand-fix them one at a
-time, the decision was to build the thing that would have caught them.
+path, whose findings are enumerated, classified and scheduled in
+[`docs/ingest/DEFECTS.md`](../ingest/DEFECTS.md). Rather than hand-fix them
+one at a time, the decision was to build the thing that would have caught
+them.
 
 | | Task | Lands | |
 |---|---|---|---|

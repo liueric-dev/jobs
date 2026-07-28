@@ -21,7 +21,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | | Task | Lands | |
 |---|---|---|---|
 | 01 | [Pin the production model](01-pin-production-model.md) | one answer to "what runs in production", enforced in code | todo |
-| 02 | [Triage the ingest audit defects](02-triage-audit-defects.md) | the 16 defects at `dd49a27` enumerated, classified, scheduled | todo |
+| 02 | [Triage the ingest audit defects](02-triage-audit-defects.md) | [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md) — 42 defects enumerated, classified, scheduled | done |
 | 03 | [Stop discarding upsert errors](03-fix-silent-upsert-errors.md) | `UpsertResult.errors` read in every ingest path | todo |
 | 04 | [Quota and wall-clock baseline](04-quota-baseline.md) | `cost-test.py` measuring requests and seconds, not dollars | todo |
 | 05 | [Corpus volume under a widened gate](05-widened-gate-volume.md) | a number: how many rows a Pursuit gate would admit | todo |
