@@ -196,6 +196,16 @@ headline is the line under it:
 > how fast a call is. At 43/day the backlog grows 3/day; at 80/day — what the
 > last seven complete days actually ran — it grows 40/day, forever.**
 
+**Superseded 2026-07-28 as a statement about the code; kept because it is
+task 04's finding and the reason the code changed.** `extract.py` no longer
+runs one batch per invocation. `main()` loops batches until the backlog is
+empty or `EXTRACT_DEADLINE_SECS` (3600, `extract.py:119`) passes, so
+`EXTRACT_BATCH_SIZE` is now the size of a batch and not a daily ceiling. The
+measurement above is what sets the deadline: at 2.85 s/call effective, one
+hour is ~1,260 calls against 43–80 eligible postings a night. The summary
+line reports `stopped=drained` or `stopped=deadline`, and the second on two
+consecutive nights is the condition this paragraph used to describe.
+
 Nothing about that is a rate limit, a token budget or a wall-clock problem.
 40 calls take 114 seconds — 1.1% of the systemd window. The pipeline is
 throttled by a constant, three orders of magnitude below anything the
@@ -377,6 +387,10 @@ constraint.** What binds is request rate limits, wall-clock, and ranking
 quality — and, measured, none of those three either: what binds is
 `EXTRACT_BATCH_SIZE`. Spend the effort on `criteria.json` calibration, not on
 tokens.
+
+*(Superseded 2026-07-28 in its last clause only, and by acting on it: the
+batch cap is no longer a daily ceiling — see the drain-loop note under "What
+it actually spends". The conclusion it supports is unchanged.)*
 
 ### Reasoning tokens: measured, and deliberately left ON
 
@@ -677,8 +691,10 @@ that look current — the one genuinely wrong combination, which
 
 | env var | default | what it does |
 |---|---|---|
-| `EXTRACT_BATCH_SIZE` | 40 | postings per extraction run — **and `run-daily.py` makes one run a night, so this is the daily ceiling.** Measured 2026-07-28 as the binding constraint on the whole pipeline; see "What it actually spends". |
+| `EXTRACT_BATCH_SIZE` | 40 | postings per **batch**. Was the daily ceiling, measured 2026-07-28 as the binding constraint on the whole pipeline; `extract.py` now drains batches until empty or out of time, so it no longer is. See "What it actually spends". |
+| `EXTRACT_DEADLINE_SECS` | 3600 | how long `extract.py` may keep starting batches, on a monotonic clock. Checked between batches only, never before the first — one batch per invocation stays the floor. Justified against 2.85 s/call effective at `EXTRACT_MAX_WORKERS=3`. |
 | `EXTRACT_MAX_WORKERS` | 3 | concurrent extraction calls |
+| `JOBS_EXTRACTION_POLICY_FILE` | `config/extraction-policy.json` | per-platform extraction pass counts and the measured self-agreement they derive from |
 | `SCORE_MAX_WORKERS` | 5 | concurrent narrative calls |
 | `JOBS_MATCH_FLOOR` | 40 | below this, no `job_matches` row is written |
 | `JOBS_PROFILE` | — | one-off profile override |

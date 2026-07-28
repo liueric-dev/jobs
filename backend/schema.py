@@ -155,6 +155,17 @@ EVENTS_TABLE = "job_events"
 #: clean text moves tech_stack (-13.1 jaccard), employment_type (-18.0) and
 #: years_experience_min (-10.0) beyond run-to-run noise; role_archetype and
 #: ai_involvement were unaffected. See migrate_ats_descriptions.py.
+#:
+#: OUTSTANDING DEBT, DELIBERATELY NOT PAID HERE: this is stale as of the
+#: selective majority-of-3 change (config/extraction-policy.json,
+#: extract.vote_facts). Extraction semantics moved -- an hn_whoishiring row
+#: extracted today is a vote over three passes and a row extracted last week
+#: is a single draw -- and under "Versions are cache keys" this number should
+#: have moved with them. It does not, because task 12 owns the next bump and
+#: carries this change with it, so ONE re-extraction pays for both instead of
+#: two burn-downs a week apart. Until then, job_facts.extraction_passes is
+#: what tells the two generations apart. Do not bump this to "tidy it up"
+#: without doing task 12's measurement: the bump re-extracts ~5,300 rows.
 FACTS_VERSION = 2
 
 #: match_score below this is not written to job_matches at all. Most jobs are
@@ -436,6 +447,30 @@ def ensure_schema(conn):
     dbconn.add_missing_columns(conn, "jobs", [
         ("posted_at_ts", "TIMESTAMPTZ"),
         ("salary_text", "TEXT"),
+    ])
+
+    # The extraction stability signal, added when extract.py started spending
+    # more than one call on the platforms measured least self-consistent (see
+    # config/extraction-policy.json and extract.vote_facts).
+    #
+    #   extraction_passes -- how many usable passes this row was voted from,
+    #     as it happened rather than as the policy asks: a three-pass platform
+    #     whose extra calls were rate-limited records 1. Without it, "was this
+    #     row voted on" is unanswerable after the fact, and the answer changes
+    #     what the row is worth.
+    #   vote_unanimity    -- the fraction of voted fields on which every pass
+    #     agreed, or NULL for a single pass. NULL rather than 1.0 deliberately:
+    #     one pass agrees with itself trivially, and 1.0 would make an
+    #     unmeasured row indistinguishable from a genuinely unanimous one in
+    #     exactly the query this column exists to answer.
+    #
+    # Both are NULL for every row extracted before this, which is honest --
+    # nothing recorded it. migrations/migrate_extraction_passes.py can fill
+    # extraction_passes=1 for them, which is a fact about how the pipeline ran,
+    # not a guess. It deliberately does not invent a unanimity.
+    dbconn.add_missing_columns(conn, FACTS_TABLE, [
+        ("extraction_passes", "INTEGER"),
+        ("vote_unanimity", "REAL"),
     ])
 
     for name, col in (("idx_jobs_company", "company_token"),
