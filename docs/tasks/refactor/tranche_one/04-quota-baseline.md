@@ -19,6 +19,13 @@ Three further reasons it cannot be reused as-is:
 
 - **The projection assumes 250 eligible postings/day.** Task 05 measures what a
   Pursuit gate actually admits. If it is 2,000, every derived figure moves by 8×.
+
+  **Answered, 2026-07-28: `N` = 43 postings/day** (2026-06-28 … 2026-07-27), in
+  [`docs/pursuit-gate-volume.md`](../../../pursuit-gate-volume.md). Use 43 for
+  quota and wall-clock — that is what the pipeline would process. Do **not** use it
+  as a count of on-target postings: hand-checked precision was 6.7%, so the usable
+  rate is ≈3/day. 43 is a floor, since three of the seven sources have under a month
+  of history; the last seven complete days ran 80/day.
 - **94% cache hit rate was measured, not guaranteed.** It depends on prompt stability
   and the provider's caching behaviour, and the prompt is about to change (task 11).
 - **The free tier changes the units.** With a near-zero marginal token cost, the
