@@ -984,7 +984,7 @@ for the rest of the directory.
 
 ---
 
-## 2026-07-28 — 18 landed (`fabe381`): the gate is the point, and it declined to report a yield
+## 2026-07-28 — 18 landed (`fabe381`): the plumbing is sound, the premise is not
 
 Report: [`docs/ingest/workday.md`](../../ingest/workday.md). New:
 `backend/ingest/workday.py`, `backend/tests/test_workday_ingest.py` (+77). Changed:
@@ -1044,7 +1044,26 @@ detail requests and **34 minutes**, for four tenants, growing linearly with the 
 count task 16's backlog will produce. That is the whole reason this source is gated
 upstream rather than pulled whole and filtered after.
 
-### It refused to report a yield, and that is the right call
+### It did eventually report a yield, and it is ~1/day against 80–200
+
+**Correction to an earlier version of this entry**, which said the task declined to report
+one. It declined at first, correctly, and then measured the right thing instead. Of **329**
+detail-fetched postings from four tenants:
+
+| | |
+|---|---|
+| AI vocabulary in the **title** | **0** |
+| entry-level AND AI-signalled | **1** (`seniority_guess`) · **3** (title regex) |
+
+Verified independently by the orchestrator against the live table; the two methods disagree
+on the margin and agree on the order. **The zero does not depend on the method.**
+Extrapolated to the ~50 tenants the task file anticipates: **~12/day against 80–200**, and
+generously so — `company_ats` holds four tenants, not fifty.
+
+The plumbing is sound and separable from that: ~1,360 postings/night reachable, 24%
+detail-fetch cost, 0 blocks, 0 records dropped, closure detection working live.
+
+### Why the first number it reported was not the answer either
 
 Only **4 of 149** postings survive the full gate. The report says, correctly, that this is
 not a yield: the gate is today's SWE-shaped `config/relevance.json`, whose two active

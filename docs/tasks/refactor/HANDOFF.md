@@ -199,10 +199,25 @@ Then, in order:
 
 Three numbers landed that change how the rest of the plan should be read.
 
-**The Phase 3 estimates are not reliable.** Task 14 measured **1.8 relevant/day against an
-estimate of 20–60**. Task 05 measured 43/day resolving to ≈3/day usable. Task 18 declined
-to report one at all, correctly. Tasks 15, 19, 20 and 21 are sized from the same table by
-the same method. **Measure before building.**
+**The Phase 3 estimates are not reliable, and this is now the session's headline finding.**
+Three sources measured, three far below estimate:
+
+| task | estimate | measured |
+|---|---|---|
+| 05 (gate volume) | — | 43/day, ≈3/day usable |
+| 14 (NYC Open Data) | 20–60/day | **1.8/day** |
+| 18 (Workday) | 80–200/day | **~1/day** at four tenants; ~12/day extrapolated to fifty |
+
+Tasks 15, 19, 20 and 21 are sized from the same table by the same method. **Measure before
+building.**
+
+**And the shape of the shortfall matters more than its size.** Of 329 Workday postings
+pulled from four NYC employers — a hospital system, a bank, a retailer — **zero have any AI
+vocabulary in the title**, by any method. Task 10 reached the same place from the other
+direction: its gate improved precision from 6.7% to 10.0% and is still 90% junk. The
+problem is not that the boards are unreachable or that the gate is too tight. **These
+employers are not posting these roles.** That is a question about the plan's premise, and
+it is not answerable by building more ingest.
 
 **The gate is not the bottleneck; sourcing is.** Task 10 raised hand-checked precision from
 task 05's 6.7% to 10.0% — a real improvement, and still 90% junk. Its own report says the
