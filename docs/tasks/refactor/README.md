@@ -43,7 +43,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | 10 | [Description-first relevance gate](tranche_two/10-description-first-gate.md) | AI-tool vocabulary matched against `description_text` — **876 rows eligible for the cohort, 573 newly, 13.2/day; precision 10.0% vs task 05's 6.7%**, [`docs/pursuit-description-gate.md`](../../pursuit-description-gate.md) | done |
 | 11 | [Archetype superset, `role_track`, missingness](tranche_two/11-archetype-superset-role-track.md) | 12 archetypes → **26**, derived from the corpus; provisional 9-value `role_track`; `normalize()` stops laundering absence into sentinels — **`other` was mostly a TECH gap: 203 of 427 reclaimed by tech values, 54 by ops**, [`docs/role-track-derivation.md`](../../role-track-derivation.md) | done |
 | 12 | [`FACTS_VERSION` bump and re-extract](tranche_two/12-facts-version-bump.md) | one bump carrying 11's changes — **and the extraction gate retargeted to `pursuit`, which took the bump from 5,317 rows to 863. `other` ROSE to 31.1%**, [`docs/facts-v3-diff.md`](../../facts-v3-diff.md) | done |
-| 13 | Cohort criteria profile | entry-level target, `uses_ai_tools` weighted above `builds_llm_features` | todo |
+| 13 | [Cohort criteria profile](tranche_two/13-cohort-criteria-profile.md) | entry-level target, `uses_ai_tools` weighted above `builds_llm_features` — **done; 144 matched of 859. DoD 122-123 partially unmet and deliberately not tuned into being met: 16/20 above floor, 10/20 in the top 20** | done |
 
 ## Phase 3 — Sourcing
 

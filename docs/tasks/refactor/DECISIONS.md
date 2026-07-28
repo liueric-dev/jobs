@@ -943,3 +943,145 @@ just made the only active one. It would also have converted a scoring-time
 KeyError into a save-time failure rather than removing it. The section is omitted
 when the key is absent instead. A persona with no positioning buckets is
 legitimate under the Pursuit scope.
+
+### 13 — The Definition of done was reported unmet rather than tuned into being met
+
+Lines 122-123 ask for 20 hand-picked target roles all above `MATCH_FLOOR` and all
+in the top 20. Measured: **16 of 20 above the floor, 10 of 20 in the top 20.** Line
+124 is met in full at 10 of 10.
+
+The list was picked on **title, company and location** — the three fields
+`score_job()` cannot see (`match.py:276-287` selects `job_facts` plus two location
+booleans and never reads the title). That is what makes it the one available
+non-circular test of the weights, and it is also why tuning against it was
+refused: adjusting `ai_involvement` until the fixture passed would have converted
+the only independent test into a circular one, which is CLAUDE.md's "never
+evaluate on the layer you trained on" at a smaller scale. Picking the top 20 of
+the ranking and asserting it is the top 20 measures nothing.
+
+Three of the four floor misses carry `ai_involvement = 'none'` and read as
+AI-adjacent only because the employer is an AI company — the exact failure mode
+task 05 measured at 6.7% precision. They may be correct rejections rather than
+weight errors. **Task 29's labels settle that; nothing available now does.**
+
+### 13 — Two silent defects in the authoring path, found because the DoD named it
+
+The DoD's "created through code that task 26 will generalise, not hand-inserted
+SQL" pointed at `migrate_profiles.py`, and reading it before running it is what
+surfaced both:
+
+- It passed `relevance_cfg` from a flag that defaults to absent, so a run against
+  `pursuit` would have written NULL over the cohort gate task 10 built — silently,
+  and the next `match.py` would have scored the whole corpus through the shared
+  title filter. `daily_narrative_budget` and `active` had the same shape, and
+  either would have switched on paid LLM scoring for the cohort profile. All three
+  now preserve what they are not given.
+- `strip_comments()` drops only **top-level** underscore keys, so nested `_comment`
+  documentation reaches the database while top-level documentation does not.
+
+Both behaviours are now pinned by test. `migrate_profiles.py` had no tests at all
+before this.
+
+### 13 — `entry` was not added to the seniority vocabulary
+
+`13-*.md:39` asks for `target: ["entry","junior","new_grad"]`. `entry` is in
+neither `extract.SENIORITY` (`extract.py:205-206`) nor `match.SENIORITY_ORDER`
+(`match.py:65-66`), and `match.py:152-154` filters the target list through
+`if t in SENIORITY_ORDER`, so it would have been dropped **silently** and no
+extracted value could ever have matched it. Adding it costs a `FACTS_VERSION` bump
+and a full re-extraction, to buy a synonym for two values already present.
+Shipped as `["new_grad","junior"]`. Seventh task file confirmed wrong about the
+code.
+
+### 13 — DoD line 125 replaced with a stronger assertion than it asks for
+
+It asks for a top-50 diff of the author's rankings before and after. `tech` and
+`frontend` are inactive as of task 12 and their `job_matches` sit at
+`facts_version 2`, while `job_facts` v3 exists only for the pursuit corpus — so
+`match.py` cannot recompute `tech` without first re-extracting ~5,000 postings,
+which is the bill task 12 was run to avoid.
+
+Asserted instead: `tech`'s `criteria_json` md5 and `criteria_version` byte-identical
+before and after. That is unchanged rankings proved by unchanged stored scores,
+which is stronger than a top-50 diff and costs nothing. Its `job_matches` lost
+exactly one row — to task 35's remediation, not to this change, verified by
+recomputing the set md5 excluding the remediated ids.
+
+### 35 — The gate belongs to extraction, because the leak is in the stripper
+
+Every contaminated row is one mechanism: `lib/text.strip_html()`'s `<[^>]+>` ends
+a tag at the first `>`, and modern Tailwind class names contain one
+(`[&:has([data-writing-block])>*]:pointer-events-auto`), so the tag's remainder is
+emitted as text. It fires source-independently — on greenhouse, where an employer
+pasted a rendered page into their own JD editor and the markup is in the API's
+`content` field, and on google_jobs, where a careers page was scraped. A fix in
+any one ingest script would have addressed one symptom of a shared cause.
+
+**The stripper itself was NOT fixed**, on blast-radius grounds: `lib/text.py` is
+called by every ingest path. So new contaminated rows will still be ingested and
+will now be rejected rather than laundered. That is a deliberate limit of what
+landed and wants its own follow-up.
+
+### 35 — The threshold was measured, and two alternatives were rejected on measurement
+
+`MARKUP_REJECT_RATIO = 0.01` is the **geometric midpoint** of an empirical gap:
+over 13,282 described postings the signature scores exactly 0.0 on all but eight,
+and the worst clean row (0.0040) and the mildest poisoned one (0.0247) sit either
+side of `sqrt(0.0040 * 0.0247) = 0.0099`. False positives over the full table: 0.
+
+Rejected, with the numbers, so neither is proposed again:
+- a marker blocklist (`data-testid=`, `pointer-events-auto`) — the query
+  `HANDOFF.md:410-413` used. It finds **3 of the 8**, missing both `google_jobs`
+  rows and both Tailwind-only greenhouse rows, which leaked class names and no
+  `data-` attribute.
+- repeated-content density, aimed at the navigation-menu case. It scores 0.000 on
+  **all eight** contaminated rows and its six highest scorers are legitimate
+  postings: six false positives, zero true ones. It measures boilerplate, which
+  real postings also have.
+
+The gate deliberately does not reject `cc7d1b61574ffdac2d112a8d`, twelve stray
+Tailwind characters in an otherwise complete description. The threshold is set
+where a prompt stops being a posting, not where it stops being clean.
+
+### 35 — Remediation clears `content_hash`, and omitting it would strand the row forever
+
+`description_text` is in `HASH_FIELDS_ATS` and `HASH_FIELDS_SHORT`
+(`schema.py:131-135`), and `lib/upsert.py:219` compares the **stored**
+`content_hash` against one recomputed from the **incoming** record. A row whose
+`description_text` is NULL but whose hash still matches upstream takes the
+`touch_sql` branch on every subsequent run: `last_seen` bumped, description never
+rewritten, posting permanently invisible while the night reports success. That is
+this pipeline's signature failure mode, reintroduced by the cleanup meant to fix
+it.
+
+Deleting the `jobs` row was rejected — five of the eight are real jobs at real
+companies with soup spliced through them, and losing Databricks' req over twelve
+class names is worse than the defect. Tombstoning the facts alone was rejected
+because the poisoned bytes would survive to be re-extracted at the next
+`FACTS_VERSION`.
+
+### D45 — One durability boundary, on the iteration axis
+
+The two tables were committed on cadences measured on **different axes** —
+`ats_seed` every 20 iterations, `company_ats` every 50 records — so no choice of
+constants could align them, and a run that died between boundaries kept the seed
+outcome while discarding the buffer. "Partial success is the honest outcome" is
+only true if both tables are partial by the same amount.
+
+The loop moved out of `main()` into `probe_pass()` **so the cadence could be
+tested rather than argued**: the test kills a pass at every one of 60 indices and
+asserts set equality between the tables. Reading the loop is what let the original
+defect through review, so the test does not read it.
+
+### D45 — `company_ats` holds every negative, and the column now falsifies itself
+
+The design question D45 declined to decide, answered yes: `tools/jsonld-probe.py`
+and tasks 16/17 read the column as their **population**, and a partial column
+understates every figure derived from it silently.
+
+But `never_found` means "no ATS URL in the served HTML", not "no ATS". All four
+positive controls with a verified live board — Datadog, MongoDB, Justworks, Ramp —
+returned `not_found` because their careers pages are client-rendered, and all four
+now carry a `never_found` row **beside** a valid token row. So **≥4 of 139 rows are
+provably wrong**, in the table itself rather than in a footnote. Backfilling 104
+rows did not make the column more correct; it made it complete.

@@ -1226,3 +1226,65 @@ Ranked by what actually caught something:
 4. **Asking where an artifact is.** Task 08's selfcheck table was quoted from a
    run whose `--out` file was never committed, making the session's best
    measurement cost 165 live calls to re-verify. Now committed.
+
+---
+
+## 2026-07-28 — 13, 35 and D45 (three parallel agents)
+
+Three subagents in one round on strictly disjoint file sets; the orchestrator took
+the baseline first, verified every claim against the code and the database, and
+committed each stream under its own number. Nothing was committed by a subagent.
+
+| stream | commit | suite delta |
+|---|---|---|
+| D45 — `company_ats` durability cadence | `e11fabf` | +8 |
+| 35 — extraction input-sanity gate | `303f7b9` | +16 |
+| 13 — cohort criteria profile | `fa2d7a7` | +31 |
+
+**782 → 837, OK.**
+
+### What each landed
+
+**13.** `pursuit` went from a documented placeholder — `base 50`, `archetypes {}` —
+to real weights at `criteria_version` 2, and from 863 uniformly-scored matches to
+144 ranked ones. The weight set was chosen by the repo owner from three variants
+simulated over the live corpus with `score_job()`, which is pure and therefore
+sweepable without writing anything.
+
+**Its DoD is partially unmet and was reported as such rather than tuned into
+passing** — 16 of 20 above floor, 10 of 20 in the top 20, against 10 of 10 on the
+senior-exclusion list. See `DECISIONS.md`.
+
+**35.** Extraction had no opinion about what it was reading. Eight rows were not job
+postings; one had been extracted at `facts_version 3` into confident facts from a
+scraped ChatGPT web UI, and another — 2,700 characters of a staffing firm's
+navigation menu — reached a `job_scores` row. The gate returns `REJECTED` before
+`build_prompt`, so zero LLM calls is structural rather than asserted.
+
+**D45.** `company_ats` held 35 `never_found` rows against 139 because two tables
+committed on cadences measured on different axes. Fixed, 104 rows backfilled with
+no network, and the fix is verified by killing a pass at every one of 60 indices.
+
+### What this round taught about running agents
+
+**File ownership does not isolate database state.** All three agents were given
+explicit, disjoint file lists and none collided on a file. They collided on the
+*database*: 35's remediation deleted 4 rows from the pursuit corpus while 13 was
+scoring it, which moved 13's frozen eval fixture (863 → 859), its matched count
+(145 → 144) and `tech`'s `job_matches` md5. Every one of those looked like a
+regression in 13 and was not. **Only the pre-flight baseline made them
+attributable** — the same lesson task 10 recorded, arriving by a different route.
+
+**The falsifiable prediction is what made verification cheap.** 13 was handed
+"expect 145 matched, 19 of the top 20 on the shared floor, 51 of 55" and told to
+stop and report rather than adjust the weights if its run disagreed. Two of the
+three reproduced exactly and the third reconciled to a known cause, which took
+minutes rather than a re-derivation.
+
+**Send an agent back to its own file.** 13's fixture staleness was fixed by 13, not
+by the orchestrator, and it came back with an exhaustive `_what_moved` record — no
+pinned score changed, 15 ranks moved, none in the top 20 — that was better than
+what was asked for.
+
+**All three went idle without reporting.** Nine of nine across four sessions now.
+Treat the idle notification as "go look".
