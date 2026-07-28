@@ -115,6 +115,13 @@ membership from the list response, not from what you stored.
 
 - Ingests from `company_ats` Workday rows, using stored tenant/dc/site.
 - All four silent failures have a reproducing fixture and a failing-loudly test.
+  The fixtures already exist, built by task 09: `backend/evals/workday_fixtures.py`,
+  with `backend/tests/test_workday_fixtures.py` proving each one still reproduces
+  the failure it names. Drive the real ingest loop through them and delete that
+  file's stand-in `_collect_naively`/`_collect_reconciled`.
+- Cassette committed: a recording of the real happy path against a live tenant
+  from `company_ats`, once task 16 has produced one. The four fixtures above are
+  constructed, not recorded, and say so.
 - Collected count is reconciled against `total`; mismatch raises.
 - Upstream gating implemented via shared `relevance.py` logic, not a second copy.
 - The seen/fetched/surviving ratio is logged nightly.

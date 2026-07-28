@@ -105,5 +105,8 @@ most of the plan's weight and should be resourced accordingly.
 - Every row validated against the live endpoint, not just regex-matched.
 - Workday rows carry tenant, data centre and site separately.
 - Breakdown by ATS reported, with the non-tech coverage fraction stated explicitly.
+- Cassette committed (task 09) covering one validation probe per ATS, including a
+  token that does not resolve — otherwise the validator is only ever exercised
+  against the live endpoints it is meant to stop trusting.
 - A monthly re-probe job exists and is in `run-daily.py` or its own timer.
 - The seed list is stored as data, extensible without a code change.

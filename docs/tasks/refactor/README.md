@@ -33,7 +33,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 |---|---|---|---|
 | 07 | Metrics and the golden set | `metrics.py`, `labels.py`, labelling CLI, three-quantity measurement | todo |
 | 08 | Score validation | a `score` task, `score.normalize()`, closes audit item 8 | todo |
-| 09 | Fetcher harness | HTTP cassettes and a scratch DB for the non-LLM scripts | todo |
+| 09 | [Fetcher harness](tranche_two/09-fetcher-harness.md) | HTTP cassettes and a scratch DB for the non-LLM scripts — all six sources | done |
 
 ## Phase 2 — Retarget the pipeline
 

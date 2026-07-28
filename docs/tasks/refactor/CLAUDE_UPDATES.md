@@ -298,3 +298,68 @@ style, including the rejected alternatives and what *would* change the decision 
 The 40/day ceiling is not any task's responsibility in the current tree, and it
 invalidates the sizing in several. Raised as a follow-up rather than fixed here —
 task 04 is a measurement task and CLAUDE.md forbids tuning during one.
+
+---
+
+## 2026-07-28 — 09 landed: cassettes for all six sources, 400 tests
+
+Phase 3 is now unblocked. `backend/evals/` gains `cassettes.py` (record/replay),
+`scratchdb.py`, `ingest_modules.py`, `workday_fixtures.py` and `record_cassettes.py`;
+`fixtures/cassettes/` holds nine cassettes with a README. **Suite 400 passing**,
+verified by the orchestrator, +73 from this task.
+
+All six existing sources have cassettes — greenhouse (with and without `?content=true`),
+lever, ashby, hn-hiring, weworkremotely, builtin-nyc, google-serpapi, google-apify.
+**Apify billed nothing**: rather than paying ~$0.15 to start a run, the agent recorded a
+historical `SUCCEEDED` one through the free read endpoints. SerpApi cost a single
+search. LinkedIn was never touched.
+
+### The task file was wrong about where to intercept
+
+It assumes the ingest scripts fetch through `lib/http.py`. **Four of the six call
+`urllib` directly**, so a `lib/http.py` seam would have recorded nothing for them while
+appearing to work — a silent-failure shape, in a harness built to catch silent
+failures. The seam is `urllib.request.urlopen`.
+
+### The open question, settled with evidence
+
+`05-fetcher-harness.md` asks whether the harness should test concurrency. Answer: yes
+for `state.try_claim`, which is *defined* by the concurrent case and guards metered
+SerpApi/Apify budgets — if it is wrong, the symptom is a silent double-spend. No for
+`lib/upsert.py`, which has no cross-process contract, since `run-daily.py` runs ingest
+sequentially as subprocesses.
+
+Settling it turned up something better. What motivated the question was really
+transaction isolation, testable without concurrency — and testing it produced **the
+first evidence in this repo that the per-record SAVEPOINT actually works**. A
+five-record batch with one NOT NULL violation: with the SAVEPOINT, `new=4`, `errors=1`,
+four rows stored. Without it, `new=2`, `errors=3`, **zero rows stored** — one bad
+record takes all five. That mechanism has been load-bearing and unverified.
+
+### The Workday fixtures are honest about being constructed
+
+All four failure modes are reproduced — `limit` above 20 returning an empty array with
+a 200; a 429 at offset 40 of 2,000 (the test asserts the full 1,960-row loss); wd1
+versus wd5 host confusion returning 404 HTML; and the 10,000-row cap with a faceted
+slice to enumerate past it. They are **built by a module rather than recorded**, because
+no Workday tenant is known until task 16, and both the module and its tests say so
+rather than passing themselves off as captures.
+
+### Two follow-ups it surfaced
+
+`match.py` still has no per-record isolation (register entry **D20**) and is now
+testable for the first time. **D17** is pinned as still-broken with an assertion ready
+to flip when it is fixed — a good pattern: the register entry and the test agree by
+construction rather than by someone remembering.
+
+Also corrected a comment task 03 wrote in `tests/test_upsert_checked.py`, which said the
+ingest scripts "cannot be imported". They can now — `evals/ingest_modules.py` imports
+them by path. The conclusion it supported still holds on its own, so the reason was
+removed and the conclusion kept.
+
+### One cross-task edit worth flagging
+
+09 added a Definition-of-done bullet to **task 16's file** — requiring a cassette that
+covers a token which does *not* resolve, "otherwise the validator is only ever exercised
+against the live endpoints it is meant to stop trusting." That is the right bullet, but
+16's agent started before it existed, so 16 will be checked against it on landing.

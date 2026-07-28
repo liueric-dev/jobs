@@ -31,6 +31,59 @@ so a model standing in for it makes the measurement circular — the defect
 which treats `sonnet-batch-1` as ground truth. Reversible only in the sense that the
 labels can be collected later.
 
+### 09 — The open question: concurrency-test the claim SQL, not `lib/upsert.py`
+
+`05-fetcher-harness.md`'s "open question worth settling first". Settled: **yes for
+`state.try_claim`, no for `lib/upsert.py`.** `try_claim` is *defined* by the concurrent
+case — `lib/state.py:96-99` guards metered SerpApi and Apify budgets, and if it is
+wrong the symptom is a silent double-spend. `lib/upsert.py` has no cross-process
+contract: `run-daily.py` runs the ingest scripts sequentially as subprocesses
+(`ingest/ats.py:97-102`), so two upserts racing on one row is unreachable. Reversible
+if the pipeline ever parallelises ingest.
+
+What actually motivated the question turned out to be transaction isolation, which is
+testable *without* concurrency — and doing so produced the first evidence in the repo
+that the per-record SAVEPOINT works. A five-record batch with one NOT NULL violation:
+with the SAVEPOINT, `new=4`, `errors=1`, four rows stored. Without it, `new=2`,
+`errors=3`, and **zero rows stored** — one bad record takes the whole batch.
+
+### 09 — The missing Definition of done, derived rather than invented
+
+`09-fetcher-harness.md` inherits "everything in `05-fetcher-harness.md`'s definition of
+done", and that section did not exist. Derived twelve bullets from that file's
+"Suggested shape" and "The defects this would catch", and wrote them into it.
+Deliberately does **not** require fixing the seven defects the harness would catch —
+task 02 produces a register, not fixes — and separates "input pinned" from "defect
+closed" so a cassette cannot be mistaken for a repair. Reversible.
+
+### 09 — The interception seam is `urllib.request.urlopen`, not `lib/http.py`
+
+The task file assumes the scripts fetch through `lib/http.py`. **Four of the six do
+not** — they call `urllib` directly, so a `lib/http.py` seam would have recorded
+nothing for them while appearing to work. Rejected: refactoring the four to route
+through `lib/http.py`, which is a caller-side change to shared code in the middle of a
+harness task. Reversible, and worth revisiting if `lib/http.py` ever becomes universal.
+
+### 09 — A scratch *schema*, not a scratch database
+
+The role `jobs_pipeline` has no `CREATEDB`, so the throwaway target is a schema created
+through the real `ensure_schema()` rather than a separate database. Rejected: granting
+`CREATEDB`, which widens production credentials to suit a test harness. Reversible.
+
+### 09 — The Workday fixtures are constructed, not recorded, and say so
+
+No Workday tenant is known until task 16 completes, so the four failure modes are built
+by a module rather than captured from a live tenant, and both the module and its tests
+state that plainly. Failure mode 4 (the 10,000-row cap) needs 500 pages, which is
+another reason not to store it as committed JSON. Reversible — re-record against a real
+tenant once one exists, which is the point of leaving it labelled.
+
+### 09 — Apify cost nothing, deliberately
+
+Recorded a *historical* `SUCCEEDED` run through Apify's free read endpoints rather than
+paying roughly $0.15 to start a fresh one. The cassette is equivalent for replay
+purposes. SerpApi cost one search. Reversible.
+
 ### 04 — `max_tier_to_score` stays at 2, and throughput was never the objection
 
 The old `_max_tier_note` said "set to 3 to open the floodgates once throughput allows."

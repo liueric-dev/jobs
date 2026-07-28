@@ -15,9 +15,48 @@ them.
 | 02 | [Evals substrate](02-evals-substrate.md) | `backend/evals/` — ModelSpec, frozen fixtures, replay cache, runner, reporting | done |
 | 03 | [Metrics and golden set](03-metrics-and-golden-set.md) | `metrics.py`, `labels.py`, the labelling CLI, self-consistency baselines | next |
 | 04 | [Score validation](04-score-validation.md) | a `score` task, `score.normalize()`, closing audit item 8 | todo |
-| 05 | [Fetcher harness](05-fetcher-harness.md) | HTTP cassettes and a scratch database for the six non-LLM scripts | todo |
+| 05 | [Fetcher harness](05-fetcher-harness.md) | HTTP cassettes and a scratch database for the six non-LLM scripts | done — **resequenced, see below** |
 
 01 and 02 landed 2026-07-27 in `fb733df`. Suite went 232 → 263 tests.
+
+## 05 moved, and it is now the tightest constraint in the plan
+
+**Here, 05 was last: `todo`, depends on 02, blocks nothing.** That ordering was
+correct for the question this directory was written to answer — the LLM stages
+are where model, prompt and cost decisions get argued, and the fetchers were
+the part that already worked.
+
+The refactor plan changed the question.
+[`docs/tasks/refactor/tranche_two/09-fetcher-harness.md`](../tasks/refactor/tranche_two/09-fetcher-harness.md)
+moves it **in front of Phase 3**, where it blocks all seven ingest tasks
+(14–21). The reason is arithmetic, and it is the same argument this directory
+already makes about frozen fixtures, one layer down:
+
+- The harness was scoped for six ingest scripts. Phase 3 adds seven more — NYC
+  Open Data, USAJobs/Adzuna, retargeted ATS, Workday CXS, JSON-LD, iCIMS,
+  nonprofit boards.
+- Writing thirteen ingest paths against live HTTP with no way to replay a
+  response means every one of them is tested by running it against production
+  and reading the logs. That is precisely how the defects in
+  [`docs/ingest/DEFECTS.md`](../ingest/DEFECTS.md) came to exist — ten of them
+  are dispositioned "fix with harness — task 09" for exactly this reason.
+- Building it *after* Phase 3 means retrofitting cassettes onto seven scripts
+  written without them. Building it *before* means seven scripts written
+  against it.
+
+The new sources are also the ones that most need it. Workday CXS alone has
+four documented silent-failure modes; its fixtures now live in
+`backend/evals/workday_fixtures.py` and were built by this task rather than by
+task 18, so that task 18 is written against a reproduction instead of
+producing one.
+
+**What that means for anyone reading this directory in isolation:** 05 is no
+longer optional polish at the end of a sequence. Its definition of done —
+which this file's own task documents did not originally contain, and which is
+now written into
+[`05-fetcher-harness.md`](05-fetcher-harness.md#definition-of-done) — gates
+seven scripts that do not exist yet. "Cassette committed" is a line in each of
+their definitions of done.
 
 ## The finding that should shape task 03
 

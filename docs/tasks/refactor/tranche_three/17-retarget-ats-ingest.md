@@ -64,7 +64,8 @@ removing rows at ingest. Same principle as the geographic filter.
 ## Definition of done
 
 - Company list read from `company_ats`; no hardcoded tokens remain.
-- Four new platforms ingesting, each with a cassette.
+- Four new platforms ingesting, each with a cassette committed (task 09;
+  `python3 evals/record_cassettes.py --list` shows the three that already exist).
 - Delta sync via `updated_at` where the platform supports it.
 - `upsert_checked` throughout; error counts logged.
 - Closure set from absence, with the logic shared rather than copy-pasted per

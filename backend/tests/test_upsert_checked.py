@@ -17,11 +17,15 @@ through, that a deliberately malformed record
   2. is logged even when the count is zero, and
   3. raises UpsertErrorRate once the rate passes the threshold.
 
-WHY THE SPEC AND NOT THE SCRIPT. The scripts cannot be imported (five of six
-have hyphens in their filenames) and importing them would buy nothing here:
-what varies between the eight paths is the TableSpec and the record shape, and
-those are what these tests parametrise over. The fetch and parse halves are
-task 09's cassette harness, and these become cassette-backed there.
+WHY THE SPEC AND NOT THE SCRIPT. Importing them would buy nothing here: what
+varies between the eight paths is the TableSpec and the record shape, and those
+are what these tests parametrise over. The fetch and parse halves are task 09's
+cassette harness, and these become cassette-backed there.
+
+(This paragraph used to say the scripts *cannot* be imported, five of six
+having hyphens in their filenames. Task 09 removed that obstacle --
+evals/ingest_modules.py imports them by path -- so the reason is gone while
+the conclusion stands on its own.)
 
 WHAT COUNTS AS MALFORMED. schema.py:118-120 states the contract these tests
 break on purpose: "Every normalize_* function must supply every key here:
