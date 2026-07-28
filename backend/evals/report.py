@@ -203,6 +203,8 @@ def render_selfcheck(stats, runs, *, platform_order=None):
                 lines.append(f"      ... {len(flips) - _FLIP_ROWS} more "
                              f"pattern(s), {hidden} record(s); see --out JSON")
 
+    lines += render_ranking(stats)
+
     lines += ["", "  clean (greenhouse+ashby) vs messy (everything else)", ""]
     for field, blob in stats["fields"].items():
         cl, ms = blob["clean"], blob["messy"]
@@ -223,6 +225,63 @@ def render_selfcheck(stats, runs, *, platform_order=None):
 def _wilson(k, n):
     from . import metrics
     return metrics.wilson(k, n)
+
+
+def render_ranking(stats):
+    """The `score` block: does the model reproduce its own ORDERING?
+
+    Returns a list of lines, empty when no field has kind `score` -- which is
+    every extract run, so the existing table is unchanged.
+
+    WHY THIS IS THE HEADLINE FOR fit_score AND agree2 IS NOT
+        fit_score has no ground truth (evals/tasks/score.py), and exact
+        agreement on a 0-100 scale understates a model that answered 70 and
+        then 72 about the same posting. The quantity that matters is whether
+        the shortlist comes out in the same order, because ordering is the
+        only thing a fit_score is allowed to influence -- and match_score,
+        not fit_score, is what actually orders the list.
+
+    WHY THE TIE HISTOGRAM IS PRINTED HERE
+        A coarse scale inflates every agreement number above by pure
+        arithmetic: if half the corpus scores 15, two independent passes
+        agree on those by coincidence a quarter of the time. p_tie is that
+        coincidence rate, so it is the floor under the floor, and printing it
+        next to rho is what stops a high agree2 being read as stability.
+    """
+    blocks = stats.get("ranking") or {}
+    if not blocks:
+        return []
+    lines = ["", "  ranking stability (fields whose kind is `score`)", ""]
+    for field, r in sorted(blocks.items()):
+        k = r["k"]
+        lines.append(f"  {field}")
+        lines.append(f"      spearman rho   mean {_num(r['spearman_mean'])}  "
+                     f"worst pair {_num(r['spearman_min'])}  "
+                     f"({r['spearman_pairs']} pair(s))")
+        lines.append(f"      top-{k} overlap  mean "
+                     f"{_pct(r.get(f'top{k}_overlap_mean'))}  worst pair "
+                     f"{_pct(r.get(f'top{k}_overlap_min'))}")
+        lines.append(f"      |diff|         mean {_num(r['mean_abs_diff'])}  "
+                     f"max {_num(r['max_abs_diff'])}")
+        for tol, cell in sorted(r["bands"].items()):
+            lines.append(f"      within +/-{tol:<3}    {_pct(cell['rate'])} "
+                         f"{_ci(*cell['ci'])}  ({cell['k']}/{cell['n']}, "
+                         "repeat 1 vs 2)")
+        for i, hist in enumerate(r["ties"]):
+            top = ", ".join(f"{v}x{c}" for v, c in hist["top"][:6])
+            lines.append(f"      pass {i + 1} ties    "
+                         f"{hist['distinct']} distinct over {hist['n']}, "
+                         f"largest {hist['largest']}, "
+                         f"p_tie {_pct(hist['p_tie'])}"
+                         + (f", undefined {hist['undefined']}"
+                            if hist["undefined"] else ""))
+            if top:
+                lines.append(f"                     {top}")
+    return lines
+
+
+def _num(x, places=3):
+    return " n/a" if x is None else f"{x:.{places}f}"
 
 
 def render_labels(triples, *, inter, intra, measured, label_set=None):

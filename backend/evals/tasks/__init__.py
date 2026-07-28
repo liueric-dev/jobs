@@ -7,10 +7,11 @@ prompt measures nothing.
 """
 
 from . import extract as extract_task
+from . import score as score_task
 
 
 def get(name):
-    tasks = {"extract": extract_task.TASK}
+    tasks = {"extract": extract_task.TASK, "score": score_task.TASK}
     try:
         return tasks[name]
     except KeyError:

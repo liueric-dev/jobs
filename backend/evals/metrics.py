@@ -57,6 +57,23 @@ CLEAN_PLATFORMS = ("greenhouse", "ashby")
 
 Z95 = 1.959963984540054
 
+#: Tolerance bands reported for a `score` field, in fit_score points.
+#:
+#: ALL THREE, NEVER ONE. Picking a single band is picking an answer: at +/-0
+#: fit_score looks unstable, at +/-10 it looks fine, and the gap between them
+#: is the finding. 5 is one step of the granularity the model actually uses --
+#: 1,098 of the 1,240 non-NULL fit_scores in production are multiples of 5
+#: (measured 2026-07-28) -- so +/-5 is "one notch", not a tuned threshold.
+SCORE_TOLERANCES = (0, 5, 10)
+
+#: k for top-k ranking overlap. 20 because that is the shortlist a person
+#: actually sees (score.py's daily_narrative_budget defaults to 20) and
+#: because CLAUDE.md names precision@20 as the objective. It is reported
+#: BESIDE rank correlation, never instead of it: a count of twenty cannot
+#: resolve the differences being decided on, which is the same document's
+#: reason for making average precision the measurement.
+TOP_K = 20
+
 
 def wilson(k, n, z=Z95):
     """Wilson score interval for k successes in n trials. (lo, hi).
@@ -128,6 +145,169 @@ def exact(kind, a, b):
 
 def _identical(kind, values):
     return all(exact(kind, values[0], v) for v in values[1:])
+
+
+# --------------------------------------------------------------------------
+# Ranking. Only a `score` field has these, and the reason is in
+# evals/tasks/score.py: there is no ground truth for fit_score, so the
+# measurable properties are whether the model reproduces its own NUMBER
+# (tolerance) and its own ORDER (correlation, overlap).
+# --------------------------------------------------------------------------
+
+def within(a, b, tol):
+    """Do two numeric answers agree to within `tol`? None is not a number.
+
+    A None on either side is not agreement at any tolerance -- "the model did
+    not give a usable score" and "it gave 50" are different outcomes, and
+    treating a shared None as agreement would let a model that tombstones
+    everything report perfect stability. Two Nones are counted separately, as
+    `undefined`.
+    """
+    if a is None or b is None:
+        return False
+    return abs(a - b) <= tol
+
+
+def _ranks(values):
+    """Competition-free average ranks, ties sharing the mean of their ranks.
+
+    Average ranks rather than first-seen order because fit_score is heavily
+    tied by construction -- 32 distinct values over 1,294 production rows --
+    and breaking ties arbitrarily would manufacture an ordering the model
+    never expressed, then measure the correlation of the manufactured part.
+    """
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    ranks = [0.0] * len(values)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and values[order[j + 1]] == values[order[i]]:
+            j += 1
+        mean_rank = (i + j) / 2.0 + 1.0
+        for k in range(i, j + 1):
+            ranks[order[k]] = mean_rank
+        i = j + 1
+    return ranks
+
+
+def spearman(xs, ys):
+    """Spearman rho over the positions where BOTH values are numbers.
+
+    Returns (rho, n). rho is None when fewer than two comparable pairs remain
+    or when either side is constant -- a model that answered 50 for every
+    posting has no ordering to correlate, and printing 0.0 there would read
+    as disagreement rather than as absence.
+    """
+    pairs = [(x, y) for x, y in zip(xs, ys) if x is not None and y is not None]
+    n = len(pairs)
+    if n < 2:
+        return None, n
+    rx = _ranks([p[0] for p in pairs])
+    ry = _ranks([p[1] for p in pairs])
+    mx, my = sum(rx) / n, sum(ry) / n
+    num = sum((a - mx) * (b - my) for a, b in zip(rx, ry))
+    denx = math.sqrt(sum((a - mx) ** 2 for a in rx))
+    deny = math.sqrt(sum((b - my) ** 2 for b in ry))
+    if denx == 0 or deny == 0:
+        return None, n
+    return num / (denx * deny), n
+
+
+def top_k_overlap(ids, xs, ys, k=TOP_K):
+    """|top-k by xs INTERSECT top-k by ys| / k, over comparable records.
+
+    Ties at the k boundary are broken by job_id so the answer is
+    deterministic, and that arbitrariness is exactly why this is reported
+    beside rho rather than instead of it: with 59 postings sharing one
+    fit_score, which twenty land in the top twenty is partly the sort's
+    choice, not the model's.
+    """
+    rows = [(i, x, y) for i, x, y in zip(ids, xs, ys)
+            if x is not None and y is not None]
+    if not rows or k <= 0:
+        return None, len(rows)
+    kk = min(k, len(rows))
+    top_x = {r[0] for r in sorted(rows, key=lambda r: (-r[1], str(r[0])))[:kk]}
+    top_y = {r[0] for r in sorted(rows, key=lambda r: (-r[2], str(r[0])))[:kk]}
+    return len(top_x & top_y) / kk, len(rows)
+
+
+def tie_histogram(values):
+    """The tie structure of one column of answers.
+
+    `p_tie` is the probability that two records drawn at random share a value
+    -- one number for "how coarse is this scale", which is what makes a before
+    /after comparison across a normalisation rule readable. A rule that clamps
+    or rounds can only push it up.
+
+    None is counted in `undefined` and excluded from everything else: a shared
+    absence is not a tie, it is two missing answers.
+    """
+    present = [v for v in values if v is not None]
+    counts = {}
+    for v in present:
+        counts[v] = counts.get(v, 0) + 1
+    n = len(present)
+    p_tie = (sum(c * (c - 1) for c in counts.values()) / (n * (n - 1))
+             if n > 1 else None)
+    return {
+        "n": n,
+        "undefined": len(values) - n,
+        "distinct": len(counts),
+        "largest": max(counts.values()) if counts else 0,
+        "p_tie": p_tie,
+        "top": sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])),
+    }
+
+
+def ranking(per_record_values, ids, *, tolerances=SCORE_TOLERANCES, k=TOP_K):
+    """Run-to-run stability of an ORDERING, from per-record repeat tuples.
+
+    `per_record_values` is one tuple of repeat values per record, the same
+    shape field_cell() takes; `ids` are the job_ids in the same order.
+
+    Every pair of repeats contributes one rho and one overlap, and the mean
+    and the worst are both reported. The worst is the one that matters: a
+    model whose passes correlate 0.95, 0.94 and 0.61 is not a 0.83 model, it
+    is a model with an unstable pass, and a mean hides that.
+    """
+    n_repeat = len(per_record_values[0]) if per_record_values else 0
+    columns = [[vals[r] for vals in per_record_values] for r in range(n_repeat)]
+
+    rhos, overlaps = [], []
+    for i in range(n_repeat):
+        for j in range(i + 1, n_repeat):
+            rho, _ = spearman(columns[i], columns[j])
+            if rho is not None:
+                rhos.append(rho)
+            ov, _ = top_k_overlap(ids, columns[i], columns[j], k=k)
+            if ov is not None:
+                overlaps.append(ov)
+
+    bands = {}
+    for tol in tolerances:
+        kk = sum(1 for vals in per_record_values
+                 if len(vals) >= 2 and within(vals[0], vals[1], tol))
+        n = len(per_record_values)
+        bands[tol] = {"k": kk, "n": n, "rate": (kk / n) if n else None,
+                      "ci": wilson(kk, n)}
+
+    diffs = [abs(a - b) for vals in per_record_values
+             for a, b in _pairs(vals) if a is not None and b is not None]
+    return {
+        "k": k,
+        "n_repeat": n_repeat,
+        "spearman_mean": (sum(rhos) / len(rhos)) if rhos else None,
+        "spearman_min": min(rhos) if rhos else None,
+        "spearman_pairs": len(rhos),
+        f"top{k}_overlap_mean": (sum(overlaps) / len(overlaps))
+                                if overlaps else None,
+        f"top{k}_overlap_min": min(overlaps) if overlaps else None,
+        "mean_abs_diff": (sum(diffs) / len(diffs)) if diffs else None,
+        "max_abs_diff": max(diffs) if diffs else None,
+        "bands": bands,
+        "ties": [tie_histogram(col) for col in columns],
+    }
 
 
 def _pairs(values):
@@ -248,6 +428,19 @@ def selfcheck(runs, records, field_kinds, *, skip_kinds=("prose",)):
                 if platforms[i] not in CLEAN_PLATFORMS]),
         }
 
+    # Ranking, for any field whose kind is `score`. Detected from the kinds
+    # rather than passed in, so a task that declares one gets the block with
+    # no change at the call site (evals/__main__.py:218) and a task that does
+    # not is unaffected.
+    rank_blocks = {}
+    for field, kind in sorted(field_kinds.items()):
+        if kind != "score":
+            continue
+        per_record = [tuple((run.results[i].normalized or {}).get(field)
+                            for run in runs) for i in comparable]
+        ids = [runs[0].results[i].job_id for i in comparable]
+        rank_blocks[field] = ranking(per_record, ids)
+
     # Whole-record identity over the compared fields only: `summary` is prose
     # and is never compared, so including it would make this 0 by
     # construction and say nothing.
@@ -269,6 +462,7 @@ def selfcheck(runs, records, field_kinds, *, skip_kinds=("prose",)):
                                    if platforms[i] == p)
                             for p in sorted(set(platforms.values()))},
         "fields": fields,
+        "ranking": rank_blocks,
         "whole_record": {"k": whole_k, "n": len(comparable),
                          "rate": (whole_k / len(comparable))
                                  if comparable else None},

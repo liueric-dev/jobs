@@ -140,7 +140,12 @@ def cmd_run(args):
         # --selfcheck is required and there is no flag to skip it: a
         # model-vs-human number without the floor beside it is the thing this
         # whole task exists to make impossible to print.
-        from evals import corpus as corpus_mod
+        # NO `from evals import corpus as corpus_mod` here. It was a
+        # redundant re-import of line 31, and because Python decides
+        # local-vs-global at compile time it made corpus_mod a local for the
+        # WHOLE function -- so line 99, which runs on every invocation, raised
+        # UnboundLocalError before any model was called. `evals run` was
+        # broken for every task, not only when --golden was passed.
         from evals import labels
         golden = corpus_mod.load(args.golden)
         if not golden:

@@ -172,6 +172,7 @@ TEST BEFORE SCHEDULING:
 """
 
 import os
+import re
 import sys
 import json
 import argparse
@@ -200,6 +201,22 @@ REQUIRED_FIELDS = (
     "fit_score", "primary_track", "gap_friendly_signal",
     "key_technologies", "gap_bridging_angle", "risk_factors",
 )
+
+#: The primary_track vocabulary, in the EXACT form job_scores stores.
+#:
+#: TITLE CASE IS THE STORED FORM AND THAT IS A DECISION, NOT AN ACCIDENT.
+#: extract.py's vocabularies are snake_case, so extract._enum() lowercases and
+#: replaces separators with underscores. Passing these five through it would
+#: map "Core SWE" -> "core_swe" and silently rewrite every value already in
+#: job_scores -- 1,231 rows as of 2026-07-28. Changing the stored form is a
+#: migration with a reader to update (schema.py:628 selects s.primary_track);
+#: normalising is not. So _track() canonicalises only for COMPARISON and
+#: returns the display form from this tuple.
+#:
+#: Kept in the same order as the prompt's schema line (build_prompt below), so
+#: a track added to one and not the other is visible in a diff.
+TRACKS = ("Core SWE", "AI Integration", "Bridge & Solutions",
+          "Re-Entry & Growth", "Poor Fit")
 
 
 def load_persona():
@@ -297,13 +314,32 @@ def build_prompt(persona, job):
     with description_text. The latter is what tools/cost-test.py and
     tools/compare-models.py pass, and keeping both working means the
     measurement tools did not need rewriting alongside the pipeline.
+
+    BUCKETS ARE OPTIONAL AND THE PROMPT DROPS THE SECTION WITHOUT THEM (D16).
+    This used to hard-index persona["buckets"], which profiles.validate()
+    does not require (profiles.py:139-142) -- so a profile saved without it
+    validated cleanly and then raised KeyError inside the thread pool, taking
+    down the whole profile's batch because run_for_profile materialises
+    pool.map through list(). That is not hypothetical any more: the `pursuit`
+    profile is active with no `buckets` key, and stays quiet only because its
+    daily_narrative_budget is 0.
+
+    The fix is here rather than in profiles.validate() -- see the note there.
+    A persona with no positioning buckets is a legitimate persona under the
+    Pursuit scope (there is no single target role to bucket against), so
+    requiring the key would reject a profile that is already live. An empty
+    section header inviting the model to fill a void would be worse than no
+    section, so the whole block is omitted.
     """
+    buckets = persona.get("buckets") or {}
     buckets_text = "\n".join(
-        f"- {name}: {b['description']} ({b['fit_signal']})"
-        for name, b in persona["buckets"].items()
+        f"- {name}: {(b or {}).get('description')} ({(b or {}).get('fit_signal')})"
+        for name, b in buckets.items()
     )
-    strengths_text = "\n".join(f"- {s}" for s in persona["strengths"])
-    gaps_text = "\n".join(f"- {g}" for g in persona["honest_gaps"])
+    buckets_block = (f"\nPOSITIONING BUCKETS:\n{buckets_text}\n"
+                     if buckets_text else "")
+    strengths_text = "\n".join(f"- {s}" for s in (persona.get("strengths") or []))
+    gaps_text = "\n".join(f"- {g}" for g in (persona.get("honest_gaps") or []))
     posting = (_facts_block(job) if "summary" in job else
                f"Title: {job.get('title')}\n"
                f"Company: {job.get('company_name')}\n"
@@ -321,10 +357,7 @@ STRENGTHS:
 
 HONEST GAPS:
 {gaps_text}
-
-POSITIONING BUCKETS:
-{buckets_text}
-
+{buckets_block}
 SCORING INSTRUCTIONS:
 {persona['scoring_instructions']}
 
@@ -342,12 +375,167 @@ Respond with exactly this JSON schema (no other text):
 }}"""
 
 
-def update_job_score(conn, job_id, profile, result, model_label):
-    """Write one (job, profile) score.
+def _canon(value):
+    """Comparison key for a track name. Not a stored value -- see TRACKS.
+
+    Everything that is not a letter or a digit becomes a space, so "&", "-",
+    "_" and "/" are all separators, and a standalone "and" is dropped because
+    a model writing "Bridge and Solutions" for "Bridge & Solutions" has given
+    the right answer in the wrong punctuation.
+    """
+    words = [w for w in re.split(r"[^a-z0-9]+", value.strip().lower())
+             if w and w != "and"]
+    return " ".join(words)
+
+
+#: canonical -> display. Two keys per track: the spaced canonical form and the
+#: separator-free one, so "CoreSWE" resolves as well as "core_swe". Same
+#: tolerance extract._enum() extends with its `v == a.replace("_", "")` arm.
+_TRACK_BY_CANON = {}
+for _t in TRACKS:
+    _TRACK_BY_CANON[_canon(_t)] = _t
+    _TRACK_BY_CANON[_canon(_t).replace(" ", "")] = _t
+
+
+def _track(value):
+    """A model's answer coerced onto TRACKS, in stored (Title Case) form, or None.
+
+    None rather than a default, for the reason extract.normalize() gives:
+    absence has to survive normalisation or a value the model never gave is
+    indistinguishable from one it did. `Poor Fit` in particular must NOT be
+    the fallback -- it is a real, negative answer, and defaulting to it would
+    manufacture rejections out of malformed JSON.
+
+    Measured (2026-07-28, production `job_scores`): the only off-vocabulary
+    value in 1,237 model-written rows is `frontend_core`, 3 rows, all on the
+    `frontend` profile -- the model answering with the PROFILE name in
+    extraction's snake_case. It coerces to None here, deliberately: it is not
+    one of the five, and guessing which one it meant would be inventing an
+    answer.
+
+    A trailing explanation is tolerated ("Poor Fit - too senior"), first-wins,
+    the same arbitration extract._enum() applies to "Senior/Mid".
+    """
+    if not isinstance(value, str):
+        return None
+    canon = _canon(value)
+    if not canon:
+        return None
+    if canon in _TRACK_BY_CANON:
+        return _TRACK_BY_CANON[canon]
+    for key, display in _TRACK_BY_CANON.items():
+        if " " in key and canon.startswith(key + " "):
+            return display
+    return None
+
+
+def _fit_score(value):
+    """An integer 0-100, or None. Mirrors extract._int_or_none()'s contract.
+
+    OUT OF RANGE IS None, NOT A CLAMP. A clamp invents a value the model did
+    not give: 850 clamped to 100 is a top-of-list annotation manufactured out
+    of a typo, and match.py already refuses to let fit_score order anything
+    precisely so that a wrong one is cheap. NULL is the honest record and the
+    tombstone path already writes it.
+
+    Booleans are rejected before int() sees them -- bool is an int subclass in
+    Python, so True would otherwise store as 1.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if 0 <= n <= 100 else None
+
+
+def _prose(value):
+    """A non-empty string, or None. Prose columns are displayed, never scored."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value or None
+
+
+def _string_list(value):
+    """A list of non-empty strings, de-duplicated, original order and case kept.
+
+    NOT lowercased, unlike extract.normalize()'s tech_stack. That field is
+    matched against a profile's tech config, so case is noise; these two are
+    rendered to a person, and rewriting "PostgreSQL" as "postgresql" in a
+    narrative is a downgrade for no gain.
+    """
+    if not isinstance(value, list):
+        return []
+    out, seen = [], set()
+    for item in value:
+        # None explicitly, before str(): str(None) is the four-character
+        # string "None", which is how a null in a model's array becomes a
+        # technology nobody has ever used.
+        if item is None or isinstance(item, (dict, list)):
+            continue
+        text = str(item).strip()
+        if text and text.lower() not in seen:
+            seen.add(text.lower())
+            out.append(text)
+    return out
+
+
+def normalize(result):
+    """Model output -> the exact column values job_scores stores, or None.
+
+    None means the response is unusable and the caller writes a tombstone --
+    the same contract as extract.normalize(), and the reason this returns a
+    dict of COLUMN values rather than passing `result` through to SQL: the
+    coercion has to happen in one place that a test can call without a
+    database, which is what audit item 8 (D15) was about.
+
+    THE "NOTHING USABLE CAME BACK" GUARD is `fit_score is None and
+    primary_track is None`. llm.has_fields() checks that the six keys are
+    PRESENT, not that any of them holds a usable value (llm.py:365-366), so
+    {"fit_score": null, "primary_track": null, ...} passes it and used to be
+    written as a row -- indistinguishable from a real score in every query
+    that does not also read scoring_model. Three such rows exist in
+    production (measured 2026-07-28: fit_score set, primary_track NULL,
+    gap_bridging_angle NULL, scoring_model 'FAILED:...'). A row that is NULL
+    in both columns anything reads is a tombstone; it should be written as
+    one.
+
+    gap_friendly_signal is tri-state for the reason extract._tristate_bool()
+    gives: bool() laundered an absent key, an explicit false, and a
+    non-boolean answer into the same False. The column is nullable and
+    nothing scores it, so the honest value is the cheap one.
+    """
+    if not llm.has_fields(result, REQUIRED_FIELDS):
+        return None
+
+    fit = _fit_score(result.get("fit_score"))
+    track = _track(result.get("primary_track"))
+    if fit is None and track is None:
+        return None
+
+    signal = result.get("gap_friendly_signal")
+    return {
+        "fit_score": fit,
+        "primary_track": track,
+        "gap_friendly_signal": signal if isinstance(signal, bool) else None,
+        "key_technologies": _string_list(result.get("key_technologies")),
+        "gap_bridging_angle": _prose(result.get("gap_bridging_angle")),
+        "risk_factors": _string_list(result.get("risk_factors")),
+    }
+
+
+def update_job_score(conn, job_id, profile, values, model_label):
+    """Write one (job, profile) score. `values` is normalize()'s output.
 
     ON CONFLICT DO UPDATE rather than DO NOTHING: re-scoring an already-scored
     job is a deliberate act (a new model, a revised persona under the same
     profile name), and the newer answer is the one that should stand.
+
+    Takes normalized values, not the raw `result` dict. That is the fix for
+    D15: there is now no path from a model response to this table that skips
+    the coercion, because this function cannot see a raw response.
     """
     conn.execute(
         f"""
@@ -369,12 +557,12 @@ def update_job_score(conn, job_id, profile, result, model_label):
         (
             job_id,
             profile,
-            result.get("fit_score"),
-            result.get("primary_track"),
-            bool(result.get("gap_friendly_signal")),
-            json.dumps(result.get("key_technologies") or []),
-            result.get("gap_bridging_angle"),
-            json.dumps(result.get("risk_factors") or []),
+            values["fit_score"],
+            values["primary_track"],
+            values["gap_friendly_signal"],
+            json.dumps(values["key_technologies"]),
+            values["gap_bridging_angle"],
+            json.dumps(values["risk_factors"]),
             utc_now_str(),
             model_label,
         ),
@@ -389,21 +577,39 @@ def mark_score_failed(conn, job_id, profile, model_label):
     tombstone table.
 
     The tombstone is per profile too: a job that one persona failed to score
-    is still worth attempting for another."""
+    is still worth attempting for another.
+
+    IT CLEARS THE NARRATIVE COLUMNS, and that is a fix rather than tidying.
+    This module's docstring promises a tombstone leaves "fit_score left NULL",
+    but the ON CONFLICT clause used to update only scored_at and
+    scoring_model -- so a row update_job_score had already written kept its
+    old fit_score and narrative under a 'FAILED:' model label. The result is a
+    row whose score says one thing and whose provenance says another, and
+    every reader that does not also select scoring_model believes the score.
+    Overwriting with NULL loses a stale narrative; keeping it publishes one.
+    """
     conn.execute(
         f"""
         INSERT INTO {schema.SCORES_TABLE} (job_id, profile, scored_at, scoring_model)
         VALUES (%s, %s, %s, %s)
         ON CONFLICT (job_id, profile) DO UPDATE SET
-            scored_at=EXCLUDED.scored_at, scoring_model=EXCLUDED.scoring_model
+            scored_at=EXCLUDED.scored_at, scoring_model=EXCLUDED.scoring_model,
+            fit_score=NULL, primary_track=NULL, gap_friendly_signal=NULL,
+            key_technologies=NULL, gap_bridging_angle=NULL, risk_factors=NULL
         """,
         (job_id, profile, utc_now_str(), llm.failed_label(model_label)),
     )
     conn.commit()
 
 
-#: score_one_job outcomes.
-SCORED, REJECTED, DEFERRED = "scored", "rejected", "deferred"
+#: score_one_job outcomes. ERRORED is its own outcome rather than folded into
+#: DEFERRED because the two have different causes and different fixes: a
+#: deferral is the endpoint being busy and resolves itself, an error is a bug
+#: in this process. Counting them together would let a persona that crashes
+#: every job in a batch print main()'s "the endpoint is rate-limiting" note,
+#: which is the wrong thing to go and check.
+SCORED, REJECTED, DEFERRED, ERRORED = ("scored", "rejected", "deferred",
+                                       "errored")
 
 
 def score_one_job(job, persona, profile, model_label):
@@ -412,17 +618,44 @@ def score_one_job(job, persona, profile, model_label):
     concurrent use).
 
     Returns SCORED, REJECTED (the model answered but the answer was unusable
-    -- tombstoned, never retried) or DEFERRED (the endpoint never gave us an
-    answer -- nothing written, retried next run).
+    -- tombstoned, never retried), DEFERRED (the endpoint never gave us an
+    answer -- nothing written, retried next run) or ERRORED (a bug on our
+    side -- nothing written, loud, retried next run).
 
-    That three-way split matters more than it looks. Tombstoning is right for
+    That split matters more than it looks. Tombstoning is right for
     a model that cannot produce parseable JSON for a given posting: retrying
     forever would burn a call a night on the same failure. It is badly wrong
     for an HTTP 429, which says nothing about the posting -- and the current
     default model rate-limits hard enough that a batch can be mostly 429s.
     Recording those as failures silently and permanently discards jobs that
     were never actually evaluated.
+
+    An UNEXPECTED exception is ERRORED, one job, and the batch continues.
+    Before this guard the only try around build_prompt was a bare
+    try/finally that closed the connection and re-raised, so a KeyError from
+    a malformed persona escaped into run_for_profile's list(pool.map(...))
+    and ended the profile's whole batch -- and because every job in a batch
+    shares one persona, the first job to fail was also the last. Nothing was
+    written, so nothing recorded that it happened. That is D16, and it is
+    worse than the 3am deferred batch profiles.validate()'s docstring
+    describes, because a deferred batch is at least a batch.
+
+    Nothing is written for an ERRORED job: a tombstone would permanently
+    discard a posting over a bug in this process, which is the same wrong
+    trade the DEFERRED/REJECTED split exists to avoid for a 429.
     """
+    try:
+        return _score_one_job(job, persona, profile, model_label)
+    except Exception as e:  # noqa: BLE001 -- deliberate: see above
+        # Loud unconditionally, not behind DEBUG_PRINT_KEYS. Silence is this
+        # system's failure mode and this is the branch that means a bug.
+        print(f"job-score ERROR on {job.get('id')} ({job.get('title')!r}): "
+              f"{type(e).__name__}: {e}", file=sys.stderr)
+        return ERRORED
+
+
+def _score_one_job(job, persona, profile, model_label):
+    """The body score_one_job guards. Same contract, minus the isolation."""
     # search_path is per-connection, so a worker's fresh connection needs it
     # set again -- dbconn.connect(schema=...) does that for every connection
     # it hands out, which is what makes the threaded case correct by
@@ -445,12 +678,13 @@ def score_one_job(job, persona, profile, model_label):
             raw = None
 
         result = llm.parse_json(raw) if raw else None
+        values = normalize(result) if result is not None else None
 
-        if llm.has_fields(result, REQUIRED_FIELDS):
-            update_job_score(conn, job["id"], profile, result, model_label)
+        if values is not None:
+            update_job_score(conn, job["id"], profile, values, model_label)
             if DEBUG_PRINT_KEYS:
                 print(f"[debug] {job.get('title')!r} @ {job.get('company_name')}: "
-                      f"fit={result.get('fit_score')} track={result.get('primary_track')!r}",
+                      f"fit={values['fit_score']} track={values['primary_track']!r}",
                       file=sys.stderr)
             return SCORED
 
@@ -550,14 +784,25 @@ def main():
                      + (f", {outcomes[REJECTED]} unparseable"
                         if outcomes[REJECTED] else "")
                      + (f", {outcomes[DEFERRED]} deferred"
-                        if outcomes[DEFERRED] else ""))
+                        if outcomes[DEFERRED] else "")
+                     + (f", {outcomes[ERRORED]} ERRORED"
+                        if outcomes[ERRORED] else ""))
     conn.close()
 
     if not parts:
         return  # every profile's shortlist was already written
-    n = total[SCORED] + total[REJECTED] + total[DEFERRED]
+    n = total[SCORED] + total[REJECTED] + total[DEFERRED] + total[ERRORED]
     print(f"job-score: " + "; ".join(parts)
           + f", model={model_label}, workers={SCORE_MAX_WORKERS}")
+    if total[ERRORED]:
+        # Named separately from the rate-limit note below: an error is a bug
+        # here, not a busy endpoint, and sending someone to SCORE_MAX_WORKERS
+        # for it would waste the trip. The stderr line from score_one_job
+        # carries the exception.
+        print(f"  NOTE: {total[ERRORED]}/{n} job(s) raised an unexpected "
+              f"exception and were skipped -- see the job-score ERROR lines "
+              f"on stderr. A persona missing a key does this to every job in "
+              f"a batch.")
     if total[DEFERRED] > n / 2:
         print(f"  NOTE: {total[DEFERRED]}/{n} calls never got a response -- "
               f"the endpoint is rate-limiting or down. Nothing was discarded; "

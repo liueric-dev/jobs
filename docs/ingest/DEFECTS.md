@@ -21,7 +21,9 @@ the current commit (`git log dd49a27..HEAD` touches only `backend/llm.py`,
 `score.py`'s model-mismatch guard, and docs/tests for task 01 — no line
 numbers cited here moved as a result, confirmed by direct read).
 
-**Total: 42 entries** (`D01`–`D42`, verified unique and gapless) — more than the 16
+**Total: 44 entries** (`D01`–`D44`, verified unique and gapless) — `D43` and
+`D44` were found by task 08 while closing `D15`, not by the original pass;
+both are recorded in full below — more than the 16
 the README named, because that count
 was itself informal (nobody had built the list yet) and because triaging
 means finding the remainder, per task 03's instruction to "audit the
@@ -59,8 +61,8 @@ given).
 | [D12](#d12) | silent data loss | fix with harness — task 09 | `match.py`: a typo'd `criteria.json` section silently disables itself |
 | [D13](#d13) | silent data loss | fix with harness — task 09 | `match.py`/`extract.py`: seniority vocabulary drift scores as free |
 | [D14](#d14) | silent data loss | won't-fix (documented, low current risk) | `match.py --profile` can silently prune another profile's rows |
-| [D15](#d15) | silent data loss | fix with harness — task 08 | `score.py`: `fit_score`/`primary_track` stored unvalidated (audit item 8) |
-| [D16](#d16) | loud failure | fix with harness — task 08 | `score.py`: missing `buckets` key kills a profile's whole batch |
+| [D15](#d15) | silent data loss | **fixed** — task 08 | `score.py`: `fit_score`/`primary_track` stored unvalidated (audit item 8) |
+| [D16](#d16) | loud failure | **fixed** — task 08 | `score.py`: missing `buckets` key kills a profile's whole batch |
 | [D17](#d17) | loud failure | fix with harness — task 09 | `google-apify.py`: `UnboundLocalError` on immediate-success poll (audit item 1) |
 | [D18](#d18) | loud failure | fix opportunistically | Uncaught `KeyError` on malformed config (audit item 6) |
 | [D19](#d19) | loud failure | fix opportunistically | Normalization outside the per-unit `try` in 4 scripts (audit item 7) |
@@ -87,6 +89,8 @@ given).
 | [D40](#d40) | cosmetic | fix opportunistically | `score.py`: login-triggered and nightly runs can double-spend |
 | [D41](#d41) | cosmetic | fix before deploy — task 24 | Contributor API: `claim` is unmetered beyond the daily cap (self-documented gap) |
 | [D42](#d42) | cosmetic | fold into task 34 | `hn-hiring.py`: null comment items re-fetched forever (audit item 5) |
+| [D43](#d43) | silent data loss | **fixed** — task 08 | `score.py`: a tombstone left the previous score in place, and `has_fields` let an all-null answer through |
+| [D44](#d44) | loud failure | **fixed** — task 08 | `evals/__main__.py`: `evals run` raised `UnboundLocalError` for every task |
 
 ---
 
@@ -284,7 +288,7 @@ avoid this class of problem, but is not applied consistently across
 `--profile` and default runs). Revisit before Phase 5's multi-tenancy work
 makes `--profile` a routine, rather than exceptional, invocation.
 
-### D15
+### D15 — fixed
 
 **`score.py` writes `fit_score` and `primary_track` straight from model
 output with no coercion, unlike `extract.py`'s `_enum()`/`_int_or_none()`**
@@ -296,15 +300,57 @@ one: naively reusing `extract._enum()` would *silently rewrite* every stored
 value. A drifted `primary_track` is invisible until something renders it
 (`match.py` never reads it); an out-of-range or wrongly-typed `fit_score`
 persists unclamped. Blast radius: all profiles (score stage). Disposition:
-**fix with harness** — `docs/tasks/refactor/tranche_two/08-score-validation.md`
-scopes `score.normalize()` with its own vocabulary, validated against real
-cached responses before touching production.
+**fixed** — task 08, 2026-07-28.
+
+`score.normalize()` (`backend/score.py`) now returns the exact column values
+or `None`, with its own `TRACKS` vocabulary in stored Title Case and a
+canonicalising comparison; `update_job_score` takes normalize()'s output and
+indexes its keys, so there is no longer a path from a model response to the
+table that skips coercion. Covered by `backend/tests/test_score.py`, which
+also asserts the trap: `extract._enum()` rewrites all five track names.
+
+**The register was right that this was worth checking before deciding how
+much to coerce.** Measured against production on 2026-07-28 (method and full
+output in `docs/score-validation.md`): 1,294 rows, `fit_score` between 0 and
+95, and exactly **three** off-vocabulary `primary_track` values — all
+`frontend_core`, all on the `frontend` profile, all written by
+`deepseek-v4-flash`. So the drift is real but rare (3 of 1,237 model-written
+rows, 0.24%), which is why the fix is a guard rather than a migration: the
+stored form stays Title Case and no existing row is rewritten.
+
+### D43 — fixed
+
+**A tombstone left the previous score in place, and `llm.has_fields` let an
+answer that was null in every column through as a row.** Two halves of one
+outcome — a row in `job_scores` that reads as a real score and is not one.
+Found by task 08 while running D15's diagnostic SQL.
+
+`mark_score_failed`'s `ON CONFLICT` updated only `scored_at` and
+`scoring_model` (`backend/score.py`, before this task), so a row
+`update_job_score` had already written kept its `fit_score`, `primary_track`
+and narrative under a `FAILED:` model label — contradicting this module's own
+docstring, which promises a tombstone leaves "`fit_score` left NULL". And
+`llm.has_fields` (`backend/llm.py:365-366`) checks that the six keys are
+**present**, not that any holds a usable value, so `{"fit_score": null,
+"primary_track": null, ...}` passed the write gate.
+
+**Measured, not inferred:** 3 rows in production carry a `FAILED:` label with
+a non-NULL `fit_score` (15, 80, 80) and a NULL `primary_track` and NULL
+`gap_bridging_angle` — the combination only these two paths together can
+produce. Every query that reads `fit_score` without also reading
+`scoring_model` believes them. Blast radius: all profiles (score stage);
+small in count, but silent by construction. Disposition: **fixed** — task 08:
+the tombstone's `ON CONFLICT` now nulls all six narrative columns, and
+`score.normalize()` rejects a response with nothing usable in it before it
+can be written. The three existing rows are not backfilled — database
+contents are staging data, and the next score of those postings overwrites
+them correctly.
 
 ---
 
 ## Loud failure — fix opportunistically; the harness catches regressions
 
-### D16
+### D16 — fixed
 
 **`score.py`'s `build_prompt` hard-indexes `persona["buckets"]`, but
 `profiles.validate()` does not require the `buckets` key**
@@ -323,10 +369,30 @@ deferred call, because a deferral is at least recorded. Full write-up:
 
 Blast radius: one profile's entire batch per occurrence (score stage). Not
 `match.py`-class in blast radius, but the same missing-isolation defect
-class as D20. Disposition: **fix with harness** — task 08 scopes two
-independent changes: add `buckets` to `validate()`'s required keys, and
-guard `score_one_job`'s body so an unexpected exception tombstones or defers
-one job instead of killing the run.
+class as D20. Disposition: **fixed** — task 08, 2026-07-28.
+
+**It was armed, not hypothetical.** The `pursuit` profile is `active` with a
+persona that has no `buckets` key (verified 2026-07-28), and the only reason
+it has never fired is `daily_narrative_budget = 0` — `select_shortlist` is
+asked for zero rows, so `build_prompt` is never reached. The first budget
+task 13 sets would have ended that profile's every batch.
+
+**Only one of the two changes task 08 scoped was made, and the other was
+deliberately rejected.** `build_prompt` now treats `buckets` as optional and
+omits the section entirely when it is absent (the prompt is byte-identical
+when it is present, so no cached response or prior comparison is
+invalidated), and `score_one_job` guards its body: an unexpected exception
+is a new `ERRORED` outcome — one job, nothing written, loud on stderr, and
+named separately in `main()`'s summary so it cannot be misread as the
+endpoint rate-limiting.
+
+Adding `buckets` to `profiles.validate()`'s required keys was **not** done.
+Under the Pursuit scope a persona with no positioning buckets is legitimate —
+there is no single target role to bucket against — so requiring the key would
+reject a profile that already exists and is active. Doing both would have
+converted a scoring-time crash into a save-time one rather than removing it.
+The reasoning is left as a comment at `backend/profiles.py:139-149` so the
+absence does not read as the oversight it originally was.
 
 ### D17
 
@@ -495,6 +561,26 @@ second condition) was applied API-side only — the root asymmetry in
 the next person touching the claim schema knows the asymmetry is load-bearing
 for that fix, not an oversight to "complete" by having the ingest scripts set
 the same columns.
+
+### D44 — fixed
+
+**`python3 -m evals run` raised `UnboundLocalError` for every task, on every
+invocation.** `cmd_run` re-imported `corpus as corpus_mod` inside its
+`--golden` branch (`backend/evals/__main__.py:143`, before this task) even
+though the module already imports it at `:31`. Python decides local-vs-global
+at compile time, so that one line made `corpus_mod` a local for the whole
+function — and `:99`, which loads the corpus on every run, referenced it
+before assignment. The `--golden` branch that caused it never had to execute.
+
+Found by task 08 running its own definition of done
+(`python3 -m evals run --task score --corpus ...`). It is not
+score-specific: `--task extract` fails identically, because the failing line
+runs before the task is used at all. It was introduced by task 07 (`3a8b42c`,
+2026-07-28) alongside the `--golden` flag, so the window was one day.
+`evals selfcheck` was unaffected — it has no such re-import — which is
+why the gap went unnoticed. Blast radius: the eval harness CLI only, nothing
+in the pipeline. Disposition: **fixed** — task 08 deleted the redundant
+import; both `--task extract` and `--task score` now run.
 
 ---
 

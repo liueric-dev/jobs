@@ -1,0 +1,1182 @@
+{
+  "fields": {
+    "fit_score": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.25,
+          "agree2_ci": [
+            0.04558726080970055,
+            0.6993581574175981
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "score",
+          "n": 4,
+          "pairwise": 0.08333333333333333,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.4898908364545973
+          ]
+        },
+        "builtin": {
+          "agree2": 0.14285714285714285,
+          "agree2_ci": [
+            0.02567962434474355,
+            0.5131278292743189
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "score",
+          "n": 7,
+          "pairwise": 0.2857142857142857,
+          "unan_k": 1,
+          "unanimous": 0.14285714285714285,
+          "unanimous_ci": [
+            0.02567962434474355,
+            0.5131278292743189
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.3125,
+          "agree2_ci": [
+            0.14164643854782039,
+            0.5559564416525933
+          ],
+          "agree2_k": 5,
+          "flips": [],
+          "jaccard": null,
+          "kind": "score",
+          "n": 16,
+          "pairwise": 0.20833333333333334,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.1936076805344365
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.42857142857142855,
+          "agree2_ci": [
+            0.15821985525146975,
+            0.7495416354723428
+          ],
+          "agree2_k": 3,
+          "flips": [],
+          "jaccard": null,
+          "kind": "score",
+          "n": 7,
+          "pairwise": 0.38095238095238093,
+          "unan_k": 2,
+          "unanimous": 0.2857142857142857,
+          "unanimous_ci": [
+            0.08221892400405678,
+            0.6410655481673808
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 0.0,
+          "agree2_ci": [
+            0.0,
+            0.2588329669680317
+          ],
+          "agree2_k": 0,
+          "flips": [],
+          "jaccard": null,
+          "kind": "score",
+          "n": 11,
+          "pairwise": 0.1212121212121212,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.2588329669680317
+          ]
+        },
+        "lever": {
+          "agree2": 0.0,
+          "agree2_ci": [
+            0.0,
+            0.6576197724933469
+          ],
+          "agree2_k": 0,
+          "flips": [],
+          "jaccard": null,
+          "kind": "score",
+          "n": 2,
+          "pairwise": 0.3333333333333333,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.6576197724933469
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 0.375,
+          "agree2_ci": [
+            0.13684428582359737,
+            0.6942576053973728
+          ],
+          "agree2_k": 3,
+          "flips": [],
+          "jaccard": null,
+          "kind": "score",
+          "n": 8,
+          "pairwise": 0.29166666666666663,
+          "unan_k": 2,
+          "unanimous": 0.25,
+          "unanimous_ci": [
+            0.071479212752109,
+            0.5907245696898311
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.36363636363636365,
+        "agree2_ci": [
+          0.15166471095367576,
+          0.6461988254921511
+        ],
+        "agree2_k": 4,
+        "flips": [],
+        "jaccard": null,
+        "kind": "score",
+        "n": 11,
+        "pairwise": 0.2727272727272727,
+        "unan_k": 2,
+        "unanimous": 0.18181818181818182,
+        "unanimous_ci": [
+          0.05136768974608513,
+          0.4769805619608442
+        ]
+      },
+      "messy": {
+        "agree2": 0.20454545454545456,
+        "agree2_ci": [
+          0.11153253070081293,
+          0.34500578061101655
+        ],
+        "agree2_k": 9,
+        "flips": [],
+        "jaccard": null,
+        "kind": "score",
+        "n": 44,
+        "pairwise": 0.2196969696969697,
+        "unan_k": 3,
+        "unanimous": 0.06818181818181818,
+        "unanimous_ci": [
+          0.023459395907381622,
+          0.18225044370221527
+        ]
+      },
+      "overall": {
+        "agree2": 0.23636363636363636,
+        "agree2_ci": [
+          0.14366655869733186,
+          0.3634836618916773
+        ],
+        "agree2_k": 13,
+        "flips": [],
+        "jaccard": null,
+        "kind": "score",
+        "n": 55,
+        "pairwise": 0.23030303030303031,
+        "unan_k": 5,
+        "unanimous": 0.09090909090909091,
+        "unanimous_ci": [
+          0.03945815507418034,
+          0.19577494583979943
+        ]
+      }
+    },
+    "gap_friendly_signal": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.5101091635454027,
+            1.0
+          ],
+          "agree2_k": 4,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 4,
+          "pairwise": 1.0,
+          "unan_k": 4,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.5101091635454027,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6456695649333126,
+            1.0
+          ],
+          "agree2_k": 7,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 7,
+          "pairwise": 1.0,
+          "unan_k": 7,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6456695649333126,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 16,
+          "pairwise": 1.0,
+          "unan_k": 16,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.8063923194655637,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6456695649333126,
+            1.0
+          ],
+          "agree2_k": 7,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 7,
+          "pairwise": 1.0,
+          "unan_k": 7,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6456695649333126,
+            1.0
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7411670330319684,
+            1.0
+          ],
+          "agree2_k": 11,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 11,
+          "pairwise": 1.0,
+          "unan_k": 11,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7411670330319684,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.7411670330319684,
+          1.0
+        ],
+        "agree2_k": 11,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 11,
+        "pairwise": 1.0,
+        "unan_k": 11,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.7411670330319684,
+          1.0
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9197043962415192,
+          1.0
+        ],
+        "agree2_k": 44,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 44,
+        "pairwise": 1.0,
+        "unan_k": 44,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9197043962415192,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9347150988829137,
+          1.0
+        ],
+        "agree2_k": 55,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 55,
+        "pairwise": 1.0,
+        "unan_k": 55,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9347150988829137,
+          1.0
+        ]
+      }
+    },
+    "key_technologies": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.25,
+          "agree2_ci": [
+            0.04558726080970055,
+            0.6993581574175981
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": 0.24246031746031743,
+          "kind": "set",
+          "n": 4,
+          "pairwise": 0.16666666666666666,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.4898908364545973
+          ]
+        },
+        "builtin": {
+          "agree2": 0.14285714285714285,
+          "agree2_ci": [
+            0.02567962434474355,
+            0.5131278292743189
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": 0.3209372637944066,
+          "kind": "set",
+          "n": 7,
+          "pairwise": 0.14285714285714285,
+          "unan_k": 1,
+          "unanimous": 0.14285714285714285,
+          "unanimous_ci": [
+            0.02567962434474355,
+            0.5131278292743189
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.1875,
+          "agree2_ci": [
+            0.06591599071428142,
+            0.4300888096197414
+          ],
+          "agree2_k": 3,
+          "flips": [],
+          "jaccard": 0.3736907768157768,
+          "kind": "set",
+          "n": 16,
+          "pairwise": 0.22916666666666669,
+          "unan_k": 2,
+          "unanimous": 0.125,
+          "unanimous_ci": [
+            0.03497748774324047,
+            0.36022827265758695
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.0,
+          "agree2_ci": [
+            2.7755575615628914e-17,
+            0.3543304350666875
+          ],
+          "agree2_k": 0,
+          "flips": [],
+          "jaccard": 0.3060606060606061,
+          "kind": "set",
+          "n": 7,
+          "pairwise": 0.047619047619047616,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            2.7755575615628914e-17,
+            0.3543304350666875
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 0.18181818181818182,
+          "agree2_ci": [
+            0.05136768974608513,
+            0.4769805619608442
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": 0.30747955747955746,
+          "kind": "set",
+          "n": 11,
+          "pairwise": 0.2121212121212121,
+          "unan_k": 1,
+          "unanimous": 0.09090909090909091,
+          "unanimous_ci": [
+            0.016232172885884855,
+            0.37735843645159567
+          ]
+        },
+        "lever": {
+          "agree2": 0.5,
+          "agree2_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": 0.2222222222222222,
+          "kind": "set",
+          "n": 2,
+          "pairwise": 0.16666666666666666,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.6576197724933469
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 0.375,
+          "agree2_ci": [
+            0.13684428582359737,
+            0.6942576053973728
+          ],
+          "agree2_k": 3,
+          "flips": [],
+          "jaccard": 0.47807239057239054,
+          "kind": "set",
+          "n": 8,
+          "pairwise": 0.3333333333333333,
+          "unan_k": 2,
+          "unanimous": 0.25,
+          "unanimous_ci": [
+            0.071479212752109,
+            0.5907245696898311
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.09090909090909091,
+        "agree2_ci": [
+          0.016232172885884855,
+          0.37735843645159567
+        ],
+        "agree2_k": 1,
+        "flips": [],
+        "jaccard": 0.28293322838777385,
+        "kind": "set",
+        "n": 11,
+        "pairwise": 0.09090909090909091,
+        "unan_k": 0,
+        "unanimous": 0.0,
+        "unanimous_ci": [
+          0.0,
+          0.2588329669680317
+        ]
+      },
+      "messy": {
+        "agree2": 0.22727272727272727,
+        "agree2_ci": [
+          0.12841947594917152,
+          0.3699235806463633
+        ],
+        "agree2_k": 10,
+        "flips": [],
+        "jaccard": 0.3608389085661814,
+        "kind": "set",
+        "n": 44,
+        "pairwise": 0.22727272727272718,
+        "unan_k": 6,
+        "unanimous": 0.13636363636363635,
+        "unanimous_ci": [
+          0.06402954497555872,
+          0.2670945304851544
+        ]
+      },
+      "overall": {
+        "agree2": 0.2,
+        "agree2_ci": [
+          0.11552214909761245,
+          0.32364879157263937
+        ],
+        "agree2_k": 11,
+        "flips": [],
+        "jaccard": 0.34525777253049983,
+        "kind": "set",
+        "n": 55,
+        "pairwise": 0.2,
+        "unan_k": 6,
+        "unanimous": 0.10909090909090909,
+        "unanimous_ci": [
+          0.05096725000782336,
+          0.21825549086553508
+        ]
+      }
+    },
+    "primary_track": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.5,
+          "agree2_ci": [
+            0.15003898915214953,
+            0.8499610108478505
+          ],
+          "agree2_k": 2,
+          "flips": [
+            [
+              "AI Integration <-> Bridge & Solutions",
+              1
+            ],
+            [
+              "Bridge & Solutions <-> Poor Fit",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 4,
+          "pairwise": 0.6666666666666666,
+          "unan_k": 2,
+          "unanimous": 0.5,
+          "unanimous_ci": [
+            0.15003898915214953,
+            0.8499610108478505
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6456695649333126,
+            1.0
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "AI Integration <-> Bridge & Solutions",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 7,
+          "pairwise": 0.9047619047619049,
+          "unan_k": 6,
+          "unanimous": 0.8571428571428571,
+          "unanimous_ci": [
+            0.4868721707256811,
+            0.9743203756552565
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.8063923194655637,
+            1.0
+          ],
+          "agree2_k": 16,
+          "flips": [
+            [
+              "Core SWE <-> Poor Fit",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 16,
+          "pairwise": 0.9583333333333334,
+          "unan_k": 15,
+          "unanimous": 0.9375,
+          "unanimous_ci": [
+            0.7167126242970107,
+            0.9888806552353576
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6456695649333126,
+            1.0
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "Bridge & Solutions <-> Poor Fit",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 7,
+          "pairwise": 0.9047619047619048,
+          "unan_k": 6,
+          "unanimous": 0.8571428571428571,
+          "unanimous_ci": [
+            0.4868721707256811,
+            0.9743203756552565
+          ]
+        },
+        "hn_whoishiring": {
+          "agree2": 0.9090909090909091,
+          "agree2_ci": [
+            0.6226415635484043,
+            0.9837678271141151
+          ],
+          "agree2_k": 10,
+          "flips": [
+            [
+              "Bridge & Solutions <-> Core SWE",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 11,
+          "pairwise": 0.9393939393939393,
+          "unan_k": 10,
+          "unanimous": 0.9090909090909091,
+          "unanimous_ci": [
+            0.6226415635484043,
+            0.9837678271141151
+          ]
+        },
+        "lever": {
+          "agree2": 0.5,
+          "agree2_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ],
+          "agree2_k": 1,
+          "flips": [
+            [
+              "Core SWE <-> Poor Fit",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 0.6666666666666666,
+          "unan_k": 1,
+          "unanimous": 0.5,
+          "unanimous_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 0.75,
+          "agree2_ci": [
+            0.40927543031016883,
+            0.9285207872478909
+          ],
+          "agree2_k": 6,
+          "flips": [
+            [
+              "AI Integration <-> Poor Fit",
+              1
+            ],
+            [
+              "Core SWE <-> Poor Fit",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 0.8333333333333334,
+          "unan_k": 6,
+          "unanimous": 0.75,
+          "unanimous_ci": [
+            0.40927543031016883,
+            0.9285207872478909
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.8181818181818182,
+        "agree2_ci": [
+          0.523019438039156,
+          0.9486323102539149
+        ],
+        "agree2_k": 9,
+        "flips": [
+          [
+            "Bridge & Solutions <-> Poor Fit",
+            2
+          ],
+          [
+            "AI Integration <-> Bridge & Solutions",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 11,
+        "pairwise": 0.8181818181818182,
+        "unan_k": 8,
+        "unanimous": 0.7272727272727273,
+        "unanimous_ci": [
+          0.43435469882387084,
+          0.902539407099751
+        ]
+      },
+      "messy": {
+        "agree2": 0.9090909090909091,
+        "agree2_ci": [
+          0.7884076083340138,
+          0.9640778067726837
+        ],
+        "agree2_k": 40,
+        "flips": [
+          [
+            "Core SWE <-> Poor Fit",
+            3
+          ],
+          [
+            "AI Integration <-> Bridge & Solutions",
+            1
+          ],
+          [
+            "AI Integration <-> Poor Fit",
+            1
+          ],
+          [
+            "Bridge & Solutions <-> Core SWE",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 44,
+        "pairwise": 0.9090909090909091,
+        "unan_k": 38,
+        "unanimous": 0.8636363636363636,
+        "unanimous_ci": [
+          0.7329054695148456,
+          0.9359704550244412
+        ]
+      },
+      "overall": {
+        "agree2": 0.8909090909090909,
+        "agree2_ci": [
+          0.7817445091344648,
+          0.9490327499921767
+        ],
+        "agree2_k": 49,
+        "flips": [
+          [
+            "Core SWE <-> Poor Fit",
+            3
+          ],
+          [
+            "AI Integration <-> Bridge & Solutions",
+            2
+          ],
+          [
+            "Bridge & Solutions <-> Poor Fit",
+            2
+          ],
+          [
+            "AI Integration <-> Poor Fit",
+            1
+          ],
+          [
+            "Bridge & Solutions <-> Core SWE",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 55,
+        "pairwise": 0.8909090909090909,
+        "unan_k": 46,
+        "unanimous": 0.8363636363636363,
+        "unanimous_ci": [
+          0.7173625426094283,
+          0.9114457966390772
+        ]
+      }
+    }
+  },
+  "model": {
+    "backend": "http",
+    "base_url": "",
+    "model": "deepseek-v4-flash"
+  },
+  "model_label": "deepseek-v4-flash",
+  "n_comparable": 55,
+  "n_records": 120,
+  "not_ok": [],
+  "platform_counts": {
+    "ashby": 4,
+    "builtin": 7,
+    "google_jobs": 16,
+    "greenhouse": 7,
+    "hn_whoishiring": 11,
+    "lever": 2,
+    "weworkremotely": 8
+  },
+  "ranking": {
+    "fit_score": {
+      "bands": {
+        "0": {
+          "ci": [
+            0.14366655869733186,
+            0.3634836618916773
+          ],
+          "k": 13,
+          "n": 55,
+          "rate": 0.23636363636363636
+        },
+        "5": {
+          "ci": [
+            0.4860922023248993,
+            0.7348404574110621
+          ],
+          "k": 34,
+          "n": 55,
+          "rate": 0.6181818181818182
+        },
+        "10": {
+          "ci": [
+            0.8042250541602005,
+            0.9605418449258196
+          ],
+          "k": 50,
+          "n": 55,
+          "rate": 0.9090909090909091
+        }
+      },
+      "k": 20,
+      "max_abs_diff": 33,
+      "mean_abs_diff": 6.606060606060606,
+      "n_repeat": 3,
+      "spearman_mean": 0.9147264197021733,
+      "spearman_min": 0.9054284676833695,
+      "spearman_pairs": 3,
+      "ties": [
+        {
+          "distinct": 19,
+          "largest": 7,
+          "n": 55,
+          "p_tie": 0.05387205387205387,
+          "top": [
+            [
+              65,
+              7
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              45,
+              5
+            ],
+            [
+              75,
+              5
+            ],
+            [
+              15,
+              4
+            ],
+            [
+              20,
+              4
+            ],
+            [
+              70,
+              4
+            ],
+            [
+              25,
+              3
+            ],
+            [
+              30,
+              3
+            ],
+            [
+              40,
+              2
+            ],
+            [
+              72,
+              2
+            ],
+            [
+              78,
+              2
+            ],
+            [
+              80,
+              2
+            ],
+            [
+              85,
+              2
+            ],
+            [
+              10,
+              1
+            ],
+            [
+              50,
+              1
+            ],
+            [
+              55,
+              1
+            ],
+            [
+              60,
+              1
+            ],
+            [
+              88,
+              1
+            ]
+          ],
+          "undefined": 0
+        },
+        {
+          "distinct": 17,
+          "largest": 6,
+          "n": 55,
+          "p_tie": 0.059932659932659935,
+          "top": [
+            [
+              15,
+              6
+            ],
+            [
+              55,
+              6
+            ],
+            [
+              65,
+              6
+            ],
+            [
+              25,
+              5
+            ],
+            [
+              75,
+              5
+            ],
+            [
+              30,
+              4
+            ],
+            [
+              78,
+              4
+            ],
+            [
+              20,
+              3
+            ],
+            [
+              45,
+              3
+            ],
+            [
+              70,
+              3
+            ],
+            [
+              35,
+              2
+            ],
+            [
+              60,
+              2
+            ],
+            [
+              68,
+              2
+            ],
+            [
+              40,
+              1
+            ],
+            [
+              80,
+              1
+            ],
+            [
+              82,
+              1
+            ],
+            [
+              88,
+              1
+            ]
+          ],
+          "undefined": 0
+        },
+        {
+          "distinct": 18,
+          "largest": 8,
+          "n": 55,
+          "p_tie": 0.05589225589225589,
+          "top": [
+            [
+              15,
+              8
+            ],
+            [
+              75,
+              6
+            ],
+            [
+              45,
+              5
+            ],
+            [
+              20,
+              4
+            ],
+            [
+              65,
+              4
+            ],
+            [
+              25,
+              3
+            ],
+            [
+              35,
+              3
+            ],
+            [
+              70,
+              3
+            ],
+            [
+              30,
+              2
+            ],
+            [
+              40,
+              2
+            ],
+            [
+              55,
+              2
+            ],
+            [
+              60,
+              2
+            ],
+            [
+              68,
+              2
+            ],
+            [
+              72,
+              2
+            ],
+            [
+              78,
+              2
+            ],
+            [
+              80,
+              2
+            ],
+            [
+              88,
+              2
+            ],
+            [
+              74,
+              1
+            ]
+          ],
+          "undefined": 0
+        }
+      ],
+      "top20_overlap_mean": 0.8333333333333334,
+      "top20_overlap_min": 0.75
+    }
+  },
+  "repeat": 3,
+  "task": "score",
+  "whole_record": {
+    "k": 1,
+    "n": 55,
+    "rate": 0.01818181818181818
+  }
+}

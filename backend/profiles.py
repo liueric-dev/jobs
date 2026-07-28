@@ -136,6 +136,14 @@ def validate(persona, criteria, relevance_cfg=None):
     """
     if not isinstance(persona, dict):
         raise ValueError("persona must be a JSON object")
+    # `buckets` is deliberately NOT in this list, and D16 is why it looks like
+    # an oversight. score.build_prompt() used to hard-index persona["buckets"]
+    # and take down a whole batch without it; the fix went there (the section
+    # is omitted when the key is absent) rather than here, because a persona
+    # with no positioning buckets is legitimate under the Pursuit scope -- the
+    # active `pursuit` profile has none -- so requiring it would reject a
+    # profile that already exists. Adding it here would resurrect the defect
+    # as a save-time failure. See score.py's build_prompt docstring.
     for key in ("background_summary", "strengths", "honest_gaps",
                 "scoring_instructions"):
         if key not in persona:
