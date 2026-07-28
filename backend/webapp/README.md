@@ -49,6 +49,9 @@ GRANT USAGE, SELECT ON SEQUENCE public.job_events_id_seq TO jobs_web;
 GRANT SELECT, INSERT, UPDATE ON public.app_users TO jobs_web;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.app_sessions TO jobs_web;
 GRANT SELECT, INSERT, DELETE ON public.oauth_logins TO jobs_web;
+GRANT SELECT ON public.eval_label_sets, public.eval_label_items TO jobs_web;
+GRANT SELECT, INSERT ON public.eval_labels TO jobs_web;
+GRANT USAGE, SELECT ON SEQUENCE public.eval_labels_id_seq TO jobs_web;
 SQL
 
 .venv/bin/python manage_app_users.py add --email you@gmail.com --profile tech --admin
@@ -107,6 +110,9 @@ session cookie.
 | `GET /v1/jobs` | this profile's ranked jobs, keyset-paginated |
 | `GET /v1/jobs/{id}` | one job, with the full description |
 | `POST /v1/events` | record interactions |
+| `GET /v1/label` | the golden-set labelling form (HTML) |
+| `POST /v1/label` | record one person's answers, then serve the next posting |
+| `GET /v1/label/progress` | `{label_set, done, total}` for the signed-in labeller |
 
 `GET /v1/jobs` takes `limit` (≤100), `cursor`, `q`, `remote`, `nyc`,
 `min_score`, `since` and `exclude_dismissed`, and returns
@@ -121,6 +127,84 @@ used after silently skips or repeats rows. Pass the `next_cursor` back.
 `POST /v1/events` takes `{"events": [{"job_id": ..., "event": ...}]}` and
 returns `{recorded, deduped, skipped}`. `event` must be one of `impression`,
 `open`, `save`, `unsave`, `dismiss`, `applied`.
+
+## The labelling surface — `/v1/label`
+
+The golden set (`../evals/labels.py`, task 07) needs judgements from ~10
+Builder volunteers, not from whoever wrote the harness. This is where they make
+them.
+
+**It is server-rendered HTML with no JavaScript.** Not a JSON endpoint: a
+volunteer cannot use one, and `frontend/` currently contains a single file
+called `.gitkeep`, so there is nothing to render a form. A `<form>`, a POST and
+a 303 to the next posting works today and keeps working when `frontend/` is
+eventually filled with something opinionated.
+
+### What a Builder actually does
+
+1. The operator adds them: `manage_app_users.py add --email them@gmail.com
+   --profile pursuit`. The allowlist is still the access control — no row, no
+   entry, and no row is ever auto-created.
+2. While the OAuth consent screen is unverified, they also go in the Google
+   console's **Test users** list. **Two allowlists that have to agree** — see
+   "Google Cloud Console" above; only one of the two failures produces an error
+   message from this service.
+3. They are sent one link: `https://<this service>/v1/label`.
+4. Signed out, that URL **302s to Google** rather than returning 401. A 401 is
+   right for `/v1/jobs`, which a frontend calls and handles; this is a URL
+   somebody pastes out of an email.
+5. They see one posting's full text and five questions, answer, press **Save
+   and next**, and repeat. Every question has an *I can't tell from this
+   posting* option, and it is not the same thing as "no".
+6. When the set is finished the page says so and stops.
+
+No terminal, no checkout, no credential, nothing installed.
+
+**`FRONTEND_ORIGIN` must point at the origin serving `/v1/label`.** The OAuth
+callback redirects to `FRONTEND_ORIGIN + next_path` (`auth.py:359`), so with
+the default `http://localhost:5173` a labeller completes the Google round trip
+and lands on a frontend that does not exist yet. Set it to this service's own
+origin for a labelling deployment. This is the one configuration step that is
+easy to miss and produces a confusing failure — the sign-in *works*, and the
+browser then shows nothing.
+
+### What is recorded
+
+`app_users.id`, never the email: an opaque id is all the inter-annotator
+computation needs, and every JSONL this produces gets exported and quoted.
+`profile` comes from the session, never from the form — the same tenancy rule
+`jobs.py:5` states, and here it is also what makes axis-B rows attributable to
+a cohort and droppable with it.
+
+Answers are validated against `extract.py`'s own vocabularies, read at render
+time rather than copied. A label recorded as `"Mid-Level"` could not be
+compared against a `job_facts` row holding `"mid"` — it would score formatting.
+
+`eval_labels` is **append-only to this service** (SELECT, INSERT; no UPDATE, no
+DELETE). A revised judgement is round 2, which is exactly what the
+intra-annotator measurement reads; quietly replacing round 1 would destroy it.
+A repeat submission of the same round is a no-op, enforced by the partial
+unique indexes rather than by code here.
+
+### Upgrading an existing deployment
+
+The startup check now covers three more tables, so **a service that has not run
+`init-schema` since this landed will refuse to start**, naming them. That is
+the intended behaviour (see "Database privileges"), and the fix is two steps:
+
+```bash
+JOBS_ADMIN_DATABASE_URL=... .venv/bin/python manage_app_users.py init-schema
+psql -d jobs -c "
+GRANT SELECT ON public.eval_label_sets, public.eval_label_items TO jobs_web;
+GRANT SELECT, INSERT ON public.eval_labels TO jobs_web;
+GRANT USAGE, SELECT ON SEQUENCE public.eval_labels_id_seq TO jobs_web;"
+```
+
+Then draw a set, from the pipeline side:
+
+```bash
+cd backend && python3 -m evals label sample --n 60 --overlap 20
+```
 
 ## Security model
 
@@ -177,6 +261,9 @@ engagement, and rewrite nothing.
 | `app_users` | SELECT, INSERT, UPDATE |
 | `app_sessions` | SELECT, INSERT, UPDATE, DELETE |
 | `oauth_logins` | SELECT, INSERT, DELETE |
+| `eval_label_sets`, `eval_label_items` | SELECT |
+| `eval_labels` | SELECT, INSERT |
+| `eval_labels_id_seq` | USAGE, SELECT |
 
 - **No UPDATE or DELETE on any pipeline table.** A session-hijacking bug or an
   injection here costs reads and event rows, not the corpus. Verified: as

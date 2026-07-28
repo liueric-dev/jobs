@@ -225,6 +225,98 @@ def _wilson(k, n):
     return metrics.wilson(k, n)
 
 
+def render_labels(triples, *, inter, intra, measured, label_set=None):
+    """The three-quantity table. The ONLY renderer for a model-vs-human figure.
+
+    IT TAKES `Interpretable`, NOT NUMBERS, AND THAT IS THE ENFORCEMENT
+        There is deliberately no function in this module that prints a
+        model-vs-human rate on its own. labels.Interpretable refuses to be
+        constructed without a floor and a ceiling, so the uninterpretable
+        report is unrepresentable rather than merely discouraged -- the same
+        move task 16 made when its coverage tool refused to print one
+        denominator alone, and the same argument the cache policy above makes
+        about enforcing at the point of printing.
+
+    THE THREE COLUMNS ARE THE SAME QUANTITY MEASURED THREE WAYS
+        floor and ceiling are both metrics.field_cell() outputs, so `agree2`
+        means the same thing in each: one pair, one Bernoulli trial per item.
+        That is why they can sit in one row and be read against each other.
+        `measured` is the model against the majority human answer, also one
+        trial per item.
+
+        A model at or below its own floor has not been shown to be wrong about
+        the world -- it has been shown to be unstable, and a golden set cannot
+        fix that. A model at or above the ceiling has saturated what the label
+        can resolve; the remaining disagreement is between people.
+    """
+    lines = [
+        "",
+        "model vs human, with the floor and the ceiling it has to be read "
+        "between" + (f"  (set={label_set})" if label_set else ""),
+        "  floor   = model self-consistency, agree2  (evals selfcheck)",
+        "  ceiling = two different people, agree2    (inter-annotator)",
+        "  model   = model vs the majority human answer",
+        "",
+    ]
+    header = (f"  {'field':<22}{'floor':>7}{'ceiling':>9}{'model':>7} "
+              f"{'ci':>10}{'n':>5}  reading")
+    lines += [header, "  " + "-" * (len(header) - 2)]
+    for t in triples:
+        floor = t.floor.get("agree2")
+        ceiling = t.ceiling.get("agree2")
+        rate = t.measured.get("rate")
+        # The reading is spelled out rather than left to the reader, because
+        # the whole failure this table exists to prevent is someone quoting
+        # the middle column on its own a month later.
+        if rate is not None and floor is not None and rate <= floor:
+            reading = "at/below its own floor -- unstable, not wrong"
+        elif rate is not None and ceiling is not None and rate >= ceiling:
+            reading = "at/above the human ceiling -- label cannot resolve more"
+        else:
+            reading = "between floor and ceiling"
+        lines.append(
+            f"  {t.field:<22}{_pct(floor):>7}{_pct(ceiling):>9}"
+            f"{_pct(rate):>7} {_ci(*t.measured['ci']):>10}"
+            f"{t.measured['n']:>5}  {reading}")
+
+    lines += ["", f"  ceiling from {len(inter['labellers'])} labeller(s): "
+                  + (", ".join(inter["labellers"]) or "none")]
+    if inter["single_labeller_items"]:
+        lines.append("  items with only one labeller (no ceiling): " + ", ".join(
+            f"{k}={v}" for k, v in sorted(
+                inter["single_labeller_items"].items())))
+    if inter["abstained"]:
+        # Never folded away, for the reason metrics.py:42 gives about records
+        # not usable in every repeat: hiding the answers a labeller could not
+        # give flatters every rate above.
+        lines.append("  abstentions (excluded from every rate): " + ", ".join(
+            f"{k}={v}" for k, v in sorted(inter["abstained"].items())))
+    if measured["no_consensus"]:
+        lines.append(f"  {measured['no_consensus']} item(s) had no majority "
+                     "human answer and are excluded -- a tie is not broken")
+    if measured["no_model_output"]:
+        lines.append(f"  {len(measured['no_model_output'])} labelled job(s) "
+                     "had no model output to compare against")
+
+    if intra["fields"]:
+        lines += ["", "  intra-annotator (same person, two rounds) -- the "
+                      "weaker ceiling", ""]
+        for field, cell in intra["fields"].items():
+            lines.append(f"  {field:<22}{_pct(cell['agree2']):>7} "
+                         f"{_ci(*cell['agree2_ci'])}  n={cell['n']}")
+    else:
+        lines += ["", "  intra-annotator: no field has a second round yet."]
+
+    lines += ["", "  vs_each (model against every individual labeller, no "
+                  "consensus rule)", ""]
+    for field, cell in measured["vs_each"].items():
+        # No interval: the pairs from one item are not independent trials, the
+        # same argument metrics.py:30 makes about `pairwise`.
+        lines.append(f"  {field:<22}{_pct(cell['rate']):>7}  n={cell['n']}  "
+                     "(point estimate; no interval -- pairs are dependent)")
+    return "\n".join(lines) + "\n"
+
+
 def write_selfcheck_json(path, stats, runs):
     """The full table as JSON, so a later run can diff against this one."""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)

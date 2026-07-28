@@ -27,7 +27,7 @@ import schema_web  # noqa: E402
 #: Modules whose SQL runs as the restricted service role. manage_app_users.py
 #: is excluded on purpose: init-schema runs as the admin role, and its CREATE
 #: statements would otherwise read as tables the service needs granted.
-SERVICE_MODULES = ("auth.py", "jobs.py", "db.py", "app.py")
+SERVICE_MODULES = ("auth.py", "jobs.py", "db.py", "app.py", "label.py")
 
 #: Aliases bound inside the SQL itself -- subquery, lateral and correlation
 #: names. They follow FROM/JOIN syntactically but are not tables to grant.
@@ -123,6 +123,21 @@ class TestGrantsCoverTheSQL(unittest.TestCase):
         self.assertEqual(schema_web.REQUIRED_TABLES["job_events"],
                          ("SELECT", "INSERT"),
                          "job_events is append-only: a dismiss is a row, not a delete")
+
+    def test_the_label_tables_are_declared_and_append_only(self):
+        # label.py's own SQL names eval_label_items; the rest of the golden-set
+        # SQL lives in ../evals/labels.py, whose table names arrive here
+        # through labels.WEB_PRIVILEGES rather than through the AST scan above
+        # -- that scan cannot see a table name that is a module constant, and
+        # tests/test_labels.py in the pipeline suite is where those three are
+        # checked against the DDL that creates them.
+        from evals import labels
+        for table in labels.TABLES:
+            self.assertIn(table, schema_web.REQUIRED_TABLES,
+                          f"{table} is written by /v1/label and must be granted")
+        self.assertNotIn("UPDATE", schema_web.REQUIRED_TABLES["eval_labels"])
+        self.assertNotIn("DELETE", schema_web.REQUIRED_TABLES["eval_labels"])
+        self.assertIn("eval_labels_id_seq", schema_web.REQUIRED_SEQUENCES)
 
     def test_the_bigserial_sequence_is_declared(self):
         # job_events.id is BIGSERIAL, so INSERT on the table is not enough --

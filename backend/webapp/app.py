@@ -39,6 +39,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import auth
 import jobs
+import label
 import schema_web
 from db import db
 
@@ -84,6 +85,10 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(jobs.router)
+# The golden-set labelling surface. Server-rendered HTML rather than JSON,
+# because the people it exists for are ~10 Builder volunteers and frontend/
+# holds one file called .gitkeep -- see label.py.
+app.include_router(label.router)
 
 
 @app.get("/v1/health")

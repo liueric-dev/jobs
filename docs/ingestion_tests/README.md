@@ -13,11 +13,53 @@ them.
 |---|---|---|---|
 | 01 | [Per-call model handles](01-llm-per-call-handles.md) | `llm.call_detailed()` with model/URL/key overrides and a `Completion` carrying usage | done |
 | 02 | [Evals substrate](02-evals-substrate.md) | `backend/evals/` — ModelSpec, frozen fixtures, replay cache, runner, reporting | done |
-| 03 | [Metrics and golden set](03-metrics-and-golden-set.md) | `metrics.py`, `labels.py`, the labelling CLI, self-consistency baselines | next |
+| 03 | [Metrics and golden set](03-metrics-and-golden-set.md) | `metrics.py`, `labels.py`, the labelling surface, self-consistency baselines | tooling built — **see task 07 below** |
 | 04 | [Score validation](04-score-validation.md) | a `score` task, `score.normalize()`, closing audit item 8 | todo |
 | 05 | [Fetcher harness](05-fetcher-harness.md) | HTTP cassettes and a scratch database for the six non-LLM scripts | done — **resequenced, see below** |
 
 01 and 02 landed 2026-07-27 in `fb733df`. Suite went 232 → 263 tests.
+
+## 03 is task 07, and the two trees must not drift
+
+**[`docs/tasks/refactor/tranche_two/07-metrics-and-golden-set.md`](../tasks/refactor/tranche_two/07-metrics-and-golden-set.md)
+IS this directory's task 03.** That file does not restate the design here — it
+records only what the Pursuit pivot changes, and this file is still the
+specification. Read both; changing one without the other is how the two trees
+drift.
+
+What task 07 adds, all of it now built:
+
+- **Two axes.** Axis A ("is the extraction correct?") is objective and
+  transfers to every future user and vertical. Axis B ("would you apply?") is
+  subjective and dies when the cohort does. `evals/labels.py` keys them
+  independently — two partial unique indexes, not one composite key over a
+  nullable column — so `DELETE FROM eval_labels WHERE axis = 'B'` leaves axis A
+  whole. This is the most durable artefact in the plan.
+- **The labeller is not the author.** The CLI at `03:101` is right for one
+  engineer and unusable for ten Builder volunteers. The labelling surface is a
+  server-rendered form at `GET /v1/label` in `backend/webapp/`, behind the
+  Google SSO and sessions that already exist there — **not** in `backend/api/`,
+  which is the contributor work queue and has neither.
+- **Inter-annotator, not just intra-.** `03:25` measures one person labelling
+  twice a week apart. With ten labellers the stronger measurement is free:
+  overlap ~20 postings across all of them and compare *between* people. Both
+  are computed; the overlap rows are served first in every queue, so attrition
+  does not take the ceiling with it.
+- **The sample includes rows the pipeline rejected.** Everything measured until
+  now was something the pipeline had already chosen to surface, so only
+  precision was estimable. `labels.sample()` draws from three strata:
+  `surfaced`, `below_floor` (a `job_facts` row and no `job_matches` row) and
+  `gate_rejected` (relevance tier above `max_tier_to_score`, so no `job_facts`
+  row either). Recall is not estimable without them.
+
+**Nothing has been labelled.** The tables ship empty and that is the correct
+state: a model standing in for a human is the exact defect `03:7-16` names in
+`claude-bench.py:417`, and seeding the table from model output "as a starting
+point" would reproduce it inside the tool built to detect it. Task 29 is the
+session that fills them.
+
+The first of the three quantities is already measured — `metrics.selfcheck`
+and the gate decision below are task 06's, at n=120.
 
 ## 05 moved, and it is now the tightest constraint in the plan
 

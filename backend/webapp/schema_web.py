@@ -51,6 +51,23 @@ REQUIRED_TABLES = {
     "oauth_logins": ("SELECT", "INSERT", "DELETE"),
 }
 
+#: The golden-set tables, owned by ../evals/labels.py and merged in here.
+#:
+#: MERGED, NOT RESTATED. The ownership rule at the top of this file cuts both
+#: ways: labels.py declares those three tables and this module must not carry
+#: a second copy of their privileges that can drift out of agreement with the
+#: DDL. Reading labels.WEB_PRIVILEGES keeps one definition and still lets the
+#: startup check, the README grant table and tests/test_grants.py all see them.
+#:
+#: The privileges are SELECT on the two set tables and SELECT+INSERT on
+#: eval_labels: no UPDATE and no DELETE anywhere. A label is evidence, and a
+#: revised judgement is a second round rather than an overwrite -- exactly the
+#: treatment job_events gets above, and for the same reason. It also means a
+#: bug in label.py cannot destroy the ceiling measurement.
+from evals import labels as _labels  # noqa: E402  (needs config's sys.path)
+
+REQUIRED_TABLES.update(_labels.WEB_PRIVILEGES)
+
 #: job_events.id is BIGSERIAL, so INSERT on the table is not enough on its own
 #: -- nextval() needs USAGE on the sequence. api/ learned this the expensive
 #: way: the equivalent grant was documented in its README and verified by
@@ -59,6 +76,9 @@ REQUIRED_TABLES = {
 REQUIRED_SEQUENCES = {
     "job_events_id_seq": ("USAGE", "SELECT"),
 }
+
+#: eval_labels.id is BIGSERIAL for the same reason and needs the same grant.
+REQUIRED_SEQUENCES.update(_labels.WEB_SEQUENCES)
 
 #: Every table any SQL in this package names. tests/test_grants.py asserts this
 #: equals the key set above; it is separate only so the test reads as an
@@ -138,6 +158,13 @@ def ensure_schema(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_app_sessions_user "
                  "ON app_sessions(user_id)")
     conn.commit()
+
+    # The golden-set tables, created by their own module's DDL. One definition
+    # per table: `python3 -m evals label init-schema` reaches the same
+    # function, so the operator can create them from either side and the two
+    # cannot drift. Nothing is inserted -- the tables ship empty and stay that
+    # way until people label.
+    _labels.ensure_schema(conn)
 
 
 def verify_schema(conn):

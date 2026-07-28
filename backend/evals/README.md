@@ -126,6 +126,95 @@ are ~9,800 of 11,517 rows and ingest continuously, while `weworkremotely`,
 of 720 rows contained **none** of the latter three — so the sources with the
 messiest parsing were the ones a naive corpus could never test.
 
+## The golden set: three quantities, never one
+
+`selfcheck` answers "is the model stable". It cannot answer "is the model
+right", because it never consults a human. `labels.py` is the other half, and
+the rule it enforces is that **model-vs-human alone is uninterpretable**:
+
+| quantity | what it is | where it comes from |
+|---|---|---|
+| **floor** | how often the model agrees with *itself* | `metrics.selfcheck` — task 06, n=120 |
+| **ceiling** | how often two *people* agree | `labels.inter_annotator` |
+| **the question** | model vs the majority human answer | `labels.model_vs_human` |
+
+A model scored at 85% against labels has been shown nothing until you know it
+self-agrees at 91% (it is unstable, not wrong) or that two humans agree at 85%
+(it has saturated what the label can resolve).
+
+So the API makes the bad report **unrepresentable rather than discouraged**.
+`labels.Interpretable` refuses to be constructed without all three and names
+which one is missing and the command that produces it; `report.render_labels`
+takes nothing else. There is no `--force`. This follows the precedent task 16
+set when its coverage tool refused to print one denominator alone.
+
+```bash
+python3 -m evals label init-schema            # DDL, admin credential, once
+python3 -m evals label sample --n 60 --overlap 20
+python3 -m evals label export --out evals/fixtures/golden-v1.jsonl
+python3 -m evals label report --run results.jsonl --selfcheck sc.json
+```
+
+**Nothing under `label` writes a label.** People do that in a browser at
+`/v1/label` (`backend/webapp/label.py`), signed in with the Google SSO that
+already exists there. A CLI is right for the author and unusable for the ~10
+Builder volunteers the labels actually come from.
+
+### Two axes, keyed independently
+
+| axis | question | scope | survives the cohort? |
+|---|---|---|---|
+| **A** | is the extraction correct? | objective | **yes** — every future user, every future vertical |
+| **B** | would you apply to this? | subjective | no |
+
+Axis A validates `job_facts`, which is extracted once and shared by every
+profile forever, and which has **never** been measured against a human —
+`tools/compare-extract.py` measures the model against itself, which catches
+instability and is structurally blind to systematic error.
+
+The independence is in the schema, not in a convention: two *partial* unique
+indexes rather than one composite key over a nullable `profile`. Postgres
+treats NULLs as distinct, so the composite key would have enforced nothing at
+all on axis A. `tests/test_labels.py` pins this against a real server, because
+a fake connection accepts the insert either way.
+
+Axis A ordering is `ai_involvement`, `seniority_level` first, and that is a
+finding rather than a preference: task 06 put `ai_involvement` at 77.8%
+pairwise self-agreement on `hn_whoishiring`, and it is the entire mechanism by
+which the cohort's opportunity space is identified.
+
+### The sample contains rows the pipeline threw away
+
+Everything measured before this was something the pipeline had already chosen
+to surface, so only **precision** was estimable and recall was not.
+
+| stratum | has `job_facts`? | has `job_matches`? | makes estimable |
+|---|---|---|---|
+| `surfaced` | yes | yes (≥ `MATCH_FLOOR`) | precision |
+| `below_floor` | yes | **no** — `match.py:291` stores only at or above the floor | recall |
+| `gate_rejected` | **no** — relevance tier > `max_tier_to_score` | no | recall |
+
+"No `job_matches` row" has two causes — under the floor, or `match.py` has not
+caught up — and SQL cannot tell them apart. `score_job()` is pure, so
+`confirm_scores()` recomputes the exact number and evicts the second kind
+rather than documenting the ambiguity. On the first real run against
+production that was **6 rows of 40**; a recall figure over that stratum would
+have been partly a measurement of the scheduler.
+
+### The ceiling is the measurement attrition takes first
+
+`--overlap N` marks the first N rows of the set as shown to *every* labeller,
+and `next_item()` serves those before anything else. A volunteer who labels ten
+postings and stops has still contributed to the inter-annotator number; if the
+shared rows came last they would have contributed nothing to it. Intra-
+annotator (one person, two rounds) is computed too — a labeller who is
+self-consistent and disagrees with everyone has a different reading of the
+*question*, and only having both numbers tells that apart from noise.
+
+An abstention (`I can't tell from this posting`) is stored as NULL, excluded
+from every rate, and counted beside it. Two people who both gave up have not
+agreed about anything, and a labeller with no way to abstain guesses.
+
 ## Comparison happens after `normalize()`
 
 A model's raw JSON is compared only after `extract.normalize()` has run, which
@@ -145,6 +234,7 @@ Prose fields (`summary`) are not compared at all. Two correct summaries differ.
 | `runner.py` | executes a task over a corpus; records provenance |
 | `metrics.py` | per-field comparison rules, Wilson intervals, platform split |
 | `report.py` | human table and JSONL; enforces the cost/latency rule |
+| `labels.py` | L0 human labels: schema, stratified sampler, agreement, the three-quantity gate |
 | `tasks/` | thin adapters over the real `build_prompt`/`normalize` |
 
 Tasks are adapters on purpose. The prompt text and coercion rules stay in
@@ -171,13 +261,17 @@ v2 close to an independent sample rather than a re-run of v1.
 
 ## Status
 
-Phase 1 (substrate) is built and tested. Phase 2 is partly landed:
-`metrics.py` and the `selfcheck` subcommand exist and the self-consistency
-floor is measured. Still to come:
+Phase 1 (substrate) is built and tested. Phase 2 is landed as **tooling**:
+`metrics.py`, `selfcheck`, `labels.py`, the `label` subcommands and the
+`/v1/label` surface all exist, and the self-consistency floor is measured at
+n=120.
 
-- **Phase 2 (rest)** — the golden set. `labels.py` and the labelling CLI do
-  not exist yet. `tasks/extract.py` already declares `FIELD_KINDS` and
-  `PRIORITY_FIELDS`, and `metrics.py` reads them.
+- **Phase 2 (the labels themselves)** — **not done, and deliberately not
+  startable from here.** The tables are empty. Filling them needs ~10 Builder
+  volunteers, which is task 29. Generating labels with a model would reproduce
+  `claude-bench.py:417`'s defect inside the tool built to detect it, so there
+  is no code path from a model's output into `eval_labels` and
+  `tests/test_labels.py` asserts the module contains none.
 - **Phase 3** — `score.py` output validation (`score.py:359-361` stores
   `fit_score` and `primary_track` with no coercion) plus a `score` task.
 - **Phase 4** — the six non-LLM fetchers: recorded HTTP fixtures and a scratch
