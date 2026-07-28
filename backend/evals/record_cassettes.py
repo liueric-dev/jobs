@@ -17,8 +17,8 @@ WHY THE RECIPES LIVE IN A FILE INSTEAD OF IN SOMEONE'S SHELL HISTORY
 COST, EXPLICITLY
     free   ats-greenhouse, ats-greenhouse-no-content, ats-lever, ats-ashby,
            ats-workable, ats-recruitee, ats-smartrecruiters, ats-validation,
-           hn-hiring, wwr-feeds, builtin-nyc, nyc-open-data -- public
-           unauthenticated endpoints
+           workday-cxs, hn-hiring, wwr-feeds, builtin-nyc, nyc-open-data --
+           public unauthenticated endpoints
     quota  google-serpapi   -- ONE SerpApi search off a metered key
     quota  google-apify     -- reads a HISTORICAL actor run. It starts no
            new run, so it bills nothing; see the recipe for why that is both
@@ -410,6 +410,113 @@ def record_ats_validation():
     return f"{len(results)} validation probes -- " + ", ".join(results)
 
 
+#: Memorial Sloan Kettering: 87-88 open postings, the SMALLEST of the four
+#: live Workday tenants in `company_ats` (Moelis 43 is smaller but sits behind
+#: an `Experienced-Hires` site that is not the shape task 18 walks; nyp 367 and
+#: nordstrom 862 are both several times the bytes for no extra shape).
+#: `docs/ingest/workday.md:553-557` names this tenant, this size and this
+#: request count.
+#:
+#: All three coordinates, not just the token: 18-ingest-workday-cxs.md:54
+#: forbids guessing the data centre, and `wd108` is not derivable from `msk`.
+WORKDAY_CXS = ("msk", "wd108", "MSKCC_Careers_Primary")
+
+
+def record_workday_cxs():
+    """A full multi-page walk plus one detail document. ~6 requests, free.
+
+    WHY THIS TENANT AND NOT NVIDIA. The `ats-validation` cassette already
+    holds one nvidia.wd5 list page, and `workday_fixtures.recorded_list_page()`
+    lifts it rather than recording a second one. What it cannot hold is a
+    WALK: it is a single page, and every multi-page failure in
+    `docs/ingest/workday.md:241-249` is about what the second page does.
+    NVIDIA's board is 2,000 postings -- 100 pages -- so walking it to get that
+    would commit megabytes to prove pagination. msk is 88 postings: five
+    pages, the last one short, which is the smallest thing that is still a
+    real walk.
+
+    WHAT THESE BYTES PIN THAT A CONSTRUCTED FIXTURE CANNOT. Failure 5 --
+    `total` reported on the offset=0 page only, every later page answering
+    `total: 0` (workday.py:463-475). It is the one failure in that table that
+    is NOT in the task file: it was found live, and until now the only fixture
+    for it is `workday_fixtures.total_only_on_first_page()`, which is
+    constructed. A constructed fixture for an undocumented upstream behaviour
+    proves that the code handles the behaviour someone REMEMBERED; it cannot
+    prove the behaviour is still real. These bytes can, and the guard below
+    refuses to record if it has stopped being real -- a cassette recorded
+    against a tenant that has quietly started reporting `total` on every page
+    would silently retire the evidence for the latch at workday.py:476.
+
+    NOT RECORDED, DELIBERATELY: the wrap (offset=100 returning page one
+    again), which is the other half of failure 5. Provoking it means one
+    request PAST the end of a stranger's board purely to record a
+    pathology, and `collect_postings` never issues that request -- the
+    `fresh == 0` guard at workday.py:490 exists so the walk stops before it.
+    A recipe that reached past the end to record it would be recording a
+    request the pipeline does not make, which is the one thing this file's
+    docstring says a recipe must not do.
+
+    Free: `*.myworkdayjobs.com` CXS is the same public, unauthenticated
+    endpoint the employer's own careers page calls. Paced by the ingest
+    script's own REQUEST_DELAY_SECONDS.
+    """
+    workday = load_ingest("workday")
+    tenant, dc, site = WORKDAY_CXS
+    with cassettes.recording(
+            "workday-cxs", source=f"{tenant}.{dc}.myworkdayjobs.com",
+            recorded_by=RECORDED_BY,
+            note=f"ingest/workday.py collect_tenant('{tenant}', '{dc}', "
+                 f"'{site}') -- the whole board at the production "
+                 f"limit={workday.PAGE_LIMIT}, five pages ending in a short "
+                 f"one, plus fetch_detail() for the first posting. Records "
+                 f"failure 5 from real bytes: `total` is on the offset=0 page "
+                 f"ONLY and every later page answers 0, so a walk that takes "
+                 f"the latest value reconciles a complete board against zero "
+                 f"and calls it a shortfall (workday.py:463-475). Also pins "
+                 f"the limit<=20 ceiling from the request side -- these are "
+                 f"the bodies _check_page_limit lets through."):
+        postings, total = workday.collect_tenant(tenant, dc, site)
+        time.sleep(workday.REQUEST_DELAY_SECONDS)
+        detail = workday.fetch_detail(tenant, dc, site,
+                                      postings[0]["externalPath"])
+
+    # Two guards, in the style of record_nyc_open_data(): a cassette that does
+    # not hold the thing it was recorded for is worse than no cassette,
+    # because it will be cited as evidence. Both check the RECORDING, not the
+    # parse, so neither can be satisfied by the code under test being wrong in
+    # a matching way.
+    # The list endpoint is a POST ending in /jobs; the detail endpoint is a GET
+    # on the same prefix (workday.py:320-334), so the method is what separates
+    # them and a substring match on the path is not enough.
+    pages = [i for i in cassettes.Cassette.load("workday-cxs").interactions
+             if i.method == "POST" and i.url.endswith("/jobs")]
+    totals = []
+    for i in pages:
+        try:
+            # .raw, not .body: a response stored as base64 leaves .body None,
+            # and reading None here would report "no totals" as "failure 5 is
+            # gone" and refuse a perfectly good recording.
+            totals.append(json.loads(i.raw.decode("utf-8")).get("total"))
+        except Exception:
+            pass
+    if len(pages) < 3:
+        raise RuntimeError(
+            f"recorded only {len(pages)} list page(s) against {tenant}.{dc} -- "
+            f"a one-page walk pins nothing that recorded_list_page() does not "
+            f"already pin; refusing to record")
+    if not (totals and totals[0] and not any(totals[1:])):
+        raise RuntimeError(
+            f"{tenant}.{dc} reported totals {totals} -- failure 5 (total on "
+            f"the first page only) is NOT in these bytes, so this cassette "
+            f"would not be evidence for the latch at workday.py:476. Either "
+            f"the tenant changed or the walk did; refusing to record")
+
+    return (f"{len(postings)} postings over {len(pages)} list page(s), "
+            f"total {total}, page totals {totals}, "
+            f"1 detail document ({len(detail.get('jobPostingInfo') or {})} "
+            f"jobPostingInfo keys)")
+
+
 def record_google_serpapi():
     """ONE SerpApi search. Metered."""
     serp = load_ingest("google-serpapi")
@@ -475,6 +582,7 @@ FREE = {
     "ats-recruitee": record_ats_recruitee,
     "ats-smartrecruiters": record_ats_smartrecruiters,
     "ats-validation": record_ats_validation,
+    "workday-cxs": record_workday_cxs,
     "hn-hiring": record_hn_hiring,
     "wwr-feeds": record_wwr_feeds,
     "builtin-nyc": record_builtin_nyc,
