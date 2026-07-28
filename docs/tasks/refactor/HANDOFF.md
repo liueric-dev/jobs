@@ -1,6 +1,7 @@
 # Handoff — the `docs/tasks/refactor/` run
 
-Written 2026-07-28 to hand this run to a fresh session. Read this first, then
+Written 2026-07-28, and rolling — last updated after task 11 landed (`da4942c`,
+`94063ea`). Read this first, then
 [`DECISIONS.md`](DECISIONS.md) (why each choice was made) and
 [`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
 [`README.md`](README.md)'s status column is the ordered index.
@@ -72,10 +73,17 @@ recorded at `schema.py:158`.
 
 ## Nothing is in flight
 
-All six agents this session completed, were verified against the code and the database,
-and were committed. **The tree is clean.** `run-daily.py`'s `STEPS` is fully wired —
-`ingest/workday.py` and `ingest/nyc-open-data.py` were added by the orchestrator, and
-`ats.py` was already there.
+**The tree is clean.** Every agent across both sessions completed, was verified against
+the code and the database, and was committed — six in the session that landed 03–18, three
+in the session that landed 11. Nothing is half-written and nothing is waiting on a reply.
+
+`run-daily.py`'s `STEPS` is fully wired — `ingest/workday.py` and `ingest/nyc-open-data.py`
+were added by the orchestrator, and `ats.py` was already there. Task 11 touched no ingest
+path and no scheduled step.
+
+**Start here:** `python3 -m unittest discover -s backend/tests` from the repo root should
+report **717, OK**. `backend/.env` is not exported by default — scripts that reach the
+database need `cd backend && (set -a; . ./.env; set +a; python3 ...)`.
 
 ## How this run works
 
@@ -89,12 +97,33 @@ files, writes the decision-log entries, and commits with the task number.
   `## RESULTS_PLACEHOLDER` and `company_ats` held **zero rows**. Caught by querying the
   database rather than reading the summary. It took two more passes to finish.
 - Several agents complete their work and go idle **without sending a report at all**.
-  Verify the artifacts directly; do not wait for a summary that may never arrive.
+  Verify the artifacts directly; do not wait for a summary that may never arrive. **Task
+  11 confirmed this at 3 of 3** — every agent went idle silently and every one had done
+  the work. Treat the idle notification as "go look", not as a failure.
+- Task 11's corpus agent shipped a document claiming "every number below is printed by
+  the tool". Four of its headline figures were printed nowhere and no flag produced them.
+  The analysis was sound; the reproducibility claim was not. **Re-run the tool and grep
+  its output for the numbers the prose asserts.**
 - Test counts drift while other agents work concurrently, so a count quoted by one agent
   may include another's in-flight tests.
 
 **Give each subagent an explicit do-not-touch file list.** Parallel agents collide
-otherwise. Three ran concurrently for most of this session without conflict on that basis.
+otherwise. Three ran concurrently for most of the first session on that basis, and task
+11's three had zero collisions across six files.
+
+**When a number disagrees, make the tool print both rather than picking one.** Task 11's
+doc said the ops archetypes reclaim 54 rows; the orchestrator's independent recount said
+55. Neither was wrong — 54 is the five recommended values, 55 is all seven proposed. The
+fix was to print both rows, labelled, so the ambiguity cannot recur. Silently adopting
+either number would have buried a real distinction.
+
+**Send an agent back to its own file; do not fix it yourself.** The ownership boundary is
+what makes parallelism safe, and it does not lapse because the agent went idle. Task 11's
+corpus agent fixed its own tool and doc on a second pass.
+
+**Hand a downstream agent its inputs inline.** Task 11's extraction agent needed the
+vocabulary its sibling had just derived, while that sibling was still editing the file it
+lived in. Pasting the values into the prompt removed the race entirely.
 
 ## What is blocked, and on what
 
@@ -178,8 +207,8 @@ Each of these is a documented claim that is **wrong about the code as it now sta
 **Two tasks are now the whole critical path, and both are held on human judgement, not on
 code.**
 
-1. **Task 13 — the cohort criteria profile.** It is what makes everything else this
-   session built *mean* anything. The `pursuit` profile exists (`7d94bb1`) but ships
+1. **Task 13 — the cohort criteria profile.** It is what makes everything else these
+   sessions built *mean* anything. The `pursuit` profile exists (`7d94bb1`) but ships
    `active=False` with **labelled placeholder** persona and criteria, because the weights
    are a cohort product call. Until it lands: task 10's gate is inert in production, and
    **task 18 cannot report a yield at all** — its 4-of-149 measures today's SWE-shaped
@@ -197,34 +226,34 @@ code.**
    design. The form is at `/v1/label` behind the existing Google SSO. What is missing is
    ~10 Builders and an afternoon.
 
-Then, in order:
+Then, in order — and **task 12 is the first thing a fresh session can actually do**:
 
-3. ~~**Task 11**~~ — **DONE, `da4942c`.** 12 archetypes → 26, `role_track`, and
-   missingness representable at both layers.
-4. **Task 12 — now the head of the queue, and its bill has grown to four items.**
+3. **Task 12 — the head of the queue, and its bill has grown to four items.**
    `schema.py:159-184` lists them: the majority-of-3 vote semantics, the 26-value
    archetype vocabulary, the new `role_track` field, and `normalize()` no longer
    defaulting. **One re-extraction settles all four; do not bump separately.** ~5,300 rows.
-5. **Task 08** — score validation; needs 07's tooling but not its human labels.
-6. **Tasks 19, 21** — the remaining unblocked Phase 3 ingest. 15 and 20 need credentials.
+   Read `docs/MEASUREMENT-TRAPS.md` first — 12 is where the new vocabulary either proves
+   out or does not, and it is the only chance to measure the before/after on one bump.
+4. **Task 08** — score validation; needs 07's tooling but not its human labels.
+5. **Tasks 19, 21** — the remaining unblocked Phase 3 ingest. 15 and 20 need credentials.
    **Do not trust their estimates** — see the finding below.
-7. **The ChatGPT-DOM defect.** Job `ff9f9d9f9643e185af0f48ca`'s `description_text` begins
+6. **The ChatGPT-DOM defect.** Job `ff9f9d9f9643e185af0f48ca`'s `description_text` begins
    `data-testid="conversation-turn-136"` — some ingest path captured a browser DOM rather
    than a posting body, and it is silently poisoning extraction input. Found by task 10,
    out of its scope, still has no task of its own.
-8. **Workday will not scale sequentially.** Task 18 costs ~14 min of nightly window at
+7. **Workday will not scale sequentially.** Task 18 costs ~14 min of nightly window at
    **four** tenants at 1.5s apart. `18-ingest-workday-cxs.md:97` anticipates ~50. The
    delay, the concurrency or the per-tenant cadence has to change before task 16's tenant
    backlog is drained into it. Measured and recorded, not solved.
-9. **Task 23, descoped** — but see the reprioritisation argument in `DECISIONS.md`: on the
+8. **Task 23, descoped** — but see the reprioritisation argument in `DECISIONS.md`: on the
    evidence **25 is where the 12x yield difference lives and it is a config edit**, and
    **24 is 7,500 searches/month against code already written and tested**.
 
-## What this session measured, and what it means
+## What these sessions measured, and what it means
 
-Three numbers landed that change how the rest of the plan should be read.
+Four numbers landed that change how the rest of the plan should be read.
 
-**The Phase 3 estimates are not reliable, and this is now the session's headline finding.**
+**The Phase 3 estimates are not reliable, and this is still the run's headline finding.**
 Three sources measured, three far below estimate:
 
 | task | estimate | measured |
@@ -235,6 +264,15 @@ Three sources measured, three far below estimate:
 
 Tasks 15, 19, 20 and 21 are sized from the same table by the same method. **Measure before
 building.**
+
+**Task 11 measured the same shortfall from a third direction, and it is the sharpest
+version yet.** Across 863 cohort-eligible postings — the ones that already pass task 10's
+gate — the AI-operations archetype the whole retarget is aimed at appears **5 times, across
+3 employers**. Not 5%: five postings. The vocabulary hole was real and is now fixed, but
+fixing it revealed that the roles are not there to be classified. Meanwhile the `other`
+bucket, which the task file assumed was full of ops roles, turned out to be **47.5% tech
+roles the vocabulary simply lacked** against 12.6% ops. The corpus is still a software
+corpus.
 
 **And the shape of the shortfall matters more than its size.** Of 329 Workday postings
 pulled from four NYC employers — a hospital system, a bank, a retailer — **zero have any AI
@@ -259,11 +297,17 @@ next, it is not this.
 success. Nothing else in the pipeline would have noticed. When a source's numbers look
 clean that is not evidence: reconcile against the count the API itself returned.
 
-## How this session ran it, and what worked
+## How these sessions ran it, and what worked
 
-**Six subagents, run in parallel, orchestrator verifying and committing.** Nothing was
-committed by a subagent. Every task was checked against the code and the database before
-its commit. Four mechanics worth keeping:
+**Task 11's session: three subagents in two rounds.** Round 1 ran the corpus-evidence
+agent and the scoring agent in parallel — disjoint files, neither blocking the other.
+Round 2 ran the extraction agent, which needed round 1's derived vocabulary. The
+orchestrator took the baseline, verified every claim, made the one judgement call it would
+not delegate (pricing 14 new archetypes for the author's profile), and committed.
+
+**The first session: six subagents in parallel, orchestrator verifying and committing.**
+Nothing was committed by a subagent in either session. Every task was checked against the
+code and the database before its commit. Mechanics worth keeping:
 
 - **Every agent gets an explicit file-ownership list.** Five ran concurrently with one
   genuine collision all session (`record_cassettes.py`, below).
@@ -279,9 +323,22 @@ its commit. Four mechanics worth keeping:
   written once at the end, from a context already spent, which is why it read as recall
   rather than record.
 
-**Five of six agents completed without sending a report at all.** They go idle silently.
-Do not wait for a summary; check the artifacts. That is now the norm rather than the
-exception.
+**Five of six agents in the first session, and three of three in task 11's, completed
+without sending a report at all.** They go idle silently. Do not wait for a summary; check
+the artifacts. That is the norm, not the exception.
+
+**Verification that actually caught things in task 11, in order of value.** Reading the
+diff caught the most; the suite caught the least. Worth copying:
+
+1. **Re-run the agent's own tool and grep for the prose's numbers.** Caught the
+   unreproducible figures.
+2. **Recompute a headline number independently.** Surfaced the 54-vs-55 distinction.
+3. **Prove an equivalence claim by exhaustion, not by reading.** The rewritten tombstone
+   guard was checked over a 192-case cross product of the four signals it reads.
+4. **AST-check the invariant.** `score_job()`'s purity is a CLAUDE.md rule; walking the
+   function for I/O calls and imports is three lines and does not rely on a promise.
+5. **`match.py --dry-run` against the live database.** The claim "this change is inert in
+   production" is worth exactly nothing unverified; it reports 0 matched or it does not.
 
 **The one real collision:** `backend/evals/record_cassettes.py` accumulated two agents'
 changes at once. Task 14's commit deliberately excluded it rather than ship task 17's
