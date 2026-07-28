@@ -893,3 +893,48 @@ people.**
 `backend/webapp/tests/` cannot run here: **`fastapi` is not installed**, which fails
 `test_label_form.py` and the four pre-existing webapp test modules identically. The
 `backend/tests/` suite, including all 44 label tests, is green.
+
+---
+
+## 2026-07-28 — 14 landed (`7221620`): it works, and it is ~1.8/day against an estimate of 20–60
+
+Report: [`docs/ingest/nyc-open-data.md`](../../ingest/nyc-open-data.md). New:
+`backend/ingest/nyc-open-data.py`, `backend/tests/test_nyc_open_data.py` (+36),
+`backend/evals/fixtures/cassettes/nyc-open-data.json`. Wired into `run-daily.py`'s `STEPS`
+by the orchestrator.
+
+**1,030 rows are in the live table** as `platform='nyc_open_data'` — 79 at tier 1 under
+the author's gate, 951 at tier 3.
+
+### The estimate was out by an order of magnitude, and this is the second time
+
+The task file estimated **20–60 relevant/day**. Measured: **~1.8/day**. The report says so
+in its own *Purpose* section — *"Read the yield section before investing further in this
+source"* — not in a footnote at the bottom.
+
+That matters beyond this one source. Phase 3's remaining sourcing decisions (15, 19, 20,
+21) are sized against estimates from the same table, and this is now the **second**
+measurement to come in far below its estimate — after task 05's 43/day gate volume
+resolving to ≈3/day usable. **Treat the remaining Phase 3 estimates as unvalidated.**
+
+### It earns its place on grounds other than volume
+
+One documented JSON API, one crawl, no HTML parsing, no token discovery. And two
+properties nothing else in the pipeline has:
+
+- **An explicit close date per posting** (`post_until`). Every other source infers closure
+  from absence, or cannot infer it at all — tasks 19–21 will have neither.
+- **NYC by construction rather than by regex.** The location filter that every other source
+  needs does not apply here.
+
+### Pagination reconciled against a count, not a short page
+
+Anonymous SODA throttles, and a throttled page is byte-identical to the end of a list —
+the landmine that cost one published account 1,960 of 2,000 jobs. The ingest reconciles
+against `$select=count(*)`.
+
+### One file deliberately left out of the commit
+
+`backend/evals/record_cassettes.py` carries this task's cassette registration **and task
+17's in-flight changes**, so it was excluded rather than committed with another agent's
+half-finished work in it. Task 17's commit brings both.

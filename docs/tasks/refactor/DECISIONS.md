@@ -702,3 +702,28 @@ The boundary of the task, enforced rather than promised. Axis B is Builder prefe
 a model standing in for it makes the measurement circular — `claude-bench.py:417` treating
 `sonnet-batch-1` as ground truth is the defect being avoided. Task 29 is the labelling
 session and it stops until there are people. Not reversible, and that is the point.
+
+### 14 — Kept despite ~1.8/day, and the reason is not volume
+
+The task file sized this at 20–60 relevant/day; it measures at ~1.8. Kept anyway: it is
+one documented JSON API with no HTML parsing and no token discovery, it is the only source
+that publishes an **explicit close date** per posting, and it is the only one that is NYC
+by construction rather than by regex. Those are properties tasks 19–21 will not have.
+Rejected: dropping it as under-yielding, which would have discarded the pipeline's only
+non-inferred closure signal to save a step that costs one crawl. Reversible — it is one
+`STEPS` entry.
+
+### 14 — The estimate miss is recorded as a finding about the estimates, not about the source
+
+Second measurement this run to land far below its task file's estimate, after task 05's
+43/day resolving to ≈3/day usable. The remaining Phase 3 estimates (15, 19, 20, 21) come
+from the same table and should be treated as unvalidated until measured. Not reversible:
+it is a measurement.
+
+### 14 — `record_cassettes.py` excluded from the commit
+
+It carried this task's registration and task 17's in-flight changes simultaneously.
+Committing it would have shipped another agent's half-finished work under this task's
+number. Task 17's commit brings both registrations. Reversible, and a consequence of
+running agents in parallel over one shared file — the general fix is that shared files get
+one owner, which is what `run-daily.py`'s `STEPS` already has.

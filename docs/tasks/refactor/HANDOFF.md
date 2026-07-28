@@ -7,8 +7,8 @@ Written 2026-07-28 to hand this run to a fresh session. Read this first, then
 
 ## State at handoff
 
-**Branch `webapp-service`, HEAD `3a8b42c`, suite at 530 tests** (task files say 263; it
-has grown — 530 is the floor now). **Note:** a full `unittest discover` currently reports
+**Branch `webapp-service`, HEAD `7221620`, suite at 566 tests** (task files say 263; it
+has grown — 566 is the floor now). **Note:** a full `unittest discover` currently reports
 failures in `test_workday_ingest`, which is `task-18-workday`'s **incomplete in-flight
 work**, not a regression. `test_relevance`, `test_extract` and `test_match` are green.
 
@@ -30,6 +30,7 @@ Ten tasks committed, one experiment, plus the two conversational decisions:
 | — | **the two extraction decisions** | `943d899` |
 | 10 | description-first cohort gate | `7d94bb1` |
 | 07 | golden-set tooling (no labels) | `3a8b42c` |
+| 14 | NYC Open Data ingest | `7221620` |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -75,12 +76,14 @@ all, so assume nothing.
   platforms. Owns the cassette machinery.
 - **`task-18-workday`** — task 18, Workday CXS with upstream relevance gating. New file
   under `ingest/`.
-- **`task-14-nycopendata`** — task 14, NYC Open Data via SODA, running anonymously
-  (no Socrata token).
 
 **None of them may touch `run-daily.py`'s `STEPS`** — several would collide. Each reports
-the line it wants added; the orchestrator wires it at commit time. **Three ingest steps
-are therefore probably unwired.** Check `STEPS` against what is in `backend/ingest/`.
+the line it wants added; the orchestrator wires it at commit time. 14's entry is wired;
+**17's and 18's are not.** Check `STEPS` against what is in `backend/ingest/`.
+
+**`backend/evals/record_cassettes.py` is shared and currently dirty.** Task 14's cassette
+registration was left in it deliberately rather than committed with task 17's unfinished
+changes. Task 17's commit must bring both.
 
 ## How this run works
 

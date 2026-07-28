@@ -49,7 +49,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 
 | | Task | Lands | est. relevant/day |
 |---|---|---|---|
-| 14 | NYC Open Data ingest | `kpav-sd4t` via SODA; `post_until` closure | 20–60 |
+| 14 | [NYC Open Data ingest](tranche_three/14-ingest-nyc-open-data.md) | `kpav-sd4t` via SODA; `post_until` closure — **done; measured ~1.8/day, not 20–60**, [`docs/ingest/nyc-open-data.md`](../../ingest/nyc-open-data.md) | ~~20–60~~ **1.8** |
 | 15 | USAJobs and Adzuna ingest | two free APIs | 35–95 |
 | 16 | [ATS token discovery](tranche_three/16-ats-token-discovery.md) | seed list bootstrap, regex probe, `company_ats` table — **7 validated non-tech NYC tokens, 1,513 open jobs**; done |
 | 17 | Retarget `ats.py` | NYC non-tech tokens | 50–150 |
