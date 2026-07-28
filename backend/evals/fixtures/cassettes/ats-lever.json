@@ -2,13 +2,13 @@
  "format_version": 1,
  "name": "ats-lever",
  "source": "api.lever.co",
- "recorded_at": "2026-07-28T07:07:24Z",
+ "recorded_at": "2026-07-28T13:12:23Z",
  "recorded_by": "evals/record_cassettes.py (task 09)",
- "note": "ingest/ats.py fetch_lever('finix'); the only lever token in config/companies.json. Lever serves real HTML in `description`, unlike greenhouse -- ats.py:261.",
+ "note": "ingest/ats.py fetch_lever('finix'); the only lever token in the companies.json seed. Lever serves real HTML in `description`, unlike greenhouse. RE-RECORDED for task 17: fetch_lever now pages with &limit=100&skip=N, so the URL differs from the pre-task-17 recording. Finix returns a short first page, which is what ends the loop.",
  "interactions": [
   {
    "method": "GET",
-   "url": "https://api.lever.co/v0/postings/finix?mode=json",
+   "url": "https://api.lever.co/v0/postings/finix?mode=json&limit=100&skip=0",
    "status": 200,
    "headers": {
     "Content-Type": "application/json; charset=utf-8"

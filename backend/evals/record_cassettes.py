@@ -16,8 +16,9 @@ WHY THE RECIPES LIVE IN A FILE INSTEAD OF IN SOMEONE'S SHELL HISTORY
 
 COST, EXPLICITLY
     free   ats-greenhouse, ats-greenhouse-no-content, ats-lever, ats-ashby,
-           hn-hiring, wwr-feeds, builtin-nyc -- public unauthenticated
-           endpoints
+           ats-workable, ats-recruitee, ats-smartrecruiters, ats-validation,
+           hn-hiring, wwr-feeds, builtin-nyc, nyc-open-data -- public
+           unauthenticated endpoints
     quota  google-serpapi   -- ONE SerpApi search off a metered key
     quota  google-apify     -- reads a HISTORICAL actor run. It starts no
            new run, so it bills nothing; see the recipe for why that is both
@@ -102,8 +103,11 @@ def record_ats_lever():
     with cassettes.recording(
             "ats-lever", source="api.lever.co", recorded_by=RECORDED_BY,
             note="ingest/ats.py fetch_lever('finix'); the only lever token in "
-                 "config/companies.json. Lever serves real HTML in "
-                 "`description`, unlike greenhouse -- ats.py:261."):
+                 "the companies.json seed. Lever serves real HTML in "
+                 "`description`, unlike greenhouse. RE-RECORDED for task 17: "
+                 "fetch_lever now pages with &limit=100&skip=N, so the URL "
+                 "differs from the pre-task-17 recording. Finix returns a "
+                 "short first page, which is what ends the loop."):
         jobs = ats.fetch_lever("finix")
     return f"{len(jobs)} lever postings"
 
@@ -113,10 +117,99 @@ def record_ats_ashby():
     with cassettes.recording(
             "ats-ashby", source="api.ashbyhq.com", recorded_by=RECORDED_BY,
             note="ingest/ats.py fetch_ashby('runway'); smallest ashby board in "
-                 "config/companies.json. Carries isRemote, which normalize_ashby "
-                 "ORs over the location regex (ats.py:271)."):
+                 "the companies.json seed. Carries isRemote, which "
+                 "normalize_ashby ORs over the location regex. RE-RECORDED for "
+                 "task 17: the URL now carries ?includeCompensation=true. "
+                 "Runway does not publish compensation, so every posting here "
+                 "holds the KEY with empty tiers and null summaries -- the "
+                 "shape ashby_salary() must answer None to, and the common "
+                 "case. The populated shape is pinned by unit test instead; "
+                 "the smallest ashby board that publishes compensation is "
+                 "`writer` at 859 KB, too large to commit for one string."):
         jobs = ats.fetch_ashby("runway")
     return f"{len(jobs)} ashby postings"
+
+
+def record_ats_workable():
+    """Both halves of a Workable pull, including the duplicate-expansion trap.
+
+    braven, a national nonprofit hiring in NYC among other cities -- picked
+    because it EXHIBITS THE TRAP: the v1 widget returns 66 entries for 20
+    distinct shortcodes (measured 2026-07-28), one per posting per location.
+    A cassette from an account without multi-location postings would let a
+    future edit drop the dedupe in fetch_workable() with nothing failing.
+    """
+    ats = load_ingest("ats")
+    with cassettes.recording(
+            "ats-workable", source="apply.workable.com", recorded_by=RECORDED_BY,
+            note="ingest/ats.py fetch_workable('braven'): the v3 POST that "
+                 "reports `total`, then the v1 widget with ?details=true that "
+                 "carries the descriptions. TWO endpoints on purpose -- v3 has "
+                 "no descriptions and pages ten at a time, the widget has "
+                 "descriptions and no total. The widget's 66 entries collapse "
+                 "to 20 unique shortcodes and v3 says total=20, which is the "
+                 "reconciliation this cassette exists to pin."):
+        jobs = ats.fetch_workable("braven")
+    return (f"{len(jobs)} unique workable postings, "
+            f"total reported {jobs.reported_total}")
+
+
+def record_ats_recruitee():
+    """One request, whole board, descriptions and structured salary.
+
+    Tellent's own board (`jobs.recruitee.com`) -- eight offers, each with a
+    `salary` object, which is the only structured salary in this script
+    besides Ashby's and the thing recruitee_salary() renders.
+    """
+    ats = load_ingest("ats")
+    with cassettes.recording(
+            "ats-recruitee", source="recruitee.com", recorded_by=RECORDED_BY,
+            note="ingest/ats.py fetch_recruitee('jobs'). One GET, the whole "
+                 "board: no pagination and no total, so a short answer IS the "
+                 "answer here. Offers carry `updated_at` and the endpoint "
+                 "accepts no filter for it -- the delta-sync claim in "
+                 "17-retarget-ats-ingest.md does not hold for this platform "
+                 "either."):
+        jobs = ats.fetch_recruitee("jobs")
+    return f"{len(jobs)} recruitee offers"
+
+
+def record_ats_smartrecruiters():
+    """The list page plus one detail call per posting.
+
+    Visa: totalFound=2, so the whole pull is three requests and the cassette
+    stays small while still holding a REAL `totalFound` to reconcile against.
+
+    Its two job ads are thin -- one has text only in `additionalInformation`
+    and the other's four sections are all empty strings -- and that is worth
+    keeping rather than recording around. "The detail call was spent and the
+    ad is empty" and "the detail call has not been spent yet" are different
+    states that both end as a NULL description if the parser conflates them,
+    and both are in these bytes. The rich shape (all four sections full of
+    HTML) was measured the same day against `BoschGroup`, whose board is
+    4,755 postings -- not something to commit to prove one join.
+
+    Multi-page reconciliation arithmetic is pinned by a synthetic cassette in
+    tests/test_ats_new_platforms.py -- recording a board large enough to page
+    would mean committing hundreds of kilobytes to prove one comparison.
+    """
+    ats = load_ingest("ats")
+    with cassettes.recording(
+            "ats-smartrecruiters", source="api.smartrecruiters.com",
+            recorded_by=RECORDED_BY,
+            note="ingest/ats.py fetch_smartrecruiters('Visa') at the "
+                 "production limit=100, then fetch_smartrecruiters_detail() "
+                 "for each posting. The list endpoint carries NO description "
+                 "-- the job ad is one GET per posting and there is no bulk "
+                 "form (?expand=jobAd is ignored), which is why the detail "
+                 "fetch is budgeted rather than unconditional."):
+        postings = ats.fetch_smartrecruiters("Visa")
+        details = []
+        for posting in postings:
+            details.append(ats.fetch_smartrecruiters_detail("Visa", posting["id"]))
+            time.sleep(ats.REQUEST_DELAY_SECONDS)
+    return (f"{len(postings)} postings (totalFound "
+            f"{postings.reported_total}), {len(details)} job ads")
 
 
 def record_hn_hiring():
@@ -174,6 +267,57 @@ def record_builtin_nyc():
         time.sleep(builtin.DETAIL_DELAY_SECONDS)
         builtin.fetch_description(records[0]["job_url"])
     return f"1 listing page ({len(records)} cards), 1 detail page"
+
+
+#: The slice of NYC Open Data that gets recorded, and the page size it is
+#: crawled at. NOT the production request: that is the whole 2,376-row
+#: dataset at $limit=1000 and would commit an ~8 MB fixture to prove three
+#: pages of pagination. `post_until IS NULL` is 49 rows (24 External, 25
+#: Internal on 2026-07-28) and is chosen because it IS the edge case -- task
+#: 14 asks for a fixture with a null `post_until` and one with an Internal
+#: `posting_type`, and this one `$where` guarantees both without any
+#: hardcoded job_id that would rot the moment DCAS closes that posting.
+#:
+#: At page size 20 the crawl is three pages ending in a short one, so the
+#: recorded interactions are the real pagination shape: count, page, page,
+#: short page, count. Everything about the request except the `$where` and
+#: the `$limit` is what production sends, because it goes through the ingest
+#: script's own fetch_all().
+NYC_OPEN_DATA_WHERE = "post_until IS NULL"
+NYC_OPEN_DATA_PAGE_SIZE = 20
+
+
+def record_nyc_open_data():
+    """The count/crawl/count shape, over the dataset's own edge cases.
+
+    Free: data.cityofnewyork.us is a public Socrata endpoint and no app
+    token is used or needed. Five requests, paced by the script's own
+    inter-page delay.
+    """
+    nyc = load_ingest("nyc-open-data")
+    with cassettes.recording(
+            "nyc-open-data", source="data.cityofnewyork.us",
+            recorded_by=RECORDED_BY,
+            note=f"ingest/nyc-open-data.py fetch_count/fetch_all/fetch_count "
+                 f"over `{NYC_OPEN_DATA_WHERE}` at $limit="
+                 f"{NYC_OPEN_DATA_PAGE_SIZE}. That slice is 49 rows holding "
+                 f"BOTH edge cases task 14 asks for -- every null post_until "
+                 f"in the dataset, and Internal postings for the "
+                 f"posting_type filter to drop. The two count queries "
+                 f"bracket the crawl: reconcile() compares what was "
+                 f"collected against them, because a throttled page and the "
+                 f"last page are the same bytes."):
+        before = nyc.fetch_count(where=NYC_OPEN_DATA_WHERE)
+        fetched = nyc.fetch_all(where=NYC_OPEN_DATA_WHERE,
+                                page_size=NYC_OPEN_DATA_PAGE_SIZE)
+        after = nyc.fetch_count(where=NYC_OPEN_DATA_WHERE)
+    kinds = {r.get("posting_type") for r in fetched.rows}
+    if not {"External", "Internal"} <= kinds:
+        raise RuntimeError(
+            f"recorded slice holds only {sorted(kinds)} -- the Internal "
+            f"filter would be untested by these bytes; refusing to record")
+    return (f"{len(fetched.rows)} rows over {fetched.pages} page(s), "
+            f"count {before} -> {after}")
 
 
 #: One (platform, token, extra, why) per ATS the task-16 validator can check,
@@ -327,10 +471,14 @@ FREE = {
     "ats-greenhouse-no-content": record_ats_greenhouse_no_content,
     "ats-lever": record_ats_lever,
     "ats-ashby": record_ats_ashby,
+    "ats-workable": record_ats_workable,
+    "ats-recruitee": record_ats_recruitee,
+    "ats-smartrecruiters": record_ats_smartrecruiters,
     "ats-validation": record_ats_validation,
     "hn-hiring": record_hn_hiring,
     "wwr-feeds": record_wwr_feeds,
     "builtin-nyc": record_builtin_nyc,
+    "nyc-open-data": record_nyc_open_data,
 }
 
 METERED = {
