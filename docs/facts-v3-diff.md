@@ -18,6 +18,23 @@ so any of them can be re-run:
 | `backend/scripts/backfill-facts.sh` stdout | wall clock, call count, batches, stop reason |
 | `python3 match.py` and `match.py --dry-run` | the recompute counts |
 | direct counts over `job_facts`, `job_matches`, `job_scores`, `profiles` | table totals, tombstones, per-profile row counts |
+| the ops-five query below | the per-value row and employer counts, including `ai_operations` |
+
+The ops-five counts are quoted in full because that section makes an argument
+about employer spread, and the spread is only as trustworthy as the grouping
+that produced it:
+
+```sql
+SELECT f.role_archetype, count(*), count(DISTINCT j.company_name)
+FROM job_facts f JOIN jobs j ON j.id = f.job_id
+WHERE f.facts_version = 3 AND f.role_archetype IN
+  ('ai_operations','implementation_analyst','support_ops','marketing_ops','admin_ops')
+GROUP BY 1 ORDER BY 2 DESC;
+```
+
+It groups on `jobs.company_name`, a free-text field — so two spellings of one
+employer count twice, and the `Confidential` caveat below is the visible case of
+the same limitation. The employer counts are therefore upper bounds.
 
 Two figures are **arithmetic, not printed**, and are marked where they appear:
 non-NULL `role_track` counts (624 = 863 − 239 NULL; 372 = 579 − 207 NULL).
@@ -334,8 +351,18 @@ Counts over all 863 version-3 rows, with distinct employers:
 | `implementation_analyst` | 7 | 0.8 | 6 | 0.86 |
 | *(total, distinct rows)* | *137* | *15.9* | | |
 
-`support_ops` carries most of the ops mass and is also the most concentrated of
-the five; the other four are close to one posting per employer.
+**`support_ops` at 82 rows is nearly 5x `ai_operations` and is where the ops mass
+actually is** — 60% of the 137 on its own. That is worth stating next to the
+shortfall above, because the two findings agree: the ops five came in 42 under
+their floor, and the ops work this corpus does contain is **support-shaped, not
+AI-shaped**. The value the vocabulary change was motivated by is not the value
+the cohort's employers are hiring for.
+
+`support_ops` is also the most concentrated of the five at 0.30 employers per
+posting — 82 postings across 25 employers — where the other four sit near one
+employer per posting. Worth a look on its own terms later: that ratio is the
+shape a few large support organisations produce, and it is the one ops value
+whose spread would not survive the test `emp` exists to apply.
 
 **`ai_operations` deserves its own paragraph, because the handoff carries a
 standing caution about it** — 5 postings across 3 employers in the title probe,
@@ -344,20 +371,26 @@ Phase 3 before anything is built on it." `extract.py:234-237` says the same, and
 `docs/role-track-derivation.md:160-176` calls it "the weakest of the 14 by some
 margin". **This run is the first re-check, and it moves two numbers:**
 
-- **Count: 5 → 17 (3.4x).** The 5 was a title probe; 17 is the extractor reading
-  whole postings. The two differ for the ordinary reason — a posting whose title
-  is "Product Operations Manager" can be an AI-operations role in its body and
-  invisible to a title match. **17 supersedes 5 for the cohort corpus.**
-- **Employer spread: 3 → 14.** This is the more informative movement, and it was
-  not asked for by the caution that prompted the re-check. 17 postings across 14
-  employers, maximum 2 at any one — no concentration at all. Since `emp` is the
-  column `docs/role-track-derivation.md:148-150` says to "read first", precisely
-  because "a candidate whose mass sits at one employer is that employer's hiring
-  spree", **the specific concern that caution encodes is retired.** For scale:
-  0.82 employers per posting, against the two values `docs/role-track-derivation.md:174-176`
-  held up as better-distributed when it called `ai_operations` the weakest —
-  `admin_ops` at 15 employers on 19 postings (0.79) and `marketing_ops` at 29 on
-  52 (0.56). On this measure `ai_operations` now leads both.
+- **Count: 5 → 17 (3.4x).** The 5 was a title probe, the 17 is the extractor
+  reading whole postings — the same probe-versus-extractor asymmetry set out
+  above, applied to one value. **17 supersedes 5 for the cohort corpus.** Note
+  which direction this is: an overshoot against a title probe, which by that
+  section's own rule confirms nothing on its own. It is the employer count below
+  that carries the information.
+- **Employer spread: 3 → 14, and this moved further than the posting count did.**
+  It is also the more meaningful of the two, because of how each reads: **"5
+  postings at 3 employers" reads like three anomalous companies; "17 across 14"
+  reads like a thin but genuine market.** That is the difference between a
+  vocabulary value and an artifact. 14 employers over 17 postings, maximum 2 at
+  any one — no concentration at all. Since `emp` is the column
+  `docs/role-track-derivation.md:148-150` says to "read first", precisely because
+  "a candidate whose mass sits at one employer is that employer's hiring spree",
+  **the specific concern that caution encodes is retired.** For scale: 0.82
+  employers per posting, against the two values
+  `docs/role-track-derivation.md:174-176` held up as better-distributed when it
+  called `ai_operations` the weakest — `admin_ops` at 15 employers on 19 postings
+  (0.79) and `marketing_ops` at 29 on 52 (0.56). On this measure `ai_operations`
+  now leads both.
 
 **The honest reading, which is narrower than those numbers invite.** 3.4x
 sounds like vindication and is not. `ai_operations` is **still 2.0% of the
