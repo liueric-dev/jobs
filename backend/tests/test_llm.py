@@ -69,12 +69,24 @@ class TestPerCallOverrides(unittest.TestCase):
     A regression here would push them back to doing that.
     """
 
+    #: JOB_SCORING_* take priority over LLM_* in base_url()/model()/api_key()
+    #: (see llm.py), so isolating only the LLM_* names left this suite at the
+    #: mercy of whatever the ambient environment set -- in particular
+    #: backend/.env's JOB_SCORING_BASE_URL/JOB_SCORING_MODEL, which point at
+    #: the real production endpoint. A shell that has sourced .env made
+    #: test_defaults_read_environment assert against the wrong URL. Every
+    #: name base_url()/model()/api_key() consult must be cleared here.
+    _ISOLATED_VARS = ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL",
+                      "JOB_SCORING_API_KEY", "JOB_SCORING_BASE_URL",
+                      "JOB_SCORING_MODEL")
+
     def setUp(self):
         self.captured = {}
         self.real = urllib.request.urlopen
         urllib.request.urlopen = self._fake
-        self.env = {k: os.environ.get(k) for k in
-                    ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL")}
+        self.env = {k: os.environ.get(k) for k in self._ISOLATED_VARS}
+        for k in self._ISOLATED_VARS:
+            os.environ.pop(k, None)
         os.environ["LLM_API_KEY"] = "envkey"
         os.environ["LLM_BASE_URL"] = "https://env.example/v1"
 
@@ -134,6 +146,48 @@ class TestPerCallOverrides(unittest.TestCase):
         llm.call_detailed("hi", model="m", api_key="k")
         self.assertEqual(self.captured["body"]["temperature"],
                          llm.DEFAULT_TEMPERATURE)
+
+
+class TestDefaultModel(unittest.TestCase):
+    def test_default_model_is_the_documented_production_model(self):
+        # Every downstream calibration figure (docs/SCORING.md's cost table,
+        # docs/ingestion_tests/README.md's self-consistency numbers) names
+        # deepseek-v4-flash specifically. A silent drift here invalidates
+        # them without anything else noticing -- see llm.py's module comment.
+        self.assertEqual(llm.DEFAULT_MODEL, "deepseek-v4-flash")
+
+
+class TestModelMismatch(unittest.TestCase):
+    """extract.py/score.py's startup pin -- see llm.model_mismatch()."""
+
+    _VARS = ("JOBS_EXPECTED_MODEL", "JOB_SCORING_MODEL", "LLM_MODEL")
+
+    def setUp(self):
+        self.env = {k: os.environ.get(k) for k in self._VARS}
+        for k in self._VARS:
+            os.environ.pop(k, None)
+
+    def tearDown(self):
+        for k, v in self.env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def test_unset_pin_is_a_noop(self):
+        self.assertIsNone(llm.model_mismatch())
+
+    def test_pin_matching_the_resolved_model_passes(self):
+        os.environ["JOBS_EXPECTED_MODEL"] = llm.DEFAULT_MODEL
+        self.assertIsNone(llm.model_mismatch())
+
+    def test_pin_disagreeing_with_the_resolved_model_fails(self):
+        os.environ["JOB_SCORING_MODEL"] = "deepseek-v4-flash"
+        os.environ["JOBS_EXPECTED_MODEL"] = "glm-4.5-flash"
+        mismatch = llm.model_mismatch()
+        self.assertIsNotNone(mismatch)
+        self.assertIn("deepseek-v4-flash", mismatch)
+        self.assertIn("glm-4.5-flash", mismatch)
 
 
 class TestTransientClassification(unittest.TestCase):

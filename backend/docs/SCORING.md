@@ -185,6 +185,11 @@ Measured with `tools/cost-test.py` against `deepseek-v4-flash` on real
 postings, at the production `temperature=0`. Prices `0.14 / 0.0028 / 0.28` per
 Mtok (input miss / input cache hit / output).
 
+`deepseek-v4-flash` is the production model — `llm.DEFAULT_MODEL`, and what
+`backend/.env`'s `JOB_SCORING_MODEL` pins both `extract.py` and `score.py`
+to as of 2026-07-28. This table describes what actually runs, not a
+candidate under evaluation.
+
 | | input tok | output tok | $/call | latency |
 |---|---|---|---|---|
 | Extraction | 1,363 (94% cached) | 1,071 | **$0.000385** | 9.3s |

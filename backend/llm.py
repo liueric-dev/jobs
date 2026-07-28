@@ -9,7 +9,7 @@ codebase. Works against anything speaking the OpenAI wire format: Z.ai (the
 current default), Groq, OpenRouter, a local Ollama/LM Studio server.
 
     LLM_BASE_URL   default https://api.z.ai/api/paas/v4
-    LLM_MODEL      default glm-4.5-flash
+    LLM_MODEL      default deepseek-v4-flash
     LLM_API_KEY    falls back to GLM_API_KEY
 
 Free-tier budgets are enforced client-side by ratelimit.py (LLM_MAX_RPM
@@ -29,7 +29,21 @@ import urllib.request
 import ratelimit
 
 DEFAULT_BASE_URL = "https://api.z.ai/api/paas/v4"
-DEFAULT_MODEL = "glm-4.5-flash"
+
+#: The production model, confirmed against the deployed environment
+#: (`backend/.env`'s JOB_SCORING_MODEL, which both extract.py and score.py
+#: resolve through) on 2026-07-28 -- chosen as the cheapest paid option found
+#: once glm-4.7 turned out unreachable on this account (see the dead-end
+#: note in score.py). Every downstream calibration figure describes THIS
+#: model: the cost table in docs/SCORING.md, the self-consistency numbers in
+#: docs/ingestion_tests/README.md, and whatever tasks 04 and 06 measure next.
+#: Changing this default changes what those figures mean without changing
+#: what they say -- a worse failure than an outright break, since the
+#: numbers keep looking valid. If the production model changes: update this,
+#: update JOBS_EXPECTED_MODEL in the deployed .env (see model_mismatch()
+#: below), and re-run whatever produced the figures above.
+DEFAULT_MODEL = "deepseek-v4-flash"
+
 #: Socket timeout per call. 120s, not 60, because 60 was cutting off work
 #: that was about to succeed: glm-4.5-flash runs a 39s median but a 85s max,
 #: so the slow tail was timing out, raising TransientError, and deferring
@@ -94,6 +108,25 @@ def model():
                               os.environ.get("LLM_MODEL", "claude-sonnet"))
     return os.environ.get("JOB_SCORING_MODEL",
                           os.environ.get("LLM_MODEL", DEFAULT_MODEL))
+
+
+def model_mismatch():
+    """None if the resolved model matches JOBS_EXPECTED_MODEL, else why not.
+
+    Unset JOBS_EXPECTED_MODEL is a deliberate no-op -- eval tooling and local
+    experiments point at all sorts of models on purpose, and only the
+    deployed pipeline should ever set the pin. Where it is set, a caller
+    refuses to start under anything else rather than silently writing
+    job_facts/job_scores rows under a model none of the calibration figures
+    describe. Mirrors api/app.py's verify_schema(): fail at startup, not
+    mid-run.
+    """
+    expected = os.environ.get("JOBS_EXPECTED_MODEL")
+    resolved = model()
+    if expected and resolved != expected:
+        return (f"resolved model {resolved!r} does not match "
+                f"JOBS_EXPECTED_MODEL {expected!r}")
+    return None
 
 
 def api_key():

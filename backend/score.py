@@ -47,9 +47,13 @@ backends is JOB_SCORING_BASE_URL / JOB_SCORING_API_KEY / JOB_SCORING_MODEL
 env vars, not a code change, and this now has zero Hermes dependency --
 just Python + psycopg + network access.
 
-WHY THE DEFAULT MODEL IS glm-4.5-flash, NOT glm-4.7 -- A REAL DEAD END
-WORTH RECORDING: the account's GLM_API_KEY (in ./.env, and also still in
-~/.hermes/.env for the harness's own use) was assumed to work for whatever model Hermes itself was successfully
+A GLM CREDENTIAL DEAD END, KEPT FOR THE REASONING -- NOT A STATEMENT OF
+WHAT RUNS TODAY: this pipeline's DEFAULT_MODEL is now deepseek-v4-flash
+(see llm.py), pinned once a paid endpoint was confirmed working. glm
+never became the default for a business reason, only a credential one,
+recorded here in case it comes up again: the account's GLM_API_KEY (in
+./.env, and also still in ~/.hermes/.env for the harness's own use) was
+assumed to work for whatever model Hermes itself was successfully
 using (glm-4.7, per ~/.hermes/config.yaml). Direct calls to
 api.z.ai/api/paas/v4/chat/completions with that exact key and "glm-4.7"
 returned "Insufficient balance or no resource package" -- yet
@@ -61,10 +65,11 @@ the discrepancy stranger, not simpler) -- possibly routed through Nous
 Portal's own infrastructure rather than a raw pay-per-token Z.ai account.
 What DID get confirmed by testing several model-ID strings against the
 same endpoint/key: glm-4.5-flash (the free-tier model) works cleanly via
-a plain direct call, including with response_format=json_object. So
-that's the default here -- swap JOB_SCORING_MODEL to glm-4.7 (or anything
-else) once/if that balance question gets resolved on Z.ai's side directly
-(a billing matter, not something fixable in this script).
+a plain direct call, including with response_format=json_object -- proof
+the structured-output path works against a real OpenAI-compatible
+endpoint, independent of which model ends up pinned. glm-4.5-flash is
+still a fine fallback if the deepseek endpoint or its balance ever falls
+over; the balance question itself is billing, not something fixable here.
 
 Tools/function-calling are simply never included in the request body --
 unlike the old CLI approach there's no separate flag needed to suppress
@@ -136,9 +141,12 @@ CONFIG:
                                 already-working Z.ai endpoint on this
                                 machine). Point at a local Ollama/LM Studio
                                 server, Groq, OpenRouter, etc. to swap.
-    JOB_SCORING_MODEL        -- model id sent in the request body (default:
-                                "glm-4.5-flash" -- see WHY THE DEFAULT MODEL
-                                above for why not glm-4.7).
+    JOB_SCORING_MODEL        -- model id sent in the request body. Defaults
+                                to llm.DEFAULT_MODEL ("deepseek-v4-flash",
+                                the production pin -- see llm.py's module
+                                comment). See the GLM CREDENTIAL DEAD END
+                                section above for a still-relevant quirk if
+                                this ever points back at a glm model.
     JOB_SCORING_API_KEY      -- bearer token for JOB_SCORING_BASE_URL.
                                 Falls back to GLM_API_KEY (in ./.env) if
                                 unset, since that's the
@@ -147,6 +155,9 @@ CONFIG:
                                 explicitly on any other machine/provider.
     JOB_SCORING_PERSONA_FILE -- path to config/persona.json (default:
                                 alongside this script)
+    JOBS_EXPECTED_MODEL      -- if set, this stage refuses to start unless
+                                the resolved model equals it exactly. See
+                                llm.model_mismatch().
     SCORE_BATCH_SIZE         -- how many unscored jobs to score per run
                                 (default 30)
 
@@ -497,6 +508,11 @@ def main():
     if not llm.api_key():
         print("job-score FAILED: JOB_SCORING_API_KEY (or GLM_API_KEY as a "
               "fallback) not set.")
+        sys.exit(1)
+
+    mismatch = llm.model_mismatch()
+    if mismatch:
+        print(f"job-score FAILED: {mismatch}")
         sys.exit(1)
 
     conn = dbconn.connect_or_exit("job-score", schema=schema.SCHEMA)

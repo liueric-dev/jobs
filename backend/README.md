@@ -294,7 +294,8 @@ All configuration is environment variables. Nothing needs editing in code.
 | `SERPAPI_API_KEY` | — | Required by `ingest/google-serpapi.py`; per-machine |
 | `APIFY_API_TOKEN` | — | Required by `ingest/google-apify.py` |
 | `JOB_SCORING_BASE_URL` | `https://api.z.ai/api/paas/v4` | Any OpenAI-compatible endpoint |
-| `JOB_SCORING_MODEL` | `glm-4.5-flash` | Model id sent in the request |
+| `JOB_SCORING_MODEL` | `deepseek-v4-flash` | Model id sent in the request -- the production pin, `llm.DEFAULT_MODEL` |
+| `JOBS_EXPECTED_MODEL` | unset (no-op) | If set, `extract.py`/`score.py` refuse to start under any other resolved model |
 | `JOB_SCORING_API_KEY` | falls back to `GLM_API_KEY` | Key for the endpoint above |
 | `SCORE_BATCH_SIZE` | `30` | Jobs scored per run |
 | `SCORE_MAX_WORKERS` | `5` | Concurrent scoring requests |

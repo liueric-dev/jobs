@@ -47,6 +47,10 @@ USAGE
     python3 extract.py
     EXTRACT_BATCH_SIZE=40 EXTRACT_MAX_WORKERS=3 python3 extract.py
     DEBUG_PRINT_KEYS=1 python3 extract.py
+
+    JOBS_EXPECTED_MODEL, if set, pins the model this stage is allowed to run
+    under -- see llm.model_mismatch(). Resolved via the same JOB_SCORING_MODEL
+    / LLM_MODEL / llm.DEFAULT_MODEL chain score.py uses.
 """
 
 import os
@@ -405,6 +409,11 @@ def main():
     if not llm.api_key():
         print("job-extract FAILED: JOB_SCORING_API_KEY (or GLM_API_KEY as a "
               "fallback) not set.")
+        sys.exit(1)
+
+    mismatch = llm.model_mismatch()
+    if mismatch:
+        print(f"job-extract FAILED: {mismatch}")
         sys.exit(1)
 
     conn = dbconn.connect_or_exit("job-extract", schema=schema.SCHEMA)
