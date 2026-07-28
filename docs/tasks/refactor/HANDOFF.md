@@ -1,17 +1,44 @@
 # Handoff — the `docs/tasks/refactor/` run
 
-Written 2026-07-28, and rolling — last updated after task 11 landed (`da4942c`,
-`94063ea`). Read this first, then
+Written 2026-07-28, and rolling — last updated after 08, 12 and 19 landed
+(`e1cdf7b`, `c4a8ff5`, `2b4dba2`, `2fecec5`, `05b7fa2`, `b86df11`). Read this first, then
 [`DECISIONS.md`](DECISIONS.md) (why each choice was made) and
 [`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
 [`README.md`](README.md)'s status column is the ordered index.
 
+## READ THIS FIRST: the cost lever that was hiding in the profiles table
+
+**The corpus was never the problem. The active profile set was.**
+`extract._eligible_sql` (`extract.py:397`) gates the extraction queue on
+`relevance.union_sql(ACTIVE profiles)`. Both of the repo owner's original
+software-engineer job-search profiles — `tech` and `frontend` — were still
+`active=True`, so every `FACTS_VERSION` bump was re-extracting *their* corpus.
+
+| active set | eligible at a bump | calls | wall clock |
+|---|---|---|---|
+| `tech` + `frontend` | 5,317 | 5,659 | ~4.5h, ~5 nights |
+| `pursuit` only | **863** | 863 | **28m31s measured** |
+
+Task 12 flipped it (`profiles.set_active`). **Reversible and destructive of
+nothing** — `prune_orphans` runs inside the loop over *active* profiles
+(`match.py:457`), so `tech`'s 3,085 matches and 1,111 scores are untouched and
+flipping back resumes them. If the owner ever wants their own job search served
+again, that is the switch; it costs the 5,317-row bill each bump.
+
+**Operating stance set by the repo owner on 2026-07-28: database contents are
+STAGING DATA. Optimize for build speed and cost, not preservation.** That is why
+task 12 used a throwaway `job_facts_v2_snapshot` instead of building
+`--dry-run --limit` into `extract.py`, and why its Axis A gate was waived rather
+than waited on. Do not build preservation machinery without checking that this
+still holds.
+
 ## State at handoff
 
-**Branch `webapp-service`, suite green at 717 tests** (task files say 263; it has grown —
-717 is the floor now). The last code commit is `da4942c` (task 11). **The whole suite
-passes** — `python3 -m unittest discover -s backend/tests` from the repo root. Working
-tree is clean apart from untracked `scripts/`, which predates this run and is not ours.
+**Branch `webapp-service`, suite green at 782 tests** (task files say 263, the
+previous handoff 717; 782 is the floor now). The last code commit is `b86df11`.
+**The whole suite passes** — `python3 -m unittest discover -s backend/tests` from
+the repo root. Working tree is clean apart from untracked `scripts/`, which
+predates this run and is not ours.
 
 `backend/webapp/tests/` is a separate matter: **`fastapi` is not installed here**, so five
 modules fail to import and always have. Not a regression, and not covered by the count
@@ -36,8 +63,74 @@ Thirteen tasks committed, one experiment, plus the two conversational decisions:
 | 17 | retarget `ats.py`, 3 new platforms | `597662b` |
 | 18 | Workday CXS, gated upstream | `fabe381` |
 | 11 | archetype superset, `role_track`, missingness | `da4942c` |
+| 08 | score validation, `score.normalize()`, D15/D16/D43/D44 | `e1cdf7b` |
+| 12 | `FACTS_VERSION` 3, extraction gate retargeted to `pursuit` | `c4a8ff5`, `2b4dba2` |
+| 19 | JSON-LD coverage spike — **dropped on the evidence** | `2fecec5` |
+| — | `workday-cxs` cassette (a pending follow-up, now closed) | `05b7fa2` |
+| — | **D45** — the `company_ats` write-back is partial | `b86df11` |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
+
+## What 08, 12 and 19 changed about the plan
+
+**1. The number the product should display is settled (task 08).** Three repeats
+over 55 records: `primary_track` reproduces at **89%** [78–95], `fit_score` at
+**24%** [14–36] with a maximum self-disagreement of 33 points, and `fit_score` as
+an *ordering* at **ρ 0.915, 83% top-20 overlap**. The bucket is stable, the
+two-digit number is not, the ordering is fine. **That is task 30's evidence, and
+it is now measured rather than argued.** Artifact:
+`docs/ingestion_tests/score-selfcheck-n120-2026-07-28.json`.
+
+**2. Widening the archetype vocabulary made `other` WORSE, not better (task 12).**
+This is the session's headline and it is a negative result. Task 11 went from 12
+values to 26 specifically to shrink `other`. After re-extraction `other` is
+**31.1% of the cohort corpus**, against 8.0% before. The split says why:
+
+| slice | n | at `other` |
+|---|---:|---:|
+| re-extracted, already had v2 facts | 284 | **4.6%** |
+| first-time extractions | 579 | **44.0%** |
+
+The vocabulary fits the corpus it was derived from and fails on the part of the
+cohort corpus nobody had looked at. **Task 13 should know this before pricing 26
+archetypes**: a weight on a value that 44% of new postings do not match is a
+weight doing nothing.
+
+**3. Two things task 12 did NOT establish**, recorded so they are not
+misremembered as settled:
+- **The majority-of-3 vote has still never fired.** `hn_whoishiring` is the only
+  platform under the 0.90 threshold and contributes **0** of the 863, so
+  `extraction_passes = 1` and `vote_unanimity IS NULL` on all 5,907 rows. The
+  debt is paid on paper; the mechanism is unexercised.
+- **Task 11's 203/54 `other` prediction is UNTESTED, not falsified.** Only 25 of
+  those 427 rows survive the pursuit union. Testing it means reactivating `tech`
+  — the ~5,000-row re-extraction the profile switch avoided.
+
+**4. `ai_operations` re-checked, and the employer spread is the finding.** The
+standing caution said 5 postings across 3 employers. It is now **17 across 14,
+maximum 2 at any one** — 0.82 employers/posting, ahead of `admin_ops` (0.79) and
+`marketing_ops` (0.56), the two the derivation doc held up as better-distributed
+when it called `ai_operations` "the weakest of the 14 by some margin." **That
+specific concern is retired.** Read the direction carefully though: 5 → 17 is an
+overshoot against a *title probe*, which confirms nothing on its own. And it is
+**still 2.0% of the corpus**. Worth knowing: 11 of those 14 employers are tech
+companies (Brex, Harvey, Coinbase, Databricks, Figma, Samsara, Vanta, …), so the
+value is being found where the pipeline was already strong, not in the
+all-industries NYC market the retarget is aimed at.
+
+**5. `support_ops` is where the ops mass actually is** — 82 rows, 60% of the ops
+137, nearly 5x `ai_operations`. The ops five came in **42 under** their
+title-probe floor, which *is* falsifiable (the extractor read whole postings and
+still applied them to fewer). The cohort's ops work is support-shaped, not
+AI-shaped.
+
+**6. Task 19 is dropped, and the population it was scoped against was wrong
+(D45).** 2 of 55 employers publish parseable `JobPosting` — and only **1 of the
+35 in the target population**, Moody's, which publishes no `validThrough`, the
+one field that makes re-crawl affordable. The other hit, Etsy, came from the
+control set and is a well-resourced tech employer on a bespoke careers site, not
+the Taleo/ADP long tail the task describes. **The fourth Phase 3 estimate checked,
+the fourth an order of magnitude high.**
 
 ## The two decisions the repo owner made in conversation — LANDED
 
@@ -73,17 +166,31 @@ recorded at `schema.py:158`.
 
 ## Nothing is in flight
 
-**The tree is clean.** Every agent across both sessions completed, was verified against
-the code and the database, and was committed — six in the session that landed 03–18, three
-in the session that landed 11. Nothing is half-written and nothing is waiting on a reply.
+**The tree is clean.** Every agent across all three sessions completed, was verified
+against the code and the database, and was committed — six in the session that landed
+03–18, three in the session that landed 11, three in the session that landed 08/12/19.
+Nothing is half-written and nothing is waiting on a reply.
 
 `run-daily.py`'s `STEPS` is fully wired — `ingest/workday.py` and `ingest/nyc-open-data.py`
-were added by the orchestrator, and `ats.py` was already there. Task 11 touched no ingest
-path and no scheduled step.
+were added by the orchestrator, and `ats.py` was already there. **Tasks 08, 12 and 19
+touched no ingest path and no scheduled step**, so the nightly run is unchanged in shape.
+What changed underneath it: the nightly `extract.py` step now serves one profile instead of
+two and has a much smaller queue, and `score.py` writes nothing at all because `pursuit`'s
+`daily_narrative_budget` is 0.
 
 **Start here:** `python3 -m unittest discover -s backend/tests` from the repo root should
-report **717, OK**. `backend/.env` is not exported by default — scripts that reach the
+report **782, OK**. `backend/.env` is not exported by default — scripts that reach the
 database need `cd backend && (set -a; . ./.env; set +a; python3 ...)`.
+
+**Live state after this session**, so a fresh session can tell drift from damage:
+```
+job_facts  5,907 = 863 @v3 (the pursuit corpus) + 5,029 @v2 + 15 @v1
+           the 5,044 below v3 are 85 on closed jobs and 4,959 open-but-not-pursuit-relevant
+           extraction_passes = 1 and vote_unanimity IS NULL on every row
+job_matches 4,241 = pursuit 863 @(3,1) + tech 3,085 @(2,5) + frontend 293 @(2,1)
+job_scores  1,294 = tech 1,111 + frontend 183; pursuit has none and will not until 13
+profiles    pursuit active; tech and frontend inactive but intact
+```
 
 ## How this run works
 
@@ -184,10 +291,14 @@ Each of these is a documented claim that is **wrong about the code as it now sta
   with "an AI operations role at an insurance company". Of 427 `other` rows the seven
   proposed ops candidates reclaim **54**; nine tech values the original twelve simply
   lacked reclaim **203**. Anyone reading section 1 for proportion will get it backwards.
-- **`ai_operations` has 5 postings across 3 employers in this corpus.** It is carried, and
-  it is the value the whole task was motivated by. Same shape as the Workday finding
-  below: **these employers are not posting these roles.** Re-check it after Phase 3
-  before anything is built on it.
+- ~~**`ai_operations` has 5 postings across 3 employers in this corpus.**~~
+  **SUPERSEDED by task 12 (`c4a8ff5`, `2b4dba2`).** The re-check the caution asked for has
+  been done. It is **17 postings across 14 employers, max 2 at any one** — 0.82
+  employers/posting, ahead of `admin_ops` (0.79) and `marketing_ops` (0.56), so the
+  weakest-on-spread concern is retired. But it is **still 2.0% of the cohort corpus**, 11
+  of the 14 employers are tech companies, and 5 → 17 is an overshoot against a *title
+  probe*, which confirms nothing on its own. The conclusion the caution was recorded
+  against is unchanged: **these employers are largely not posting these roles.**
 - **The task files were written from the plan, not from the code.** Six are now confirmed
   wrong about what they describe: 05's premise, 10's instruction to lift a regex verbatim,
   17's "current coverage is Greenhouse and Lever" (Ashby already existed), the `generated:`
@@ -204,50 +315,88 @@ Each of these is a documented claim that is **wrong about the code as it now sta
 
 ## Recommended next steps
 
-**Two tasks are now the whole critical path, and both are held on human judgement, not on
-code.**
+**Task 13 is now the whole critical path, and its urgency changed character on
+2026-07-28: `pursuit` is the ONLY active profile and it ships placeholder
+criteria.** Ranking is live and meaningless until 13 lands. That is a different
+situation from the previous handoff, where 13 was blocking work that had not
+started.
 
-1. **Task 13 — the cohort criteria profile.** It is what makes everything else these
-   sessions built *mean* anything. The `pursuit` profile exists (`7d94bb1`) but ships
-   `active=False` with **labelled placeholder** persona and criteria, because the weights
-   are a cohort product call. Until it lands: task 10's gate is inert in production, and
-   **task 18 cannot report a yield at all** — its 4-of-149 measures today's SWE-shaped
-   `relevance.json`, not Workday. Activating the profile is a deliberate act worth **+573
-   rows, 13.2/day**.
+1. **Task 13 — the cohort criteria profile.** `pursuit` is `active=True` as of
+   `c4a8ff5`, matching 863 postings, with `criteria.archetypes = {}` and a
+   persona whose `background_summary` literally begins `PLACEHOLDER`. Every
+   archetype therefore prices through `match.py:191`'s `archetype:{v}:unpriced`
+   path at the missingness penalty. Nothing is broken; the ordering is simply not
+   yet a product.
 
-   **Its blocker narrowed on 2026-07-28.** Task 11 (`da4942c`) delivered the vocabulary 13
-   was going to have to invent: 26 archetypes with per-value corpus evidence in
-   `docs/role-track-derivation.md`, and an `unknown_penalty` block whose shape 13 should
-   copy. What remains is genuinely a product call and nothing else — the 20 plausible
-   Pursuit target roles, and where `uses_ai_tools` sits relative to `builds_llm_features`.
-   Note before pricing: the five ops archetypes carry far less corpus mass than the nine
-   tech ones, and `ai_operations` has 5 postings across 3 employers.
-2. **Task 29 — the labelling session.** 07's tooling is built and produced zero labels by
-   design. The form is at `/v1/label` behind the existing Google SSO. What is missing is
-   ~10 Builders and an afternoon.
+   **Three inputs 13 did not have before:**
+   - The vocabulary exists — 26 archetypes with per-value corpus evidence in
+     `docs/role-track-derivation.md`, and an `unknown_penalty` block to copy.
+   - **`other` is 31.1% of the cohort corpus and 44.0% of first-time
+     extractions.** Price the vocabulary knowing nearly half of new postings do
+     not match any of it. This is the single most important thing 13 should read.
+   - The ops mass is `support_ops` (82), not `ai_operations` (17). Weighting
+     `ai_operations` heavily targets 2.0% of the corpus, 11 of whose 14 employers
+     are tech companies.
 
-Then, in order — and **task 12 is the first thing a fresh session can actually do**:
+   **Do not set `daily_narrative_budget` above 0 without checking D16 first.** It
+   is fixed (`e1cdf7b`), but the profile has no `buckets` key and that was the
+   detonator.
 
-3. **Task 12 — the head of the queue, and its bill has grown to four items.**
-   `schema.py:159-184` lists them: the majority-of-3 vote semantics, the 26-value
-   archetype vocabulary, the new `role_track` field, and `normalize()` no longer
-   defaulting. **One re-extraction settles all four; do not bump separately.** ~5,300 rows.
-   Read `docs/MEASUREMENT-TRAPS.md` first — 12 is where the new vocabulary either proves
-   out or does not, and it is the only chance to measure the before/after on one bump.
-4. **Task 08** — score validation; needs 07's tooling but not its human labels.
-5. **Tasks 19, 21** — the remaining unblocked Phase 3 ingest. 15 and 20 need credentials.
-   **Do not trust their estimates** — see the finding below.
-6. **The ChatGPT-DOM defect.** Job `ff9f9d9f9643e185af0f48ca`'s `description_text` begins
-   `data-testid="conversation-turn-136"` — some ingest path captured a browser DOM rather
-   than a posting body, and it is silently poisoning extraction input. Found by task 10,
-   out of its scope, still has no task of its own.
-7. **Workday will not scale sequentially.** Task 18 costs ~14 min of nightly window at
-   **four** tenants at 1.5s apart. `18-ingest-workday-cxs.md:97` anticipates ~50. The
-   delay, the concurrency or the per-tenant cadence has to change before task 16's tenant
-   backlog is drained into it. Measured and recorded, not solved.
-8. **Task 23, descoped** — but see the reprioritisation argument in `DECISIONS.md`: on the
-   evidence **25 is where the 12x yield difference lives and it is a config edit**, and
-   **24 is 7,500 searches/month against code already written and tested**.
+2. **Task 29 — the labelling session.** 07's tooling is built and produced zero
+   labels by design. The form is at `/v1/label` behind the existing Google SSO.
+   What is missing is ~10 Builders and an afternoon. **Task 08 sharpened what the
+   labels are for**: Axis A now has a specific question to settle — whether the
+   ops shortfall is the title probe over-counting or the extractor
+   under-applying.
+
+Then, in order:
+
+3. **The browser-DOM poisoning, and it is now WORSE than the previous handoff
+   recorded.** Job `ff9f9d9f9643e185af0f48ca` (Taboola, *Product Analyst*) has a
+   `description_text` beginning `*]:pointer-events-auto … data-testid="conversation-turn-136"`
+   — a scraped ChatGPT web UI, not a posting. **It was re-extracted at
+   `facts_version = 3` and produced confident facts from that markup**:
+   `role_archetype = 'data'`, `role_track = 'data_and_analytics'`. Three postings
+   carry browser-DOM markers:
+   ```sql
+   SELECT count(*) FROM jobs WHERE description_text LIKE '%data-testid=%'
+      OR description_text LIKE '%pointer-events-auto%';   -- 3
+   ```
+   The re-extraction propagated the poison rather than clearing it, and nothing
+   in the pipeline notices. Still has no task of its own. **Give it one**, and
+   note the general shape: extraction has no input-sanity gate at all, so any
+   ingest path that captures the wrong bytes gets laundered into structured facts.
+
+4. **D45 — the `company_ats` write-back is partial.** 35 `never_found` rows
+   against a true population of 139, the 35 being a contiguous alphabetical block.
+   Tasks 16 and 17 read that column too. Needs a task; the repair is a re-run of
+   the write-back, but whether `company_ats` should hold every negative is a
+   design question.
+
+5. **Task 21 has lost its premise.** It was scoped as "cheap because task 19's
+   parser does most of the work." 19 is dropped. Either re-scope it as a
+   standalone Idealist parser or measure first — and note that Idealist's
+   per-listing expiration date was the good closure case, which survives.
+
+6. **Tasks 15 and 20 need credentials**, and **their estimates come from the same
+   table that has now been wrong four times out of four.** Measure before
+   building. That is no longer a caution; it is the run's most reliable finding.
+
+7. **Workday will not scale sequentially.** Task 18 costs ~14 min of nightly
+   window at **four** tenants at 1.5s apart. `18-ingest-workday-cxs.md:97`
+   anticipates ~50. Measured and recorded, not solved.
+
+8. **Task 23, descoped** — but see the reprioritisation argument in
+   `DECISIONS.md`: on the evidence **25 is where the 12x yield difference lives
+   and it is a config edit**, and **24 is 7,500 searches/month against code
+   already written and tested**.
+
+9. **`job_scores` has no version key at all** — no `prompt_version`,
+   `persona_version` or `criteria_version` (`schema.py:328-343`). Re-scoring
+   triggers only on an anti-join for "no row exists" (`score.py:242-244`), so a
+   persona or prompt edit silently leaves stale narratives. Task 08 documented it
+   and deliberately did not fix it. **Task 13 edits the persona**, so this bites
+   next.
 
 ## What these sessions measured, and what it means
 
@@ -261,6 +410,14 @@ Three sources measured, three far below estimate:
 | 05 (gate volume) | — | 43/day, ≈3/day usable |
 | 14 (NYC Open Data) | 20–60/day | **1.8/day** |
 | 18 (Workday) | 80–200/day | **~1/day** at four tenants; ~12/day extrapolated to fifty |
+| 19 (JSON-LD) | 30–60/day | **≤1.1–2.3/day**, a ceiling that is not reachable — **dropped** |
+
+**Four for four.** This is no longer a caution about one estimate; it is the most
+reliable finding of the whole run. Every Phase 3 number that has been checked has
+come back an order of magnitude high, and they were all produced by the same
+method from the same table. **Tasks 15, 20 and 21 are sized identically and should
+be treated as unfounded until measured.** A spike costs an afternoon; task 19's
+cost 333 HTTP requests and no LLM calls at all.
 
 Tasks 15, 19, 20 and 21 are sized from the same table by the same method. **Measure before
 building.**

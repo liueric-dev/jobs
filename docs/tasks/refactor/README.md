@@ -33,7 +33,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | | Task | Lands | |
 |---|---|---|---|
 | 07 | [Metrics and the golden set](tranche_two/07-metrics-and-golden-set.md) | `labels.py`, `/v1/label` behind the existing SSO, three-quantity measurement — **tooling built, zero labels; the labelling itself is task 29 and needs people** | done |
-| 08 | Score validation | a `score` task, `score.normalize()`, closes audit item 8 | todo |
+| 08 | [Score validation](tranche_two/08-score-validation.md) | `score.normalize()`, an `evals` score task, closes audit item 8 (D15) — **and the measurement task 30 needed: the bucket reproduces at 89%, the number at 24%**, [`docs/score-validation.md`](../../score-validation.md) | done |
 | 09 | [Fetcher harness](tranche_two/09-fetcher-harness.md) | HTTP cassettes and a scratch DB for the non-LLM scripts — all six sources | done |
 
 ## Phase 2 — Retarget the pipeline
@@ -42,7 +42,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 |---|---|---|---|
 | 10 | [Description-first relevance gate](tranche_two/10-description-first-gate.md) | AI-tool vocabulary matched against `description_text` — **876 rows eligible for the cohort, 573 newly, 13.2/day; precision 10.0% vs task 05's 6.7%**, [`docs/pursuit-description-gate.md`](../../pursuit-description-gate.md) | done |
 | 11 | [Archetype superset, `role_track`, missingness](tranche_two/11-archetype-superset-role-track.md) | 12 archetypes → **26**, derived from the corpus; provisional 9-value `role_track`; `normalize()` stops laundering absence into sentinels — **`other` was mostly a TECH gap: 203 of 427 reclaimed by tech values, 54 by ops**, [`docs/role-track-derivation.md`](../../role-track-derivation.md) | done |
-| 12 | `FACTS_VERSION` bump and re-extract | one bump carrying 11's changes; full corpus re-extraction | todo |
+| 12 | [`FACTS_VERSION` bump and re-extract](tranche_two/12-facts-version-bump.md) | one bump carrying 11's changes — **and the extraction gate retargeted to `pursuit`, which took the bump from 5,317 rows to 863. `other` ROSE to 31.1%**, [`docs/facts-v3-diff.md`](../../facts-v3-diff.md) | done |
 | 13 | Cohort criteria profile | entry-level target, `uses_ai_tools` weighted above `builds_llm_features` | todo |
 
 ## Phase 3 — Sourcing
@@ -54,9 +54,9 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | 16 | [ATS token discovery](tranche_three/16-ats-token-discovery.md) | seed list bootstrap, regex probe, `company_ats` table — **7 validated non-tech NYC tokens, 1,513 open jobs**; done |
 | 17 | [Retarget `ats.py`](tranche_three/17-retarget-ats-ingest.md) | roster from `company_ats`; **six vendors** (3 new); closure conditional on reconciliation — done, [`docs/ingest/ats.md`](../../ingest/ats.md) | 50–150 |
 | 18 | [Workday CXS ingest](tranche_three/18-ingest-workday-cxs.md) | `/wday/cxs/` + **upstream relevance gating** — done; 1,366 reachable/night from 4 tenants at 11% detail cost. **Yield deliberately not reported until task 13**, [`docs/ingest/workday.md`](../../ingest/workday.md) | re-measure |
-| 19 | JSON-LD parser | `extruct` over career pages; `validThrough` closure | 30–60 |
+| 19 | [JSON-LD parser](tranche_three/19-jsonld-parser.md) | measured before building — **2 of 55 employers publish `JobPosting`, 1 of 35 in the target population. DROPPED**, [`docs/jsonld-coverage.md`](../../jsonld-coverage.md) | ~~30–60~~ **≤1.1–2.3 (ceiling)** |
 | 20 | iCIMS via Firecrawl | reserved 1,000 credits/month | 20–40 |
-| 21 | Nonprofit boards | Idealist and peers | 10–25 |
+| 21 | Nonprofit boards | Idealist and peers — **premise broken: it was "cheap because task 19's parser does most of the work", and 19 is dropped. Re-scope or measure first** | 10–25, unverified |
 
 ## Phase 4 — Google Jobs
 
