@@ -7,8 +7,8 @@ Written 2026-07-28 to hand this run to a fresh session. Read this first, then
 
 ## State at handoff
 
-**Branch `webapp-service`, HEAD `7221620`, suite at 566 tests** (task files say 263; it
-has grown — 566 is the floor now). **Note:** a full `unittest discover` currently reports
+**Branch `webapp-service`, HEAD `597662b`, suite at 604 tests** (task files say 263; it
+has grown — 604 is the floor now). **Note:** a full `unittest discover` currently reports
 failures in `test_workday_ingest`, which is `task-18-workday`'s **incomplete in-flight
 work**, not a regression. `test_relevance`, `test_extract` and `test_match` are green.
 
@@ -31,6 +31,7 @@ Ten tasks committed, one experiment, plus the two conversational decisions:
 | 10 | description-first cohort gate | `7d94bb1` |
 | 07 | golden-set tooling (no labels) | `3a8b42c` |
 | 14 | NYC Open Data ingest | `7221620` |
+| 17 | retarget `ats.py`, 3 new platforms | `597662b` |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -72,18 +73,15 @@ Agents spawned in the session after `943d899`, each with an explicit do-not-touc
 **Check `git status` first**; the previous handoff's two in-flight agents left nothing at
 all, so assume nothing.
 
-- **`task-17-ats`** — task 17, retarget `ingest/ats.py` onto `company_ats`, four new ATS
-  platforms. Owns the cassette machinery.
 - **`task-18-workday`** — task 18, Workday CXS with upstream relevance gating. New file
   under `ingest/`.
 
 **None of them may touch `run-daily.py`'s `STEPS`** — several would collide. Each reports
-the line it wants added; the orchestrator wires it at commit time. 14's entry is wired;
-**17's and 18's are not.** Check `STEPS` against what is in `backend/ingest/`.
+the line it wants added; the orchestrator wires it at commit time. 14's entry is wired; 17 needed none
+(`ats.py` was already there); **18's is not.** Check `STEPS` against what is in `backend/ingest/`.
 
-**`backend/evals/record_cassettes.py` is shared and currently dirty.** Task 14's cassette
-registration was left in it deliberately rather than committed with task 17's unfinished
-changes. Task 17's commit must bring both.
+**`backend/evals/record_cassettes.py` is resolved** — task 17's commit carried both its
+own and task 14's registrations.
 
 ## How this run works
 
@@ -153,6 +151,12 @@ Each of these is a documented claim that is **wrong about the code as it now sta
   four** known-good tokens because those boards render client-side. All its coverage
   figures are floors; `company_ats.validation_note` says so per row.
 - **The platform value is `builtin`**, not `builtin-nyc` as task files write it.
+- **The task files were written from the plan, not from the code.** Five are now confirmed
+  wrong about what they describe: 05's premise, 10's instruction to lift a regex verbatim,
+  17's "current coverage is Greenhouse and Lever" (Ashby already existed), the `generated:`
+  frontmatter claim, and 14's 20–60/day estimate against a measured 1.8. **Read the code
+  before trusting a task file's account of it**, and expect the Definition-of-done counts
+  to be off.
 - **`fastapi` is not installed in this environment**, so `backend/webapp/tests/` cannot
   run at all — five modules fail to import, four of which predate this run. It is not a
   regression and not task 07's doing. `backend/tests/` is the suite that gates work here;

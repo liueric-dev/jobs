@@ -52,7 +52,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | 14 | [NYC Open Data ingest](tranche_three/14-ingest-nyc-open-data.md) | `kpav-sd4t` via SODA; `post_until` closure — **done; measured ~1.8/day, not 20–60**, [`docs/ingest/nyc-open-data.md`](../../ingest/nyc-open-data.md) | ~~20–60~~ **1.8** |
 | 15 | USAJobs and Adzuna ingest | two free APIs | 35–95 |
 | 16 | [ATS token discovery](tranche_three/16-ats-token-discovery.md) | seed list bootstrap, regex probe, `company_ats` table — **7 validated non-tech NYC tokens, 1,513 open jobs**; done |
-| 17 | Retarget `ats.py` | NYC non-tech tokens | 50–150 |
+| 17 | [Retarget `ats.py`](tranche_three/17-retarget-ats-ingest.md) | roster from `company_ats`; **six vendors** (3 new); closure conditional on reconciliation — done, [`docs/ingest/ats.md`](../../ingest/ats.md) | 50–150 |
 | 18 | Workday CXS ingest | `/wday/cxs/` + **upstream relevance gating** | 80–200 |
 | 19 | JSON-LD parser | `extruct` over career pages; `validThrough` closure | 30–60 |
 | 20 | iCIMS via Firecrawl | reserved 1,000 credits/month | 20–40 |

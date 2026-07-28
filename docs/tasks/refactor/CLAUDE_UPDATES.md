@@ -938,3 +938,46 @@ against `$select=count(*)`.
 `backend/evals/record_cassettes.py` carries this task's cassette registration **and task
 17's in-flight changes**, so it was excluded rather than committed with another agent's
 half-finished work in it. Task 17's commit brings both.
+
+---
+
+## 2026-07-28 — 17 landed (`597662b`): the roster is a table, and the task file was wrong about the starting point
+
+Report: [`docs/ingest/ats.md`](../../ingest/ats.md), rewritten by hand. New:
+`backend/ingest/ats_sources.py`, `backend/tests/test_ats_new_platforms.py` (+38), three
+recorded cassettes. Changed: `backend/ingest/ats.py`, `backend/config/companies.json`,
+`backend/evals/record_cassettes.py`.
+
+`ats.py` was already in `run-daily.py`'s `STEPS`, so nothing needed wiring.
+
+### Three new platforms, not four — the task file mis-stated the baseline
+
+It says *"current coverage is Greenhouse and Lever"* and asks for Ashby, Workable,
+Recruitee and SmartRecruiters. **Ashby was already supported.** Three are new, and the
+Greenhouse/Lever/Ashby mappings are unchanged from the 2026-07-27 version. Six vendors
+now.
+
+This is the fourth task file in this run found to be wrong about the code it describes,
+after 05's premise, 10's regex instruction and 18's frontmatter claim. The pattern is
+consistent: **the task files were written from the plan, not from the code.**
+
+### Adding an employer is a row insert, not a deploy
+
+`ingest/ats_sources.py` is the single place that knows where the roster comes from —
+`company_ats`, task 16's table. `config/companies.json` no longer competes as a second
+source of truth.
+
+### Closure is now conditional on reconciliation
+
+Previously a posting absent from a run was closed. Now a run that comes back **short of
+the total the API just reported** does not get to close anything. That is the landmine
+CLAUDE.md names — *a throttled page is not the end of a list* — applied to the one
+operation where it does permanent damage: closure driven by a truncated page is how a
+source silently marks its own live corpus dead.
+
+### The `generated:` frontmatter is dropped, not preserved
+
+`docs/ingest/ats.md` carried `generated: 2026-07-27`. **No generator exists** —
+`grep -rn "docs/ingest" --include='*.py'` finds no writer anywhere in the repo. The file is
+now hand-written and says so, and says what it supersedes. Task 34 still owns the decision
+for the rest of the directory.

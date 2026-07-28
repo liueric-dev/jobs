@@ -727,3 +727,33 @@ Committing it would have shipped another agent's half-finished work under this t
 number. Task 17's commit brings both registrations. Reversible, and a consequence of
 running agents in parallel over one shared file — the general fix is that shared files get
 one owner, which is what `run-daily.py`'s `STEPS` already has.
+
+### 17 — Three platforms, not the task file's four: Ashby already existed
+
+The task file's "current coverage is Greenhouse and Lever" is wrong about the code.
+Workable, Recruitee and SmartRecruiters are new; Ashby's mapping is unchanged. Recorded
+because the count appears in the task file's Definition of done and a later reader
+comparing four-asked against three-delivered would otherwise read it as incomplete work.
+Not reversible: it is a fact about the starting point.
+
+### 17 — Closure is conditional on reconciliation, not on absence alone
+
+A run that collects fewer rows than the `total` the API reported does not close anything.
+Absence-based closure is free and correct only when the list is complete, and a throttled
+page is byte-identical to a complete one. The failure it prevents is permanent: closing a
+live corpus because one page was throttled. Rejected: closing on absence and relying on
+the next run to reopen, which writes a `closed` status the app has already shown a user.
+Reversible as code; the data damage it prevents is not.
+
+### 17 — `config/companies.json` retired as a roster, not deleted
+
+`company_ats` is the single source of truth and `ingest/ats_sources.py` is the only place
+that knows it. Two competing rosters is the condition the task file asked to end.
+Reversible.
+
+### 17 — `docs/ingest/ats.md` drops its `generated:` frontmatter
+
+It claimed `generated: 2026-07-27` and no generator exists anywhere in the repo. Rather
+than preserving a provenance claim nothing can back, the file is hand-written, says so,
+and names what it supersedes. Task 34 still owns the directory-wide decision — this is one
+file declining to keep asserting something false in the meantime. Reversible.
