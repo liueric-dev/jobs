@@ -265,6 +265,26 @@ one `STEPS` already has — shared files get a single owner, named in advance.
 
 ## Pending follow-ups with no task of their own
 
+- **`backend/evals/record_cassettes.py` owes a `workday-cxs` recipe** — a full multi-page
+  walk against `msk.wd108` (88 postings, ~5 requests) plus one detail document. That would
+  turn task 18's `total`-only-on-first-page finding from a *constructed* fixture into a
+  recorded one. Not done because `backend/evals/` was owned by another agent; the exact
+  recipe is specified in `docs/ingest/workday.md`.
+- **Task 09's `workday_fixtures.prefix_assumed()` models the wrong failure shape.** It
+  models a wrong data centre as HTTP 404 with an HTML body; the real recorded probe in
+  `ats-validation.json` shows `nvidia.wd1` answering **HTTP 422 with a JSON `errorCode`**.
+  The consequence is identical — both permanent, neither retried, both surface — so it was
+  recorded rather than silently edited.
+- **Accepted, and worth knowing it was a deviation:** task 18 kept `_collect_naively`
+  against the letter of `18-ingest-workday-cxs.md:121`. It is a stand-in for the *defect*,
+  not for the ingest loop, and it is the only thing that can show a constructed fixture
+  still reproduces the failure it names. A fixture that no longer triggers its own failure
+  reads like coverage and is worse than none.
+- **Fixtures written from a specification test the specification.** All three failure modes
+  task 18 found live were invisible to the four constructed fixtures, because those encode
+  the shapes the task file *describes*. Task 09's cassettes are the counterweight and
+  should be preferred wherever a real endpoint can be recorded.
+
 - **The SerpApi ledger reconciliation** (above).
 - **Task 12 must carry the majority-of-3 change into its `FACTS_VERSION` bump.**
   Extraction semantics changed; CLAUDE.md: "Versions are cache keys."
