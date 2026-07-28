@@ -72,42 +72,65 @@ A real end-to-end run, four tenants, sequential, 1.5s apart, from this host's
 residential IP:
 
 ```
-workday-ingest: 4/4 tenants ok (0 blocked, 0 shortfall, 0 failed), seen 1366,
-                detail-fetched 149 (11% of seen)
-workday-ingest: gate-surviving 4, 149 new, 0 updated, 0 unchanged, 0 closed,
-                0 old-closed pruned, 0 record(s) dropped, 462.3s wall-clock,
+workday-ingest: 4/4 tenants ok (0 blocked, 0 shortfall, 0 failed), seen 1359,
+                detail-fetched 329 (24% of seen)
+workday-ingest: gate-surviving 14, 181 new, 0 updated, 148 unchanged, 1 closed,
+                0 old-closed pruned, 0 record(s) dropped, 861.0s wall-clock,
                 profiles=frontend,tech
-workday-ingest:   Memorial Sloan Kettering (workday:msk@wd108):     88/88,   56 (64%), 115.3s
-workday-ingest:   Moelis & Company (workday:moelis@wd1):            42/42,   17 (40%),  39.7s
-workday-ingest:   NewYork-Presbyterian (workday:nyp@wd1):         368/368,   49 (13%), 135.5s
-workday-ingest:   Nordstrom (workday:nordstrom@wd501):            868/868,   27 ( 3%), 171.8s
+workday-ingest:   Memorial Sloan Kettering (workday:msk@wd108):     88/88,   59 (67%), drift +0, 118.2s
+workday-ingest:   Moelis & Company (workday:moelis@wd1):            42/42,   30 (71%), drift +0,  79.9s
+workday-ingest:   NewYork-Presbyterian (workday:nyp@wd1):         363/366,  210 (58%), drift +3, 465.2s
+workday-ingest:   Nordstrom (workday:nordstrom@wd501):            866/866,   30 ( 3%), drift +0, 197.6s
+workday-ingest: ALERT NewYork-Presbyterian: `total` said 366 and 363 distinct postings
+                were collected (+3) -- under one page, so the board moved mid-walk
+                rather than a page being lost
 ```
 
-**220 requests, 462s, 149 rows written, 0 dropped, 0 blocked.**
+**~400 requests, 861s, 329 rows in the table, 0 dropped, 0 blocked, 1 closure detected.**
+
+This is the third run of the day and the first with both live-found location and
+reconciliation fixes in. The two earlier runs are worth recording because the deltas
+are the evidence:
+
+| run | detail-fetched | gate-surviving | wall-clock | what changed |
+|---|---|---|---|---|
+| 1 | 149 (11%) | 4 | 462s | first end-to-end run |
+| 2 | 122 of 3 tenants | 4 | 420s | Nordstrom **shortfall**: `total` 867, collected 865 — ordinary mid-walk churn, fatal under a strict check |
+| 3 | **329 (24%)** | **14** | **861s** | `locationsText` facility-name fix; one-page reconciliation threshold |
+
+**Run 1 was silently dropping 161 of NewYork-Presbyterian's postings** — real NYC
+hospital jobs — and reporting `4/4 tenants ok` while doing it. See
+[Field mapping](#field-mapping).
 
 **Against task 04's budget:** there is no budget to check against. Task 04
-(`docs/tasks/refactor/tranche_one/04-quota-baseline.md`) is still `todo` and `docs/`
-contains no wall-clock baseline document; the number this task was asked to report
-against does not exist yet. What does exist is task 05's figure quoted inside 04's own
+(`docs/tasks/refactor/tranche_one/04-quota-baseline.md`) **landed in `c3275be`** — this
+file originally said it was `todo`, because every task file's `**Status:**` header was
+stale until 2026-07-28. What is true is the narrower point: 04 produced no standalone
+`docs/` report. Its findings went into `backend/docs/SCORING.md`, so the wall-clock
+baseline document this task was asked to report against does not exist where one would
+look for it. What does exist is task 05's figure quoted inside 04's own
 file: the pipeline currently admits **43 eligible postings/day** (80/day over the last
-seven complete days). This source adds **~8 minutes** of nightly window at four
-tenants.
+seven complete days). This source adds **~14 minutes** of nightly window at four
+tenants, and that scales with tenant count — at the ~50 tenants 18-…md:97 anticipates
+it would not fit a nightly window sequentially at 1.5s, and the delay, the concurrency
+or the per-tenant cadence will have to change. That is a real constraint and it is not
+solved here.
 
-**Read `gate-surviving 4` carefully — it is the most important number here and it is
+**Read `gate-surviving 14` carefully — it is the most important number here and it is
 not a yield.** The full gate is the *current* `config/relevance.json`, which is
 SWE-shaped: two active profiles named `frontend` and `tech`, `title_include` built from
-"engineer", "developer", "SRE", "machine learning". Four of 149 hospital, bank and
+"engineer", "developer", "SRE", "machine learning". Fourteen of 329 hospital, bank and
 retail postings match it, which is exactly right and exactly useless — those profiles
 are not who this source exists for. The task file's 80–200 relevant postings/day
 assumes the Pursuit retarget (`config/relevance.json` and `config/persona.json`
 rewritten for entry-level, AI-adjacent, all-industry, NYC). **This number must be
 re-measured after that retarget, and it is not evidence about the source until it is.**
-What the run does establish is the part that does not depend on the persona: 1,366
-postings reachable per night from four tenants, at 11% detail-fetch cost, with no
+What the run does establish is the part that does not depend on the persona: ~1,360
+postings reachable per night from four tenants, at 24% detail-fetch cost, with no
 blocks.
 
-**Without the upstream gate the same run would be 1,366 detail requests — 34 minutes of
-detail fetching for four tenants.** That is the cost profile the gate exists to avoid,
+**Without the upstream gate the same run would be 1,359 detail requests — 34 minutes of
+detail fetching for four tenants, against the 8 it actually spent.** That is the cost profile the gate exists to avoid,
 and it grows linearly with the tenant count that task 16's backlog is expected to
 produce.
 
@@ -266,25 +289,30 @@ location and nothing else — decides who gets a detail request.
 
 | tenant | listed | detail-fetched | ratio |
 |---|---|---|---|
-| Nordstrom | 868 | 27 | 3% |
-| NewYork-Presbyterian | 368 | 49 | 13% |
-| Memorial Sloan Kettering | 88 | 56 | 64% |
-| Moelis & Company | 42 | 17 | 40% |
-| **total** | **1,366** | **149** | **11%** |
+| Nordstrom | 866 | 30 | 3% |
+| NewYork-Presbyterian | 363 | 210 | 58% |
+| Memorial Sloan Kettering | 88 | 59 | 67% |
+| Moelis & Company | 42 | 30 | 71% |
+| **total** | **1,359** | **329** | **24%** |
 
 The task file predicted "two thousand requests becomes perhaps a hundred and fifty".
-1,366 → 149.
+1,359 → 329 — the right order of magnitude, and higher than the first run's 149 because
+that run was wrong (see the location finding below), not because the filter loosened by
+choice.
 
-Of those 149, **4** clear the full gate under the current SWE-shaped profiles — see the
+The ratio splits cleanly by employer geography. Nordstrom is national, so the location
+half does nearly all the work (3%). MSK, Moelis and NYP are single-city NYC employers,
+so location cuts nothing and only the exclusion lists apply — 58-71%, which is the
+expected shape for a one-city employer and the reason `RATIO_ALARM` sits at 0.80 rather
+than something tighter.
+
+Of those 329, **14** clear the full gate under the current SWE-shaped profiles — see the
 warning under [Measured runtime](#measured-runtime-2026-07-28). The upstream filter and
 the full gate are answering different questions and both numbers are logged nightly for
 that reason.
 
-MSK's 64% is the number to watch: it is a single-campus NYC employer, so the location
-half of the filter cuts nothing and only the exclusion lists apply. That is the
-expected shape for a one-city employer and it is why `RATIO_ALARM` is 0.80 rather than
-something tighter — but a tenant creeping toward 1.0 means the filter has stopped
-working, and the alert says so (18-…md:86-88).
+A tenant creeping toward 1.0 means the filter has stopped working, and the alert says
+so (18-…md:86-88).
 
 ### One implementation, two callers — and why not the one the task file asked for
 
@@ -459,8 +487,8 @@ values and not `.errors`; CLAUDE.md names that a landmine and a test in
 are inaccessible; they are counted, not retried (18-…md:104-106).
 
 **Block rate: not measured.** 18-…md:128 requires "block rate measured over one week …
-before any escalation". Two runs exist, both on 2026-07-28: **0 of 4 tenants blocked, 0
-shortfalls, 0 detail-fetch errors, ~440 requests**. That is a single day's observation
+before any escalation". Three runs exist, all on 2026-07-28: **0 of 4 tenants blocked, 0
+shortfalls, 0 detail-fetch errors, ~1,000 requests across three runs**. That is a single day's observation
 from one IP and explicitly not a rate.
 The script prints a block-rate line on any run with a refusal or a failure, and it says
 so in the line itself. **No escalation to Scrapfly or any other scraping service is
