@@ -125,6 +125,40 @@ are not who this source exists for. The task file's 80–200 relevant postings/d
 assumes the Pursuit retarget (`config/relevance.json` and `config/persona.json`
 rewritten for entry-level, AI-adjacent, all-industry, NYC). **This number must be
 re-measured after that retarget, and it is not evidence about the source until it is.**
+
+### The yield against the population this source exists for
+
+The `14` above is not the answer, and neither is a deferral. Measured on the final run,
+against the population task 18 exists to find — entry-level, AI-adjacent, NYC, any
+industry:
+
+| | of 329 detail-fetched |
+|---|---|
+| AI vocabulary in the **title** | **0** |
+| entry-level signalled | 30 (by `seniority_guess`) · 71 (by title regex) |
+| AI vocabulary in title **or** description | 21 |
+| **entry-level AND AI-signalled** | **1** (by `seniority_guess`) · **3** (by title regex) |
+
+Two methods are shown because they disagree on the margin and neither is a gate result: a
+Pursuit-shaped `config/relevance.json` does not exist yet (task 13), and inventing one to
+measure against would be a fabricated measurement. The first row does not depend on the
+method at all — **zero of 329 postings from four Workday tenants have any AI vocabulary in
+the title.**
+
+**Extrapolated to the ~50 tenants `18-ingest-workday-cxs.md:97` anticipates: ~12/day,
+against an estimate of 80–200.** That extrapolation is generous — it assumes 46 more
+tenants exist and behave like these four, and `company_ats` currently holds four.
+
+Caveats, so this is not over-read in either direction: **n = 4 tenants**, health/finance/
+retail, one night. Task 05 measured company-level false positives as the dominant failure
+mode, so a looser Pursuit gate would raise this count and lower its precision — 6.7%
+hand-checked is the relevant prior.
+
+**What the run does establish, independent of any persona:** ~1,360 postings/night
+reachable, 24% detail-fetch cost, 0 blocks, 0 records dropped, closure detection working.
+The plumbing is sound. What did not survive contact is the premise that Workday carries the
+plan's volume — and the shape of that finding is not "the boards are hard to reach" but
+**these employers are not posting these roles.**
 What the run does establish is the part that does not depend on the persona: ~1,360
 postings reachable per night from four tenants, at 24% detail-fetch cost, with no
 blocks.
