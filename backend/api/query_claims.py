@@ -61,7 +61,8 @@ import schema  # noqa: E402  (../schema.py -- the pipeline owns the jobs DDL)
 from google_jobs import normalize_job  # noqa: E402,F401  (re-exported; app.py calls it)
 from lib import dbconn  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
-from lib.upsert import upsert as _lib_upsert  # noqa: E402
+from lib.upsert import UpsertErrorRate  # noqa: E402
+from lib.upsert import upsert_checked as _lib_upsert_checked  # noqa: E402
 
 #: The same spec both Google ingest scripts build, so all three write
 #: identical rows -- including the sticky posted_at that keeps a re-submitted
@@ -438,9 +439,25 @@ def upsert(conn, records):
     a 500, wrote no submission_log row, never called mark_success, and spent
     the contributor's SerpApi credit for nothing.
 
-    Returns (new, updated, unchanged); lib's UpsertResult unpacks to that
-    triple, and also carries .errors, which the caller may report.
+    Returns the full UpsertResult. It still unpacks to (new, updated,
+    unchanged), but callers must read `.errors` -- that is the whole point of
+    upsert_checked, and this call site used to pass `debug=` too, so a
+    per-record failure here had no stderr fallback either.
+
+    WHY THIS DOES NOT PROPAGATE UpsertErrorRate. lib.upsert commits before
+    the rate is checked, so by the time it raises, the records that succeeded
+    are already in the table. Letting it out of here would 500 the request
+    AFTER the write, skipping mark_success and the submission_log row -- the
+    contributor would have spent their SerpApi credit, had their rows stored,
+    and be told the submission failed with nothing recorded. So the batch is
+    reported rather than rejected: the count reaches the response body, the
+    submission_log reason, and the server log, which is three channels more
+    than the zero it had before.
     """
-    result = _lib_upsert(conn, _JOB_SPEC, records, schema.make_job_id)
+    try:
+        result = _lib_upsert_checked(conn, _JOB_SPEC, records,
+                                     schema.make_job_id, debug=True)
+    except UpsertErrorRate as e:
+        result = e.result
     conn.commit()
     return result

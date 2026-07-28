@@ -46,6 +46,13 @@ independent data sources (same reasoning ingest/ats.py itself uses for
 per-company failures: one source being down isn't a reason to skip
 another). Exit code is non-zero if any sub-script failed.
 
+The final summary reports written/dropped record counts PER STEP, not just
+how many steps exited non-zero. An exit code answers "did it run"; it cannot
+tell "ran and wrote nothing" from "ran and dropped everything", and those two
+need opposite responses -- the first is a quiet Tuesday, the second is data
+loss. The counts come from the `upsert-summary:` line lib.upsert.upsert_checked
+logs on every call; see parse_upsert_summaries() below.
+
 ENVIRONMENT: this script establishes its own environment from ./.env rather
 than assuming the caller did. The 2026-07-25 00:00 scheduled run failed all
 seven steps at once on missing DATABASE_URL and missing API keys, because
@@ -80,10 +87,12 @@ TEST BEFORE SCHEDULING:
 """
 
 import os
+import re
 import sys
 import subprocess
 
 from lib import envfile
+from lib.upsert import SUMMARY_PREFIX
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -133,6 +142,39 @@ def run_step(step):
     return result.returncode, result.stdout, result.stderr
 
 
+#: One `key=value` pair of a lib.upsert.summary_line(). Parsed rather than
+#: passed back structurally because the steps are SUBPROCESSES: giving them a
+#: side channel would mean a temp file or an extra fd in nine scripts, where
+#: the line they already have to log says everything needed.
+_SUMMARY_FIELD = re.compile(r"(\w+)=(\d+)")
+
+
+def parse_upsert_summaries(text):
+    """Total the `upsert-summary:` lines in one step's output.
+
+    Returns (written, errors). `written` counts rows this run actually put in
+    the table -- new plus updated. `unchanged` is deliberately excluded: a run
+    that re-saw everything and wrote nothing new is a normal quiet day, and
+    folding it in would hide exactly the case this summary exists to expose.
+
+    Steps that never upsert (extract, match, score) produce no such lines and
+    come back (None, None), which the summary reports as "-" rather than as a
+    zero they would be indistinguishable from.
+    """
+    written = errors = None
+    for line in text.splitlines():
+        if SUMMARY_PREFIX not in line:
+            continue
+        fields = dict(_SUMMARY_FIELD.findall(line))
+        if "errors" not in fields:
+            continue  # not a summary line after all; don't count a partial one
+        if written is None:
+            written = errors = 0
+        written += int(fields.get("new", 0)) + int(fields.get("updated", 0))
+        errors += int(fields["errors"])
+    return written, errors
+
+
 def main():
     # Before anything else: this process IS the environment every step
     # inherits (run_step passes os.environ.copy()), so establishing it here
@@ -149,6 +191,13 @@ def main():
         sys.exit(1)
 
     failures = []
+    #: script_name -> (written, errors), from the upsert-summary lines each
+    #: step logs. WHY THIS IS HERE: the old summary printed only
+    #: "{n}/{len(STEPS)} step(s) failed", so a step that upserted 400 records
+    #: and dropped 100 counted as a clean success. An exit code answers "did
+    #: it run"; it cannot distinguish "ran and wrote nothing" from "ran and
+    #: dropped everything", and those need opposite responses.
+    volumes = {}
 
     for step in STEPS:
         # Label by script name only -- the args are an implementation detail
@@ -161,9 +210,30 @@ def main():
         if stderr.strip():
             print(f"[{script_name}] stderr: {stderr.strip()}", file=sys.stderr)
 
+        volumes[script_name] = parse_upsert_summaries(stdout + "\n" + stderr)
+
         if returncode != 0:
             failures.append(script_name)
             print(f"[{script_name}] exited with code {returncode}", file=sys.stderr)
+
+    # Printed on EVERY run, including a clean one. This pipeline's failure
+    # mode is silence -- an exhausted key, a revoked key, a blocked scraper
+    # and a changed endpoint all return zero rows rather than raising -- so
+    # the thing worth alerting on is volume, and a volume line that only
+    # appears when something is already known to be wrong cannot be used for
+    # that. "ats 0/0" on a Tuesday is the signal.
+    parts = []
+    for script_name in (s if isinstance(s, str) else s[0] for s in STEPS):
+        written, errors = volumes.get(script_name, (None, None))
+        label = script_name.removeprefix("ingest/").removesuffix(".py")
+        parts.append(f"{label} -"
+                     if written is None else
+                     f"{label} {written}/{errors}")
+
+    total_errors = sum(e for _, e in volumes.values() if e)
+    print(f"run-daily: {len(STEPS) - len(failures)}/{len(STEPS)} step(s) ok, "
+          f"{total_errors} record(s) dropped "
+          f"[written/dropped: {', '.join(parts)}]")
 
     if failures:
         print(f"run-daily: {len(failures)}/{len(STEPS)} step(s) failed: {failures}")

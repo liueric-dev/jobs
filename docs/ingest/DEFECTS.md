@@ -44,7 +44,7 @@ given).
 
 | id | class | disposition | one-line |
 |---|---|---|---|
-| [D01](#d01) | silent data loss | fix now — task 03 | Per-record upsert errors discarded at 8 call sites |
+| [D01](#d01) | silent data loss | **fixed** — task 03 | Per-record upsert errors discarded at 8 call sites |
 | [D02](#d02) | silent data loss | fix with harness — task 09 | `builtin-nyc.py` title/company zip can silently misattribute |
 | [D03](#d03) | silent data loss | fix with harness — task 09 | `builtin-nyc.py` salary regex unscoped, captures false positives |
 | [D04](#d04) | silent data loss | won't-fix (documented) | `weworkremotely.py` token from display name — silent duplicate rows |
@@ -94,7 +94,7 @@ given).
 This is the only class that justifies delaying Phase 3, because it is the
 only class the operator cannot detect by watching the nightly run.
 
-### D01
+### D01 — fixed
 
 **Per-record upsert errors discarded, at every one of 8 call sites.**
 `lib/upsert.py:157-166`'s `UpsertResult.__iter__` yields `(new, updated,
@@ -113,9 +113,15 @@ and silently drops every per-record failure. Confirmed at:
 
 Blast radius: **all ingest** — every write path in the pipeline. A run with a
 hundred failed records and zero read errors reports success; the only symptom
-is a corpus quietly smaller than it should be. Disposition: **fix now** —
-`docs/tasks/refactor/tranche_one/03-fix-silent-upsert-errors.md` is written
-and scoped to this exact defect and all 8 sites.
+is a corpus quietly smaller than it should be. **Status: fixed**
+(`docs/tasks/refactor/tranche_one/03-fix-silent-upsert-errors.md`) —
+`lib/upsert.py` gained `upsert_checked()`, which logs an `upsert-summary:`
+line carrying `errors=N` on every call including when N is zero, and raises
+`UpsertErrorRate` above a 5% per-run failure rate. All 8 sites call it;
+`UpsertResult.__iter__` is deliberately unchanged. `run-daily.py` now reports
+per-step written/dropped counts, so "ran and wrote nothing" and "ran and
+dropped everything" no longer print identically.
+`backend/tests/test_upsert_checked.py` covers all 8 paths.
 
 ### D02
 

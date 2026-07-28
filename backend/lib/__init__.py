@@ -11,7 +11,7 @@ to ../schema.py, the ingest scripts and api/.
     state      watermarks, plus the claim half api/ and the ingests use
     text       strip_html, bounded_json, the posted_at parsing, heuristics
     timeparse  utc_now, utc_now_str
-    upsert     upsert(), TableSpec
+    upsert     upsert(), upsert_checked(), TableSpec
 
 Used by the nightly pipeline, by everything in ingest/ and tools/, and by
 the contributor API under api/ -- which is the same package, imported the

@@ -89,7 +89,8 @@ import schema  # noqa: E402  (schema.py)
 from google_jobs import normalize_job  # noqa: E402  (../google_jobs.py)
 from lib import dbconn, http, state, text  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
-from lib.upsert import upsert  # noqa: E402
+from lib.upsert import (UpsertErrorRate, UpsertResult, check_error_rate,  # noqa: E402
+                        upsert_checked)
 
 APIFY_API_TOKEN = os.environ.get("APIFY_API_TOKEN")
 GOOGLE_JOBS_QUERIES_FILE = os.environ.get(
@@ -212,7 +213,9 @@ def main():
 
     picked = pick_stale_queries(conn, all_queries, APIFY_DAILY_QUERY_BUDGET)
 
-    total_new = total_updated = total_unchanged = 0
+    #: Accumulated across queries so the failure-rate check is per RUN rather
+    #: than per query -- see the same comment in ingest/ats.py.
+    totals = UpsertResult()
     query_errors = []
     queries_run = 0
 
@@ -229,11 +232,19 @@ def main():
             continue
 
         records = [normalize_job(j, q["mode"]) for j in jobs]
-        n, u, unc = upsert(conn, job_spec, records, schema.make_job_id, debug=DEBUG_PRINT_KEYS)
-        total_new += n
-        total_updated += u
-        total_unchanged += unc
-        queries_run += 1
+        try:
+            result = upsert_checked(conn, job_spec, records, schema.make_job_id,
+                                    debug=DEBUG_PRINT_KEYS)
+        except UpsertErrorRate as e:
+            # Counted, not fatal here: the run-level check after the loop
+            # decides. mark_success still runs below -- the actor run is
+            # billed either way and re-running would bill it twice.
+            result = e.result
+            query_errors.append(f"{q['slug']}: {e}")
+        else:
+            queries_run += 1
+        totals += result
+        n, u, unc = result.new, result.updated, result.unchanged
 
         state.mark_success(conn, dataset, utc_now_str(),
                            table=schema.WATERMARK_TABLE)
@@ -254,10 +265,18 @@ def main():
     if query_errors and DEBUG_PRINT_KEYS:
         print(f"[debug] {len(query_errors)}/{len(picked)} queries failed: {query_errors}", file=sys.stderr)
 
-    if total_new or total_updated or closed_count or query_errors:
-        print(f"google-jobs-apify-ingest: {total_new} new, {total_updated} updated, "
-              f"{total_unchanged} unchanged, {closed_count} closed (stale), "
+    if totals.new or totals.updated or closed_count or query_errors or totals.errors:
+        print(f"google-jobs-apify-ingest: {totals.new} new, {totals.updated} updated, "
+              f"{totals.unchanged} unchanged, {closed_count} closed (stale), "
+              f"{len(totals.errors)} record(s) dropped, "
               f"{queries_run}/{len(picked)} queries succeeded ({len(query_errors)} failed).")
+
+    # Last, so the summary above is on stdout either way.
+    try:
+        check_error_rate(totals, label=schema.TABLE)
+    except UpsertErrorRate as e:
+        print(f"google-jobs-apify ingest FAILED: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

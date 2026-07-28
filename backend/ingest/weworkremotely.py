@@ -92,7 +92,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import schema  # noqa: E402  (schema.py)
 from lib import dbconn, http, ids, state, text  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
-from lib.upsert import upsert  # noqa: E402
+from lib.upsert import UpsertErrorRate, upsert_checked  # noqa: E402
 
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 
@@ -222,7 +222,16 @@ def main():
         conn.close()
         sys.exit(1)
 
-    new_count, updated_count, unchanged_count = upsert(conn, job_spec, all_records, schema.make_job_id, debug=DEBUG_PRINT_KEYS)
+    # One batch, so upsert_checked's own threshold IS the per-run rate. The
+    # raise is deferred to the bottom of main() so the summary still prints.
+    upsert_failure = None
+    try:
+        result = upsert_checked(conn, job_spec, all_records, schema.make_job_id,
+                                debug=DEBUG_PRINT_KEYS)
+    except UpsertErrorRate as e:
+        result, upsert_failure = e.result, e
+    new_count, updated_count, unchanged_count = (result.new, result.updated,
+                                                 result.unchanged)
     closed_count = schema.close_stale(conn, 'weworkremotely', WWR_STALE_AFTER_DAYS)
     state.set_watermark(conn, "weworkremotely", utc_now_str(),
                         table=schema.WATERMARK_TABLE)
@@ -231,11 +240,16 @@ def main():
     if category_errors and DEBUG_PRINT_KEYS:
         print(f"[debug] {len(category_errors)} categor(y/ies) failed: {category_errors}", file=sys.stderr)
 
-    if new_count or updated_count or closed_count or category_errors:
+    if new_count or updated_count or closed_count or category_errors or result.errors:
         print(f"weworkremotely: {new_count} new, {updated_count} updated, "
               f"{unchanged_count} unchanged, {closed_count} closed (stale), "
+              f"{len(result.errors)} record(s) dropped, "
               f"{len(all_records)} parsed across {len(CATEGORIES) - len(category_errors)}/{len(CATEGORIES)} "
               f"categories ({len(category_errors)} failures).")
+
+    if upsert_failure:
+        print(f"weworkremotely ingest FAILED: {upsert_failure}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

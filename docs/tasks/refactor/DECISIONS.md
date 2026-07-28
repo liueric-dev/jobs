@@ -31,6 +31,60 @@ so a model standing in for it makes the measurement circular — the defect
 which treats `sonnet-batch-1` as ground truth. Reversible only in the sense that the
 labels can be collected later.
 
+### 03 — `upsert_checked` went into `lib/upsert.py`, not the `ingest/_common.py` fallback
+
+The task file offers `backend/ingest/_common.py` as a fallback "if `lib/` must stay
+byte-identical" to another repo, and CLAUDE.md states that constraint as live with
+drift reported by `tools/lib-parity.sh`. **That script does not exist anywhere in the
+repo**, and `backend/lib/__init__.py` plus `backend/tests/test_lib_contract.py:5`
+both record that `lib/` "used to be a shared package and is now this repo's own code."
+The constraint is dead. Put the helper beside `upsert` where it belongs. Rejected: the
+fallback location, which two of the eight call sites (`api/app.py`, `api/query_claims.py`)
+could not have imported from cleanly anyway. Reversible, but there is no longer a
+reason to. **CLAUDE.md's `lib/` parity rule is stale and should be corrected in task 34.**
+
+### 03 — `UpsertResult.__iter__` left exactly as it was
+
+The task said not to change it and that is right: the three-tuple unpack is the
+documented shape, and rewriting it would move the surprise rather than remove it. The
+fix is a wrapper that cannot be called without logging the error count, so the correct
+call is also the shorter one. Not reversible in intent — it is the design.
+
+### 03 — The failure rate is checked at two scopes, not one
+
+Scripts that upsert inside a per-source loop (`ats.py`, both Google scripts) apply the
+threshold twice: per batch, where one bad source is survivable and is recorded the way
+an unreachable source already was, and again over the accumulated total at the end of
+the run, where it is not. Hence `check_error_rate()` exists separately from
+`upsert_checked()`, and `UpsertErrorRate` carries `.result` — `upsert()` commits before
+raising, so the records that succeeded *are* written and a caller that catches it can
+still count them. Single-batch scripts (`hn-hiring`, `builtin-nyc`, `weworkremotely`)
+need only the one scope. Reversible.
+
+### 03 — The 5% threshold is a guess, and is labelled as one
+
+`DEFAULT_THRESHOLD = 0.05` per the task file. There has never been a run with the error
+count recorded, so there is no distribution to choose from — the constant says so in
+its own comment rather than presenting itself as calibrated. Reversible, and should be
+revisited once real error counts exist.
+
+### 03 — The contributor API's `accepted` now means "written", and a `dropped` field appears
+
+`POST /submit` previously returned `accepted: len(records)` — the count that *normalized*
+cleanly, which said nothing about whether they reached the table. It now returns the
+count actually written, adds `dropped`, and populates `submission_log.reason`. Not
+literally required by the task, which only demanded the error count stop being
+discarded; kept because the alternative preserves the exact defect at the API boundary,
+and a contributor whose rows vanished has no other channel to learn it. The two values
+differ **only when records were dropped** — that is, only in the case where the old
+answer was wrong. `docs/tasks/refactor/API-CONTRACT-v1.md` freezes the frontend read
+endpoints and does not cover this one, so no frozen contract is broken.
+
+**Reversible in code, but it is a deployed surface** — a client that treats `accepted`
+as "how many I sent that parsed" would now see a smaller number on a partial failure,
+which is the intended correction. Flagged rather than buried because it is the one
+change in task 03 that is visible outside the repo.
+
 ### 05 — The rate came from `posted_at_ts`, not `first_seen`
 
 The task specifies grouping by `first_seen::date` over 30 days. That cannot work here:

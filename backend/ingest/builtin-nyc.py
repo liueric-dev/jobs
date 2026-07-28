@@ -125,7 +125,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import schema  # noqa: E402  (schema.py)
 from lib import dbconn, http, ids, state, text  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
-from lib.upsert import upsert  # noqa: E402
+from lib.upsert import UpsertErrorRate, upsert_checked  # noqa: E402
 
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 
@@ -401,7 +401,17 @@ def main():
         conn.close()
         sys.exit(1)
 
-    new_count, updated_count, unchanged_count = upsert(conn, job_spec, all_records, schema.make_job_id, debug=DEBUG_PRINT_KEYS)
+    # One batch, so upsert_checked's own threshold IS the per-run rate. It
+    # raises rather than returning, and that is caught at the bottom of main()
+    # so the summary line still reaches stdout before the non-zero exit.
+    upsert_failure = None
+    try:
+        result = upsert_checked(conn, job_spec, all_records, schema.make_job_id,
+                                debug=DEBUG_PRINT_KEYS)
+    except UpsertErrorRate as e:
+        result, upsert_failure = e.result, e
+    new_count, updated_count, unchanged_count = (result.new, result.updated,
+                                                 result.unchanged)
 
     # After the upsert: new rows are in the table by now, so one pass covers
     # both this run's postings and the older backlog. See fill_descriptions().
@@ -414,12 +424,17 @@ def main():
     if page_errors and DEBUG_PRINT_KEYS:
         print(f"[debug] {len(page_errors)} page(s) failed: {page_errors}", file=sys.stderr)
 
-    if new_count or updated_count or closed_count or page_errors:
+    if new_count or updated_count or closed_count or page_errors or result.errors:
         print(f"builtin-nyc: {new_count} new, {updated_count} updated, "
               f"{unchanged_count} unchanged, {closed_count} closed (stale), "
+              f"{len(result.errors)} record(s) dropped, "
               f"{desc_fetched} descriptions fetched ({desc_failed} failed), "
               f"{len(all_records)} parsed across {MAX_PAGES - len(page_errors)}/{MAX_PAGES} pages "
               f"({len(page_errors)} page failures).")
+
+    if upsert_failure:
+        print(f"builtin-nyc ingest FAILED: {upsert_failure}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -58,11 +58,11 @@ ceiling rather than a daily cap to be discovered, and probing it would risk the 
 figure with its date and source instead, which still satisfies the task's requirement
 that the limit live in the repo rather than in someone's memory.
 
-### In flight
+### Started, both now landed
 
 | task | state |
 |---|---|
-| 03 — stop discarding upsert errors | running |
+| 03 — stop discarding upsert errors | **done** |
 | 05 — corpus volume under a widened gate | **done** |
 
 Started in parallel: their file sets are disjoint (03 is `backend/lib/`, `ingest/`,
@@ -147,3 +147,54 @@ greenhouse + ashby alone.
 
 `N` is now referenced from `04-quota-baseline.md`, closing that task's last Definition
 of done item.
+
+---
+
+## 2026-07-28 — 03 landed: all eight call sites, 267 → 280 tests
+
+`upsert_checked()` in `backend/lib/upsert.py`, and every one of the eight sites from
+`DEFECTS.md` D01 converted — including the two the task file did not name
+(`api/app.py`, `api/query_claims.py`) and the two that were not three-tuple unpacks at
+all (`hn-hiring.py` read `.new` only; `query_claims.py` also omitted `debug=`).
+
+**Verified by the orchestrator before commit**, not taken on trust:
+`grep -rn "= upsert(" backend/` leaves only comments, docstrings and
+`upsert_checked`'s own internal call; suite 280 passing, up from the 267 floor.
+
+Three things worth knowing beyond the diff:
+
+**The `lib/` parity constraint is dead, and CLAUDE.md is stale about it.** The task
+file offered `ingest/_common.py` as a fallback "if `lib/` must stay byte-identical",
+and CLAUDE.md asserts that constraint with `tools/lib-parity.sh` reporting drift. That
+script does not exist in the repo, and `lib/__init__.py` and
+`tests/test_lib_contract.py:5` both record that `lib/` is now this repo's own code. The
+helper therefore went where it belongs. **CLAUDE.md's parity rule needs correcting in
+task 34.**
+
+**The threshold is applied at two scopes.** Loop-based scripts check per batch — where
+one bad source is survivable and is now counted rather than ignored — and again over
+the run total, where it is not. `UpsertErrorRate` carries `.result` because `upsert()`
+commits before raising, so the records that succeeded are written and can still be
+tallied.
+
+**The nightly summary can now tell the two failures apart.** `run-daily.py` parses the
+`upsert-summary:` line every call emits. Steps that never upsert report `-` rather than
+`0`, and `unchanged` is deliberately excluded from "written" so a quiet day cannot
+disguise a day that dropped everything.
+
+### One change that is visible outside the repo
+
+`POST /submit` now returns `accepted` = records actually **written** rather than
+records that merely parsed, adds a `dropped` field, and populates
+`submission_log.reason`. Not strictly demanded by the task. Kept because the
+alternative leaves the exact defect intact at the API boundary, and the two values
+differ only when records were dropped — the case where the old answer was a lie.
+`API-CONTRACT-v1.md` freezes the frontend read endpoints only, so nothing frozen
+breaks. Called out here because it is the one part of task 03 a client could notice.
+
+### Follow-up left for task 34
+
+`docs/ingest/contributor-api.md:378` documents the `submission_log` row and cites line
+numbers that this commit moved. It carries `generated:` frontmatter, and per CLAUDE.md
+generated docs are regenerated rather than hand-edited — but no generator script exists
+for it. Left alone deliberately; task 34 owns the resolution.

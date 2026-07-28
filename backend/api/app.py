@@ -333,7 +333,14 @@ async def submit(
             except (AttributeError, TypeError, ValueError):
                 rejected += 1
 
-        new, updated, unchanged = qc.upsert(conn, records)
+        result = qc.upsert(conn, records)
+        new, updated, unchanged = result.new, result.updated, result.unchanged
+        #: Records that normalized cleanly and then failed to WRITE. Distinct
+        #: from `rejected`, which counts payload entries this endpoint refused
+        #: before ever reaching the database. Both go in the response and in
+        #: submission_log, because a contributor whose rows silently vanished
+        #: has no other way to find out.
+        dropped = len(result.errors)
 
         # Watermark advances only now, after results are actually stored --
         # this is what makes a failed submit safely retryable (see mark_success).
@@ -345,14 +352,17 @@ async def submit(
             """
             INSERT INTO submission_log (contributor_id, dataset, submitted_at,
                 fetched_count, accepted_count, rejected_count, reason)
-            VALUES (%s, %s, %s, %s, %s, %s, NULL)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (contributor_id, dataset, qc.utc_now_str(), len(payload.jobs), len(records), rejected),
+            (contributor_id, dataset, qc.utc_now_str(), len(payload.jobs),
+             len(records) - dropped, rejected,
+             f"{dropped} record(s) failed to write" if dropped else None),
         )
         conn.commit()
 
         return {
-            "accepted": len(records), "rejected": rejected,
+            "accepted": len(records) - dropped, "rejected": rejected,
+            "dropped": dropped,
             "new": new, "updated": updated, "unchanged": unchanged,
         }
 

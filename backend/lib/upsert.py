@@ -237,3 +237,121 @@ def upsert(conn, spec, records, id_fn, *, now=None, debug=False):
         print(f"[debug] {len(result.errors)} upsert errors "
               f"(samples: {result.errors[:3]})", file=sys.stderr)
     return result
+
+
+# --------------------------------------------------------------------------
+# upsert_checked -- making the correct call the easy one
+# --------------------------------------------------------------------------
+#
+# WHY THIS EXISTS. UpsertResult.__iter__ above yields (new, updated,
+# unchanged) and NOT .errors, so
+#
+#     n, u, unc = upsert(...)
+#
+# reads naturally, is what eight call sites wrote, and silently discards
+# every per-record failure. A run that dropped a hundred records and hit no
+# read errors reported success: no alert, no non-zero exit, no log line. The
+# only symptom was a corpus quietly smaller than it should be, which is
+# indistinguishable from a slow hiring week.
+#
+# __iter__ stays as it is -- it is the documented shape and rewriting it
+# would only move the surprise. The fix is a wrapper that cannot be called
+# without the error count being logged, so callers get the correct behaviour
+# by writing the shorter thing.
+
+class UpsertErrorRate(RuntimeError):
+    """Raised when a batch's per-record failure rate exceeds the threshold.
+
+    Carries `.result`, because upsert() commits before this is raised: the
+    records that succeeded ARE written. A caller that catches this can still
+    report and accumulate them, and several do -- see the per-unit loops in
+    ingest/ats.py and the two Google scripts, which treat one bad batch the
+    way they already treat one unreachable source.
+    """
+
+    def __init__(self, message, result):
+        super().__init__(message)
+        self.result = result
+
+
+#: Prefix of the machine-readable line upsert_checked() emits on EVERY call.
+#: run-daily.py scans step output for it to build the nightly per-step record
+#: and error counts, which is what makes "ran and wrote nothing" distinct
+#: from "ran and dropped everything". Keep the format stable, or update
+#: run-daily.parse_upsert_summaries() in the same commit.
+SUMMARY_PREFIX = "upsert-summary:"
+
+#: Default per-run failure rate above which upsert_checked raises. 5% is a
+#: starting guess, not a measurement -- there has never been a run with the
+#: error count recorded, so there is no distribution to pick from yet. Tune
+#: it once task 04's baseline exists.
+DEFAULT_THRESHOLD = 0.05
+
+
+def summary_line(result, table="?"):
+    """The one line every upsert emits, in a form both a human reading
+    journalctl and run-daily.py's parser can use."""
+    return (f"{SUMMARY_PREFIX} table={table} new={result.new} "
+            f"updated={result.updated} unchanged={result.unchanged} "
+            f"errors={len(result.errors)}")
+
+
+def _stderr_logger(line):
+    print(line, file=sys.stderr)
+
+
+def upsert_checked(*args, threshold=DEFAULT_THRESHOLD, logger=None, **kwargs):
+    """Upsert, log any per-record errors, and raise if the failure rate
+    exceeds `threshold`. Returns the full result including .errors.
+
+    `logger` is any callable taking one string; it defaults to writing to
+    stderr, which is where this pipeline's scripts already put log output and
+    keeps the summary out of the stdout that the watchdog treats as an alert.
+
+    The summary is logged ALWAYS, including when the error count is zero.
+    That is deliberate: `errors=0` present on every run makes the field's
+    ABSENCE the anomaly. A count that only appears when it is bad is a count
+    nobody notices has stopped appearing.
+    """
+    result = upsert(*args, **kwargs)
+
+    # The spec is positional in every caller (conn, spec, records, id_fn),
+    # but accept it by keyword too rather than IndexError on a caller that
+    # spells it differently.
+    spec = args[1] if len(args) > 1 else kwargs.get("spec")
+    table = getattr(spec, "table", "?")
+
+    log = logger or _stderr_logger
+    log(summary_line(result, table))
+    check_error_rate(result, threshold=threshold, label=table, logger=log)
+    return result
+
+
+def check_error_rate(result, *, threshold=DEFAULT_THRESHOLD, label="",
+                     logger=None):
+    """Raise UpsertErrorRate if `result`'s failure rate exceeds `threshold`.
+
+    Separate from upsert_checked because the scripts that upsert inside a
+    per-source loop need the rule applied twice, at two different scopes:
+    once per batch (where a single bad source is survivable and is recorded
+    the way an unreachable source already is) and once over the accumulated
+    total at the end of the run, where it is not.
+    """
+    if not result.errors:
+        return result
+
+    log = logger or _stderr_logger
+    attempted = (result.new + result.updated + result.unchanged
+                 + len(result.errors))
+    rate = len(result.errors) / attempted
+    log(f"upsert: {len(result.errors)}/{attempted} record(s) failed"
+        f"{' on ' + label if label else ''} ({rate:.1%}); "
+        f"samples: {result.errors[:3]}")
+    if rate > threshold:
+        raise UpsertErrorRate(
+            f"{len(result.errors)}/{attempted} records failed to upsert"
+            f"{' into ' + label if label else ''} "
+            f"({rate:.1%} > {threshold:.1%} threshold); "
+            f"samples: {result.errors[:3]}",
+            result)
+    return result

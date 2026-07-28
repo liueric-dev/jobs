@@ -91,7 +91,7 @@ import relevance  # noqa: E402  (relevance.py -- for the role vocabulary)
 import schema  # noqa: E402  (schema.py)
 from lib import dbconn, http, ids, state, text  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
-from lib.upsert import upsert  # noqa: E402
+from lib.upsert import UpsertErrorRate, upsert_checked  # noqa: E402
 
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 
@@ -422,9 +422,17 @@ def main():
     conn.commit()
 
     # This source is insert-only -- a comment is never edited in place, so
-    # only the new count is meaningful here.
-    new_count = upsert(conn, job_spec, records, schema.make_job_id,
-                       debug=DEBUG_PRINT_KEYS).new
+    # only the new count is meaningful here. The ERROR count is meaningful
+    # everywhere, though, which is why `.new` alone was not enough: a comment
+    # whose row failed to write is already marked seen in hn_seen_comments
+    # above, so it is never retried and is lost for the life of the thread.
+    upsert_failure = None
+    try:
+        result = upsert_checked(conn, job_spec, records, schema.make_job_id,
+                                debug=DEBUG_PRINT_KEYS)
+    except UpsertErrorRate as e:
+        result, upsert_failure = e.result, e
+    new_count = result.new
 
     # A --reparse that now DECLINES a comment must retire the row it wrote
     # under the old parser, because a skipped comment produces no record and
@@ -461,10 +469,15 @@ def main():
               f"{len(new_kid_ids)} new, {skipped} unparseable, {fetch_errors} fetch errors",
               file=sys.stderr)
 
-    if new_count or closed_count or fetch_errors:
+    if new_count or closed_count or fetch_errors or result.errors:
         print(f"hn-hiring: thread '{thread.get('title')}' -- {new_count} new, "
               f"{skipped} skipped (unparseable), {closed_count} closed (stale), "
+              f"{len(result.errors)} record(s) dropped, "
               f"{fetch_errors} fetch errors.")
+
+    if upsert_failure:
+        print(f"hn-hiring ingest FAILED: {upsert_failure}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

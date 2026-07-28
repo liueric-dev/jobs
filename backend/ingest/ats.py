@@ -131,7 +131,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import schema  # noqa: E402  (schema.py)
 from lib import dbconn, http, ids, state, text  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
-from lib.upsert import upsert  # noqa: E402
+from lib.upsert import (UpsertErrorRate, UpsertResult, check_error_rate,  # noqa: E402
+                        upsert_checked)
 
 JOB_SOURCES_FILE = os.environ.get(
     "JOB_SOURCES_FILE",
@@ -312,7 +313,12 @@ def main():
         sys.exit(1)
 
     run_started_at = utc_now_str()
-    total_new = total_updated = total_unchanged = total_closed = 0
+    total_closed = 0
+    #: Accumulated across companies so the failure-rate check is per RUN, not
+    #: per company: one 3-record source failing entirely is not a reason to
+    #: abandon the other forty-nine, but the same failures spread across the
+    #: whole run are. UpsertResult.__add__ sums the error lists too.
+    totals = UpsertResult()
     company_errors = []
     company_successes = 0
 
@@ -332,13 +338,20 @@ def main():
             continue
 
         records = [normalize(company, j) for j in raw_jobs]
-        result = upsert(conn, ats_spec, records, schema.make_job_id,
-                        debug=DEBUG_PRINT_KEYS)
-        n, u, unc = result
-        total_new += n
-        total_updated += u
-        total_unchanged += unc
-        company_successes += 1
+        try:
+            result = upsert_checked(conn, ats_spec, records, schema.make_job_id,
+                                    debug=DEBUG_PRINT_KEYS)
+        except UpsertErrorRate as e:
+            # Same reasoning as the fetch failure above: one source writing
+            # badly isn't a reason to skip the rest. But it IS now counted --
+            # it lands in company_errors, in the stdout summary, and in the
+            # run-level rate check after the loop.
+            result = e.result
+            company_errors.append(f"{company['name']} ({platform}:{token}): {e}")
+        else:
+            company_successes += 1
+        totals += result
+        n, u, unc = result.new, result.updated, result.unchanged
 
         if records:
             seen_ids = [r["source_id"] for r in records]
@@ -365,11 +378,24 @@ def main():
               f"{company_errors[:5]}", file=sys.stderr)
 
     # Stay silent on quiet days -- that's the point of no-agent watchdog mode.
-    if total_new or total_updated or total_closed or pruned or company_errors:
-        print(f"jobs-ingest: {total_new} new, {total_updated} updated, {total_unchanged} unchanged, "
+    # Dropped records are never a quiet day, so totals.errors joins the
+    # conditions that break the silence.
+    if (totals.new or totals.updated or total_closed or pruned
+            or company_errors or totals.errors):
+        print(f"jobs-ingest: {totals.new} new, {totals.updated} updated, "
+              f"{totals.unchanged} unchanged, "
               f"{total_closed} closed, {pruned} old-closed pruned, "
+              f"{len(totals.errors)} record(s) dropped, "
               f"across {company_successes}/{len(sources)} sources "
               f"({len(company_errors)} failed).")
+
+    # Last, so the summary above is on stdout either way: the run-level rate,
+    # across every company rather than within one.
+    try:
+        check_error_rate(totals, label=schema.TABLE)
+    except UpsertErrorRate as e:
+        print(f"jobs ingest FAILED: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
