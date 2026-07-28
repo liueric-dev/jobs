@@ -62,7 +62,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | | Task | Lands | |
 |---|---|---|---|
 | 22 | [JobSpy spike](tranche_four/22-jobspy-spike.md) | does self-hosted work from the home IP — **no: dropped**, [`docs/jobspy-spike.md`](../../jobspy-spike.md) | done |
-| 23 | SERP abstraction | `serp/` package, provider adapters, quota ledger, router, cache | **on hold** — 22 removed its cost basis; needs the query-bank experiment first |
+| 23 | SERP abstraction | `serp/` package, provider adapters, quota ledger, router, cache — **descoped**: 2 adapters not 8, no JobSpy, no router step 2 | todo |
 | 24 | Revive the contributor API | `backend/api/` deployed; Builder key onboarding | todo |
 | 25 | Search queries | query as a first-class object, caching, cohort signal | todo |
 

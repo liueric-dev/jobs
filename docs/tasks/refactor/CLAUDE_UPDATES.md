@@ -497,3 +497,71 @@ overstates by 1.9x.
 Probing stopped deliberately at 280 of 376: `blocked` climbed 16 → 30 as coverage grew,
 and this host also runs the nightly ATS pulls and `google-serpapi.py`. The 96 unprobed
 are first in line for the nightly backfill.
+
+---
+
+## 2026-07-28 — the query-bank experiment: Google Jobs works when asked properly
+
+Deliverable: [`docs/google-jobs-query-experiment.md`](../../google-jobs-query-experiment.md).
+16 SerpApi searches, exactly at the authorised budget. **No production writes** —
+verified: still 11,824 rows, no leftover scratch schemas, `google-queries.json`
+untouched.
+
+**Recommendation: build task 23, sharply descoped.** Task 22's challenge to the 4.8%
+figure was right.
+
+| | Pursuit-shaped bank | current SWE bank (control) |
+|---|---|---|
+| hand-checked genuine | **9 / 130 = 6.9%** (CI 3.7–12.7) | **0 / 39** |
+| non-tech or government employers | 45.4% | — |
+| new to the corpus | 129 of 130 | — |
+
+The control is what makes it credible, and the agent **refused the comparison it was
+sent to make**: 4.8% is a share-of-corpus figure and this is a yield, so it built a real
+control instead — 30 pinned production `google_jobs` rows plus every one of the 9 rows
+in the whole 901-row population carrying both AI and entry-level title signals, same
+judge, same criteria. Zero genuine of 39. It also reports the weaker of its own two
+statistics: the hand-check contrast is p=0.088, underpowered on the control arm.
+
+**Weakest number, flagged by the agent itself:** 0.56 genuine/search is a *first-run*
+rate — none of the 16 queries used a date chip, and no Google Jobs query on either bank
+has ever run more than twice, so steady-state daily yield is unmeasured.
+
+### The experiment found a defect in its own authorisation
+
+I approved 16 searches after reading `google_jobs_query_stats`: **41 used this month**,
+209 remaining. The SerpApi account read **137 used** — and 153 after. **97 left, not
+209.** The repo's ledger undercounts real spend by 3.3x, in the dangerous direction.
+
+Nobody gets an error from this; the ledger simply disagrees with the vendor, and the
+first symptom is a month going dark early. It matters directly because task 23's descope
+**keeps the quota ledger** — which must reconcile against the provider's counter, not
+against rows this pipeline remembered to write.
+
+### Four defects found outside scope, recorded not fixed
+
+1. **Task 05's AI regex is missing bare `\yai\y`, `ai-driven` and `ai-enabled`** — it
+   drops 3 of the 9 genuine rows. **Task 10 must not lift it as-is**, which is exactly
+   what task 05's document invites.
+2. The entry-level regex has no `\yintern\y`, which also affects task 05's own two
+   genuine rows.
+3. **`google_jobs.py:98-99` discards `detected_extensions.work_from_home`.** Verified:
+   the field is read into a local and `work_from_home` appears nowhere else in the
+   codebase; `is_remote` comes only from a regex on the location string. All 7 genuinely
+   remote postings get both location flags FALSE and sit at tier 2.
+4. 45% of rows arrive via aggregators carrying a median **530-character paraphrase**
+   against 4,838 elsewhere. That is what `extract.py` is being fed, and it bears on
+   task 06's clean-versus-messy split.
+
+### A reprioritisation worth your attention
+
+23 currently blocks 24 and 25. The evidence inverts that: **25 is where the entire 12x
+difference lives and it is a config edit**, and **24 is 7,500 searches/month** (30
+Builders × 250) against code already written and tested — roughly 8x every free tier in
+`SOURCING-STRATEGY.md` combined. 23 lists `contributor.py` as one adapter among eight.
+On these numbers it is not one adapter, it is the product. Recorded, not acted on.
+
+Also useful: the **production tier gate is already the best filter for this source**
+(74 kept, 8/9 recall, 10.8% precision). Task 05's widened AI-vocabulary gate is worse on
+both axes here, and its AI+entry+location composite discards two-thirds of the genuine
+rows.

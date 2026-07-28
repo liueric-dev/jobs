@@ -31,6 +31,56 @@ so a model standing in for it makes the measurement circular — the defect
 which treats `sonnet-batch-1` as ground truth. Reversible only in the sense that the
 labels can be collected later.
 
+### EXP — Build task 23, sharply descoped. Google Jobs yields when it is asked properly
+
+16 SerpApi searches on Pursuit-shaped queries: 131 results, 74 passing the production
+gate, **9 genuine by hand-check — 6.9%, 95% CI 3.7–12.7%**. 45.4% of employers returned
+are non-tech or government, the category task 05 found absent from every configured
+source. 129 of 130 rows are new to the corpus.
+
+The control is what makes this credible. **The 4.8% figure was not used, because it is
+not comparable** — it is a share-of-corpus number against a yield, and `google_jobs` has
+901 rows to greenhouse's 7,370 largely because the ATS pull takes whole boards while the
+Google bank runs eight queries a night. Instead: 30 pinned production `google_jobs` rows
+plus every one of the 9 rows in the entire 901-row population whose title carries both
+AI and entry-level signals, judged by the same person against the same criteria —
+**0 genuine of 39**. Population proxy 1.0% versus 31.5%, p<1e-12. The hand-check
+contrast alone is p=0.088, underpowered on the control arm, and the document says so.
+
+Descope: keep the single interface and the normalizer into `lib/`'s frozen shape,
+`SerpResult` provenance, the quota ledger, the cache and volume alerting. Cut the JobSpy
+adapter, canary and router step 2 (task 22 settled those), and six of eight provider
+adapters — ScraperAPI and ZenRows bill 25 credits per Google request, so a 1,000-credit
+tier is 40 real searches. Reversible.
+
+**Weakest number, and it is stated as such:** 0.56 genuine/search is a *first-run* rate
+with no date chip on any of the 16 queries. Nobody has measured steady-state daily yield
+for a Google Jobs query on either bank — `google_jobs_query_stats` holds 32 slugs and
+none has run more than twice. The follow-up is rerunning the same 16 in two weeks with
+`chips=date_posted:week`.
+
+### EXP — The repo's own SerpApi ledger undercounts real spend by 3.3x
+
+Before authorising this experiment the orchestrator read `google_jobs_query_stats` and
+found **41** searches used this month, implying 209 remaining. The SerpApi account
+itself read **137 used**, and 153 after the experiment — **97 left, not 209**.
+
+The repo's view of its own metered spend is wrong by a factor of 3.3, in the dangerous
+direction. This is CLAUDE.md's "silence" failure mode wearing a different hat: nobody
+gets an error, the ledger simply disagrees with the vendor and the first symptom is a
+month that goes dark early. It bears directly on task 23, whose descope **keeps the
+quota ledger** — that ledger needs to reconcile against the provider's own counter, not
+against rows this pipeline remembered to write. Not reversible; it is a defect.
+
+### EXP — Task 23 should not block 24 and 25; the evidence inverts it
+
+`23-serp-abstraction.md` lists itself as blocking both. But **task 25 is where the whole
+12x difference lives, and it is a config edit**; and **task 24 is 30 Builders × 250
+searches/month = 7,500 searches**, roughly 8x every free tier in `SOURCING-STRATEGY.md`
+combined, against code that is already written and tested. 23 lists `contributor.py` as
+one adapter among eight. On these numbers it is not one adapter — it is the product.
+Recorded rather than acted on: reordering a phase is the repo owner's call.
+
 ### 16 — `not_found` does not mean "no ATS", and the positive control is why we know
 
 The seed roster carried ten tech employers with tokens already verified in
