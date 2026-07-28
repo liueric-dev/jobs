@@ -7,17 +7,16 @@ Written 2026-07-28 to hand this run to a fresh session. Read this first, then
 
 ## State at handoff
 
-**Branch `webapp-service`, suite green at 663 tests** (task files say 263; it has grown —
-663 is the floor now). The last code commit is `fabe381`; the commits after it are this
-tree's own documentation. **The whole suite passes** — `python3 -m unittest
-discover -s backend/tests` from the repo root. Working tree is clean apart from untracked
-`scripts/`, which predates this run and is not ours.
+**Branch `webapp-service`, suite green at 717 tests** (task files say 263; it has grown —
+717 is the floor now). The last code commit is `da4942c` (task 11). **The whole suite
+passes** — `python3 -m unittest discover -s backend/tests` from the repo root. Working
+tree is clean apart from untracked `scripts/`, which predates this run and is not ours.
 
 `backend/webapp/tests/` is a separate matter: **`fastapi` is not installed here**, so five
 modules fail to import and always have. Not a regression, and not covered by the count
 above.
 
-Twelve tasks committed, one experiment, plus the two conversational decisions:
+Thirteen tasks committed, one experiment, plus the two conversational decisions:
 
 | | task | commit |
 |---|---|---|
@@ -35,6 +34,7 @@ Twelve tasks committed, one experiment, plus the two conversational decisions:
 | 14 | NYC Open Data ingest | `7221620` |
 | 17 | retarget `ats.py`, 3 new platforms | `597662b` |
 | 18 | Workday CXS, gated upstream | `fabe381` |
+| 11 | archetype superset, `role_track`, missingness | `da4942c` |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -145,10 +145,25 @@ Each of these is a documented claim that is **wrong about the code as it now sta
   four** known-good tokens because those boards render client-side. All its coverage
   figures are floors; `company_ats.validation_note` says so per row.
 - **The platform value is `builtin`**, not `builtin-nyc` as task files write it.
-- **The task files were written from the plan, not from the code.** Five are now confirmed
+- **Task 11 section 3 describes a bug that was not in the code.** It says a NULL
+  `role_archetype` "reads as a perfect archetype match" and a NULL
+  `advanced_degree_required` "is indistinguishable from `false`". **Neither field was ever
+  NULL** — `normalize()` substituted `"other"` / `"none"` / `"unknown"` / `false`, so 0 of
+  5,321 non-tombstoned rows carried a NULL in any of them. The bias was real and one layer
+  up. Fixed in `da4942c` at both layers; the task file now carries a correction block.
+- **`other` was mostly a TECH vocabulary gap, not an ops one.** Task 11 section 1 opens
+  with "an AI operations role at an insurance company". Of 427 `other` rows the seven
+  proposed ops candidates reclaim **54**; nine tech values the original twelve simply
+  lacked reclaim **203**. Anyone reading section 1 for proportion will get it backwards.
+- **`ai_operations` has 5 postings across 3 employers in this corpus.** It is carried, and
+  it is the value the whole task was motivated by. Same shape as the Workday finding
+  below: **these employers are not posting these roles.** Re-check it after Phase 3
+  before anything is built on it.
+- **The task files were written from the plan, not from the code.** Six are now confirmed
   wrong about what they describe: 05's premise, 10's instruction to lift a regex verbatim,
   17's "current coverage is Greenhouse and Lever" (Ashby already existed), the `generated:`
-  frontmatter claim, and 14's 20–60/day estimate against a measured 1.8. **Read the code
+  frontmatter claim, 14's 20–60/day estimate against a measured 1.8, and **11's section 3,
+  which describes a NULL-handling bug in code that never produced a NULL**. **Read the code
   before trusting a task file's account of it**, and expect the Definition-of-done counts
   to be off.
 - **`fastapi` is not installed in this environment**, so `backend/webapp/tests/` cannot
@@ -170,16 +185,26 @@ code.**
    **task 18 cannot report a yield at all** — its 4-of-149 measures today's SWE-shaped
    `relevance.json`, not Workday. Activating the profile is a deliberate act worth **+573
    rows, 13.2/day**.
+
+   **Its blocker narrowed on 2026-07-28.** Task 11 (`da4942c`) delivered the vocabulary 13
+   was going to have to invent: 26 archetypes with per-value corpus evidence in
+   `docs/role-track-derivation.md`, and an `unknown_penalty` block whose shape 13 should
+   copy. What remains is genuinely a product call and nothing else — the 20 plausible
+   Pursuit target roles, and where `uses_ai_tools` sits relative to `builds_llm_features`.
+   Note before pricing: the five ops archetypes carry far less corpus mass than the nine
+   tech ones, and `ai_operations` has 5 postings across 3 employers.
 2. **Task 29 — the labelling session.** 07's tooling is built and produced zero labels by
    design. The form is at `/v1/label` behind the existing Google SSO. What is missing is
    ~10 Builders and an afternoon.
 
 Then, in order:
 
-3. **Task 11** — archetype superset, `role_track`, missingness. Unblocked by 10, and
-   `job_facts.vote_unanimity` now gives it a per-row stability signal to record.
-4. **Task 12** — and it **must** carry the `FACTS_VERSION` bump for the majority-of-3
-   change. See `schema.py:158`. One re-extraction pays for both; do not bump separately.
+3. ~~**Task 11**~~ — **DONE, `da4942c`.** 12 archetypes → 26, `role_track`, and
+   missingness representable at both layers.
+4. **Task 12 — now the head of the queue, and its bill has grown to four items.**
+   `schema.py:159-184` lists them: the majority-of-3 vote semantics, the 26-value
+   archetype vocabulary, the new `role_track` field, and `normalize()` no longer
+   defaulting. **One re-extraction settles all four; do not bump separately.** ~5,300 rows.
 5. **Task 08** — score validation; needs 07's tooling but not its human labels.
 6. **Tasks 19, 21** — the remaining unblocked Phase 3 ingest. 15 and 20 need credentials.
    **Do not trust their estimates** — see the finding below.
@@ -285,6 +310,21 @@ one `STEPS` already has — shared files get a single owner, named in advance.
   the shapes the task file *describes*. Task 09's cassettes are the counterweight and
   should be preferred wherever a real endpoint can be recorded.
 
+- **Task 11's `role_track` column is NULL on all 5,328 rows** and stays that way until
+  task 12 re-extracts. Nothing has been extracted for it, so there is nothing to backfill
+  — the same rule as `job_events.rank`. Its nine-value vocabulary is **provisional**,
+  derived pre-Phase-3 from a tech-heavy corpus; `tools/derive-role-tracks.py` re-runs the
+  derivation and `docs/role-track-derivation.md` holds the evidence.
+- **Nothing task 11 touched is live.** No `criteria_version` bump, so the 26 archetype
+  weights and the `unknown_penalty` block are inert until
+  `migrate_profiles.py --apply --bump`. Verified: `match.py --dry-run` reports 0 matched
+  for both active profiles. Whoever bumps should know `years_experience_min` is NULL on
+  **52.9%** of the corpus, so its penalty is a corpus-wide re-ranking, and the magnitudes
+  are unfitted guesses.
+- **Two leftover scratch schemas hold a full `job_facts` each** — `scratch_5ce56323` and
+  `scratch_cafb8b05`, from task 09's harness. Harmless (`search_path` is `public`) but it
+  means the teardown does not always run, and an `information_schema` query without a
+  `table_schema` filter triples its rows. Noticed while verifying task 11's column add.
 - **The SerpApi ledger reconciliation** (above).
 - **Task 12 must carry the majority-of-3 change into its `FACTS_VERSION` bump.**
   Extraction semantics changed; CLAUDE.md: "Versions are cache keys."

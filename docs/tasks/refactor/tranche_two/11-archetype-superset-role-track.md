@@ -1,6 +1,6 @@
 # 11 — Archetype superset, `role_track`, and missingness
 
-**Status:** DONE (hash recorded in the follow-up commit). **Depends on:** 06, 10.
+**Status:** DONE, `da4942c`. **Depends on:** 06, 10.
 **Blocks:** 12, 13, 30.
 
 > **Correction, 2026-07-28.** Section 3 below is wrong about the code it describes. The
