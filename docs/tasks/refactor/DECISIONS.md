@@ -639,3 +639,66 @@ set. The headline says the gate "is better than the one task 05 measured and it 
 mostly noise" rather than leading with the improvement — task 12's extraction volume
 projection consumes this number and a flattering one would mis-size it. Not reversible:
 it is a measurement.
+
+### 07 — The golden-set DDL is owned by `evals/labels.py`, not `schema.py`
+
+`webapp/schema_web.py` reads `labels.WEB_PRIVILEGES` and `labels.WEB_SEQUENCES` and calls
+`labels.ensure_schema`, so the tables are declared once. The alternative — putting them in
+`schema.py` beside `job_events` — would have made the pipeline schema depend on the evals
+package's vocabulary. It also would have collided with a concurrent agent, but that is not
+why: labels are evidence about the pipeline rather than part of it. Reversible.
+
+### 07 — A `CHECK` enforces that axis A carries no profile and axis B must
+
+Not a convention, a constraint, in both directions. It is what makes
+`DELETE FROM eval_labels WHERE axis = 'B'` a safe cohort teardown: nothing objective can
+have been keyed to a profile by accident, so nothing objective is lost with it. Axis A
+validates `job_facts`, which outlives every cohort. **Effectively irreversible** — relaxing
+it later cannot recover rows already written under the wrong key.
+
+### 07 — `tech_stack` is excluded from the form; `remote_policy` at 81.7% is kept
+
+`03-metrics-and-golden-set.md:116` instructs that the selfcheck narrow the field set and
+that the remainder be recorded as known-unstable rather than dropped silently. `tech_stack`
+self-agrees 70.4% exact, and most of that instability is granularity, so a label settles a
+question about the field's definition — a spec change, not evidence. `remote_policy` is a
+five-value enum where a disagreement is a real disagreement a human can settle from the
+posting. Rejected: dropping both, and keeping both. Reversible — the list can grow without
+rework, since metrics scores only what is labelled.
+
+### 07 — Axis B is two answers with no middle, and abstention is NULL
+
+"Would you apply" is the decision the product actually asks a Builder to make. A 1-5 scale
+invites a middle that means nothing and cannot be turned into a precision figure. "I cannot
+tell" is an abstention stored as NULL, which is a different statement from "no" — and
+abstentions are excluded from agreement and **counted**, never folded in. Reversible.
+
+### 07 — Labels are append-only to the service, and a revision is a second round
+
+No `UPDATE` and no `DELETE` grant for the web role. A label is evidence; a labeller who
+changes their mind produces a second round and both rows survive, which is also precisely
+what makes intra-annotator agreement computable at all. Rejected: an editable label, which
+would have destroyed the ceiling measurement as a side effect of a UI convenience.
+Irreversible by design.
+
+### 07 — A tie between labellers is not broken into a consensus
+
+Two people disagreeing is the measurement, not an obstacle to it. Ties are reported and
+excluded from model-vs-human, and the count of what was dropped is reported with it.
+Rejected: majority-of-three-humans, which would launder the ceiling into a false certainty
+in exactly the way majority-of-3 is *appropriate* for a model and is not for people.
+Reversible.
+
+### 07 — The surface is server-rendered HTML behind the existing SSO, not a CLI
+
+The task file says "usable by someone who has never opened a terminal" and the labellers
+are ~10 Builder volunteers. `frontend/` holds one file called `.gitkeep`, so a JSON
+endpoint would have had no client. Google SSO and sessions already exist in
+`backend/webapp/`, so `/v1/label` costs one router. Reversible.
+
+### 07 — Zero labels produced, and a test asserts no module calls a model to label
+
+The boundary of the task, enforced rather than promised. Axis B is Builder preference, so
+a model standing in for it makes the measurement circular — `claude-bench.py:417` treating
+`sonnet-batch-1` as ground truth is the defect being avoided. Task 29 is the labelling
+session and it stops until there are people. Not reversible, and that is the point.

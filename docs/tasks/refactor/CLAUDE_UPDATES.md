@@ -821,3 +821,75 @@ not an implementation one.
    `ff9f9d9f9643e185af0f48ca` begins with `data-testid="conversation-turn-136"`. Something
    in that ingest path captured a browser DOM rather than a posting body. Worth a task of
    its own; it is silently poisoning extraction input.
+
+---
+
+## 2026-07-28 — 07 landed (`3a8b42c`): the tooling is built, and it produced zero labels
+
+New: `backend/evals/labels.py`, `backend/webapp/label.py`, `backend/tests/test_labels.py`
+(+44), `backend/webapp/tests/test_label_form.py`. Changed: `backend/evals/README.md`,
+`__main__.py`, `report.py`, `backend/webapp/app.py`, `schema_web.py`,
+`docs/ingestion_tests/README.md`.
+
+**`backend/schema.py` was not touched.** The golden-set DDL is owned by
+`evals/labels.py` and merged into `webapp/schema_web.py` by reading
+`labels.WEB_PRIVILEGES`, so there is one definition rather than two.
+
+### The uninterpretable report is unrepresentable, not discouraged
+
+Task 16 set the precedent — a tool that *refuses to print one denominator alone*. This
+does the same for the three quantities: a model-vs-human number will not render without
+the floor (task 06's `selfcheck`) and the ceiling (human agreement) beside it. The
+renderer takes the triple; a partial triple is **refused, not silently dropped**; an empty
+cell is as absent as a missing one. There is no code path that prints one number alone.
+
+### The two axes are keyed so that axis A survives the cohort
+
+| axis | key |
+|---|---|
+| A — "is the extraction correct?" | `(job_id, field, labeller_id, round_no)`, **no profile** |
+| B — "would you apply to this?" | `(job_id, field, profile, labeller_id, round_no)` |
+
+A `CHECK` enforces the asymmetry in both directions: axis A **may not** carry a profile,
+axis B **must**. `DELETE FROM eval_labels WHERE axis = 'B'` when the Pursuit cohort ends
+leaves every axis-A row intact and fully interpretable — which is the point, because axis A
+validates `job_facts`, the tier shared by every profile that will ever exist and the one
+that **has never been measured against a human**.
+
+### `tech_stack` is off the form, and the reason is recorded rather than the field dropped
+
+At **70.4%** exact self-agreement (task 06, n=115), most of `tech_stack`'s instability is
+granularity — "Postgres" vs "PostgreSQL", whether nice-to-haves count — so a human label
+would be settling a question about the field's *definition*. That is a spec change, not
+evidence, and it would spend scarce volunteer hours on a figure nobody can act on.
+
+`remote_policy` at **81.7%** is **kept**, and that is the judgement call in the list: it is
+a five-value enum where a disagreement is a disagreement a human can settle from the
+posting. The two fields are unstable in different ways and the distinction is the reason
+one is asked and one is not.
+
+`ai_involvement` and `seniority_level` are asked **first** — task 06 measured
+`ai_involvement` at 77.8% on `hn_whoishiring`, and a field that cannot agree with itself is
+where a human label buys the most.
+
+### The surface is HTML behind the SSO that already exists
+
+Server-rendered at `/v1/label`, not a CLI. It is for ~10 Builder volunteers and
+`frontend/` currently holds one file called `.gitkeep`. Labels are **append-only to the
+service** — no `UPDATE` and no `DELETE` grant — because a label is evidence; a revision is
+a second round and both survive.
+
+### Zero labels, and a test that enforces it
+
+`test_the_tables_ship_empty` and `test_no_module_in_the_package_calls_a_model_to_label`.
+Verified independently: no `%label%` table exists in the live database yet, since
+`ensure_schema` runs on webapp startup. Axis B *is* Builder preference, so a model standing
+in for it makes the measurement circular — the exact defect `claude-bench.py:417` has in
+treating `sonnet-batch-1` as ground truth. **Task 29 is the labelling session and it needs
+people.**
+
+### An environment limitation, not a regression
+
+`backend/webapp/tests/` cannot run here: **`fastapi` is not installed**, which fails
+`test_label_form.py` and the four pre-existing webapp test modules identically. The
+`backend/tests/` suite, including all 44 label tests, is green.

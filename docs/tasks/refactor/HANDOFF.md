@@ -7,8 +7,8 @@ Written 2026-07-28 to hand this run to a fresh session. Read this first, then
 
 ## State at handoff
 
-**Branch `webapp-service`, HEAD `7d94bb1`, suite at 486 tests** (task files say 263; it
-has grown — 486 is the floor now). **Note:** a full `unittest discover` currently reports
+**Branch `webapp-service`, HEAD `3a8b42c`, suite at 530 tests** (task files say 263; it
+has grown — 530 is the floor now). **Note:** a full `unittest discover` currently reports
 failures in `test_workday_ingest`, which is `task-18-workday`'s **incomplete in-flight
 work**, not a regression. `test_relevance`, `test_extract` and `test_match` are green.
 
@@ -29,6 +29,7 @@ Ten tasks committed, one experiment, plus the two conversational decisions:
 | — | Google Jobs query-bank experiment | `eee979d` |
 | — | **the two extraction decisions** | `943d899` |
 | 10 | description-first cohort gate | `7d94bb1` |
+| 07 | golden-set tooling (no labels) | `3a8b42c` |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -70,8 +71,6 @@ Agents spawned in the session after `943d899`, each with an explicit do-not-touc
 **Check `git status` first**; the previous handoff's two in-flight agents left nothing at
 all, so assume nothing.
 
-- **`task-07-labels`** — task 07's tooling only, stopping short of the act of labelling.
-  `evals/labels.py`, `evals/metrics.py`, `evals/corpus.py`, `api/`.
 - **`task-17-ats`** — task 17, retarget `ingest/ats.py` onto `company_ats`, four new ATS
   platforms. Owns the cassette machinery.
 - **`task-18-workday`** — task 18, Workday CXS with upstream relevance gating. New file
@@ -109,9 +108,10 @@ otherwise. Three ran concurrently for most of this session without conflict on t
 ceiling ("5-10 jobs labelled twice, a week apart") and tranche two's 07 adds
 inter-annotator agreement, needing two people. Axis B *is* Builder preference — a model
 standing in for it makes the measurement circular, the exact defect `03:13` names in
-`claude-bench.py:417`, which treats `sonnet-batch-1` as ground truth. **07's tooling can
-be built; only the labelling stops.** Task **29** is the labelling session itself and
-stops entirely. **30** sits behind it. **12** needs Axis A figures. **13** additionally
+`claude-bench.py:417`, which treats `sonnet-batch-1` as ground truth. **07's tooling is
+now built (`3a8b42c`) and produced zero labels, by design and by test.** The form is
+server-rendered HTML at `/v1/label` behind the existing Google SSO; what is missing is
+people. Task **29** is the labelling session itself and stops entirely. **30** sits behind it. **12** needs Axis A figures. **13** additionally
 needs product judgement — the 20 plausible Pursuit target roles and the weights are
 cohort calls, not implementation.
 
@@ -150,6 +150,10 @@ Each of these is a documented claim that is **wrong about the code as it now sta
   four** known-good tokens because those boards render client-side. All its coverage
   figures are floors; `company_ats.validation_note` says so per row.
 - **The platform value is `builtin`**, not `builtin-nyc` as task files write it.
+- **`fastapi` is not installed in this environment**, so `backend/webapp/tests/` cannot
+  run at all — five modules fail to import, four of which predate this run. It is not a
+  regression and not task 07's doing. `backend/tests/` is the suite that gates work here;
+  anything under `webapp/` is unverified by CI as things stand.
 - **`docs/ingest/*.md` claim `generated:` frontmatter but no generator exists.** Task 34
   must decide: write generators, or drop the claim.
 
