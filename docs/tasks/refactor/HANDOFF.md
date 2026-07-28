@@ -313,6 +313,55 @@ Each of these is a documented claim that is **wrong about the code as it now sta
 - **`docs/ingest/*.md` claim `generated:` frontmatter but no generator exists.** Task 34
   must decide: write generators, or drop the claim.
 
+## The plan-level question: GATE 2 is the one at risk
+
+`MASTER-PLAN-pursuit.md:251` sets **GATE 2 — ≥200 new Pursuit-relevant postings/day
+across sources** as the exit condition for the sourcing phase. That gate now looks
+unreachable by the sources the plan names, and it is the only gate whose premise
+this run has actually damaged.
+
+**What the named sources have measured:**
+
+| source | plan estimate | measured |
+|---|---|---|
+| 14 NYC Open Data | 20–60/day | 1.8 |
+| 18 Workday | 80–200/day | ~1 at four tenants (~12 extrapolated to fifty) |
+| 19 JSON-LD | 30–60/day | ≤1.1–2.3 ceiling — **dropped** |
+| 15, 20, 21 | 65–160/day combined | **unmeasured, same method, same table** |
+
+The three Phase 3 sources that have been measured contribute roughly **3/day
+between them**. The plan needed those three plus JSON-LD to carry most of the 200.
+
+**What the cohort gate's total intake is: not yet cleanly measurable, and that is
+itself worth recording.** Every day in the table so far carries a backfill
+component — 7/24 is the initial 11,000-row load (greenhouse 7,182 + ashby 2,561),
+and 7/28's 1,802 includes this session's NYC Open Data and Workday loads. The two
+least-contaminated days read **0 and 28** cohort-relevant postings; the least-bad
+four-day window averages ~27/day and is still not clean.
+
+**Do not quote a steady-state figure until a clean window exists** — a naive
+`count/days` over the current table returns ~130/day, which is almost entirely the
+initial load and would be wrong by an order of magnitude in the flattering
+direction. **The first job of the next sourcing session is to measure this
+properly**, over a window with no backfill in it. Until then the honest statement
+is: tens per day against a gate of 200.
+
+**This does not invalidate the plan; it relocates the risk.** Phases 1 and 2 —
+the pipeline retarget — are essentially done and their premises held. What has not
+held is the assumption that the long tail is reachable by adding feeds. Four
+independent measurements now say the same thing from four directions: task 10's
+gate is 90% junk after improving precision to 10.0%; task 18 found *zero* AI
+vocabulary in 329 Workday postings from a hospital, a bank and a retailer; task
+19 found 1 of 35 target employers publishing structured data; and task 12 found
+44% of first-time cohort extractions unclassifiable even at 26 archetypes.
+
+**The question that needs an answer before more ingest is built** is not "which
+source next" but whether ≥200/day of entry-level AI-adjacent NYC postings exists
+to be found at all. If it does not, GATE 2 should move rather than be chased, and
+the plan's Display decision (*"Tracks + reasoning, no 0–100 score surfaced"*)
+matters more than its sourcing decisions — because with a small corpus, ordering
+quality beats volume. That is a call for the repo owner, not for an implementer.
+
 ## Recommended next steps
 
 **Task 13 is now the whole critical path, and its urgency changed character on
