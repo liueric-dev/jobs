@@ -1094,3 +1094,43 @@ Half-right, though, and worth recording: **task 04 has no standalone `docs/` rep
 findings went into `backend/docs/SCORING.md`. So an agent told to check its work against
 "task 04's budget" finds no such document. Task 34 should decide whether 04's numbers get
 promoted to `docs/`.
+
+## 11 — Archetype superset, `role_track`, missingness
+
+Three changes designed together because they ship in one `FACTS_VERSION` bump, which task
+12 still owns. **Nothing was re-extracted and nothing was tuned.** Suite 663 → **717**.
+
+**The archetype vocabulary went from 12 values to 26.** Derived, not invented:
+`backend/tools/derive-role-tracks.py` (new, stdlib-only) against 863 cohort-eligible
+postings and the 427 rows sitting at `other`, with the evidence in
+`docs/role-track-derivation.md`. Five ops values, nine tech. Two of the task file's seven
+proposed candidates were dropped on evidence.
+
+**`role_track` exists as a nullable `job_facts` column and an extracted field**, with a
+provisional nine-value vocabulary from title clustering. It is NULL on all 5,328 rows and
+stays NULL until task 12 re-extracts — nothing has been extracted for it, so there is
+nothing to backfill, and a guessed value would be worse than a missing one.
+
+**Missingness is now representable at both layers.** `normalize()` no longer substitutes
+`"other"` / `"none"` / `"unknown"` / `false` for an absent answer, and the four scored
+booleans are tri-state. `score_job()` prices each nullable feature via a top-level
+`unknown_penalty` map and emits a `{feature}:missing` entry into `match_reasons`, so "why
+is this ranked 8th" is answerable when the answer is "we could not tell".
+
+### The defect it found: the task file described a bug that was not there
+
+Section 3 is written against NULLs that do not exist — `normalize()` had already laundered
+every absence into a real-looking value, so 0 of 5,321 rows carried a NULL in any of the
+fields it names. The bias was real and one layer up. **That is now five task files
+confirmed wrong about the code**, and the correction changed the work: the fix had to land
+in extraction, not only in scoring.
+
+### What is deliberately still outstanding
+
+- **No `FACTS_VERSION` bump.** Task 11 adds three items to the unpaid bill already recorded
+  at `schema.py:159-168`; one re-extraction under task 12 settles all of it.
+- **No `criteria_version` bump.** The new weights and penalties are inert until someone
+  runs `migrate_profiles.py --apply --bump`. Verified inert: `match.py --dry-run` reports
+  0 matched for both active profiles.
+- **The `role_track` vocabulary is provisional.** Derived pre-Phase-3 from a tech-heavy
+  corpus; the task file expects revision and the tool exists to re-run it.

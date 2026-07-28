@@ -166,6 +166,22 @@ EVENTS_TABLE = "job_events"
 #: two burn-downs a week apart. Until then, job_facts.extraction_passes is
 #: what tells the two generations apart. Do not bump this to "tidy it up"
 #: without doing task 12's measurement: the bump re-extracts ~5,300 rows.
+#:
+#: Task 11 adds three more items to that same unpaid bill, for the same reason
+#: and to be settled by the same bump:
+#:   * role_archetype's vocabulary went from 12 values to 26 (extract.ARCHETYPE),
+#:     so a posting that answered "other" last week may answer "support_ops"
+#:     today with no change to the posting.
+#:   * role_track is a new extracted field. It is NULL on every row until the
+#:     re-extraction, which is honest -- nothing has been extracted for it.
+#:   * normalize() stopped defaulting role_archetype, ai_involvement,
+#:     remote_policy and the four booleans, so an absent answer is now NULL
+#:     rather than "other" / "none" / "unknown" / false. That changes what a
+#:     stored value MEANS, not merely which values occur.
+#: All three edit _INSTRUCTIONS (extract.py's cache-keyed fixed prefix), whose
+#: own comment asks for a bump on exactly this kind of change. Still not paid
+#: here: one re-extraction under task 12 settles the vote-semantics change
+#: above and these three together, instead of four burn-downs of ~5,300 rows.
 FACTS_VERSION = 2
 
 #: match_score below this is not written to job_matches at all. Most jobs are
@@ -468,9 +484,26 @@ def ensure_schema(conn):
     # nothing recorded it. migrations/migrate_extraction_passes.py can fill
     # extraction_passes=1 for them, which is a fact about how the pipeline ran,
     # not a guess. It deliberately does not invent a unanimity.
+    #
+    #   role_track -- the browsable role family a posting belongs to
+    #     (extract.ROLE_TRACK), a coarser grain than role_archetype and a
+    #     separate axis rather than a rollup of it. NULLABLE BY DESIGN: the
+    #     clustering it was derived from covers 83.2% of the corpus and
+    #     docs/role-track-derivation.md is explicit that the tail below n=5 is
+    #     not trustworthy, so "no track fits this" has to be representable
+    #     rather than rounded to the nearest one. The vocabulary itself is
+    #     PROVISIONAL -- derived pre-Phase-3 from a tech-heavy corpus, and
+    #     tools/derive-role-tracks.py exists to re-run it once Phase 3 lands.
+    #
+    # role_track is NULL on every existing row and stays NULL until task 12
+    # re-extracts. That is honest rather than a gap: nothing has ever been
+    # extracted for this column, so there is no migration to backfill it and
+    # there should not be -- the same rule as job_events.rank, where a guessed
+    # value is worse than a missing one.
     dbconn.add_missing_columns(conn, FACTS_TABLE, [
         ("extraction_passes", "INTEGER"),
         ("vote_unanimity", "REAL"),
+        ("role_track", "TEXT"),
     ])
 
     for name, col in (("idx_jobs_company", "company_token"),

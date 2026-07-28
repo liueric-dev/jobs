@@ -62,6 +62,7 @@ BASE = {
     "years_experience_min": 2,
     "years_experience_max": 4,
     "role_archetype": "backend",
+    "role_track": "software_engineering",
     "tech_stack": '["python"]',
     "ai_involvement": "uses_ai_tools",
     "ml_research_required": False,
@@ -88,15 +89,31 @@ def job(platform, job_id="j1"):
             "description_text": "We are hiring an engineer."}
 
 
-def response(**overrides):
-    """A raw model response that normalize() will accept."""
-    payload = {
+#: Sentinel for payload(): "delete this key entirely", which is a different
+#: response from "answer it with null" and a very different one from "answer
+#: it false". Telling those three apart is the whole of the missingness work.
+_OMIT = object()
+
+
+def payload(**overrides):
+    """A raw model response dict that normalize() will accept.
+
+    Only the REQUIRED_FIELDS keys are present by default, so a test that
+    wants to know what normalize() does with an unanswered field can simply
+    not mention it.
+    """
+    p = {
         "seniority_level": "junior", "role_archetype": "backend",
         "remote_policy": "hybrid", "tech_stack": ["python"],
         "summary": "A backend role. It uses Python.",
     }
-    payload.update(overrides)
-    return json.dumps(payload)
+    p.update(overrides)
+    return {k: v for k, v in p.items() if v is not _OMIT}
+
+
+def response(**overrides):
+    """The same thing as JSON, for the tests that go through a fake `call`."""
+    return json.dumps(payload(**overrides))
 
 
 class PolicyTests(unittest.TestCase):
@@ -222,6 +239,254 @@ class CallCountTests(unittest.TestCase):
             job("hn_whoishiring"), call=lambda p: "not json at all")
         self.assertEqual(outcome, extract.REJECTED)
         self.assertIsNone(facts)
+
+
+#: The fourteen values docs/role-track-derivation.md added to the original
+#: twelve. Listed here rather than sliced out of extract.ARCHETYPE so the test
+#: fails if somebody removes one, which slicing would not catch.
+NEW_ARCHETYPES = (
+    "ai_operations", "implementation_analyst", "support_ops", "marketing_ops",
+    "admin_ops", "hardware_embedded", "infrastructure_compute",
+    "engineering_management", "qa_test", "program_management", "mobile",
+    "business_systems", "it_internal", "developer_relations",
+)
+
+
+class VocabularyTests(unittest.TestCase):
+    """The closed vocabularies, and the coercion that keeps them closed.
+
+    match.py compares these strings exactly, so a value the model can say but
+    _enum() cannot recognise scores as unknown for every profile forever --
+    silently. That is the failure these tests exist for, and it is invisible
+    in production.
+    """
+
+    def test_every_vocabulary_value_survives_a_round_trip(self):
+        for vocab in (extract.ARCHETYPE, extract.ROLE_TRACK,
+                      extract.SENIORITY, extract.AI_INVOLVEMENT,
+                      extract.REMOTE_POLICY):
+            for value in vocab:
+                self.assertEqual(extract._enum(value, vocab), value)
+
+    def test_the_fourteen_derived_archetypes_are_present(self):
+        for value in NEW_ARCHETYPES:
+            self.assertIn(value, extract.ARCHETYPE, value)
+        self.assertEqual(len(extract.ARCHETYPE), 26)
+        self.assertEqual(len(set(extract.ARCHETYPE)), 26)
+
+    def test_the_two_dropped_candidates_are_absent(self):
+        # Proposed by the task file, dropped on evidence: between them they
+        # reclaim ONE row of 427 (automation_specialist has 5 cohort postings
+        # and 1 `other` row; 8 of data_coordination's 9 hits are a single
+        # employer's "Data Annotation Specialist"). See
+        # docs/role-track-derivation.md, "Dropped". Adding them back needs new
+        # evidence, not a re-reading of the task file.
+        self.assertNotIn("automation_specialist", extract.ARCHETYPE)
+        self.assertNotIn("data_coordination", extract.ARCHETYPE)
+
+    def test_business_systems_is_deliberately_in_both_vocabularies(self):
+        # Not a copy-paste slip: the archetype is the role, the track is the
+        # browsable family it sits in. Pinned so it is not "tidied up".
+        self.assertIn("business_systems", extract.ARCHETYPE)
+        self.assertIn("business_systems", extract.ROLE_TRACK)
+
+    def test_archetype_near_misses_coerce(self):
+        for raw, expected in (
+                ("AI Operations", "ai_operations"),
+                ("QA/Test", "qa_test"),
+                ("Support-Ops", "support_ops"),
+                ("IT Internal", "it_internal"),
+                ("ENGINEERING_MANAGEMENT", "engineering_management"),
+                ("Hardware/Embedded", "hardware_embedded"),
+                ("mobile engineer", "mobile"),            # prefix rule
+                ("business_systems_analyst", "business_systems"),
+        ):
+            self.assertEqual(extract._enum(raw, extract.ARCHETYPE), expected,
+                             raw)
+
+    def test_role_track_near_misses_coerce(self):
+        for raw, expected in (
+                ("Software Engineering", "software_engineering"),
+                ("revenue-operations", "revenue_operations"),
+                ("SOLUTIONS_AND_IMPLEMENTATION", "solutions_and_implementation"),
+                ("business operations coordinator", "business_operations"),
+        ):
+            self.assertEqual(extract._enum(raw, extract.ROLE_TRACK), expected,
+                             raw)
+
+    def test_a_slash_is_a_separator_like_a_dash(self):
+        # The module docstring has always named "Senior/Mid" as a shape that
+        # must not silently score as unknown; until now the slash survived
+        # both replaces and matched nothing. A compound answer resolves to the
+        # value named FIRST -- the same first-wins arbitration the prefix rule
+        # already applies to "mid_level".
+        self.assertEqual(extract._enum("Senior/Mid", extract.SENIORITY),
+                         "senior")
+        self.assertEqual(extract._enum("Mid/Senior", extract.SENIORITY), "mid")
+
+    def test_an_unrecognised_answer_is_none_not_a_guess(self):
+        self.assertIsNone(extract._enum("astronaut", extract.ARCHETYPE))
+        self.assertIsNone(extract._enum("veterinary", extract.ROLE_TRACK))
+        self.assertIsNone(extract._enum(None, extract.ARCHETYPE))
+        self.assertIsNone(extract._enum(7, extract.ARCHETYPE))
+
+    def test_the_prompt_offers_every_value_it_will_accept(self):
+        # A value in the tuple but not in _INSTRUCTIONS is a value the model
+        # is never told about; one in the prompt but not the tuple coerces to
+        # NULL on the way back in. Both fail silently, so both are pinned.
+        for value in extract.ARCHETYPE + extract.ROLE_TRACK:
+            self.assertIn(value, extract._INSTRUCTIONS, value)
+        # The prompt must PERMIT null rather than force a track: coverage is
+        # 83.2% and the cluster tail is explicitly untrusted, so a model with
+        # no good answer has to be allowed to say so.
+        guidance = [line for line in extract._INSTRUCTIONS.splitlines()
+                    if line.startswith("  role_track ")]
+        self.assertEqual(len(guidance), 1)
+        self.assertIn("null", guidance[0])
+
+    def test_the_confusable_values_are_told_apart_in_the_prompt(self):
+        # The list of values is generated from the tuples, so it cannot fall
+        # out of date -- but the GUIDANCE is hand-written, and a vocabulary
+        # that doubled in size without explaining its overlapping values just
+        # moves the ambiguity from `other` into a wrong confident answer.
+        # These four pairs are the ones docs/role-track-derivation.md flags.
+        archetype = [line for line in extract._INSTRUCTIONS.splitlines()
+                     if line.startswith("  role_archetype ")][0]
+        for value in ("support_ops", "it_internal", "engineering_management",
+                      "pm", "infrastructure_compute", "devops",
+                      "ai_operations", "other"):
+            self.assertIn(f'"{value}"', archetype, value)
+
+
+class MissingnessTests(unittest.TestCase):
+    """normalize() must not launder "could not tell" into a real value.
+
+    Every enum here used to carry a default, so an unanswered field was
+    stored as "other" / "none" / "unknown" / false and match.py scored it
+    identically to a confident answer -- which rewards the postings
+    extraction did WORST on. These assert `is None`, never falsiness:
+    assertFalse(None) passes and would hide exactly the bug.
+    """
+
+    def test_absent_enums_are_none(self):
+        facts = extract.normalize(payload(remote_policy=None))
+        self.assertIsNone(facts["remote_policy"])
+        self.assertIsNone(facts["ai_involvement"])   # key never sent at all
+        self.assertIsNone(facts["role_track"])
+
+    def test_unrecognised_enums_are_none_not_a_default(self):
+        facts = extract.normalize(payload(
+            role_archetype="quantum_alchemist", ai_involvement="a lot",
+            remote_policy="wherever", role_track="misc"))
+        self.assertIsNone(facts["role_archetype"])
+        self.assertIsNone(facts["ai_involvement"])
+        self.assertIsNone(facts["remote_policy"])
+        self.assertIsNone(facts["role_track"])
+
+    def test_booleans_are_tri_state(self):
+        for field in ("ml_research_required", "advanced_degree_required",
+                      "customer_facing", "gap_friendly_language"):
+            absent = extract.normalize(payload())
+            self.assertIsNone(absent[field], field)
+            self.assertIs(extract.normalize(payload(**{field: False}))[field],
+                          False, field)
+            self.assertIs(extract.normalize(payload(**{field: True}))[field],
+                          True, field)
+
+    def test_a_non_boolean_answer_is_unknown_rather_than_true(self):
+        # "yes" and 1 are the model failing to follow the schema, not the
+        # posting stating a requirement. Reading them as True would penalise
+        # a posting for something it never said.
+        for value in ("yes", "true", 1, [], {}):
+            facts = extract.normalize(payload(advanced_degree_required=value))
+            self.assertIsNone(facts["advanced_degree_required"], repr(value))
+
+    def test_employment_type_and_visa_keep_their_unknown(self):
+        # Left alone deliberately: "unknown" is a real VALUE in both
+        # vocabularies -- a posting genuinely says nothing about sponsorship
+        # -- and nothing in match.py scores either field.
+        facts = extract.normalize(payload())
+        self.assertEqual(facts["employment_type"], "unknown")
+        self.assertEqual(facts["visa_sponsorship"], "unknown")
+
+    def test_a_null_required_field_still_passes_the_shape_gate(self):
+        # llm.has_fields tests key PRESENCE, and that is still right now that
+        # null is meaningful: requiring non-null would TOMBSTONE a posting
+        # whose archetype the model honestly could not determine, permanently
+        # discarding a row for giving the newly-correct answer.
+        facts = extract.normalize(payload(role_archetype=None))
+        self.assertIsNotNone(facts)
+        self.assertIsNone(facts["role_archetype"])
+
+    def test_a_missing_required_key_is_still_unusable(self):
+        self.assertIsNone(extract.normalize(payload(summary=_OMIT)))
+
+
+class TombstoneGuardTests(unittest.TestCase):
+    """The guard at extract.py's normalize(): exactly what it caught before.
+
+    It used to read `archetype == "other"`, using "other" as a proxy for "the
+    model said nothing useful" -- correct only because "other" was also the
+    default for an unrecognised answer. Now that the default is None, a naive
+    read of that line stops firing and junk gets STORED instead of tombstoned,
+    with nothing in production to notice.
+    """
+
+    def test_the_new_predicate_is_the_old_one(self):
+        # The algebra, asserted rather than argued: _enum(x, ARCHETYPE,
+        # "other") == "other" iff _enum(x, ARCHETYPE) is "other" or None, for
+        # every shape of answer. That is what makes the rewrite equivalent.
+        for raw in ("other", "Other", "OTHER", "backend", "ai_operations",
+                    "astronaut", "", "   ", None, 7, [], {"a": 1}, True,
+                    "other_thing", "otherwise"):
+            old = extract._enum(raw, extract.ARCHETYPE, "other") == "other"
+            new = extract._enum(raw, extract.ARCHETYPE) in (None, "other")
+            self.assertEqual(old, new, repr(raw))
+
+    def test_a_genuinely_empty_response_still_tombstones(self):
+        self.assertIsNone(extract.normalize(payload(
+            seniority_level=None, role_archetype=None, remote_policy=None,
+            tech_stack=[], summary="")))
+
+    def test_an_unrecognised_answer_to_everything_still_tombstones(self):
+        # The case the old code caught via the "other" default. It must keep
+        # tombstoning now that the default is gone.
+        self.assertIsNone(extract.normalize(payload(
+            seniority_level="whatever", role_archetype="astronaut",
+            remote_policy="wherever", tech_stack="not a list", summary=42)))
+
+    def test_an_explicit_other_is_an_answer_and_is_not_tombstoned(self):
+        # "None of these archetypes fit" is a real, meaningful reply. It is
+        # stored as "other" -- distinguishable from the NULL an unrecognised
+        # answer now produces, which it was not before.
+        facts = extract.normalize(payload(role_archetype="other"))
+        self.assertIsNotNone(facts)
+        self.assertEqual(facts["role_archetype"], "other")
+
+    def test_an_explicit_other_and_nothing_else_still_tombstones(self):
+        # Equivalence in the other direction: the guard needs all four
+        # signals empty, and "other" alone was never enough to save a row.
+        self.assertIsNone(extract.normalize(payload(
+            seniority_level=None, role_archetype="other", remote_policy=None,
+            tech_stack=[], summary="")))
+
+    def test_any_one_usable_signal_saves_the_row(self):
+        empty = {"seniority_level": None, "role_archetype": None,
+                 "remote_policy": None, "tech_stack": [], "summary": ""}
+        for saved in ({"seniority_level": "senior"},
+                      {"role_archetype": "support_ops"},
+                      {"tech_stack": ["python"]},
+                      {"summary": "A role."}):
+            self.assertIsNotNone(extract.normalize({**empty, **saved}), saved)
+
+    def test_a_newly_recognised_archetype_is_no_longer_tombstone_bait(self):
+        # Not a change to the guard but a consequence of the vocabulary: a
+        # response naming ONLY "support_ops" used to coerce to "other" and,
+        # with nothing else usable, was thrown away. It is now an answer.
+        facts = extract.normalize({
+            "seniority_level": None, "role_archetype": "support_ops",
+            "remote_policy": None, "tech_stack": [], "summary": ""})
+        self.assertEqual(facts["role_archetype"], "support_ops")
 
 
 class VoteTests(unittest.TestCase):
@@ -387,6 +652,71 @@ class VoteTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             extract.vote_facts([])
 
+    def test_role_track_votes_like_any_other_enum(self):
+        facts, _ = extract.vote_facts([
+            result(role_track="business_operations"),
+            result(role_track="technical_support"),
+            result(role_track="technical_support"),
+        ])
+        self.assertEqual(facts["role_track"], "technical_support")
+
+    def test_role_track_three_way_tie_falls_back_to_the_first_pass(self):
+        facts, unanimity = extract.vote_facts([
+            result(role_track="data_and_analytics"),
+            result(role_track="business_analysis"),
+            result(role_track="revenue_operations"),
+        ])
+        self.assertEqual(facts["role_track"], "data_and_analytics")
+        self.assertLess(unanimity, 1.0)
+
+    def test_role_track_none_majority_wins(self):
+        # None means "no listed track describes this", which is a real answer
+        # on a nullable-by-design field: two passes saying it outrank one that
+        # named a track.
+        facts, _ = extract.vote_facts([
+            result(role_track=None),
+            result(role_track=None),
+            result(role_track="product_and_marketing"),
+        ])
+        self.assertIsNone(facts["role_track"])
+
+    def test_role_track_all_none_stays_none(self):
+        facts, unanimity = extract.vote_facts(
+            [result(role_track=None)] * 3)
+        self.assertIsNone(facts["role_track"])
+        self.assertEqual(unanimity, 1.0)   # agreeing on None is agreement
+
+    def test_role_track_disagreement_moves_the_prose_pass(self):
+        # role_track joins the agreement vector _majority_pass_index() scores,
+        # so a pass outvoted on it alone no longer carries the summary. That
+        # is the intended effect and not a side effect: the prose should
+        # describe the reading of the posting the vote endorsed.
+        facts, _ = extract.vote_facts([
+            result(role_track="business_analysis", summary="Outvoted."),
+            result(role_track="technical_support", summary="Endorsed."),
+            result(role_track="technical_support", summary="Also endorsed."),
+        ])
+        self.assertEqual(facts["role_track"], "technical_support")
+        self.assertEqual(facts["summary"], "Endorsed.")
+
+    def test_a_null_role_track_never_tombstones_a_row(self):
+        # End to end through extract_facts: the model omitting the field is
+        # the expected case on 16.8% of postings and must cost nothing.
+        outcome, facts, passes, _ = extract.extract_facts(
+            job("greenhouse"), call=lambda p: response())
+        self.assertEqual(outcome, extract.EXTRACTED)
+        self.assertIsNone(facts["role_track"])
+
+    def test_tri_state_booleans_vote_with_none(self):
+        # normalize() no longer forces these through bool(), so None reaches
+        # the vote and has to count as an answer here too.
+        facts, _ = extract.vote_facts([
+            result(customer_facing=None),
+            result(customer_facing=None),
+            result(customer_facing=True),
+        ])
+        self.assertIsNone(facts["customer_facing"])
+
     def test_vote_does_not_mutate_its_inputs(self):
         results = [result(seniority_level="mid"), result(), result()]
         snapshot = json.dumps(results, sort_keys=True)
@@ -517,6 +847,37 @@ class SchemaAndSelectionTests(unittest.TestCase):
             cols = dbconn.existing_columns(conn, schema.FACTS_TABLE)
             self.assertIn("extraction_passes", cols)
             self.assertIn("vote_unanimity", cols)
+
+    def test_ensure_schema_creates_role_track(self):
+        # Added via add_missing_columns rather than the CREATE TABLE, so a
+        # FRESH database is exactly the path that could silently lack it --
+        # and update_job_facts INSERTs every name in _FACT_COLUMNS, so a
+        # missing column is an error on every extraction rather than a
+        # degraded one.
+        with scratchdb.scratch_schema() as (conn, _name):
+            self.assertIn("role_track",
+                          dbconn.existing_columns(conn, schema.FACTS_TABLE))
+
+    def test_update_job_facts_writes_role_track(self):
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._insert_job(conn, "j1", "2026-07-01T00:00:00")
+            conn.commit()
+            extract.update_job_facts(
+                conn, "j1", result(role_track="technical_support"),
+                "test-model")
+            self.assertEqual(conn.execute(
+                "SELECT role_track FROM job_facts WHERE job_id = 'j1'"
+            ).fetchone()[0], "technical_support")
+
+    def test_a_null_role_track_round_trips_as_null(self):
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._insert_job(conn, "j2", "2026-07-01T00:00:00")
+            conn.commit()
+            extract.update_job_facts(conn, "j2", result(role_track=None),
+                                     "test-model")
+            self.assertIsNone(conn.execute(
+                "SELECT role_track FROM job_facts WHERE job_id = 'j2'"
+            ).fetchone()[0])
 
     def test_update_job_facts_writes_the_stability_columns(self):
         with scratchdb.scratch_schema() as (conn, _name):

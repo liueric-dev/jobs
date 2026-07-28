@@ -183,14 +183,115 @@ MAX_DESCRIPTION_CHARS = 3000
 #: is treated as unusable rather than stored half-empty. Everything else --
 #: comp, visa, years -- is genuinely often absent from a posting and NULL is
 #: the honest answer.
+#:
+#: THIS IS A SHAPE GATE, NOT A CONTENT GATE, and it stays that way now that
+#: NULL is meaningful. llm.has_fields (llm.py:366) tests key PRESENCE only, so
+#: {"role_archetype": null} passes it. That was worth re-deciding when
+#: normalize() stopped defaulting these fields, and the answer is that
+#: presence is still the right test: the question here is "did the model
+#: answer the schema we asked for", and the question "did it actually say
+#: anything" belongs to the guard in normalize() below, which can see all four
+#: signals at once instead of one key in isolation. Requiring non-null would
+#: TOMBSTONE a posting whose archetype the model honestly could not determine
+#: -- writing off the row permanently for giving the newly-correct answer,
+#: which is the missingness bug in a worse form. (has_fields also lives in
+#: llm.py and is shared with score.py; changing it there would move a gate
+#: this task never measured.)
+#: role_track is deliberately NOT here: it is nullable by design, so requiring
+#: its key would tombstone rows over a field nothing scores.
 REQUIRED_FIELDS = ("seniority_level", "role_archetype", "remote_policy",
                    "tech_stack", "summary")
 
 SENIORITY = ("intern", "new_grad", "junior", "mid", "senior", "staff",
              "principal", "director", "exec")
-ARCHETYPE = ("backend", "frontend", "fullstack", "ai_integration",
-             "ml_research", "forward_deployed", "solutions", "data",
-             "devops", "security", "pm", "other")
+
+#: role_archetype's closed vocabulary, and the input to match.py's single most
+#: predictive feature.
+#:
+#: DERIVED, NOT INVENTED. The original twelve were all software-engineering
+#: values, which made every non-software role `other` -- priced at 0 by
+#: config/criteria.json, i.e. indistinguishable from a missing value. The
+#: fourteen added below come from docs/role-track-derivation.md (a), measured
+#: against 863 cohort-eligible postings and the 427 rows already sitting at
+#: `other`. That document reports employer SPREAD beside every count, because
+#: a candidate whose mass sits at one employer is that employer's hiring spree
+#: rather than a vocabulary value. The fourteen reclaim 242 of the 427 (56.7%).
+#:
+#: Its headline finding is worth carrying next to the list, because it is not
+#: what the task file assumed: `other` was mostly a TECH vocabulary gap, not an
+#: ops one. 240 of the 427 `other` titles contain the word "engineer"; the five
+#: ops values reclaim 54 rows, the nine tech values reclaim 203.
+#:
+#: CONSIDERED AND DROPPED ON EVIDENCE, recorded so they are not proposed again:
+#:   automation_specialist -- 5 cohort postings, 1 `other` row. The spread is
+#:     fine, the mass is not, and the genuine automation work in this corpus
+#:     already lands in implementation_analyst and business_systems.
+#:   data_coordination     -- 9 cohort postings, 8 of them one employer's "Data
+#:     Annotation Specialist". Two employers is not a vocabulary value; it is
+#:     precisely the near-duplicate trap that analysis was built to catch.
+#:   Between them they would have reclaimed ONE row of the 427.
+#:
+#: ai_operations is the value this whole change is motivated by and it is the
+#: THINNEST of the fourteen: 5 cohort postings across 3 employers. It is
+#: carried deliberately -- its absence is exactly the failure being fixed --
+#: but it is the first thing to re-check when Phase 3 lands new sources.
+#:
+#: THE ESCAPE HATCH, RECORDED NOW: if a third vertical ever appears, stop
+#: hand-growing this and adopt O*NET/SOC codes. Hand-maintained taxonomies that
+#: lag reality are the documented failure mode -- it is why LinkedIn abandoned
+#: theirs. Two verticals does not justify SOC's complexity; four would. This
+#: change takes the hand-maintained list from 12 to 26, which is most of the
+#: way to where that trade flips, so the next person to want another eight
+#: values should read docs/role-track-derivation.md, "The O*NET/SOC escape
+#: hatch", before adding them.
+ARCHETYPE = (
+    # The original twelve. All software engineering.
+    "backend", "frontend", "fullstack", "ai_integration",
+    "ml_research", "forward_deployed", "solutions", "data",
+    "devops", "security", "pm", "other",
+    # Ops (5). Reclaim 54 of the 427 `other` rows.
+    "ai_operations", "implementation_analyst", "support_ops",
+    "marketing_ops", "admin_ops",
+    # Tech (9). Reclaim 203. This is where the `other` mass actually was.
+    "hardware_embedded", "infrastructure_compute", "engineering_management",
+    "qa_test", "program_management", "mobile", "business_systems",
+    "it_internal", "developer_relations",
+)
+
+#: The browsable role families the UI groups by -- a coarser grain than
+#: ARCHETYPE, and a separate axis rather than a rollup of it.
+#:
+#: PROVISIONAL, AND THE REASON MATTERS. These nine are cluster names from
+#: docs/role-track-derivation.md (b): agglomerative clustering over posting
+#: TITLES (descriptions rebuild the employer list, not a role taxonomy -- 94%
+#: of title-only clusters span 4+ employers against 30% for title+description).
+#: The corpus they came from is pre-Phase-3 and tech-heavy, and the task file
+#: (tranche_two/11-archetype-superset-role-track.md:56-64) is explicit that a
+#: taxonomy derived from it "will not describe the population's opportunity
+#: space" and expects revision. backend/tools/derive-role-tracks.py exists to
+#: re-run the derivation; this is not a settled vocabulary.
+#:
+#: NULLABLE BY DESIGN, and _INSTRUCTIONS says so to the model. The nine tracks
+#: cover 83.2% of clusters at n>=5; the tail below that forms on incidental
+#: shared title words (a Site Reliability Engineer and a Pharmacy Technician
+#: both saying "technician") and is explicitly not trusted. A vocabulary that
+#: forces a value on the other 16.8% would be inventing one.
+#:
+#: `security` and AI/agent engineering both surfaced as clean clusters and are
+#: deliberately NOT tracks: they already exist as ARCHETYPE values, and giving
+#: the UI two controls that do the same thing at different grains is worse than
+#: giving it one.
+#:
+#: business_systems appears in BOTH vocabularies, at different grains, and that
+#: is intended rather than a copy-paste slip: as an archetype it is the role
+#: (Business Systems Analyst, Salesforce/Workday/ERP configuration), as a track
+#: it is the browsable family that role sits in. Do not "fix" it by deleting
+#: either one.
+ROLE_TRACK = ("software_engineering", "technical_support", "business_analysis",
+              "product_and_marketing", "solutions_and_implementation",
+              "data_and_analytics", "revenue_operations", "business_systems",
+              "business_operations")
+
 AI_INVOLVEMENT = ("none", "uses_ai_tools", "builds_llm_features",
                   "core_ml_research")
 REMOTE_POLICY = ("onsite", "hybrid", "remote_local", "remote_anywhere",
@@ -210,6 +311,7 @@ Respond with ONLY a single JSON object -- no markdown code fences, no explanatio
 Use exactly these values for the enumerated fields:
   seniority_level: {" | ".join(SENIORITY)}
   role_archetype: {" | ".join(ARCHETYPE)}
+  role_track: {" | ".join(ROLE_TRACK)} | null
   ai_involvement: {" | ".join(AI_INVOLVEMENT)}
   remote_policy: {" | ".join(REMOTE_POLICY)}
   employment_type: {" | ".join(EMPLOYMENT_TYPE)}
@@ -217,7 +319,8 @@ Use exactly these values for the enumerated fields:
 
 Field guidance:
   seniority_level        the level the posting is hiring AT, from its title and requirements -- not the seniority of the team.
-  role_archetype         the single closest match. "forward_deployed" means embedded with customers to build solutions; "solutions" means sales/customer-facing technical work; "ai_integration" means building LLM/agent features into a product; "ml_research" means training models or research-scientist work.
+  role_archetype         the single closest match. "forward_deployed" means embedded with customers to build solutions; "solutions" means sales/customer-facing technical work; "ai_integration" means building LLM/agent features into a product; "ml_research" means training models or research-scientist work. Pairs that are easy to confuse: "support_ops" vs "it_internal" differ by WHO IS SERVED -- "support_ops" serves external customers or users of the product, "it_internal" serves the company's own staff. "engineering_management" means managing engineers; "pm" means product management, deciding what gets built. "infrastructure_compute" means networks, data centres, SRE and compute platforms; "devops" means the delivery pipeline -- CI/CD, build, release. "ai_operations" means running or enabling AI systems and workflows inside a business rather than building them, and it is an uncommon role -- use it only when the posting is clearly that, not whenever AI is mentioned. Answer "other" when none of the listed values fit: "other" is a real answer and is not the same as omitting the field.
+  role_track             the broad role family this posting belongs to, a coarser grouping than role_archetype. Use null if none of the listed tracks clearly describes the role. Do not force a value -- null is the correct answer for a role that belongs to no listed track, and is more useful than a wrong one.
   years_experience_min   the smallest number of years the posting requires. null if unstated. Do not invent a number from the seniority level.
   years_experience_max   only if the posting gives a range. null otherwise.
   tech_stack             concrete technologies named in the posting, lowercased. Do not include soft skills, methodologies, or company names. Empty list if none are named.
@@ -234,6 +337,7 @@ Respond with exactly this JSON schema (no other text):
   "years_experience_min": <integer or null>,
   "years_experience_max": <integer or null>,
   "role_archetype": "<enum>",
+  "role_track": "<enum or null>",
   "tech_stack": ["...", "..."],
   "ai_involvement": "<enum>",
   "ml_research_required": <true or false>,
@@ -353,14 +457,26 @@ def _enum(value, allowed, default=None):
     """Coerce a model's answer onto a closed vocabulary, or None.
 
     Tolerates the shapes models actually produce -- "Mid", "mid-level",
-    "REMOTE_ANYWHERE" -- because rejecting those would tombstone a perfectly
-    good extraction over formatting. Anything still unrecognised becomes the
-    default rather than being stored: see the closed-vocabulary note in the
-    module docstring.
+    "REMOTE_ANYWHERE", "QA/Test" -- because rejecting those would tombstone a
+    perfectly good extraction over formatting. Anything still unrecognised
+    becomes the default rather than being stored: see the closed-vocabulary
+    note in the module docstring.
+
+    "/" is a separator like "-" and " ". The module docstring has always named
+    "Senior/Mid" as a shape that must not silently score as unknown, and this
+    is the line that was failing to deliver it: a slash survived the two
+    replaces, so "QA/Test" matched nothing. Consequence, stated because it is
+    a real judgement and not free: a compound answer now resolves to the value
+    named FIRST in the string ("Senior/Mid" -> senior, "Mid/Senior" -> mid)
+    rather than to NULL. That is the same first-wins arbitration the prefix
+    rule below already applies to "mid_level" and "full_time_employee", the
+    vocabularies are single-valued so SOMETHING has to be discarded, and a
+    value the posting names beats a null it does not.
     """
     if not isinstance(value, str):
         return default
-    v = value.strip().lower().replace("-", "_").replace(" ", "_")
+    v = (value.strip().lower()
+         .replace("-", "_").replace(" ", "_").replace("/", "_"))
     if v in allowed:
         return v
     # "mid_level" -> "mid", "full_time_employee" -> "full_time"
@@ -381,11 +497,41 @@ def _int_or_none(value, lo=0, hi=1_000_000):
     return n if lo <= n <= hi else None
 
 
+def _tristate_bool(value):
+    """True, False, or None for "the response did not say".
+
+    bool() used to be here, and it laundered three different things into
+    False: an explicit false, an absent key, and an answer that was not a
+    boolean at all. Only the first is evidence about the posting. The other
+    two are the extractor failing, and match.py can price a NULL at the
+    unknown rate but cannot price a False that was really a shrug -- which
+    systematically rewarded the postings extraction did worst on, exactly the
+    bias tranche_two/11 section 3 exists to remove.
+
+    A non-bool is None rather than truthiness-tested, so the model answering
+    1, "true" or "yes" reads as "could not tell" instead of as a confident
+    True. That is the conservative direction: these four fields are scored,
+    and inventing a True from a string is how a posting gets penalised for a
+    requirement it never stated.
+    """
+    return value if isinstance(value, bool) else None
+
+
 def normalize(result):
     """Model output -> the exact column values job_facts stores.
 
     Returns None when the response cannot be used at all, which the caller
     turns into a tombstone.
+
+    ABSENCE SURVIVES THIS FUNCTION. Every enum below used to carry a default
+    -- "other", "none", "unknown" -- so a field the model never answered was
+    stored as a real-looking value, and match.py could not tell the two apart.
+    A NULL role_archetype and a role_archetype the extractor guessed at score
+    identically only if you never write the NULL down. So the defaults are
+    gone: unrecognised or absent is None, and the columns are nullable to hold
+    it. employment_type and visa_sponsorship keep theirs, because "unknown" is
+    a legitimate VALUE in those two vocabularies (a posting really does say
+    nothing about sponsorship) and nothing scores them either way.
     """
     if not llm.has_fields(result, REQUIRED_FIELDS):
         return None
@@ -399,10 +545,31 @@ def normalize(result):
     summary = summary.strip() if isinstance(summary, str) else None
 
     seniority = _enum(result.get("seniority_level"), SENIORITY)
-    archetype = _enum(result.get("role_archetype"), ARCHETYPE, "other")
-    if seniority is None and archetype == "other" and not stack and not summary:
-        # Nothing usable came back under any name -- treat as unparseable
-        # rather than writing a row that is NULL in every column that matters.
+    archetype = _enum(result.get("role_archetype"), ARCHETYPE)
+
+    # THE "NOTHING USABLE CAME BACK" GUARD. Treat as unparseable rather than
+    # writing a row that is NULL in every column that matters.
+    #
+    # It used to read `archetype == "other"`, which was only ever correct
+    # because "other" was ALSO the default the line above returned for an
+    # absent or unrecognised answer -- i.e. it was using "other" as a proxy
+    # for "the model said nothing useful". Now that the default is None, that
+    # comparison would silently stop firing on exactly the responses it exists
+    # to catch, and junk would be stored instead of tombstoned.
+    #
+    # `archetype in (None, "other")` is EXACTLY the old predicate, not an
+    # approximation of it: _enum(x, ARCHETYPE, "other") returns "other" iff x
+    # coerced to "other" OR nothing matched and it fell through to the
+    # default, i.e. iff _enum(x, ARCHETYPE) is "other" or None. Same
+    # responses tombstone as before -- test_extract.py asserts the equivalence
+    # over a matrix of raw values rather than trusting this paragraph.
+    #
+    # What changed is downstream, and is the point: a model that explicitly
+    # answers "other" ("none of these archetypes fit") now stores "other",
+    # while a model that answered nothing recognisable stores NULL. Those were
+    # the same value before and they are different evidence.
+    if (seniority is None and archetype in (None, "other")
+            and not stack and not summary):
         return None
 
     yr_min = _int_or_none(result.get("years_experience_min"), 0, 50)
@@ -415,14 +582,18 @@ def normalize(result):
         "years_experience_min": yr_min,
         "years_experience_max": yr_max,
         "role_archetype": archetype,
+        "role_track": _enum(result.get("role_track"), ROLE_TRACK),
         "tech_stack": json.dumps(stack),
-        "ai_involvement": _enum(result.get("ai_involvement"), AI_INVOLVEMENT,
-                                "none"),
-        "ml_research_required": bool(result.get("ml_research_required")),
-        "advanced_degree_required": bool(result.get("advanced_degree_required")),
-        "customer_facing": bool(result.get("customer_facing")),
-        "remote_policy": _enum(result.get("remote_policy"), REMOTE_POLICY,
-                               "unknown"),
+        "ai_involvement": _enum(result.get("ai_involvement"), AI_INVOLVEMENT),
+        "ml_research_required": _tristate_bool(
+            result.get("ml_research_required")),
+        "advanced_degree_required": _tristate_bool(
+            result.get("advanced_degree_required")),
+        "customer_facing": _tristate_bool(result.get("customer_facing")),
+        "remote_policy": _enum(result.get("remote_policy"), REMOTE_POLICY),
+        # "unknown" survives as a DEFAULT in these two alone: it is a real
+        # value in both vocabularies rather than a stand-in for absence, and
+        # nothing in match.py scores either field.
         "employment_type": _enum(result.get("employment_type"),
                                  EMPLOYMENT_TYPE, "unknown"),
         "comp_min": _int_or_none(result.get("comp_min")),
@@ -430,7 +601,8 @@ def normalize(result):
         "comp_currency": (result.get("comp_currency") or None
                           if isinstance(result.get("comp_currency"), str)
                           else None),
-        "gap_friendly_language": bool(result.get("gap_friendly_language")),
+        "gap_friendly_language": _tristate_bool(
+            result.get("gap_friendly_language")),
         "visa_sponsorship": _enum(result.get("visa_sponsorship"), VISA,
                                   "unknown"),
         "summary": summary,
@@ -438,7 +610,8 @@ def normalize(result):
 
 
 _FACT_COLUMNS = ("seniority_level", "years_experience_min",
-                 "years_experience_max", "role_archetype", "tech_stack",
+                 "years_experience_max", "role_archetype", "role_track",
+                 "tech_stack",
                  "ai_involvement", "ml_research_required",
                  "advanced_degree_required", "customer_facing",
                  "remote_policy", "employment_type", "comp_min", "comp_max",
@@ -465,12 +638,22 @@ _FACT_COLUMNS = ("seniority_level", "years_experience_min",
 #: Plain majority. Values are either a closed-vocabulary string or None, and
 #: None VOTES: two passes answering "the posting does not say" outrank one
 #: that names a level, which is the honest reading of that evidence.
-VOTE_ENUM_FIELDS = ("seniority_level", "role_archetype", "ai_involvement",
-                    "remote_policy", "employment_type", "visa_sponsorship",
-                    "comp_currency")
+#:
+#: role_track votes exactly like its neighbours -- it is a closed-vocabulary
+#: string that is None when unknown, which is the case _majority_value() was
+#: already written for. Adding it also widens _majority_pass_index()'s
+#: agreement vector by one, which is intended: the pass whose track the vote
+#: endorsed is more likely to be the pass whose prose describes the same
+#: reading of the posting.
+VOTE_ENUM_FIELDS = ("seniority_level", "role_archetype", "role_track",
+                    "ai_involvement", "remote_policy", "employment_type",
+                    "visa_sponsorship", "comp_currency")
 
-#: Plain majority, same rule. normalize() has already forced these through
-#: bool(), so there is no None case to handle.
+#: Plain majority, same rule -- and these are now TRI-STATE. normalize() used
+#: to force them through bool(), so None could not occur; it no longer does,
+#: because an absent answer and an explicit false are different evidence (see
+#: _tristate_bool). None votes here for the same reason it votes above: two
+#: passes that could not tell outrank one that claimed it could.
 VOTE_BOOL_FIELDS = ("ml_research_required", "advanced_degree_required",
                     "customer_facing", "gap_friendly_language")
 
@@ -556,7 +739,7 @@ def vote_facts(results):
     evidence for any value.
 
     The unanimity fraction is over the VOTED fields only (enums, booleans and
-    integers -- 15 of the 17 columns): the share of them on which every pass
+    integers -- 16 of the 18 columns): the share of them on which every pass
     gave the same value. It is None for a single pass, deliberately. One pass
     agrees with itself trivially, and storing 1.0 for it would make an
     unmeasured row indistinguishable from a genuinely unanimous three-pass

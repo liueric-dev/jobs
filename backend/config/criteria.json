@@ -8,6 +8,8 @@
   "base": 35,
 
   "_archetypes_comment": "Mirrors the four positioning buckets in persona.json. bridge_solutions is the strongest fit, so forward_deployed/solutions lead -- but only just. CALIBRATED 2026-07-26: the first version had core SWE at +15 against +28 for bridge roles, and every one of the worst rules-vs-LLM disagreements was a backend/fullstack role the LLM scored 85 and the rules put near the floor. That was a misreading of persona.json, which calls core_swe 'safety-net positioning: the 5 YOE production background alone should qualify for these regardless of AI angle'. Core SWE is a strong fit, not a fallback.",
+  "_archetypes_superset_comment": "EXTENDED 2026-07-28 (task 11 section 1) from twelve values to twenty-six. The twelve above were all software engineering, so an operations role at an insurance company extracted as 'other' -- worth exactly 0, which is to say indistinguishable from a missing value, on the single most predictive feature in score_job(). The fourteen added below are derived from the corpus, not imagined: docs/role-track-derivation.md has the row count, employer spread and example titles behind each one, and backend/tools/derive-role-tracks.py re-derives them. THE SUPERSET IS SHARED, THE WEIGHTS ARE NOT. job_facts is extracted once per posting for every profile that will ever exist, so there is one vocabulary and this file decides what each value is worth to THIS persona -- a software profile prices the ops values at or below zero, the cohort profile (task 13) does the reverse. That is the whole reason a superset was chosen over per-vertical vocabularies (task file lines 19-26). TWO PROPOSED VALUES WERE DROPPED ON EVIDENCE and are deliberately absent: 'automation_specialist' (5 cohort postings, 1 'other' row) and 'data_coordination' (8 of its 9 hits are one employer's 'Data Annotation Specialist' -- one employer posting one role is not a vocabulary value). Together they would have reclaimed 1 row of 427. WHAT THE EVIDENCE SAID THAT THE TASK FILE DID NOT: the 'other' bucket is mostly a TECH vocabulary gap, not an ops one -- the seven ops candidates reclaim 54 of 427 'other' rows, while nine tech values the original twelve simply lacked reclaim 203. The nine tech values are therefore additions this SWE profile itself benefits from, not scaffolding for the cohort.",
+  "_archetypes_superset_magnitudes": "THE FOURTEEN NEW NUMBERS ARE UNFITTED PLACEMENTS, like their neighbours above but without even the calibration pass the originals got on 2026-07-26. They are interpolated against the existing scale by reasoning about persona.json, and CLAUDE.md's 'do not re-tune on a provisional number' applies. NOTHING WAS RE-TUNED to accommodate them: not one of the twelve original weights changed. REASONING, so the guesses are auditable. The tech values: mobile 12, real product engineering but a platform the persona has never shipped, so below frontend's 20; infrastructure_compute 6, a neighbour of devops (8) and priced just under it; qa_test 0, a genuine software role that is simply not any of the four positioning buckets; developer_relations 5, customer-facing technical work like the bridge bucket but sold as advocacy rather than delivery; business_systems -15 and it_internal -20, Salesforce/Workday/ERP and internal helpdesk, further from the persona than devops is; hardware_embedded -30, electrical and mechanical work outside software entirely; engineering_management -25 and program_management -28, both near pm (-30) and for the same reason -- persona.json asks for a mid-level IC role, so these are a LEVEL mismatch as much as a domain one. The ops values, at or below zero per the task file: ai_operations -10, AI-adjacent but running programs rather than building features, so it must sit far below ai_integration (26); support_ops -15; marketing_ops -30; admin_ops -35, the furthest of any value from a 5-YOE production engineer. ONE HONEST TENSION, recorded rather than smoothed: implementation_analyst is priced 0, but its definition -- customer-facing technical work configuring and deploying an existing product -- overlaps forward_deployed (30) and solutions (28), which are this persona's STRONGEST fits. It is 0 and not 25 because the two strong values already exist to catch the technical version of that work, leaving implementation_analyst to catch the analyst version; if calibration later shows postings landing on it that the LLM scores highly, this is the first weight to revisit and the reason it would be wrong is written here.",
   "archetypes": {
     "forward_deployed": 30,
     "solutions": 28,
@@ -16,9 +18,23 @@
     "backend": 26,
     "frontend": 20,
     "data": 12,
+    "mobile": 12,
     "devops": 8,
+    "infrastructure_compute": 6,
+    "developer_relations": 5,
+    "qa_test": 0,
+    "implementation_analyst": 0,
+    "ai_operations": -10,
     "security": -10,
+    "business_systems": -15,
+    "support_ops": -15,
+    "it_internal": -20,
+    "engineering_management": -25,
+    "program_management": -28,
     "pm": -30,
+    "marketing_ops": -30,
+    "hardware_embedded": -30,
+    "admin_ops": -35,
     "ml_research": -55,
     "other": 0
   },
@@ -83,5 +99,26 @@
     "customer_facing": 8,
     "advanced_degree_required": -45,
     "ml_research_required": -100
-  }
+  },
+
+  "_unknown_penalty_comment": "ADDED 2026-07-28 (task 11 section 3). What a field costs when the extractor could not answer it. Before this, seniority_level was the ONLY field with a price for not knowing (see seniority.unknown_penalty above); every other rule in score_job() handled a missing value by falling through with no delta and no reason, which is the same silent zero _staff_comment describes -- an unanswered field scored identically to an on-target one AND recorded nothing, so the ranking quietly rewarded the postings extraction did worst on. Keyed by job_facts COLUMN NAME, in one block rather than one key per rule, because archetypes / ai_involvement / flags are bare {value: delta} maps: an 'unknown_penalty' key inside them would be indistinguishable from an archetype of that name. seniority_level is deliberately NOT listed here -- its number stays inside the seniority block where the live profiles already carry it; match.py reads this block only as a fallback for it.",
+
+  "_unknown_penalty_magnitudes": "THESE NUMBERS ARE PROVISIONAL AND UNFITTED. They are placed by reasoning about each field's existing delta range, not measured against anything, and CLAUDE.md's 'do not re-tune on a provisional number' applies to them as much as to any other guess in this file. WHAT WOULD FIT THEM: the principled target is E[delta | field present] -- what a posting would have been expected to pay had the extractor answered -- which is computable today because score_job() is pure: run it over the rows where the field IS present, take the mean of that rule's delta, and that mean is the fitted unknown penalty. tools/calibrate-match.py sweeps score_job() and the frozen corpus in evals/fixtures/ is the corpus to do it on (NOT ORDER BY first_seen DESC -- that selection is ~85% greenhouse/ashby). REASONING FOR EACH, so the guesses are auditable: years_experience_min -2, kept small on purpose because most postings that DO state a minimum ask for 6 or fewer years and therefore pay 0, so the expected cost of knowing is near zero and a large penalty for not knowing would be a corpus-wide re-ranking dressed up as a bug fix. role_archetype -6, the largest of the set because archetype is the most predictive feature in the function (+30 to -55) and 'other' is already worth exactly 0 -- unknown has to sit below 'other' or the two states are again indistinguishable; -6 is roughly a fifth of the on-target value. ai_involvement -4, same shape, one notch below its 'none': 0. remote_policy 0 and tech_stack 0 -- both DELIBERATE, see below. The two bonus flags gap_friendly_language and customer_facing are 0 because absence of a bonus is already its own cost; charging for a missing bonus converts a bonus into a requirement. The two disqualifying flags advanced_degree_required -6 and ml_research_required -8 are ~1/7 and ~1/12 of their own penalties, standing in for an unmeasured P(flag is true | extractor could not tell); measure that base rate on the fixtures and these are the first two to replace.",
+
+  "_unknown_penalty_rates": "HOW OFTEN EACH FIRES, measured 2026-07-28 over the 5,321 non-tombstoned job_facts rows. Read this before changing a magnitude: a -N on a field that is NULL on half the corpus is a large effect, not a rounding one. years_experience_min NULL on 2,817 rows (52.9%). tech_stack empty on 1,899 (35.7%) -- but empty is NOT missing, see below. seniority_level NULL on exactly 1 row. role_archetype, ai_involvement, remote_policy and all four booleans are NULL on ZERO rows TODAY, and that is an artefact rather than a fact about the corpus: extract.py's normalize() substitutes sentinels for absent answers -- role_archetype to 'other' (extract.py:402), ai_involvement to 'none' (:419), remote_policy to 'unknown' (:424), the four booleans through bool() (:421-423, :433). Task 11's sibling change makes normalize() preserve None and makes the booleans tri-state, riding task 12's FACTS_VERSION bump; at that point these currently-dormant penalties start firing at whatever the true absence rate turns out to be. So the numbers above take effect in two steps, and the rate that matters for role_archetype is not 0% -- it is unknown, and worth measuring before anyone raises the -6.",
+
+  "_unknown_penalty_zeroes": "THE TWO ZEROES ARE DECISIONS, NOT OMISSIONS. tech_stack 0: _tech_comment above records that absence is never penalised because the persona is explicitly stack-agnostic for core_swe roles, and that is not being reversed here -- but the two states are now distinguished, which they were not. An EMPTY stack is the extractor answering 'this posting names no technologies', a real property of 35.7% of the corpus; a NULL stack is it not answering. Only NULL reaches this key, and it is priced at 0 so the documented decision holds for both. remote_policy 0: its absence is ALREADY charged, once, by location.neither_penalty -- match.py's location rule treats 'we could not classify this' as location:unmatched, and _location_comment says exactly that. Any nonzero value here is therefore a SECOND charge for the same absence. match.py emits a separate remote:missing reason anyway so that if someone does set it, the double charge is visible in match_reasons rather than buried inside location:unmatched.",
+  "unknown_penalty": {
+    "years_experience_min": -2,
+    "role_archetype": -6,
+    "ai_involvement": -4,
+    "tech_stack": 0,
+    "remote_policy": 0,
+    "gap_friendly_language": 0,
+    "customer_facing": 0,
+    "advanced_degree_required": -6,
+    "ml_research_required": -8
+  },
+
+  "_unknown_penalty_inert": "NOTHING IN THIS BLOCK IS LIVE. This file is only a template: it is imported once by migrate_profiles.py and thereafter jobs.profiles.criteria_json is authoritative. Until someone runs migrate_profiles.py --apply --bump, every live profile's criteria carries no unknown_penalty block at all, match.py's .get(..., 0) lookups all return 0, add() skips every falsy delta, and score_job() returns byte-identical scores and byte-identical reason lists to before the change. That bump is DELIBERATELY NOT part of task 11 -- these magnitudes are unfitted, and bumping criteria_version restages every match row in the corpus."
 }

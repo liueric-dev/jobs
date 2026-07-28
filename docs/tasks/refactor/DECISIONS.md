@@ -800,3 +800,73 @@ the task's own docs entry.
 Its findings went into `backend/docs/SCORING.md` instead, so an agent asked to check
 against "task 04's budget" finds no such document — which is half of why task 18 concluded
 04 was undone. Recorded for task 34 to decide whether to promote them. Reversible.
+
+### 11 — `normalize()` stopped defaulting, because the task file's premise was wrong
+
+Task 11 section 3 says a NULL `role_archetype` "reads as a perfect archetype match" and a
+NULL `advanced_degree_required` "is indistinguishable from `false`". **Neither field was
+ever NULL.** `normalize()` substituted sentinels — `"other"`, `"none"`, `"unknown"`,
+`bool()` — so 0 of 5,321 non-tombstoned rows held a NULL in any of them. The bias was real
+but lived one layer up, in extraction, not in scoring: "the extractor could not tell" and
+"the posting says none" were the same stored value, so an `unknown_penalty` would have had
+nothing to fire on.
+
+Both halves therefore shipped: `normalize()` preserves `None`, and `score_job()` prices it.
+`employment_type` and `visa_sponsorship` keep their defaults — `unknown` is a real value in
+those two vocabularies and nothing scores them. Not reversible without re-extraction.
+
+### 11 — The `other` bucket was mostly a TECH vocabulary gap, not an ops one
+
+The task file's motivating example is "an AI operations role at an insurance company". The
+corpus disagrees about proportion: of 427 `other` rows, the seven proposed ops candidates
+reclaim **54**; nine tech values the original twelve simply lacked reclaim **203**. 240
+occurrences of "engineer" across those titles. So nine tech values were added that the task
+file never proposed, and they benefit the author's own profile rather than the cohort's.
+Reversible.
+
+### 11 — Two of the seven proposed archetypes were dropped on evidence
+
+`automation_specialist` (5 cohort postings, 1 `other` row) and `data_coordination` (8 of 9
+hits are one employer's "Data Annotation Specialist"). Together they reclaim **1 row of
+427**. The task file asks for values "grounded in what the corpus actually contains, not in
+imagination"; these are the ones that standard excludes. Reversible, and
+`derive-role-tracks.py` still probes and prints them — the evidence *against* a value is
+the part a later reader cannot reconstruct.
+
+### 11 — `ai_operations` is carried at 5 postings across 3 employers, and that is recorded
+
+The value the whole task is motivated by is the thinnest of the fourteen. Carried because
+its absence is precisely the failure being fixed, and because `other` priced at 0 is what
+makes the hole invisible. But it is the weakest recommendation in the set and the first to
+re-check after Phase 3. This is the same shape as the run's existing headline finding —
+of 329 Workday postings from four NYC employers, zero carry AI vocabulary in the title.
+**These employers are not posting these roles**, and a vocabulary cannot fix that.
+
+### 11 — `_enum` now splits on `/`, which is scope the task did not ask for
+
+`extract.py:33` has always named `"Senior/Mid"` as a shape that must not "silently score as
+unknown for every profile forever". The code never delivered it: `/` survived the two
+`replace()` calls, so `"QA/Test"` matched nothing. Fixed, because `qa_test` is one of the
+new values and the docstring documents the intent. **It is a semantics change to fields
+task 11 does not own** — a compound answer now resolves to the value named first rather
+than to NULL, on every enum. Recorded rather than smuggled; it rides task 12's
+re-extraction with everything else. Reversible.
+
+### 11 — The tombstone guard's `== "other"` was a proxy, and it would have failed silently
+
+`normalize()`'s "nothing usable came back" guard tested `archetype == "other"`, which was
+only ever correct because `"other"` was *also* the default for an absent answer. Removing
+the default would have silently stopped it firing on exactly the responses it exists to
+catch, storing junk instead of tombstoning it. Rewritten as `archetype in (None, "other")`,
+which is the old predicate exactly, and verified over a 192-case cross product rather than
+by argument. The gain is downstream: a model that explicitly answers `"other"` is now
+distinguishable from one that answered nothing.
+
+### 11 — No `criteria_version` bump, so the whole change is inert in production
+
+`config/criteria.json` is a template; `jobs.profiles.criteria_json` is authoritative. The
+new `unknown_penalty` block and the fourteen archetype weights take effect only on
+`migrate_profiles.py --apply --bump`, deliberately not run here. Two reasons: the
+magnitudes are unfitted, and `years_experience_min` alone is NULL on 52.9% of the corpus,
+so bumping would re-rank the live profile on a guess. Verified inert — `match.py --dry-run`
+reports **0 matched** for both active profiles after every change in this commit.

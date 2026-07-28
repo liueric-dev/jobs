@@ -93,6 +93,44 @@ def score_job(facts, criteria):
             reasons.append({"rule": rule, "delta": delta})
         return delta <= HARD_EXCLUDE_AT
 
+    # -- explicit missingness -----------------------------------------------
+    # "the extractor could not tell" is a state of a posting, not the absence
+    # of one. Every rule below except seniority used to handle it by falling
+    # through -- no delta, no reason -- which scores an unanswered field
+    # identically to an on-target one, so the ranking systematically rewards
+    # the postings extraction did worst on.
+    #
+    # ONE BLOCK, NOT ONE KEY PER RULE. seniority's unknown_penalty lives
+    # inside its own config block because that block is structured. archetypes,
+    # ai_involvement and flags are bare {value: delta} maps, so a key added
+    # there would be indistinguishable from an archetype literally named
+    # "unknown_penalty". A top-level map keyed by job_facts column name has no
+    # such collision and puts every missingness cost in one readable place.
+    # seniority still reads its own key first so live profiles carrying the
+    # old shape keep the -4 they already have.
+    #
+    # NAMING: `{feature}:missing`, in the same colon-namespaced shape as
+    # `archetype:backend` and `flag:customer_facing`, and matching the
+    # explicit `__missing__` level / `{col}__missing` indicator that
+    # tools/learned-ranker-probe.py:257-294 already emits for these same
+    # columns -- a reason string and a probe feature name the same state.
+    # "missing" and not "unknown" because `unknown` is a legitimate extracted
+    # VALUE of remote_policy (extract.py:424-425), employment_type and
+    # visa_sponsorship, so `remote:unknown` could not be read back as either
+    # one. seniority's pre-existing `seniority:unknown` keeps its spelling: it
+    # is already written into every stored match_reasons row, and renaming it
+    # would invalidate that history to buy consistency in a string nothing
+    # parses (grep: only match.py and tests/test_match.py mention these).
+    #
+    # MISSINGNESS NEVER HARD-EXCLUDES. add()'s return value is deliberately
+    # ignored for every rule in this block. Letting absence disqualify would
+    # let an extraction failure delete a posting outright, which is a worse
+    # version of the bias the block exists to remove.
+    #
+    # Absent config still means zero -- every lookup is .get(..., 0) -- so a
+    # profile whose criteria_json predates this scores byte-identically.
+    miss = criteria.get("unknown_penalty") or {}
+
     # -- seniority ----------------------------------------------------------
     sen_cfg = criteria.get("seniority") or {}
     level = facts.get("seniority_level")
@@ -100,7 +138,8 @@ def score_job(facts, criteria):
         add(f"seniority:{level}:excluded", HARD_EXCLUDE_AT)
         return 0, reasons
     if level is None:
-        add("seniority:unknown", sen_cfg.get("unknown_penalty", 0))
+        add("seniority:unknown",
+            sen_cfg.get("unknown_penalty", miss.get("seniority_level", 0)))
     elif level in (sen_cfg.get("target") or ()):
         pass  # on target: no delta, and no reason -- silence is the signal
     else:
@@ -122,7 +161,12 @@ def score_job(facts, criteria):
     yr_cfg = criteria.get("years_experience") or {}
     required = facts.get("years_experience_min")
     ceiling = yr_cfg.get("max_required")
-    if required is not None and ceiling is not None and required > ceiling:
+    if required is None:
+        # NULL on 52.9% of job_facts (5,321 non-tombstoned rows, 2026-07-28) --
+        # by far the most-missing scored field, so the magnitude behind this
+        # matters more here than anywhere else in the function.
+        add("years:missing", miss.get("years_experience_min", 0))
+    elif ceiling is not None and required > ceiling:
         over = required - ceiling
         penalty = min(over * yr_cfg.get("over_penalty_per_year", 0),
                       yr_cfg.get("over_penalty_cap", 10 ** 6))
@@ -131,24 +175,54 @@ def score_job(facts, criteria):
     # -- archetype ----------------------------------------------------------
     archetype = facts.get("role_archetype")
     arch_cfg = criteria.get("archetypes") or {}
-    if archetype in arch_cfg:
+    if archetype is None:
+        add("archetype:missing", miss.get("role_archetype", 0))
+    elif archetype in arch_cfg:
         if add(f"archetype:{archetype}", arch_cfg[archetype]):
             return 0, reasons
+    else:
+        # Named by the extractor, priced by nobody -- the same silent zero
+        # criteria.json's _staff_comment documents for seniority, and the
+        # archetype superset (section 1 of this task) is about to add values
+        # an un-bumped criteria_json will not list. Charged at the unknown
+        # rate because that is what it is: unknown TO THIS PROFILE. Reusing
+        # the number rather than adding a second config key that would itself
+        # default to a silent zero.
+        add(f"archetype:{archetype}:unpriced", miss.get("role_archetype", 0))
 
     # -- AI involvement -----------------------------------------------------
     ai_cfg = criteria.get("ai_involvement") or {}
     involvement = facts.get("ai_involvement")
-    if involvement in ai_cfg:
+    if involvement is None:
+        add("ai:missing", miss.get("ai_involvement", 0))
+    elif involvement in ai_cfg:
         if add(f"ai:{involvement}", ai_cfg[involvement]):
             return 0, reasons
+    else:
+        add(f"ai:{involvement}:unpriced", miss.get("ai_involvement", 0))
 
     # -- tech stack ---------------------------------------------------------
     # Substring rather than equality: postings write "node.js", "Node", and
     # "nodejs" for one thing, and the alternative is a synonym table nobody
     # maintains. Capped, so breadth of stack is not itself a signal.
+    #
+    # AN EMPTY STACK IS NOT A MISSING ONE. `[]` is the extractor answering
+    # "this posting names no technologies" -- a real and common property of a
+    # posting (1,899 rows, 35.7%, name none), and criteria.json:44 records the
+    # deliberate decision that absence is never penalised because the persona
+    # is stack-agnostic for core_swe roles. That decision is preserved by
+    # pricing tech_stack's unknown at 0, not by refusing to distinguish the
+    # states. Only `None` -- the extractor did not answer at all -- is
+    # missing here, and load_facts() cannot currently produce it -- match.py:333
+    # coerces a NULL column to [] -- so this branch is reachable only from a
+    # caller that hands score_job facts directly. It exists so the distinction
+    # survives if that coercion is ever removed.
     tech_cfg = criteria.get("tech") or {}
     boosts = tech_cfg.get("boost") or {}
-    stack = facts.get("tech_stack") or []
+    stack = facts.get("tech_stack")
+    if stack is None:
+        add("tech:missing", miss.get("tech_stack", 0))
+        stack = []
     earned = 0
     for term, delta in boosts.items():
         if any(term in item for item in stack):
@@ -160,18 +234,39 @@ def score_job(facts, criteria):
     # Reads the booleans already on the `jobs` table, falling back to the extracted
     # remote_policy only to distinguish "onsite somewhere else" (a real no)
     # from "we could not classify this" (a data gap, penalised less).
+    #
+    # remote_policy's missingness is ALREADY PRICED, once, by the else branch
+    # below: "we could not classify this" is exactly what location:unmatched
+    # charges neither_penalty for, and the _location_comment says so. So a
+    # nonzero unknown_penalty.remote_policy is a SECOND charge for the same
+    # absence, not a first one -- it defaults to 0 for that reason, and the
+    # separate reason entry exists so that if someone ever does set it, the
+    # double charge is visible in match_reasons instead of hidden inside
+    # location:unmatched. Nothing is charged when the location booleans
+    # accepted the posting: remote_policy was not consulted, so its absence
+    # cost the ranking nothing.
     loc_cfg = criteria.get("location") or {}
+    policy = facts.get("remote_policy")
     if not (loc_cfg.get("accept_nyc") and facts.get("location_is_nyc")) and \
        not (loc_cfg.get("accept_remote") and facts.get("location_is_remote")):
-        if facts.get("remote_policy") == "onsite":
+        if policy == "onsite":
             add("location:onsite_elsewhere",
                 loc_cfg.get("onsite_elsewhere_penalty", 0))
         else:
             add("location:unmatched", loc_cfg.get("neither_penalty", 0))
+        if policy is None:
+            add("remote:missing", miss.get("remote_policy", 0))
 
     # -- boolean flags ------------------------------------------------------
+    # Tri-state, not truthiness: False is the extractor saying "this posting
+    # does not require an advanced degree", None is it not knowing. `if
+    # facts.get(flag)` collapsed the two, so a posting whose disqualifying
+    # flags could not be read scored as though they were all clear.
     for flag, delta in (criteria.get("flags") or {}).items():
-        if facts.get(flag):
+        value = facts.get(flag)
+        if value is None:
+            add(f"flag:{flag}:missing", miss.get(flag, 0))
+        elif value:
             if add(f"flag:{flag}", delta):
                 return 0, reasons
 

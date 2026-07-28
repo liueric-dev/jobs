@@ -1,6 +1,15 @@
 # 11 — Archetype superset, `role_track`, and missingness
 
-**Status:** todo. **Depends on:** 06, 10. **Blocks:** 12, 13, 30.
+**Status:** DONE (hash recorded in the follow-up commit). **Depends on:** 06, 10.
+**Blocks:** 12, 13, 30.
+
+> **Correction, 2026-07-28.** Section 3 below is wrong about the code it describes. The
+> fields it says are NULL were never NULL — `extract.normalize()` substituted `"other"`,
+> `"none"`, `"unknown"` and `false` for absent answers, so 0 of 5,321 non-tombstoned rows
+> held a NULL in any of them. The bias is real but lives in extraction, not scoring, and
+> the fix had to land in both. See `DECISIONS.md`, "11 — `normalize()` stopped defaulting".
+> Section 1's framing is also off in proportion: `other` was mostly a *tech* vocabulary
+> gap, not an ops one. Read the code before this file.
 
 Three changes to `job_facts`, designed together because they ship in one
 `FACTS_VERSION` bump (task 12).
