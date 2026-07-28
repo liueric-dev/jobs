@@ -145,6 +145,12 @@ STEPS = [
     ["tools/ats-discover.py", "--apply", "--nightly", "--limit", "40"],
     "ingest/ats.py",
     "ingest/builtin-nyc.py",
+    # With the other NYC-scoped source, and before extract.py -- which is the
+    # only ordering constraint that matters. Yields ~1.8 relevant postings/day
+    # against the task file's 20-60 estimate; kept because it is one documented
+    # JSON API with an explicit close date per posting, not because of volume.
+    # See docs/ingest/nyc-open-data.md.
+    "ingest/nyc-open-data.py",
     "ingest/weworkremotely.py",
     "ingest/hn-hiring.py",
     "ingest/google-serpapi.py",
