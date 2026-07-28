@@ -487,7 +487,8 @@ def touch_validated(conn, records, now):
     return cur.rowcount
 
 
-#: Discovered rows are written every this many, not once at the end.
+#: Batch size for the ONE durability boundary in the probe loop, counted in
+#: EMPLOYERS PROBED.
 #:
 #: WHY THIS IS NOT "once at the end, it is simpler". A full pass is ~380
 #: employers at a 1.2s politeness delay -- about forty minutes of outward HTTP
@@ -497,7 +498,21 @@ def touch_validated(conn, records, now):
 #: skips those employers as recently probed and the requests are spent for
 #: nothing. Flushing in batches makes an interrupted run a partial success,
 #: which is the honest outcome.
-FLUSH_EVERY = 50
+#:
+#: WHY IT IS COUNTED IN EMPLOYERS AND NOT IN RECORDS -- defect D45. A probe
+#: writes to two tables: ats_seed.last_probe_outcome (record_probe) and
+#: company_ats (flush). Those used to commit on two different cadences
+#: measured on two different AXES -- the seed committed every 20 ITERATIONS,
+#: company_ats flushed every 50 RECORDS -- so no choice of constants could
+#: line them up, and a run killed between the two boundaries kept the seed
+#: outcome durably while silently discarding up to 49 buffered company_ats
+#: rows. That is what happened: a 100-employer pass on 2026-07-28T07:40 left
+#: exactly 50 rows in company_ats (one flush batch) and 100 outcomes in
+#: ats_seed, and the 104-row shortfall D45 reports is the accumulated
+#: difference. "Partial success" is only honest if BOTH tables are partial by
+#: the same amount, so there is now one boundary, on the iteration axis, and
+#: commit_batch() is the only place either table is made durable.
+FLUSH_EVERY = 20
 
 
 def flush(conn, records, now, verbose=False):
@@ -520,10 +535,110 @@ def flush(conn, records, now, verbose=False):
         # One bad batch is survivable and is recorded, exactly as ingest/ats.py
         # treats one unreachable company. The records that succeeded ARE
         # written -- upsert() commits before the rate check raises.
+        #
+        # It is survivable, not invisible. The dropped records are carried out
+        # on result.errors, main() reports the count in its volume line, and a
+        # run that dropped anything exits non-zero: "a run that dropped a
+        # hundred records and hit no read errors reported success" is the exact
+        # defect lib/upsert.py:246-260 exists to remove, and swallowing it into
+        # stderr here would have reinstated it one layer up.
         result = e.result
-        print(f"ats-discover: {e}", file=sys.stderr)
+        print(f"ats-discover ALERT: {len(e.result.errors)} record(s) dropped "
+              f"from a batch of {len(records)} -- {e}", file=sys.stderr)
     touch_validated(conn, records, now)
     return result
+
+
+def commit_batch(conn, records, now, verbose=False, reconcile=True):
+    """Make one batch durable in BOTH tables, or in neither. See FLUSH_EVERY.
+
+    flush() -> upsert() commits (lib/upsert.py:235), and that commit also
+    lands the record_probe() UPDATEs pending on this same connection, so the
+    company_ats rows and the ats_seed outcomes they describe are one
+    transaction. The trailing conn.commit() is for the batch that produced no
+    records at all -- flush() returns early on an empty list without
+    committing, and the seed outcomes still have to land.
+
+    An exception escaping flush() therefore rolls the seed outcomes back too,
+    which is the point: the two tables cannot end a run disagreeing.
+
+    The one case that does NOT get rolled back is a per-record upsert failure.
+    upsert() isolates those with a SAVEPOINT and commits the survivors before
+    check_error_rate raises (lib/upsert.py:198, :235), so the batch partly
+    lands and the failed records do not -- D45's shape again, one record wide.
+    reconcile_seed_outcomes() closes that too, by measuring what actually
+    landed rather than trusting the return value.
+
+    `reconcile=False` for the backfill path, and ONLY for it. Reconciliation
+    clears the ats_seed outcome so the employer is re-probed, which is right
+    when this batch is the thing that produced the outcome and wrong when
+    ats_seed is the SOURCE the batch was derived from -- there, clearing it
+    would destroy the only surviving record of a probe that has already been
+    paid for, to repair a company_ats row that can be rebuilt from it.
+    """
+    result = flush(conn, records, now, verbose=verbose)
+    if result.errors and reconcile:
+        reconcile_seed_outcomes(conn, records, verbose=verbose)
+    conn.commit()
+    return result
+
+
+def reconcile_seed_outcomes(conn, records, verbose=False):
+    """Un-probe any employer in this batch whose row is NOT in company_ats.
+
+    Called only when a batch reported per-record errors, and it checks the
+    TABLE rather than the error list: upsert()'s errors are strings with no
+    record identity on them, and inferring identity from a message is how a
+    reconciliation quietly stops reconciling.
+
+    Clearing last_probed_at/last_probe_outcome is what makes the next run
+    re-probe the employer -- select_employers() orders NULLS FIRST and
+    --new-only admits a NULL outcome. probe_attempts is deliberately left
+    incremented: the attempt happened, and a counter that only counts
+    successes cannot be used to find an employer that fails every time.
+
+    Returns the employer names reset.
+    """
+    ids = {ad.make_row_id(r): r["employer_name"] for r in records}
+    if not ids:
+        return []
+    landed = {r[0] for r in conn.execute(
+        f"SELECT id FROM {ATS_TABLE} WHERE id = ANY(%s)",
+        (list(ids),)).fetchall()}
+    lost = sorted({name for row_id, name in ids.items() if row_id not in landed})
+    if not lost:
+        return []
+    conn.execute(
+        f"UPDATE {SEED_TABLE} SET last_probed_at = NULL, "
+        f"last_probe_outcome = NULL, last_probe_detail = %s "
+        f"WHERE employer_name = ANY(%s)",
+        ("write to company_ats failed; outcome cleared for re-probe", lost))
+    shown = lost if verbose else lost[:5]
+    print(f"ats-discover ALERT: {len(lost)} employer(s) reset for re-probe "
+          f"after a failed write -- {', '.join(shown)}"
+          f"{'' if len(shown) == len(lost) else ' ... (--verbose for all)'}",
+          file=sys.stderr)
+    return lost
+
+
+def exit_on_dropped(conn, errors, repaired=""):
+    """Close the connection and exit non-zero if any record was dropped.
+
+    A dropped record is a probe that was paid for -- an outward request against
+    a stranger's site -- and then thrown away. Every write path in this script
+    ends here rather than each deciding for itself, because "a run that dropped
+    a hundred records and hit no read errors reported success" is the defect
+    lib/upsert.py:246-260 exists to remove, and one path quietly exiting 0
+    reinstates it. run-daily.py:257 already counts the volume from the
+    upsert-summary line; this is the run saying so itself.
+    """
+    conn.close()
+    if not errors:
+        return
+    print(f"ats-discover FAILED: {errors} record(s) dropped and NOT written "
+          f"to {ATS_TABLE}.{' ' + repaired if repaired else ''} Read the "
+          f"upsert-summary line for what failed.", file=sys.stderr)
+    sys.exit(1)
 
 
 def record_probe(conn, employer_name, outcome, detail, careers_url, now):
@@ -536,6 +651,122 @@ def record_probe(conn, employer_name, outcome, detail, careers_url, now):
          WHERE employer_name = %s
         """,
         (now, outcome, (detail or "")[:300], careers_url, employer_name))
+
+
+def select_seed_not_found(conn):
+    """Every employer whose careers page was READ and held no ATS signature.
+
+    `last_probe_outcome = 'not_found'` is the same judgement never_found_row()
+    records; ats_seed is simply the table that kept all of them, because its
+    write committed on a cadence company_ats' did not. See FLUSH_EVERY.
+    """
+    return [{"employer_name": r[0], "careers_url": r[1]}
+            for r in conn.execute(
+                f"SELECT employer_name, careers_url FROM {SEED_TABLE} "
+                f"WHERE last_probe_outcome = %s ORDER BY employer_name",
+                (ad.NOT_FOUND,)).fetchall()]
+
+
+def backfill_never_found(conn, now, apply=False, verbose=False):
+    """Write a never_found row for every ats_seed `not_found` outcome.
+
+    NO NETWORK, and none is needed: the probe already happened and its result
+    is in ats_seed. This re-derives the company_ats row that the probe should
+    have written, from the outcome it did write.
+
+    Idempotent by construction rather than by a NOT EXISTS guard. A tokenless
+    row keys on lower(employer_name) (ats_discovery.make_row_id), the rows
+    are byte-identical in shape to the ones already present, and
+    careers_url -- the only hash field with any freedom in it -- is copied
+    from the same seed column the probe read it from. Verified before writing:
+    all 35 pre-existing rows carry exactly the seed's careers_url. So a
+    re-run reports every row `unchanged`, which is a stronger statement than
+    "selected nothing the second time".
+
+    Returns (rows_considered, UpsertResult).
+    """
+    seeds = select_seed_not_found(conn)
+    records = [ad.never_found_row(s["employer_name"], s["careers_url"], now,
+                                  discovered_via="backfill-from-ats_seed")
+               for s in seeds]
+    if not apply:
+        return len(records), UpsertResult()
+    return len(records), commit_batch(conn, records, now, verbose=verbose,
+                                      reconcile=False)
+
+
+def probe_pass(conn, fetcher, employers, now, *, apply=False,
+               max_url_candidates=ad.MAX_URL_CANDIDATES, breaker_after=25,
+               max_blocked_frac=0.35, verbose=False):
+    """Probe each employer, writing both tables on one cadence.
+
+    Returns (totals, counts, aborted). Lifted out of main() so the durability
+    cadence can be tested by killing a pass at every index and comparing what
+    survived in each table -- see tests/test_ats_discovery.py. That is the
+    only property of this loop that D45 showed cannot be verified by reading
+    it.
+    """
+    records, counts, aborted = [], {}, None
+    totals = UpsertResult()
+
+    for i, employer in enumerate(employers, 1):
+        outcome, url, detail, hits = probe_employer(
+            fetcher, employer, max_candidates=max_url_candidates)
+        counts[outcome] = counts.get(outcome, 0) + 1
+
+        if outcome == ad.FOUND:
+            for platform, fields in hits:
+                status, open_jobs, note = validate(fetcher, platform, fields)
+                records.append({
+                    "employer_name": employer["employer_name"],
+                    "careers_url": url,
+                    "ats": platform,
+                    "token": fields["token"],
+                    "workday_site": fields.get("workday_site"),
+                    "workday_dc": fields.get("workday_dc"),
+                    "open_jobs_at_validation": open_jobs,
+                    "first_validated_at": now,
+                    "last_validated_at": now,
+                    "open_jobs_changed_at": None,
+                    "status": status,
+                    "validation_note": note,
+                    "discovered_via": "careers-page-regex",
+                })
+                counts[f"token:{status}"] = counts.get(f"token:{status}", 0) + 1
+        elif outcome == ad.NOT_FOUND:
+            # The ONLY path that may write never_found. See ats_discovery.py.
+            records.append(ad.never_found_row(employer["employer_name"], url, now))
+
+        if apply:
+            record_probe(conn, employer["employer_name"], outcome, detail,
+                         url, now)
+            # ONE boundary, on the iteration axis, for both tables. See
+            # FLUSH_EVERY -- the two-axis version of these four lines is D45.
+            if i % FLUSH_EVERY == 0:
+                totals += commit_batch(conn, records, now, verbose=verbose)
+                records = []
+
+        if verbose or not apply:
+            print(f"  [{i}/{len(employers)}] {employer['employer_name'][:38]:40s}"
+                  f" {outcome:13s} {detail or ''}"
+                  + ("  " + ", ".join(f"{p}:{f['token']}" for p, f in hits)
+                     if hits else ""))
+
+        # CIRCUIT BREAKER. A run that is mostly being refused has measured
+        # nothing, and finishing it would write a confident, empty answer.
+        blocked = counts.get(ad.BLOCKED, 0)
+        if i >= breaker_after and blocked / i > max_blocked_frac:
+            aborted = (f"{blocked}/{i} probes blocked "
+                       f"({blocked / i:.0%} > {max_blocked_frac:.0%})")
+            break
+
+    if apply:
+        # The tail batch. It runs on the circuit-breaker path too: those
+        # probes were performed and their outcomes are already pending on the
+        # connection, so dropping their company_ats rows here would recreate
+        # the D45 divergence at the one moment the run is least trusted.
+        totals += commit_batch(conn, records, now, verbose=verbose)
+    return totals, counts, aborted
 
 
 # -- reporting ---------------------------------------------------------------
@@ -790,6 +1021,10 @@ def main():
                         "company_ats tokens against their live feed")
     p.add_argument("--revalidate-status", nargs="*",
                    help="restrict --revalidate to these status values")
+    p.add_argument("--backfill-never-found", action="store_true",
+                   help="write a company_ats never_found row for every "
+                        "ats_seed not_found outcome and exit; no network, no "
+                        "re-probing (defect D45)")
     p.add_argument("--add-employer", help="add one employer to ats_seed and exit")
     p.add_argument("--careers-url")
     p.add_argument("--sector", default="unknown")
@@ -818,6 +1053,22 @@ def main():
     if args.report:
         print_report(conn)
         conn.close()
+        return
+
+    if args.backfill_never_found:
+        now = utc_now_str()
+        considered, res = backfill_never_found(conn, now, apply=args.apply,
+                                               verbose=args.verbose)
+        print(f"ats-discover: backfill -- {considered} ats_seed "
+              f"'{ad.NOT_FOUND}' outcome(s); {res.new} new, {res.updated} "
+              f"updated, {res.unchanged} unchanged, {len(res.errors)} dropped.")
+        if args.apply:
+            print_report(conn)
+        else:
+            print("\ndry run -- nothing written. Re-run with --apply.")
+        exit_on_dropped(conn, len(res.errors),
+                        "ats_seed still holds every outcome, so re-running "
+                        "the backfill is safe and repairs it.")
         return
 
     if args.due_only and not revalidation_due(conn, args.interval_days):
@@ -878,7 +1129,9 @@ def main():
             print_report(conn)
         else:
             print("\ndry run -- nothing written. Re-run with --apply.")
-        conn.close()
+        exit_on_dropped(conn, len(totals.errors),
+                        "The tokens are unchanged in company_ats; the next "
+                        "re-validation retries them.")
         return
 
     # Discovery sources beyond the seeded roster. Stubbed, and loud about it.
@@ -901,63 +1154,12 @@ def main():
                       max_requests=args.max_requests, verbose=args.verbose,
                       timeout=args.timeout)
     now = utc_now_str()
-    records, counts, aborted = [], {}, None
-    totals = UpsertResult()
-
-    for i, employer in enumerate(employers, 1):
-        outcome, url, detail, hits = probe_employer(
-            fetcher, employer, max_candidates=args.max_url_candidates)
-        counts[outcome] = counts.get(outcome, 0) + 1
-
-        if outcome == ad.FOUND:
-            for platform, fields in hits:
-                status, open_jobs, note = validate(fetcher, platform, fields)
-                records.append({
-                    "employer_name": employer["employer_name"],
-                    "careers_url": url,
-                    "ats": platform,
-                    "token": fields["token"],
-                    "workday_site": fields.get("workday_site"),
-                    "workday_dc": fields.get("workday_dc"),
-                    "open_jobs_at_validation": open_jobs,
-                    "first_validated_at": now,
-                    "last_validated_at": now,
-                    "open_jobs_changed_at": None,
-                    "status": status,
-                    "validation_note": note,
-                    "discovered_via": "careers-page-regex",
-                })
-                counts[f"token:{status}"] = counts.get(f"token:{status}", 0) + 1
-        elif outcome == ad.NOT_FOUND:
-            # The ONLY path that may write never_found. See ats_discovery.py.
-            records.append(ad.never_found_row(employer["employer_name"], url, now))
-
-        if args.apply:
-            record_probe(conn, employer["employer_name"], outcome, detail,
-                         url, now)
-            if i % 20 == 0:
-                conn.commit()
-            if len(records) >= FLUSH_EVERY:
-                totals += flush(conn, records, now, verbose=args.verbose)
-                records = []
-
-        if args.verbose or not args.apply:
-            print(f"  [{i}/{len(employers)}] {employer['employer_name'][:38]:40s}"
-                  f" {outcome:13s} {detail or ''}"
-                  + ("  " + ", ".join(f"{p}:{f['token']}" for p, f in hits)
-                     if hits else ""))
-
-        # CIRCUIT BREAKER. A run that is mostly being refused has measured
-        # nothing, and finishing it would write a confident, empty answer.
-        blocked = counts.get(ad.BLOCKED, 0)
-        if i >= args.breaker_after and blocked / i > args.max_blocked_frac:
-            aborted = (f"{blocked}/{i} probes blocked "
-                       f"({blocked / i:.0%} > {args.max_blocked_frac:.0%})")
-            break
-
-    if args.apply:
-        conn.commit()
-        totals += flush(conn, records, now, verbose=args.verbose)
+    totals, counts, aborted = probe_pass(
+        conn, fetcher, employers, now, apply=args.apply,
+        max_url_candidates=args.max_url_candidates,
+        breaker_after=args.breaker_after,
+        max_blocked_frac=args.max_blocked_frac,
+        verbose=args.verbose)
     written, errors = totals.new + totals.updated, len(totals.errors)
 
     # Volume, not errors -- the summary prints on every run, including a clean
@@ -1001,7 +1203,10 @@ def main():
     else:
         print("\ndry run -- nothing written. Re-run with --apply.")
 
-    conn.close()
+    exit_on_dropped(conn, errors,
+                    "Their ats_seed outcomes were cleared by "
+                    "reconcile_seed_outcomes(), so the next run re-probes "
+                    "those employers; nothing needs repairing by hand.")
 
 
 if __name__ == "__main__":

@@ -424,5 +424,219 @@ class CareersUrlTests(unittest.TestCase):
         self.assertEqual(ad.host_of(""), "")
 
 
+# -- defect D45: the two tables must be partial by the SAME amount -----------
+
+class FakeConn:
+    """The two-phase part of a connection, and nothing else.
+
+    A probe writes ats_seed through record_probe() (an UPDATE left pending on
+    this connection) and company_ats through flush() (which commits). What
+    D45 turned on is which of those survives a kill, so this models exactly
+    that: statements land in `pending`, commit() moves them to `committed`,
+    and a kill discards `pending`. Everything else about SQL is irrelevant
+    here and is not simulated.
+    """
+
+    def __init__(self):
+        self.pending_seed = []
+        self.committed_seed = []
+        self.committed_ats = []
+
+    def execute(self, sql, params=None):
+        if "UPDATE ats_seed" in sql:
+            self.pending_seed.append(params[-1])
+        return self
+
+    def fetchall(self):
+        return []
+
+    def commit(self):
+        self.committed_seed.extend(self.pending_seed)
+        self.pending_seed = []
+
+
+class Killed(RuntimeError):
+    """Stands in for Ctrl-C, a systemd stop, or an uncaught error mid-pass."""
+
+
+class CadenceTests(unittest.TestCase):
+    """D45. `company_ats` held 35 never_found rows against 139 real ones, and
+    the survivors were an alphabetical block -- the signature of a write-back
+    truncated partway, not of anything about employers.
+
+    The cause was two durability cadences on two different AXES:
+    record_probe()'s UPDATE committed every 20 ITERATIONS while company_ats
+    flushed every 50 RECORDS, so no pair of constants could align them. A run
+    killed between the boundaries kept the seed outcome and discarded the
+    buffered rows, and the next run then skipped those employers as recently
+    probed -- the requests were spent and the answer thrown away.
+
+    This asserts the invariant directly, by killing a pass at EVERY index and
+    comparing what survived in each table. Reading the loop is what let the
+    original defect through review, so the test does not read it.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "tools", "ats-discover.py")
+        spec = importlib.util.spec_from_file_location("ats_discover_cli", path)
+        cls.cli = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.cli)
+
+    def setUp(self):
+        self.employers = [{"employer_name": f"Employer {i:03d}",
+                           "careers_url": f"https://e{i}.org/careers"}
+                          for i in range(1, 61)]
+
+    def run_pass(self, kill_at=None):
+        """Run a real probe_pass over a fake connection, optionally dying at
+        the `kill_at`-th employer. Returns the FakeConn."""
+        conn = FakeConn()
+
+        def fake_probe(fetcher, employer, max_candidates=None):
+            i = self.employers.index(employer) + 1
+            if kill_at is not None and i == kill_at:
+                raise Killed(f"killed at {i}")
+            # Every probe is conclusive and negative: the never_found path is
+            # the one D45 lost, so it is the one under test.
+            return (ad.NOT_FOUND, employer["careers_url"], "no signature", [])
+
+        def fake_flush(conn_, records, now, verbose=False):
+            # Mirrors the real flush(): upsert() commits (lib/upsert.py:235),
+            # and that commit lands the pending record_probe UPDATEs too.
+            conn_.committed_ats.extend(r["employer_name"] for r in records)
+            conn_.commit()
+            return self.cli.UpsertResult(new=len(records))
+
+        orig_probe, orig_flush = self.cli.probe_employer, self.cli.flush
+        self.cli.probe_employer, self.cli.flush = fake_probe, fake_flush
+        try:
+            try:
+                self.cli.probe_pass(conn, None, self.employers, "T",
+                                    apply=True, breaker_after=10_000)
+            except Killed:
+                pass
+        finally:
+            self.cli.probe_employer, self.cli.flush = orig_probe, orig_flush
+        return conn
+
+    def test_a_completed_pass_writes_both_tables_in_full(self):
+        conn = self.run_pass()
+        self.assertEqual(len(conn.committed_seed), 60)
+        self.assertEqual(len(conn.committed_ats), 60)
+
+    def test_a_pass_killed_at_any_index_loses_nothing(self):
+        """The invariant, stated as a set equality rather than a count: an
+        employer recorded as probed in ats_seed MUST have its company_ats row,
+        whatever iteration the process died on."""
+        for kill_at in range(1, 61):
+            with self.subTest(kill_at=kill_at):
+                conn = self.run_pass(kill_at=kill_at)
+                self.assertEqual(sorted(conn.committed_seed),
+                                 sorted(conn.committed_ats),
+                                 f"tables diverged when killed at {kill_at}")
+
+    def test_the_kill_actually_costs_something(self):
+        """Guards the test above against passing vacuously. If probe_pass ever
+        stopped writing at all, set equality would hold trivially -- so pin
+        that a kill mid-pass does commit the completed batches and does lose
+        the partial one."""
+        conn = self.run_pass(kill_at=45)
+        self.assertEqual(len(conn.committed_ats), 40)   # two batches of 20
+        self.assertEqual(len(conn.committed_seed), 40)
+
+    def test_there_is_one_cadence_constant_not_two(self):
+        """The original pair could not be aligned by choosing better numbers,
+        because one counted iterations and the other counted records. Pin that
+        only FLUSH_EVERY remains and that it is small enough to be a real
+        bound on loss."""
+        src = open(os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "tools", "ats-discover.py")).read()
+        self.assertNotIn("i % 20 == 0", src)
+        self.assertIn("i % FLUSH_EVERY == 0", src)
+        self.assertLessEqual(self.cli.FLUSH_EVERY, 20)
+
+
+class BackfillTests(unittest.TestCase):
+    """D45's repair: the 139 probes already happened, so the missing rows are
+    re-derived from ats_seed rather than re-probed. No network."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cli = CadenceTests.cli if hasattr(CadenceTests, "cli") else None
+        if cls.cli is None:                                  # pragma: no cover
+            CadenceTests.setUpClass()
+            cls.cli = CadenceTests.cli
+
+    def test_backfilled_rows_are_shaped_like_the_ones_that_survived(self):
+        """Byte-identical in shape, or the backfill writes a second dialect of
+        never_found row into the same column that tasks 16/17 read."""
+        probed = ad.never_found_row("Acme", "https://acme.org/careers", "T")
+        filled = ad.never_found_row("Acme", "https://acme.org/careers", "T",
+                                    discovered_via="backfill-from-ats_seed")
+        self.assertEqual({k: v for k, v in probed.items()
+                          if k != "discovered_via"},
+                         {k: v for k, v in filled.items()
+                          if k != "discovered_via"})
+        self.assertEqual(ad.make_row_id(probed), ad.make_row_id(filled))
+
+    def test_the_row_id_ignores_provenance_and_case(self):
+        """Idempotency rests on this: a backfilled row must land on the SAME
+        primary key as the row the probe would have written, or a re-run
+        doubles the population instead of confirming it."""
+        a = ad.never_found_row("Penguin Random House", "https://p/careers", "T")
+        b = ad.never_found_row("penguin random house", "https://p/careers",
+                               "T2", discovered_via="backfill-from-ats_seed")
+        self.assertEqual(ad.make_row_id(a), ad.make_row_id(b))
+
+    def test_careers_url_is_the_only_hash_field_the_backfill_can_move(self):
+        """`now` is not hashed and `first_validated_at` is sticky, so re-running
+        the backfill cannot report the existing rows as `updated` unless
+        ats_seed.careers_url has changed under it."""
+        movable = set(ad.HASH_FIELDS_COMPANY_ATS) & set(
+            ad.never_found_row("A", "u", "T"))
+        self.assertEqual(
+            {f for f in movable
+             if ad.never_found_row("A", "u", "T")[f]
+             != ad.never_found_row("A", "u", "T2")[f]},
+            set())
+        self.assertIn("careers_url", movable)
+
+    def test_backfill_does_not_reconcile_its_own_source(self):
+        """reconcile_seed_outcomes() clears ats_seed so the employer is
+        re-probed. That is right when the batch PRODUCED the outcome and
+        destructive when ats_seed is the source the batch was derived from --
+        it would delete the only surviving record of a probe already paid
+        for."""
+        conn = FakeConn()
+        seen = {}
+
+        def fake_flush(conn_, records, now, verbose=False):
+            return self.cli.UpsertResult(errors=["boom"] * len(records))
+
+        def fake_reconcile(conn_, records, verbose=False):
+            seen["called"] = True
+            return []
+
+        orig_flush = self.cli.flush
+        orig_rec = self.cli.reconcile_seed_outcomes
+        self.cli.flush, self.cli.reconcile_seed_outcomes = (fake_flush,
+                                                            fake_reconcile)
+        try:
+            self.cli.commit_batch(conn, [{"employer_name": "A"}], "T",
+                                  reconcile=False)
+            self.assertNotIn("called", seen)
+            self.cli.commit_batch(conn, [{"employer_name": "A"}], "T",
+                                  reconcile=True)
+            self.assertIn("called", seen)
+        finally:
+            self.cli.flush = orig_flush
+            self.cli.reconcile_seed_outcomes = orig_rec
+
+
 if __name__ == "__main__":
     unittest.main()

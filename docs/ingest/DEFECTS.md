@@ -586,7 +586,7 @@ import; both `--task extract` and `--task score` now run.
 
 ---
 
-### D45 — open
+### D45 — fixed
 
 **`company_ats.status = 'never_found'` holds 35 rows against a true population
 of 139, and the 35 are an alphabetical block.** `ats_seed` records a probe
@@ -622,12 +622,80 @@ population, not by the original triage pass. The spike worked around it by
 probing 35 target rows plus a 20-employer control drawn from `ats_seed`
 directly, and the workaround is what surfaced the discrepancy.
 
-Blast radius: any task sizing itself off `company_ats`. Disposition: **open,
-needs a task of its own** — the fix is a re-run of the write-back, but whether
-`company_ats` should hold every negative or only probed-and-confirmed ones is a
-design question the register should not decide. Note it interacts with D-level
-findings about `ats_seed` freshness: 96 of 376 rows have `last_probed_at` NULL
-and have never been probed at all.
+**Root cause: two durability cadences on two different axes.** A probe writes
+two tables. `record_probe()` leaves an `UPDATE ats_seed` pending on the
+connection and the loop committed it **every 20 iterations**; the `company_ats`
+rows were buffered in a Python list and flushed **every 50 records**
+(`FLUSH_EVERY`). Because one counted *employers* and the other counted
+*records*, no choice of constants could align them — and any run that died
+before the final flush kept the seed outcome durably while silently discarding
+the buffer. `--limit` defaulting to 20 with `ORDER BY last_probed_at NULLS
+FIRST, employer_name` made successive runs walk the roster alphabetically,
+which is where the block shape comes from.
+
+The database still holds the fingerprint. Three passes ran on 2026-07-28
+(`ats_seed.last_probed_at`): 07:14 probed 140 employers, 07:36 probed 40, 07:40
+probed 100. Every one of those 280 outcomes is in `ats_seed`. `company_ats`
+received rows from the 07:40 pass only, and **exactly 50** of them — `never_found`
+35 + `valid` 7 + `unvalidated` 5 + `dead` 3 — which is one flush batch and not a
+number any probe result would produce. The 104 shortfall is 71 + 22 from the two
+passes that wrote nothing plus 11 from the truncated tail of the third.
+
+Fixed in `backend/tools/ats-discover.py`:
+
+- **One boundary, on the iteration axis.** `commit_batch()` is now the only
+  place either table is made durable, called at `i % FLUSH_EVERY == 0` and once
+  at the end (`probe_pass()`). `flush()` → `upsert()` commits, and that commit
+  lands the pending `record_probe()` UPDATEs in the same transaction, so the
+  two tables are partial by the same amount or not at all. `FLUSH_EVERY` is 20.
+- **The loop was lifted out of `main()` into `probe_pass()`** so the cadence can
+  be tested rather than argued. `tests/test_ats_discovery.py::CadenceTests`
+  kills a pass at every one of 60 indices and asserts the two committed sets are
+  equal. Against the pre-fix cadence that test fails at 31 of the 60 kill points;
+  against the fix it passes at all 60.
+- **A dropped record no longer exits 0.** `flush()` still survives one bad batch,
+  but `reconcile_seed_outcomes()` re-reads `company_ats` for the batch's ids and
+  clears `last_probed_at` / `last_probe_outcome` for any employer whose row is
+  absent, so the employer is re-probed instead of being recorded as settled. This
+  closes the last one-record-wide version of the same divergence: `upsert()`
+  isolates per-record failures with a SAVEPOINT and commits the survivors
+  *before* `check_error_rate` raises (`lib/upsert.py:198,:235`), so the seed
+  outcome would otherwise have outlived the row. The run then exits 1.
+- **Backfill, no network.** `--backfill-never-found` re-derives a row for every
+  `ats_seed.last_probe_outcome = 'not_found'` via `ats_discovery.never_found_row()`.
+  Applied 2026-07-28: 104 new, 35 unchanged, 0 dropped. `never_found` 35 → **139**;
+  `valid` 75, `unvalidated` 5, `dead` 3 all unchanged. A second run reports 139
+  unchanged. The 35 original rows keep `discovered_via = 'probe'`; the 104 carry
+  `'backfill-from-ats_seed'`.
+
+**Blast radius: reporting and sizing only, never ingest.** `never_found` rows
+have `ats = ''` and `token = ''`, and `ingest/ats_sources.py:107-115` filters on
+`ats = ANY(HANDLED_PLATFORMS)`, `status = ANY(('valid','unvalidated'))` *and*
+`token <> ''` — three independent exclusions. Measured: the roster is 70 rows
+before the backfill and 70 after.
+
+**The widened column is still a floor, and is now measurably so.** `never_found`
+means *"no ATS URL in the served HTML"*, not *"no ATS"*
+(`backend/ats_discovery.py:499-508`). Of the four positive controls with a
+verified live board — Datadog, MongoDB, Justworks, Ramp — the probe returned
+`not_found` for all four, because their careers pages are client-rendered. All
+four now carry a `never_found` row *alongside* their valid `greenhouse`/`ashby`
+token row, so the column carries its own falsification: **≥4 of 139 rows are
+provably wrong**, and every coverage figure derived from it is a lower bound.
+Backfilling 104 rows widens a population that is already false-negative-heavy;
+it does not make it more correct, it makes it complete.
+
+Disposition: **fixed** — cadence aligned, backfill applied, 8 tests added (782 →
+790). Unchanged and still open: 96 of 376 `ats_seed` rows have `last_probed_at`
+NULL and have never been probed at all, which is why the `never_found`
+first-letter histogram now runs A–R and stops. That is a separate gap in the
+probe's coverage of the roster, not in this write-back.
+
+**Follow-up for whoever owns `tools/jsonld-probe.py`** (not touched here):
+`SEED_NOT_FOUND_SQL` at `:1000-1007` selects seed `not_found` rows *without* a
+`company_ats` row as its wider control population. That set is now empty by
+construction, which is correct behaviour but makes `--extra-sample` a no-op, and
+the comment at `:995-999` still says "company_ats holds 35 never_found rows".
 
 ---
 
