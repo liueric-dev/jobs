@@ -21,9 +21,10 @@ the current commit (`git log dd49a27..HEAD` touches only `backend/llm.py`,
 `score.py`'s model-mismatch guard, and docs/tests for task 01 — no line
 numbers cited here moved as a result, confirmed by direct read).
 
-**Total: 44 entries** (`D01`–`D44`, verified unique and gapless) — `D43` and
-`D44` were found by task 08 while closing `D15`, not by the original pass;
-both are recorded in full below — more than the 16
+**Total: 45 entries** (`D01`–`D45`, verified unique and gapless) — `D43` and
+`D44` were found by task 08 while closing `D15`, and `D45` by task 19's
+coverage spike, not by the original pass; all three are recorded in full
+below — more than the 16
 the README named, because that count
 was itself informal (nobody had built the list yet) and because triaging
 means finding the remainder, per task 03's instruction to "audit the
@@ -91,6 +92,7 @@ given).
 | [D42](#d42) | cosmetic | fold into task 34 | `hn-hiring.py`: null comment items re-fetched forever (audit item 5) |
 | [D43](#d43) | silent data loss | **fixed** — task 08 | `score.py`: a tombstone left the previous score in place, and `has_fields` let an all-null answer through |
 | [D44](#d44) | loud failure | **fixed** — task 08 | `evals/__main__.py`: `evals run` raised `UnboundLocalError` for every task |
+| [D45](#d45) | silent under-sizing | **open** — needs a task | `company_ats`: the `never_found` write-back from `ats_seed` is partial. 35 rows against a true population of 139 |
 
 ---
 
@@ -581,6 +583,51 @@ runs before the task is used at all. It was introduced by task 07 (`3a8b42c`,
 why the gap went unnoticed. Blast radius: the eval harness CLI only, nothing
 in the pipeline. Disposition: **fixed** — task 08 deleted the redundant
 import; both `--task extract` and `--task score` now run.
+
+---
+
+### D45 — open
+
+**`company_ats.status = 'never_found'` holds 35 rows against a true population
+of 139, and the 35 are an alphabetical block.** `ats_seed` records a probe
+outcome per employer (`backend/migrations/migrate_company_ats.py:98-116`);
+`last_probe_outcome = 'not_found'` — "page fetched, no ATS signature", the real
+negative — is **139** of its 376 rows. Only **35** of those got a `never_found`
+row written back into `company_ats`; **104** never got a row at all.
+
+The 35 are not a sample. Grouped by first letter of `employer_name` they are
+`M=8 N=20 O=2 P=5` — a contiguous block, which is the signature of a write-back
+that stopped partway rather than of anything about employers. Reproduce:
+
+```sql
+SELECT left(employer_name,1), count(*) FROM company_ats
+WHERE status='never_found' GROUP BY 1 ORDER BY 1;
+
+SELECT count(*) FROM ats_seed WHERE last_probe_outcome='not_found';        -- 139
+SELECT count(*) FROM ats_seed s WHERE s.last_probe_outcome='not_found'
+  AND NOT EXISTS (SELECT 1 FROM company_ats a
+                  WHERE a.employer_name=s.employer_name AND a.status='never_found');  -- 104
+```
+
+**Why it matters more than its size.** `company_ats.status` is what downstream
+work sizes itself against. Task 19 names `never_found` as its entire population
+(`19-jsonld-parser.md:15-17`), so its brief was written against 25% of the set it
+meant to describe. Task 17's roster and task 16's coverage figures read the same
+column. Nothing crashes; the numbers are just quietly too small, which is this
+system's documented failure mode — *"Silence is this system's failure mode"*
+(CLAUDE.md), and *"alert on volume, not errors."*
+
+Found by task 19's coverage spike (`2fecec5`) while assembling its probe
+population, not by the original triage pass. The spike worked around it by
+probing 35 target rows plus a 20-employer control drawn from `ats_seed`
+directly, and the workaround is what surfaced the discrepancy.
+
+Blast radius: any task sizing itself off `company_ats`. Disposition: **open,
+needs a task of its own** — the fix is a re-run of the write-back, but whether
+`company_ats` should hold every negative or only probed-and-confirmed ones is a
+design question the register should not decide. Note it interacts with D-level
+findings about `ats_seed` freshness: 96 of 376 rows have `last_probed_at` NULL
+and have never been probed at all.
 
 ---
 
