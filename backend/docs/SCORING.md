@@ -75,8 +75,10 @@ Two properties do the work:
 - **The prompt contains no persona.** Not only because facts should not be
   persona-shaped, but because the instruction block is then byte-identical for
   every posting *and every profile* — one cache prefix across the whole corpus.
-  Measured cache hit rate at steady state: 94% of input. The posting goes last
-  for the same reason; anything variable earlier would truncate the prefix.
+  Measured 2026-07-28 on the current prompt: **95% of input once warm, 80% on
+  a cold prefix** — see "What it actually spends" for why that is a range. The
+  posting goes last for the same reason; anything variable earlier would
+  truncate the prefix.
 - **It never re-runs.** `facts_version` records which generation of the schema
   produced a row, so adding a field is a resumable backlog burn-down rather
   than a TRUNCATE, and tombstoned rows get one more attempt under the new
@@ -179,7 +181,159 @@ change.
 
 ---
 
-## What it costs
+## What it actually spends
+
+> **At 43 eligible postings/day, the nightly extraction pass takes 0.03 hours
+> and consumes 0.1% of what actually binds — 3 of the provider's 2,500
+> concurrent requests. There is no daily request ceiling to consume.**
+
+That sentence is the deliverable of task 04 and it is not the headline. The
+headline is the line under it:
+
+> **The pipeline cannot process 43/day. `EXTRACT_BATCH_SIZE` is 40
+> (`extract.py:70`) and `run-daily.py` invokes `extract.py` exactly once
+> (`run-daily.py:120`), so the ceiling is 40 postings a night regardless of
+> how fast a call is. At 43/day the backlog grows 3/day; at 80/day — what the
+> last seven complete days actually ran — it grows 40/day, forever.**
+
+Nothing about that is a rate limit, a token budget or a wall-clock problem.
+40 calls take 114 seconds — 1.1% of the systemd window. The pipeline is
+throttled by a constant, three orders of magnitude below anything the
+provider or the clock imposes.
+
+### Method
+
+Reproducible, and every part of it pinned:
+
+| | |
+|---|---|
+| measured | **2026-07-28**, at commit `e353e3e` |
+| model | `deepseek-v4-flash` at `api.deepseek.com` — `JOB_SCORING_MODEL`, the production pin (`llm.py:45`). Extraction and scoring resolve to the same model, so one row each rather than two tables. |
+| corpus | `evals/fixtures/corpus-v1.jsonl` — **frozen**, 120 records, stratified across all seven platforms. Extract: 115 eligible, first 60 by sorted `job_id`. Score: 55 eligible (those carrying a facts block), first 24. |
+| concurrency | the pipeline's own — `EXTRACT_MAX_WORKERS=3`, `SCORE_MAX_WORKERS=5`. Latency at `workers=1`, which the old tool defaulted to, is not latency the pipeline ever sees. |
+| temperature | 0, as production pins it (`llm.DEFAULT_TEMPERATURE`) |
+| calls | **84 produced the table below** (60 extract + 24 narrative); 173 billable in total on the day, the remainder being the cold-vs-warm cache comparison and smoke runs. All through `llm.call_detailed()`, so `ratelimit.acquire()` applied — the old tool built the HTTP request itself and silently bypassed it. |
+
+```bash
+cd backend
+python3 tools/cost-test.py --stage extract --n 60
+python3 tools/cost-test.py --stage score   --n 24
+```
+
+**Not a live corpus, deliberately.** Every tool under `tools/` used to select
+with `ORDER BY first_seen DESC LIMIT n` against production, so the sample
+changed nightly and a slower p95 was equally well explained by a busier
+endpoint or by a batch of longer postings. That applies to cost exactly as it
+applies to quality — see `evals/corpus.py`'s *WHY FREEZE*.
+
+### The measurement
+
+| | extract | narrative |
+|---|---|---|
+| wall-clock p50 | **7.7 s** | 7.8 s |
+| wall-clock p95 | **13.1 s** | 9.5 s |
+| min / max | 4.0 / 16.9 s | 4.1 / 9.8 s |
+| effective, at the stage's own workers | 2.85 s/call (3) | 1.62 s/call (5) |
+| input tokens/call | 1,286 | 1,042 |
+| output tokens/call | 971 (757 reasoning) | 729 (546 reasoning) |
+| prefix cache hit | **80% cold, 95% warm** | **74% cold, 95% warm** |
+| usable JSON | 60/60 | 24/24 (23/24 on the first run) |
+| deferred (transient) | 0 | 0 |
+| tombstoned (permanent) | 0 | 0 |
+| $/call | $0.000284 | $0.000215 |
+
+**The cache figure is a range, not a number, and the old 94% was the top of
+it.** DeepSeek's prefix cache survives *between* runs. The same 24 narrative
+prompts read 74% of input cached on a cold prefix and 95% on an immediate
+re-run; extraction read 80% then 95%. Both stages converge on 95% once warm,
+which is what the 94% in the dollar table below was measuring — but a
+measurement taken after a `FACTS_VERSION` bump, a prompt edit (task 11), or a
+quiet day will see the cold end. Quote the range.
+
+**Failure and retry rate were zero over 84 calls, which is a floor and not a
+guarantee.** `n=84` cannot resolve a 1% failure rate. What it does establish
+is that neither stage has a *systematic* failure against this corpus,
+including its `long_title`, `no_description` and `tombstoned` pathology rows.
+One narrative response on the first run parsed but omitted a required field
+and would have been tombstoned; the same prompt succeeded on re-run, which is
+the temperature-0 non-determinism `deepseek-v4-flash` is already known for
+(76% self-agreement on `seniority_level`).
+
+### The provider's limits, in the repo rather than in someone's memory
+
+Recorded in `PROVIDER_LIMITS` in `tools/cost-test.py`, which is where the
+tool reads them from.
+
+| limit | value | provenance |
+|---|---|---|
+| concurrent requests | **2,500** | repo owner, 2026-07-28 — **operator-stated, not measured** |
+| requests/day | none published | DeepSeek does not publish a daily ceiling |
+| requests/minute | none published | ditto; the documented posture is degradation under load, not refusal |
+| client-side RPM/RPD | unset for this model | `ratelimit.py`; `.env` caps only `gemini-3.6-flash` |
+
+**The throttle probe the task asked for was not run, and that is a decision
+rather than an omission.** Finding the ceiling by pushing until 429 would
+have spent an unknown share of the nightly `run-daily.py` window to rediscover
+a number already in hand. The figure above is therefore a *claim to check*,
+not a measurement to reuse — but it is a claim that now lives in the repo with
+its date and its source attached, which is what the task actually needed.
+
+At 3 concurrent calls the pipeline uses 0.12% of that ceiling. Concurrency is
+not close to binding and will not be until the batch cap is raised by three
+orders of magnitude.
+
+### Does it fit the nightly window?
+
+`jobs-ingest.service` sets `TimeoutStartSec=10800` — systemd kills the unit at
+three hours, mid-run, and the nine steps are sequential.
+
+| | calls | wall-clock | share of the 3 h window |
+|---|---|---|---|
+| extraction, one nightly batch (40) | 40 | 114 s | 1.1% |
+| narrative, 2 active profiles × budget 20 | 40 | 65 s | 0.6% |
+| extraction at N=43, if the cap were lifted | 43 | 123 s | 1.1% |
+| extraction at N=80, if the cap were lifted | 80 | 228 s | 2.1% |
+| one-time tier-3 backfill (6,075 rows) | 6,075 | 4.8 h at 3 workers | needs `scripts/backfill-facts.sh`, not the nightly path |
+
+**It fits, at both N figures, with three orders of magnitude of headroom.**
+Lifting `EXTRACT_BATCH_SIZE` to 100 would still be 2.6% of the window. The
+constant is doing no useful work at these volumes; it was sized when scoring
+was the filter and 200–400 rows/day arrived unfiltered.
+
+Note the narrative stage is **not** a function of postings/day at all:
+`run_for_profile()` takes `profile_obj.daily_narrative_budget`
+(`score.py:479`), so nightly narrative volume is `active_profiles × budget`
+regardless of how many postings arrived. `SCORE_BATCH_SIZE` (`score.py:195`)
+is documented in two docstrings as the cap and is read by nothing on the
+nightly path.
+
+### `max_tier_to_score` stays at 2
+
+The full reasoning is in `config/relevance.json`'s `_max_tier_*` fields, which
+is where a person editing the number will actually look. In one line:
+**affordable, and not worth it.**
+
+Tier 3 is a 6,183-row, $1.73, 4.8-hour backfill — throughput is not the
+objection and the old note here ("set to 3 once throughput allows") is
+answered. The objections are that tier 3 is 93% employer boilerplate
+(`docs/pursuit-gate-volume.md`, hand-checked n=30 at 6.7% precision), that 34
+of the 43 on-target titles are *already* at tier 1/2 so widening buys nine
+postings, and — decisively — that `tier_sql` folds `company_exclude` and
+`description_exclude` into the same predicate that assigns the tier
+(`relevance.py:163`, `:168`, `:189`). `max_tier_to_score = 3` is therefore an
+unconditional pass, not a wider gate: it re-admits 182 provenance-excluded
+rows and 1,906 `title_exclude` rows, and those are the ones that rank
+*highest*, because their titles are keyword-stuffed in the way `title_include`
+rewards.
+
+---
+
+## What it costs in dollars (secondary)
+
+Kept because it is still the input to any future paid tier, and demoted
+because the section above is what actually binds. **The `latency` and
+`% cached` columns in this table are superseded by the 2026-07-28
+measurement above** — they were taken at `workers=1` against a live corpus.
 
 Measured with `tools/cost-test.py` against `deepseek-v4-flash` on real
 postings, at the production `temperature=0`. Prices `0.14 / 0.0028 / 0.28` per
@@ -210,9 +364,19 @@ At 100 profiles, 250 new eligible postings/day, 30% daily-active:
 Extraction is the flat term: 250 calls/day whether there is one profile or a
 thousand. Narrative is `active_profiles x budget`.
 
+**The 250/day in that table is an assumption and it was 6x high.** Measured
+2026-07-28 over 2026-06-28…2026-07-27, the current gate admits 66/day
+(`docs/pursuit-gate-volume.md` reports 43/day for the narrower AI-vocabulary
+population), and the widest possible gate — every open, described row —
+admits 152/day. So every dollar figure above is a ceiling, not an estimate.
+The relative ordering of the three rows is unaffected, which is the only thing
+the table was ever used for.
+
 At roughly $0.05/user/month, **token cost has stopped being the interesting
 constraint.** What binds is request rate limits, wall-clock, and ranking
-quality. Spend the effort on `criteria.json` calibration, not on tokens.
+quality — and, measured, none of those three either: what binds is
+`EXTRACT_BATCH_SIZE`. Spend the effort on `criteria.json` calibration, not on
+tokens.
 
 ### Reasoning tokens: measured, and deliberately left ON
 
@@ -513,7 +677,7 @@ that look current — the one genuinely wrong combination, which
 
 | env var | default | what it does |
 |---|---|---|
-| `EXTRACT_BATCH_SIZE` | 40 | postings per extraction run |
+| `EXTRACT_BATCH_SIZE` | 40 | postings per extraction run — **and `run-daily.py` makes one run a night, so this is the daily ceiling.** Measured 2026-07-28 as the binding constraint on the whole pipeline; see "What it actually spends". |
 | `EXTRACT_MAX_WORKERS` | 3 | concurrent extraction calls |
 | `SCORE_MAX_WORKERS` | 5 | concurrent narrative calls |
 | `JOBS_MATCH_FLOOR` | 40 | below this, no `job_matches` row is written |

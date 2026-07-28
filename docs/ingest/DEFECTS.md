@@ -21,7 +21,8 @@ the current commit (`git log dd49a27..HEAD` touches only `backend/llm.py`,
 `score.py`'s model-mismatch guard, and docs/tests for task 01 — no line
 numbers cited here moved as a result, confirmed by direct read).
 
-**Total: 41 entries** — more than the 16 the README named, because that count
+**Total: 42 entries** (`D01`–`D42`, verified unique and gapless) — more than the 16
+the README named, because that count
 was itself informal (nobody had built the list yet) and because triaging
 means finding the remainder, per task 03's instruction to "audit the
 remaining sources... before assuming four is the total." 25 are genuinely new

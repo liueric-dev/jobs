@@ -198,3 +198,103 @@ breaks. Called out here because it is the one part of task 03 a client could not
 numbers that this commit moved. It carries `generated:` frontmatter, and per CLAUDE.md
 generated docs are regenerated rather than hand-edited — but no generator script exists
 for it. Left alone deliberately; task 34 owns the resolution.
+
+---
+
+## Running backlog for task 34 (documentation cleanup)
+
+Collected as encountered, so 34 does not have to rediscover them. Each is a documented
+claim that is wrong about the code as it now stands.
+
+- **CLAUDE.md's `lib/` parity rule is stale.** It states `lib/` is "vendored
+  byte-identical to another repo" with drift reported by `tools/lib-parity.sh`. That
+  script does not exist anywhere in the repo, and both `backend/lib/__init__.py` and
+  `backend/tests/test_lib_contract.py:5` record that `lib/` is now this repo's own
+  code. The rule sent task 03 toward an `ingest/_common.py` fallback that two of its
+  eight call sites could not have used. **This is the highest-value item here** — it is
+  in the file every session reads first.
+- **`docs/ingest/DEFECTS.md` undercounted itself.** Prose said "Total: 41 entries"; the
+  register contains `D01`–`D42`, verified unique and gapless. Corrected in this run.
+  The README's "42" was right all along.
+- **`docs/ingest/contributor-api.md:378` cites line numbers that task 03 moved**, and
+  documents a `submission_log` row whose `reason` column is now populated. The file
+  carries `generated:` frontmatter, so per CLAUDE.md it should be regenerated rather
+  than hand-edited — but **no generator script exists for it**. 34 needs to decide
+  whether these files get a real generator or lose the frontmatter that claims they
+  have one.
+- **Task files describe a `relevance.json` that no longer exists.**
+  `05-widened-gate-volume.md:13-20` lists 12 `title_include` terms; there are 34. Any
+  later task scoped on that description inherits the error — 10 and 13 are the ones at
+  risk.
+- **The platform value is `builtin`, not `builtin-nyc`**, as several task files write
+  it.
+- **`docs/ingestion_tests/05-fetcher-harness.md` has no Definition of done**, but
+  `09-fetcher-harness.md` inherits from it by reference. Being resolved inside task 09.
+
+---
+
+## 2026-07-28 — 04 landed, and the answer was not a quota
+
+The sentence the task asked for:
+
+> **At 43 eligible postings/day, the nightly extraction pass takes 0.03 hours and
+> consumes 0.1% of what actually binds — 3 of the provider's 2,500 concurrent
+> requests. There is no daily request ceiling to consume.**
+
+It is not the headline. The headline is what the measurement turned up underneath:
+
+> **The pipeline cannot process 43/day.** `EXTRACT_BATCH_SIZE = 40`
+> (`extract.py:70`) and `run-daily.py` invokes `extract.py` exactly once, so the
+> ceiling is **40 postings a night** regardless of how fast a call is. At 43/day the
+> backlog grows 3/day. At 80/day — what the last seven complete days actually ran —
+> it grows 40/day, forever.
+
+**Verified independently:** `EXTRACT_BATCH_SIZE=40` with nothing overriding it in
+`.env`, and `extract.py` appears exactly once in `run-daily.py`'s `STEPS`.
+
+The pipeline is throttled by a constant three orders of magnitude below anything the
+provider or the clock imposes. Task 04 was scoped to find out whether quota or
+wall-clock binds. Neither does.
+
+| measured | value |
+|---|---|
+| extract wall-clock | 7.7s p50 / 13.1s p95 per call; 2.85s/call effective at `EXTRACT_MAX_WORKERS=3` |
+| provider concurrency | 2,500 — **operator-stated, not measured**, dated in `SCORING.md` |
+| daily request ceiling | none published |
+| calls made | 84 for the table (60 extract + 24 narrative); 173 billable on the day |
+| corpus | frozen `corpus-v1.jsonl`, 120 records, pinned model, temperature 0 |
+
+Two defects fell out of doing the measurement properly. The old `cost-test.py` **built
+its own HTTP request instead of going through `llm.call_detailed()`**, so
+`ratelimit.acquire()` never applied — it was measuring a system the pipeline does not
+run. And it defaulted to one worker, so its latency figures were never comparable to
+the nightly window.
+
+### `max_tier_to_score` stays at 2 — and the reason is not throughput
+
+The config's old note said "set to 3 to open the floodgates once throughput allows."
+Throughput now allows. It is still wrong, and the decisive reason is structural rather
+than economic:
+
+**`max_tier_to_score = 3` is an unconditional pass, not a wider gate.**
+`relevance.py:189` computes `CASE WHEN row_ok AND loc_ok THEN 1 WHEN row_ok THEN 2 ELSE
+3 END`, and `:223` admits rows on `tier <= max_tier`. Every row satisfies `<= 3`.
+Because `row_ok` folds in `title_include`, `title_exclude`, `company_exclude` **and**
+`description_exclude`, that one-character change disables four exclusion lists
+simultaneously — 1,906 rows return on `title_exclude` alone (account executive,
+recruiter, nurse, controller, VP), plus 182 unique relist-spam rows.
+
+And they return *at the top*: 19 of them already reach `match_score >= 90`, one hits 99
+against an LLM fit of 15, because keyword-stuffed titles are precisely what
+`title_include` rewards. `MATCH_FLOOR` cannot save this — the junk scores highest, so
+the floor filters the wrong end.
+
+Recorded across four `_comment` fields in `relevance.json` in the file's existing
+style, including the rejected alternatives and what *would* change the decision (task
+10 making the provenance exclusions a predicate no tier number can switch off).
+
+### Consequence: a new blocker nobody had written down
+
+The 40/day ceiling is not any task's responsibility in the current tree, and it
+invalidates the sizing in several. Raised as a follow-up rather than fixed here —
+task 04 is a measurement task and CLAUDE.md forbids tuning during one.
