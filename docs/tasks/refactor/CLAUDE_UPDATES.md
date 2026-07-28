@@ -363,3 +363,60 @@ removed and the conclusion kept.
 covers a token which does *not* resolve, "otherwise the validator is only ever exercised
 against the live endpoints it is meant to stop trusting." That is the right bullet, but
 16's agent started before it existed, so 16 will be checked against it on landing.
+
+---
+
+## 2026-07-28 — 22 landed: drop JobSpy, and task 23 is now in question
+
+Findings: [`docs/jobspy-spike.md`](../../jobspy-spike.md). **No code merged** — verified,
+zero `jobspy` references anywhere outside that document. LinkedIn never queried; every
+call passed `site_name=["google"]` explicitly rather than trusting a default.
+
+**Decision: drop JobSpy.** It returns zero rows from this machine — 0/20 queries, zero
+exceptions, every request HTTP 200, p50 0.18s. That combination is the tell: it is not
+a block. No captcha, no `sorry/index`, no "unusual traffic" interstitial. Google
+requires JavaScript for search results, announced 2025-01-17 explicitly to stop
+scrapers, and JobSpy parses HTML.
+
+The probe that settles it: a plain web search with no `udm` parameter —
+`q=weather new york` — returned the identical JS bootstrap shell. **No query could have
+worked**, which kills the "wrong query syntax" explanation upstream offers for this
+symptom. JobSpy issue #302 reports the same warning string, open since 2025-09-06.
+
+This is a negative with a documented global cause rather than a "didn't work today"
+observation, so confidence is high and no proxy or IP change addresses it. The SerpApi
+control was clean — 10/10 results, 30/30 apply URLs — so the vertical is alive and only
+the free path into it is dead.
+
+**The spike's own premise went untested and remains open.** The question was whether a
+residential IP fares better than a datacentre one. JobSpy never gets far enough for IP
+reputation to be consulted.
+
+### This puts task 23 in question, and 05's platform finding needs re-reading
+
+JobSpy was the reason the SERP abstraction looked affordable
+(`ADDENDUM-google-jobs-providers.md:73-74`). Without it, every remaining provider is
+metered and the router reduces to squeezing eight small free tiers — to grow a source
+measured at 4.8%.
+
+**But that 4.8% is not settled, and this is the more important finding.**
+`backend/config/google-queries.json` holds 32 queries across `core_swe`,
+`ai_integration`, `bridge_solutions` and `reentry_growth`, and **every one is a
+software-engineering title** — verified directly: "full stack engineer", "backend
+engineer", "LLM engineer", "forward deployed engineer", "software engineer returnship".
+
+Google Jobs contributed few Pursuit-shaped rows because **it was never asked for any**.
+The honest statement is "Google Jobs *as currently queried* is 4.8%". Task 05's
+conclusion that it is not a meaningful source does not survive that distinction
+unexamined — and the spike's own control run returned 10 results with 4,508-character
+median descriptions for "barista" in NYC.
+
+**Consequence:** task 23 should not be built or dropped on the current evidence. The
+deciding experiment is cheap — re-point the query bank at Pursuit-shaped terms, run
+task 05's SQL against the result, compare. Hours, not a package. Raised as a follow-up.
+
+### Minor
+
+The agent reported it could not run the test suite because "pytest isn't installed".
+The suite is `python3 -m unittest discover -s backend/tests` and runs fine; its only
+change was one markdown file, so nothing was at risk either way.

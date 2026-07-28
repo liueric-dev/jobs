@@ -31,6 +31,57 @@ so a model standing in for it makes the measurement circular — the defect
 which treats `sonnet-batch-1` as ground truth. Reversible only in the sense that the
 labels can be collected later.
 
+### 22 — Drop JobSpy. The cause is global, not this IP
+
+JobSpy returns zero rows from this machine — 0/20 queries, no exceptions, every request
+HTTP 200. Not a block: no captcha, no `sorry/index`, no "unusual traffic". Google
+requires JavaScript for search results (announced 2025-01-17, explicitly to stop
+scrapers) and JobSpy parses HTML. The decisive probe was a plain web search with no
+`udm` parameter — `q=weather new york` returned the identical JS bootstrap shell, which
+rules out the "wrong query syntax" explanation upstream offers for this symptom. JobSpy
+issue #302 reports the same string, open since 2025-09-06.
+
+Confidence is high and unusually so: this is a negative with a documented global cause
+rather than a "works today" observation. No proxy or IP change fixes it. Invalidated
+only by JobSpy shipping a JS-executing backend, Google reversing the requirement, or a
+fork parsing the rendered payload — and on the first, `ingest/google-serpapi.py:10-18`
+already records Playwright automation against Google Jobs being CAPTCHA-walled twice.
+Reversible in principle; nothing to reverse today.
+
+The SerpApi control was clean — 10/10 results per search, 30/30 apply URLs. The
+vertical is alive; only the free path into it is dead.
+
+**The spike's own premise went untested**, and this is worth keeping: the question was
+whether a residential IP fares better than a datacentre one. JobSpy never gets far
+enough for IP reputation to be consulted, so that question is still open — it simply
+cannot be answered with this tool.
+
+### 22 — The 14-day observation was deliberately not run
+
+The task's design assumes a scraper that works on night one and degrades as reputation
+accrues. This one fails 100% from a deterministic, non-reputational cause, so 420
+further requests would re-observe the same zero — and would be the one part of the spike
+that could plausibly harm the home IP that `google-serpapi.py` and the ATS pulls run
+from nightly. Reversible.
+
+### 22 — The 4.8% Google Jobs figure is not settled, and task 05 should be read accordingly
+
+Task 05 reported Google Jobs at 4.8% of the target population and concluded it is not a
+meaningful source. **That figure is conditioned on a query bank that has never been
+asked for this population.** `backend/config/google-queries.json` holds 32 pre-retarget
+queries in four buckets — `core_swe`, `ai_integration`, `bridge_solutions`,
+`reentry_growth` — and **every one is a software-engineering title** (verified: "full
+stack engineer", "backend engineer", "LLM engineer", "forward deployed engineer",
+"software engineer returnship"). Google Jobs contributed few Pursuit-shaped rows because
+it was never asked for any.
+
+Mild evidence the other way from the spike's own SerpApi control: "barista" in NYC
+returned 10 results with 4,508-character median descriptions.
+
+So the honest statement is "Google Jobs *as currently queried* is 4.8%", not "Google
+Jobs is 4.8%". Not reversible as a fact; it changes the reading of an already-committed
+document, which is why it is recorded here.
+
 ### 09 — The open question: concurrency-test the claim SQL, not `lib/upsert.py`
 
 `05-fetcher-harness.md`'s "open question worth settling first". Settled: **yes for
