@@ -1,8 +1,24 @@
 ---
 script: backend/extract.py
-commit: dd49a27
 generated: 2026-07-27
+partially_hand_revised: 2026-07-28
 ---
+
+> **Provenance, and how much of this file was actually checked.** The
+> `generated: 2026-07-27` line above is inherited and, as
+> [`ats.md`](ats.md) records, **no generator exists** — nothing in this
+> repository writes `docs/ingest/*.md`, so "regenerate, never hand-edit" is a
+> convention with no implementation behind it. Task 34 owns that decision.
+>
+> On 2026-07-28, task 12 hand-revised **only** these parts, against the code at
+> the `FACTS_VERSION = 3` bump: "What makes a job eligible", "Full re-run", the
+> `select_unextracted_jobs` node of the Data Flow diagram, and two entries under
+> Open Questions (the 15 version-1 rows, and `normalize`'s defaults). Line
+> citations in those parts are current. **Everywhere else in this file the
+> citations are the 2026-07-27 ones and several are known to be stale** —
+> `extract.py` grew the drain loop, the per-platform vote and `_eligible_sql`
+> since, so e.g. `main` is at `:969`, not `:404`. Treat an unrevised citation as
+> this file being out of date, not as the code being wrong.
 
 > Stage 2 of 4. For what the extracted facts mean downstream, which of the
 > 17 fields the ranker actually reads, and how a failed extraction differs
@@ -98,7 +114,7 @@ flowchart TD
     CONN --> PROF["profiles.load_active<br/>extract.py:413"]
     PROF -->|"none active"| STOP["print 'nothing is waiting'<br/>return 0 · extract.py:414-417"]
     PROF --> CFG["relevance.for_profile per profile<br/>extract.py:419"]
-    CFG --> SEL["select_unextracted_jobs<br/>status=open AND description &lt;&gt; ''<br/>AND relevance.union_sql(cfgs)<br/>AND NOT EXISTS facts_version &gt;= 2<br/>ORDER BY first_seen DESC LIMIT 40<br/>extract.py:161-194"]
+    CFG --> SEL["select_unextracted_jobs<br/>status=open AND description &lt;&gt; ''<br/>AND relevance.union_sql(cfgs)<br/>AND LEFT JOIN job_facts:<br/>no row OR facts_version &lt; 3<br/>ORDER BY (stale?), first_seen ASC<br/>LIMIT EXTRACT_BATCH_SIZE<br/>extract.py:372-446"]
     SEL -->|"empty"| SILENT["return · SILENT<br/>extract.py:421-423"]
     SEL --> LABEL["model_label = model@host<br/>close main conn<br/>extract.py:426-428"]
 
@@ -206,45 +222,94 @@ triple. Every other column in `backend/schema.py:343-368` is in
 
 `job_facts.job_id` is the primary key —
 `REFERENCES jobs(id) ON DELETE CASCADE ON UPDATE CASCADE`
-(`backend/schema.py:344-345`). **One row per posting, never per profile**,
+(`backend/schema.py:386-387`). **One row per posting, never per profile**,
 which is the entire point of the stage.
 
 ### What makes a job eligible
 
-`select_unextracted_jobs` (`:161-194`):
+`_eligible_sql` (`:372-410`) is the single definition, and
+`select_unextracted_jobs` (`:413-446`) and `remaining()` (`:449-453`) are both
+built from it:
 
 ```sql
+FROM jobs j
+LEFT JOIN job_facts f ON f.job_id = j.id
 WHERE j.status = 'open'
   AND coalesce(j.description_text, '') <> ''
   AND <relevance.union_sql(cfgs)>
-  AND NOT EXISTS (SELECT 1 FROM job_facts f
-                  WHERE f.job_id = j.id AND f.facts_version >= 2)
-ORDER BY j.first_seen DESC
-LIMIT 40
+  AND (f.job_id IS NULL OR f.facts_version < <FACTS_VERSION>)
+ORDER BY (f.job_id IS NOT NULL), j.first_seen ASC
+LIMIT <EXTRACT_BATCH_SIZE>
 ```
 
-The **version comparison rather than a bare `NOT EXISTS`** is what makes a
-schema change a resumable burn-down: "bump `FACTS_VERSION` and yesterday's
-rows become eligible again, one batch at a time, without a TRUNCATE"
-(`:164-168`).
+`<FACTS_VERSION>` is `schema.FACTS_VERSION` (`3` as of 2026-07-28) and
+`<EXTRACT_BATCH_SIZE>` is `EXTRACT_BATCH_SIZE`; both are bound as parameters
+(`:398-401`), so neither is a literal in the source.
+
+**It is a `LEFT JOIN`, not the `NOT EXISTS` this document described until
+2026-07-28.** The join does one thing the subquery could not: it exposes
+whether a *stale* facts row exists, which is what the `ORDER BY` sorts on.
+`job_facts.job_id` is the primary key (`backend/schema.py:386`), so the join is
+at most one row per posting and cannot fan out — and given that, "no row at the
+current version" and "no row at all OR a row below it" are the same predicate
+(`:382-387`).
+
+The **version comparison rather than a bare existence test** is what makes a
+schema change a resumable burn-down: "bump `FACTS_VERSION` and yesterday's rows
+become eligible again, one batch at a time, without a TRUNCATE" (`:390-395`).
+
+**The ordering is `first_seen ASC` within two groups, not `first_seen DESC`.**
+Never-extracted rows sort ahead of stale ones, oldest-first within each group
+(`:439`). Plain FIFO was rejected because after a `FACTS_VERSION` bump it would
+queue tonight's postings behind thousands of re-extractions; `DESC` was what
+the code used to do, and it was making exactly the greenhouse/ashby-biased
+selection CLAUDE.md forbids for eval corpora, in production, where it decides
+which postings are never looked at at all (`:413-431`).
+
+`EXTRACT_BATCH_SIZE` defaults to 40 (`:98`);
+`backend/scripts/backfill-facts.sh:24` overrides it to 50. One `python3
+extract.py` is not one batch: `drain_loop` (`:932-966`) keeps fetching batches
+until the backlog is empty, `EXTRACT_DEADLINE_SECS` expires (default 3600,
+`:119`), or a batch makes no progress at all.
 
 `relevance.union_sql(cfgs)` is the OR across all active profiles
 (`backend/relevance.py:199-217`), because facts are shared. An empty profile
 list returns `"FALSE"`, not `"TRUE"` — "No active profiles means nobody is
 waiting for this work."
 
-`remaining()` (`:197-214`) duplicates that WHERE clause, with the comment "if
-one changes the other must" (`:198-199`).
+`remaining()` no longer duplicates the WHERE clause. It used to, under a
+docstring promising "if one changes the other must"; both are now built from
+`_eligible_sql`, which makes the agreement structural instead of a promise
+(`:376-380`).
 
 ### Full re-run
 
-Idempotent and cheap: rows already at `facts_version >= 2` are excluded by the
-`NOT EXISTS`, so a second run the same day selects only what the first did not
-finish. Tombstones are stored **at the current version** precisely so they do
-not come back (`:170-171`, `:344-346`).
+Idempotent and cheap: rows already at the current `facts_version` are excluded
+by the version comparison, so a second run the same day selects only what the
+first did not finish. Tombstones are stored **at the current version** precisely
+so they do not come back (`:388-390`, `:812-826`).
 
-Live state: 5,288 `job_facts` rows — 5,273 at version 2, **15 still at version
-1**, and 7 tombstoned. The 15 remain eligible on every run.
+Live state after the version-3 bump (2026-07-28, `FACTS_VERSION = 3`): 5,907
+`job_facts` rows — 863 at version 3, 5,029 at version 2, **15 still at version
+1**, and 6 tombstoned. `extract.remaining()` is **0**.
+
+The 5,044 rows below version 3 are not a backlog, and the reason splits two
+ways:
+
+- **85 are unreachable forever.** 15 at version 1 and 70 at version 2 sit on
+  jobs whose `status` is no longer `open`, and the `j.status = 'open'`
+  predicate above excludes them on every run. See the Open Questions section.
+- **4,959 are open but not relevant to the active profile.** They were
+  extracted for `tech`/`frontend`, which were deactivated when `pursuit` was
+  turned on, so the relevance union no longer selects them. **Reactivating
+  `tech` would make roughly 5,000 rows eligible at once** — that is a
+  ~5,000-call re-extraction, not a resumption, and it is the cost to plan for
+  before flipping a profile back on. Nothing about them is stale in itself;
+  they are simply facts nobody is currently asking for.
+
+Tombstones went 7 → 6 across the bump: one previously-tombstoned posting was in
+the eligible set, got its one more chance, and this time returned usable facts.
+No new tombstones were written (0 unusable across 863 extractions).
 
 ### Partial re-run after a mid-batch crash
 
@@ -381,23 +446,28 @@ the default for this caller.
 
 ## Open Questions
 
-**The live extraction model is not the documented default.** All 5,288
+**The live extraction model is not the documented default.** All 5,907
 `job_facts` rows carry `extraction_model = 'deepseek-v4-flash@api.deepseek.com'`
-(or its `FAILED:` variant). `backend/llm.py:29-30` defaults to
+(5,901) or its `FAILED:` variant (6) — one value, no mixture, re-counted
+2026-07-28 after the version-3 bump. `backend/llm.py:29-30` defaults to
 `glm-4.5-flash` at `api.z.ai`, and `backend/README.md`'s configuration table
 says the same. The values are environment-driven (`backend/llm.py:65`), so
 there is no contradiction in the code — but the documented default has not
 been what runs, and I could not determine when or why it changed. Nothing in
 `backend/.env.example` names deepseek.
 
-**15 rows are stuck at `facts_version = 1`.** They match
-`select_unextracted_jobs`'s `NOT EXISTS ... facts_version >= 2` predicate
-(`:184-186`), so they should be re-extracted on any run that reaches them —
-but `ORDER BY j.first_seen DESC` (`:187`) puts the newest first, and these are
-by definition old. Whether they are permanently starved by that ordering, or
-simply excluded by the relevance union or a closed status, I could not
-determine without running the query against live data with the current profile
-configs.
+**~~15 rows are stuck at `facts_version = 1`.~~ ANSWERED 2026-07-28 (task 12):
+they are excluded by a closed status, not starved by the ordering.** All 15
+sit on jobs whose `status` is no longer `open`, and `_eligible_sql` requires
+`j.status = 'open'` (`:405`), so no run reaches them regardless of ordering or
+of how many versions the schema advances. The same is true of every row below
+the current version — 85 of them after the version-3 bump — and it is not a
+defect: they are the last facts anyone has about a posting that no longer
+exists, and deleting them to make a version count come out would destroy
+evidence to tidy a number. **The invariant a `FACTS_VERSION` bump can hold is
+"no OPEN, relevance-eligible row sits below the current version", not "no row
+anywhere does"** — task 12's own definition of done asked for the latter and it
+is unreachable by construction. See `docs/facts-v3-diff.md`.
 
 **Runtime is not separately measured**, for the same reason as every other
 step: `run-daily.py` captures and re-emits output after completion
@@ -417,14 +487,24 @@ it can overlap with the nightly `run-daily.py` depends on the `flock` in the
 systemd unit, which guards `run-daily.py` only. I did not read that shell
 script.
 
-**`normalize` can return facts that are almost entirely defaults.** The guard
-at `:268-271` rejects a response only when seniority is None **and** archetype
-fell back to `"other"` **and** stack is empty **and** summary is absent. A
-response with only a summary passes and is stored with `"other"`/`"none"`/
-`"unknown"` in every enum. How many of the 5,273 successful rows look like
-that I did not measure.
+**~~`normalize` can return facts that are almost entirely defaults.~~ LARGELY
+ANSWERED 2026-07-28 (task 11, carried by the version-3 bump).** `normalize`
+stopped defaulting `role_archetype`, `ai_involvement`, `remote_policy` and the
+four booleans (`:520-534`), so a response with only a summary is no longer
+stored as `"other"`/`"none"`/`"unknown"` across the board — those columns are
+NULL now, and a NULL is distinguishable from an answer where before it was not.
+The guard itself is unchanged in effect: it still rejects only when seniority
+is None **and** archetype is None-or-`"other"` **and** stack is empty **and**
+summary is absent (`:571-573`), and `test_extract.py` asserts that predicate is
+exactly the old one over a matrix of raw values. `employment_type` and
+`visa_sponsorship` keep their `"unknown"` default deliberately, because
+`"unknown"` is a real value in those two vocabularies (`:594-598`). What is
+still not measured: how many stored rows are thin in this sense — the
+version-3 per-field NULL counts are in `docs/facts-v3-diff.md`, but only over
+the rows that bump re-extracted.
 
-**The 7 tombstones are not broken down.** `mark_extract_failed` records only
+**The 6 tombstones are not broken down.** (7 before the version-3 bump; one was
+re-extracted successfully under it.) `mark_extract_failed` records only
 the model label (`:341-361`), not which of the three rejection paths fired —
 `RuntimeError`, `JSONDecodeError`, or `normalize` returning `None`. Recovering
 that would require re-running those jobs.

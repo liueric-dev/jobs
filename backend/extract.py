@@ -382,7 +382,7 @@ def _eligible_sql(cfgs, limit=None):
     The LEFT JOIN replaces a NOT EXISTS, and does one more thing than
     exclude: it exposes whether a stale facts row exists, which is what
     select_unextracted_jobs() orders on. job_facts.job_id is the PRIMARY KEY
-    (schema.py:345), so the join is at most one row per posting and cannot
+    (schema.py:386), so the join is at most one row per posting and cannot
     fan out -- and given that, "no row at the current version" and "no row at
     all OR a row below the current version" are the same predicate.
 

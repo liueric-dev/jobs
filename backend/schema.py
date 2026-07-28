@@ -156,33 +156,47 @@ EVENTS_TABLE = "job_events"
 #: years_experience_min (-10.0) beyond run-to-run noise; role_archetype and
 #: ai_involvement were unaffected. See migrate_ats_descriptions.py.
 #:
-#: OUTSTANDING DEBT, DELIBERATELY NOT PAID HERE: this is stale as of the
-#: selective majority-of-3 change (config/extraction-policy.json,
-#: extract.vote_facts). Extraction semantics moved -- an hn_whoishiring row
-#: extracted today is a vote over three passes and a row extracted last week
-#: is a single draw -- and under "Versions are cache keys" this number should
-#: have moved with them. It does not, because task 12 owns the next bump and
-#: carries this change with it, so ONE re-extraction pays for both instead of
-#: two burn-downs a week apart. Until then, job_facts.extraction_passes is
-#: what tells the two generations apart. Do not bump this to "tidy it up"
-#: without doing task 12's measurement: the bump re-extracts ~5,300 rows.
-#:
-#: Task 11 adds three more items to that same unpaid bill, for the same reason
-#: and to be settled by the same bump:
-#:   * role_archetype's vocabulary went from 12 values to 26 (extract.ARCHETYPE),
-#:     so a posting that answered "other" last week may answer "support_ops"
-#:     today with no change to the posting.
-#:   * role_track is a new extracted field. It is NULL on every row until the
-#:     re-extraction, which is honest -- nothing has been extracted for it.
+#: 3 (2026-07-28, task 12): the SEMANTICS changed, and four separate changes
+#: are settled by this one number. Each independently invalidated every row;
+#: bumping once means one burn-down instead of four. What moved:
+#:   * Vote semantics. config/extraction-policy.json and extract.vote_facts()
+#:     made extraction per-platform: a posting from a source below the 0.90
+#:     self-agreement threshold is now a field-wise majority over three passes,
+#:     where every version-2 row is a single draw. job_facts.extraction_passes
+#:     and .vote_unanimity record which a row got.
+#:   * role_archetype's vocabulary went from 12 values to 26
+#:     (extract.ARCHETYPE), so a posting that answered "other" under version 2
+#:     may answer "support_ops" under version 3 with no change to the posting.
+#:   * role_track is a new extracted field, NULL on every version-2 row
+#:     because nothing had been extracted for it.
 #:   * normalize() stopped defaulting role_archetype, ai_involvement,
-#:     remote_policy and the four booleans, so an absent answer is now NULL
-#:     rather than "other" / "none" / "unknown" / false. That changes what a
-#:     stored value MEANS, not merely which values occur.
-#: All three edit _INSTRUCTIONS (extract.py's cache-keyed fixed prefix), whose
-#: own comment asks for a bump on exactly this kind of change. Still not paid
-#: here: one re-extraction under task 12 settles the vote-semantics change
-#: above and these three together, instead of four burn-downs of ~5,300 rows.
-FACTS_VERSION = 2
+#:     remote_policy and the four booleans (extract.py:520-573), so an absent
+#:     answer is now NULL rather than "other" / "none" / "unknown" / false.
+#:     That changes what a stored value MEANS, not merely which values occur.
+#: The middle three all edit _INSTRUCTIONS, extract.py's cache-keyed fixed
+#: prefix, whose own comment asks for a bump on exactly this kind of change.
+#:
+#: WHAT THIS BUMP DID NOT VALIDATE, stated so the version number is not read as
+#: evidence it does not carry: the majority-of-3 vote DID NOT FIRE during the
+#: version-3 re-extraction. hn_whoishiring is the only platform below the 0.90
+#: threshold and it contributed 0 of the 863 rows re-extracted. 208 of its
+#: postings are open and described, so they were not filtered out by status --
+#: the active profile set moved to `pursuit` alone in the same operation, and
+#: the relevance union rejects every one of them. So the vote-semantics item
+#: is paid on paper -- version 3 now means "extracted under the per-platform
+#: policy" -- while the mechanism itself remains unexercised in production.
+#: The first hn_whoishiring row to become eligible is the first real test of
+#: vote_facts(); do not treat 3 as a passing grade for it. See
+#: docs/facts-v3-diff.md.
+#:
+#: STRANDED ROWS ARE EXPECTED AND ARE NOT A BUG. _eligible_sql requires
+#: j.status = open (extract.py:405), so a bump never reaches facts rows whose
+#: job has since closed -- 85 rows at the time of this bump, 15 of them still
+#: at version 1. The invariant this bump can actually hold is "no OPEN,
+#: relevant row sits below the current version", not "no row anywhere does".
+#: Do not delete those rows to make a count come out; they are the last facts
+#: anyone has about a posting that no longer exists.
+FACTS_VERSION = 3
 
 #: match_score below this is not written to job_matches at all. Most jobs are
 #: irrelevant to most profiles, and at N profiles the full cross product is
