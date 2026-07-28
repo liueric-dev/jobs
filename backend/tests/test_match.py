@@ -403,5 +403,255 @@ class TestDegenerateInputs(unittest.TestCase):
         json.loads(json.dumps(reasons))
 
 
+#: The cohort profile's weights and the two frozen eval sets that pin them.
+#: Read from disk rather than duplicated here on purpose: config/pursuit-criteria.json
+#: is what migrate_profiles.py imports, so a test that copied the numbers would
+#: keep passing after someone edited the file the pipeline actually reads.
+_BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PURSUIT_CRITERIA_FILE = os.path.join(_BACKEND, "config", "pursuit-criteria.json")
+PURSUIT_GOLDENS_FILE = os.path.join(
+    _BACKEND, "evals", "fixtures", "pursuit-criteria-goldens.json")
+PURSUIT_CORPUS_FILE = os.path.join(
+    _BACKEND, "evals", "fixtures", "pursuit-criteria-corpus.jsonl")
+
+
+def _load_json(path):
+    with open(path) as f:
+        return json.load(f)
+
+
+def _pursuit_criteria():
+    """The file as match.py would see it, i.e. with the documentation stripped.
+
+    Same transformation migrations/migrate_profiles.py:strip_comments applies
+    before the config reaches the database, so the numbers under test are the
+    ones that would actually rank.
+    """
+    return {k: v for k, v in _load_json(PURSUIT_CRITERIA_FILE).items()
+            if not k.startswith("_")}
+
+
+class TestPursuitCriteriaComments(unittest.TestCase):
+    """Every weight block carries a `_comment`. Task 13's DoD line 126.
+
+    CLAUDE.md calls these load-bearing documentation, and the failure mode is
+    not that someone deletes one -- it is that someone ADDS a weight block and
+    does not write one, at which point the file has a number nobody can trace.
+    So the assertion walks the file's own top-level keys rather than a list
+    written here, which would go stale the moment the config grew.
+    """
+
+    def setUp(self):
+        self.cfg = _load_json(PURSUIT_CRITERIA_FILE)
+
+    def test_every_weight_block_has_a_comment(self):
+        blocks = [k for k in self.cfg if not k.startswith("_")]
+        self.assertTrue(blocks, "the config has no weight blocks at all")
+        for name in blocks:
+            # Any _-prefixed sibling naming the block counts: several blocks
+            # need more than one comment (_seniority_comment plus
+            # _seniority_hard_exclude_comment), and requiring exactly
+            # `_{name}_comment` would push the extra prose somewhere worse.
+            siblings = [k for k in self.cfg
+                        if k.startswith("_") and name in k]
+            self.assertTrue(
+                siblings,
+                f"criteria block {name!r} has no _comment. Every weight gets "
+                f"one -- see CLAUDE.md, Conventions.")
+
+    def test_the_stale_self_agreement_figures_are_not_reimported(self):
+        """DoD line 127. config/criteria.json's _hard_exclude_comment used to
+        justify its penalty design with 95% / 90% self-agreement figures from
+        tools/compare-extract.py. Task 06 measured neither: seniority_level is
+        85.2% and role_archetype 84.3% at n=115. The correction landed in the
+        author's file; the obligation here is not to copy the dead numbers
+        into a new one."""
+        prose = " ".join(v for k, v in self.cfg.items()
+                         if k.startswith("_") and isinstance(v, str))
+        for stale in ("95%", "90%"):
+            self.assertNotIn(stale, prose,
+                             f"{stale} self-agreement is superseded -- see "
+                             f"docs/ingestion_tests/README.md:150-160")
+        self.assertIn("85.2%", prose)
+
+    def test_every_archetype_in_the_extractor_vocabulary_is_priced(self):
+        """An omission is not a neutral zero: match.py:180-191 charges an
+        unnamed value unknown_penalty.role_archetype down the
+        `archetype:{v}:unpriced` path. Imported from extract rather than
+        listed here so adding a value to the vocabulary fails this test."""
+        import extract
+        priced = set(self.cfg["archetypes"])
+        self.assertEqual(set(extract.ARCHETYPE), priced,
+                         "archetypes must price extract.ARCHETYPE exactly")
+
+
+class TestPursuitGoldens(unittest.TestCase):
+    """Task 13's DoD lines 122-124, against frozen fixtures.
+
+    OFFLINE BY CONSTRUCTION. The corpus is the 859 job_facts rows the cohort
+    gate admits as of 2026-07-28, frozen to JSONL, so these assertions do not
+    read the database -- which matters because the repo owner's operating
+    stance is that database contents are staging data. A test that scored the
+    live table would fail on a re-extraction rather than on a weight change,
+    and that is not hypothetical: task 35 (`303f7b9`) deleted four of this
+    corpus's rows mid-task-13 for being browser-DOM markup rather than job
+    postings. Freezing is what made that a deliberate re-pin instead of a
+    mystery failure.
+
+    THE LISTS WERE PICKED ON TITLE, COMPANY AND LOCATION, BEFORE ANY SCORE
+    EXISTED. score_job() reads none of those three, so this is the one
+    non-circular check available. The fixture's own _selection_method and
+    _measured_2026_07_28 record the method and, more importantly, the two
+    numbers that came in BELOW what the task file asks for.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.criteria = _pursuit_criteria()
+        cls.goldens = _load_json(PURSUIT_GOLDENS_FILE)
+        with open(PURSUIT_CORPUS_FILE) as f:
+            cls.corpus = [json.loads(line) for line in f if line.strip()]
+        scored = sorted(
+            ((match.score_job(facts_, cls.criteria)[0], facts_["job_id"])
+             for facts_ in cls.corpus),
+            key=lambda pair: (-pair[0], pair[1]))
+        cls.score = {job_id: s for s, job_id in scored}
+        cls.rank = {job_id: i + 1 for i, (_, job_id) in enumerate(scored)}
+        cls.floor = cls.goldens["match_floor"]
+
+    def test_the_fixture_matches_the_corpus_it_was_pinned_against(self):
+        self.assertEqual(len(self.corpus), self.goldens["corpus_rows"])
+        self.assertEqual(len({r["job_id"] for r in self.corpus}),
+                         len(self.corpus), "duplicate job_id in the corpus")
+
+    #: The four postings task 35 (`303f7b9`) removed for being browser-DOM
+    #: markup rather than job postings. Named here, not counted, because a
+    #: count cannot tell "regenerated from the live corpus" from "restored
+    #: from the pre-remediation snapshot and coincidentally the same size".
+    REMEDIATED = (
+        "1074b7f0354bc3cceed49194", "53cbf3ae21a12bff1ff73476",
+        "7bdfba1a4e254be44463737c", "ff9f9d9f9643e185af0f48ca",
+    )
+
+    def test_the_remediated_markup_rows_are_gone_and_stay_gone(self):
+        """Their facts were derived from a scraped ChatGPT web UI and from a
+        staffing firm's navigation menu. Regenerating this fixture from a
+        stale snapshot would put them back, and they would score and rank
+        like real postings -- one of them cleared the floor at rank 126."""
+        present = set(self.score) & set(self.REMEDIATED)
+        self.assertFalse(
+            present,
+            f"markup rows are back in the corpus: {sorted(present)}. "
+            f"Regenerate from the live gate, not from an old snapshot.")
+
+    def test_both_lists_are_pinned_by_sorted_job_id(self):
+        """CLAUDE.md: pin eval sets by sorted job_id. Sorted order is what
+        makes 'is this the same eval set' answerable by eye in a diff."""
+        for key in ("target_roles", "senior_software_roles"):
+            ids = [r["job_id"] for r in self.goldens[key]]
+            self.assertEqual(ids, sorted(ids), f"{key} is not sorted")
+            self.assertEqual(len(ids), len(set(ids)), f"{key} has duplicates")
+            for job_id in ids:
+                self.assertIn(job_id, self.score,
+                              f"{job_id} is not in the frozen corpus")
+
+    def test_ten_senior_software_roles_are_below_the_floor(self):
+        """DoD line 124, and the only one of the three met in full."""
+        rows = self.goldens["senior_software_roles"]
+        self.assertEqual(len(rows), 10)
+        for r in rows:
+            self.assertLess(
+                self.score[r["job_id"]], self.floor,
+                f"{r['title']} ({r['company']}) scores "
+                f"{self.score[r['job_id']]} >= floor {self.floor}")
+
+    def test_target_roles_clear_the_floor_at_the_pinned_rate(self):
+        """DoD line 122 asks for 20 of 20 and the measured answer is 16.
+
+        Asserted as a floor rather than as 20 because the four misses were
+        diagnosed and NOT tuned away -- three of them carry
+        ai_involvement = 'none' and are arguably correct rejections of
+        postings that read AI-adjacent only because the employer is an AI
+        company. Raising a weight until this reads 20/20 would be fitting to
+        a twenty-row eval, which CLAUDE.md forbids twice over. The number is
+        here so a change that makes it WORSE is caught; task 29's labels are
+        what should decide whether 16 is the right answer.
+        """
+        rows = self.goldens["target_roles"]
+        self.assertEqual(len(rows), 20)
+        above = [r for r in rows if self.score[r["job_id"]] >= self.floor]
+        self.assertGreaterEqual(
+            len(above), 16,
+            "hand-picked target roles above MATCH_FLOOR fell below the "
+            "pinned 16 of 20")
+
+    def test_target_roles_in_the_top_twenty_at_the_pinned_rate(self):
+        """DoD line 123, same shape as above: 10 of 20 measured against 20 of
+        20 asked for. This one is precision@20 read from the other side -- of
+        the ranking's top 20, half are on a list drawn up without seeing it.
+        CLAUDE.md is explicit that a count of twenty cannot resolve the
+        differences being decided on, so it is a regression floor and not a
+        quality claim."""
+        rows = self.goldens["target_roles"]
+        in_top = [r for r in rows if self.rank[r["job_id"]] <= 20]
+        self.assertGreaterEqual(
+            len(in_top), 10,
+            "hand-picked target roles inside the top 20 fell below the "
+            "pinned 10 of 20")
+
+    def test_pinned_scores_and_ranks_still_reproduce(self):
+        """The change detector. A weight edit is SUPPOSED to break this; the
+        point is that its effect on thirty known postings is printed rather
+        than discovered later. Regenerate the fixture in the same commit."""
+        for key in ("target_roles", "senior_software_roles"):
+            for r in self.goldens[key]:
+                job_id = r["job_id"]
+                self.assertEqual(
+                    (self.score[job_id], self.rank[job_id]),
+                    (r["pinned_score"], r["pinned_rank"]),
+                    f"{r['title']} ({r['company']}) moved: pinned "
+                    f"{r['pinned_score']}@{r['pinned_rank']}, now "
+                    f"{self.score[job_id]}@{self.rank[job_id]}")
+
+    def test_the_corpus_wide_counts_the_weights_were_chosen_against(self):
+        """The three numbers the repo owner selected this weight set on, over
+        the whole frozen corpus rather than the thirty pinned rows. They are
+        the only figures here big enough to mean anything, and they are what
+        a later editor should re-run first.
+
+        144 AND 145 ARE BOTH RIGHT, ABOUT DIFFERENT CORPORA. The weight set
+        was selected against 863 rows and 145 cleared the floor. Task 35
+        (`303f7b9`) then deleted four postings whose description_text was
+        browser-DOM markup rather than a job posting, one of which was above
+        the floor at rank 126, and this fixture was re-pinned to the
+        surviving 859. So an older document saying 145 is not stale
+        arithmetic -- it is the same weights over a corpus that still
+        contained four things that were not jobs. The goldens file's
+        _both_numbers block is the long version.
+
+        The other two figures did not move at all: none of the four removed
+        rows was entry-level x uses_ai_tools.
+        """
+        matched = [j for j, s in self.score.items() if s >= self.floor]
+        self.assertEqual(len(matched), 144)
+
+        entry = ("intern", "new_grad", "junior")
+        by_id = {f["job_id"]: f for f in self.corpus}
+        top20 = sorted(self.score, key=lambda j: (-self.score[j], j))[:20]
+        self.assertEqual(
+            sum(1 for j in top20
+                if by_id[j]["seniority_level"] in entry
+                and by_id[j]["ai_involvement"] == "uses_ai_tools"), 19)
+
+        # The shared floor as a population: entry-level AND the cohort's
+        # targeting mechanism. 13-cohort-criteria-profile.md:25-33.
+        shared_floor = [f["job_id"] for f in self.corpus
+                        if f["seniority_level"] in entry
+                        and f["ai_involvement"] == "uses_ai_tools"]
+        self.assertEqual(len(shared_floor), 55)
+        self.assertEqual(
+            sum(1 for j in shared_floor if self.score[j] >= self.floor), 51)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

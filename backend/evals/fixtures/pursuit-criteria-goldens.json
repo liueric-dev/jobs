@@ -1,0 +1,291 @@
+{
+  "_comment": "Frozen eval set for the `pursuit` criteria profile (task 13, Definition of done lines 122-124). Two hand-picked lists of job_ids, sorted, pinned. Scored against evals/fixtures/pursuit-criteria-corpus.jsonl -- the 859 job_facts rows the cohort gate admits as of 2026-07-28, after task 35's markup remediation (`303f7b9`); it held 863 when this file was first written, and _corpus_drift_2026_07_28 below records the four that went and why. Freezing the corpus is what lets tests/test_match.py reproduce both the score and the RANK of every row here without a database and without the corpus moving underneath it. CLAUDE.md: pin eval sets by sorted job_id, never train on them, never recycle them.",
+  "_selection_method": "SELECTED ON TITLE, COMPANY AND LOCATION ONLY, BEFORE ANY SCORE WAS COMPUTED. Those three fields are the only evidence in the corpus that match.score_job() cannot see -- it reads job_facts plus two location booleans and never reads the title (match.py:276-287) -- so a list picked from them is the one available non-circular test of the weights. Picking the top 20 of the ranking and asserting that it is the top 20 would measure nothing. CLAUDE.md's 'never evaluate on the layer you trained on' is the same rule at a different scale. CONSTRAINT APPLIED WHILE PICKING: at most three postings per employer, because near-duplicate postings from one employer's hiring spree are the documented trap (docs/role-track-derivation.md, and the `data_coordination` value dropped for exactly this in extract.py:229-232). Six of the plausible targets were EliseAI and three were kept.",
+  "_target_definition": "A 'plausible Pursuit target role' here means the shared floor and nothing narrower (MASTER-PLAN-pursuit.md:41-42, 13-cohort-criteria-profile.md:25-33): an entry-level-signalled title (Associate, Coordinator, Specialist, Analyst, Junior, New Grad, Assistant, Implementation, Support), in operations / support / implementation / internal-systems / marketing-ops shaped work or an explicitly AI-tool role, located in the NYC metro or genuinely US-remote. No judgement about the body text was used, because the body is what the extractor read.",
+  "_measured_2026_07_28": "WHAT THE PIN ACTUALLY SHOWS, recorded because two of the three numbers are below what the task file's Definition of done asks for. Of the 20 hand-picked targets: 16 clear MATCH_FLOOR (40) and 10 appear in the top 20. All 10 senior software roles score below the floor -- 10 of 10, the strongest of the three. DoD:122-123 asks for 20 of 20 on both counts and that is NOT met; DoD:124 is met in full. THE FOUR MISSES ARE NOT WEIGHT ERRORS AND THE DIAGNOSIS IS THE VALUE OF THIS FIXTURE. Three of the four -- Harvey's Support Operations Data Analyst, Harvey's IT Operations Analyst, Braze's IT Associate -- carry ai_involvement = 'none' and pay -30 for it. They read AI-adjacent to a human ONLY because the employer is an AI company, which is precisely the failure mode task 05 hand-measured at 6.7% precision and which the cohort gate's conjunctive shape exists to remove (migrations/migrate_pursuit_profile.py:135-146: 'the vocabulary selects for the COMPANY being AI-ish, not the ROLE'). The ranker is arguably right and the hand-pick reproduced the bias. The fourth, 'AI Prompt Engineer & RPA Implementation Specialist', misses by three points on seniority_level = 'mid' plus ai_involvement = 'builds_llm_features' rather than 'uses_ai_tools'. NOTHING WAS RE-TUNED TO CLOSE THE GAP. The weight set was chosen by the repo owner before this fixture existed, and moving a number to make a hand-picked list pass is fitting to a 20-row eval, which CLAUDE.md forbids ('do not re-tune on a provisional number', 'a count of twenty cannot resolve the differences being decided on'). Task 29's labels are what should settle whether the three Harvey/Braze rows are misses or correct rejections.",
+  "_pinned_score_note": "pinned_score and pinned_rank are the values produced by config/pursuit-criteria.json against pursuit-criteria-corpus.jsonl on 2026-07-28. They are a CHANGE DETECTOR, not a target: a weight edit is supposed to move them, and the test that reads them exists so the edit's effect on thirty known postings is printed rather than discovered later. Regenerate them deliberately, in the same commit as the weight change, and say in the commit message which way they moved.",
+  "_corpus_drift_2026_07_28": "CORPUS RE-PINNED 2026-07-28: 863 rows -> 859. NOT a re-tune and not a correction of anything in this file -- task 35 (`303f7b9`, 'Reject markup before it becomes facts') found that extraction had no opinion about what it was reading and remediated 7 postings whose description_text was browser-DOM markup rather than a job posting. Their job_facts rows were deleted, and four of the seven were in this corpus. The facts they contributed were derived from markup: ff9f9d9f9643e185af0f48ca (Taboola) was extracted from a scraped ChatGPT web UI into a confident role_archetype = 'data'; 53cbf3ae21a12bff1ff73476 (Get Hire Technologies) was 2,700 characters of a staffing firm's navigation menu and answered senior / ml_research / core_ml_research. THE FOUR REMOVED IDS, with what they scored under these weights before removal: 1074b7f0354bc3cceed49194 (0, rank 493), 53cbf3ae21a12bff1ff73476 (0, rank 586), 7bdfba1a4e254be44463737c (42, rank 126 -- the only one of the four above the floor), ff9f9d9f9643e185af0f48ca (24, rank 265). None of the thirty ids pinned below was among them.",
+  "_both_numbers": "BOTH NUMBERS, SO NEITHER HAS TO BE RE-DERIVED. The above-floor count is 144 on the 859-row corpus and was 145 on the 863-row one; the single row of difference is 7bdfba1a4e254be44463737c at rank 126. A 145 in an older document is not stale arithmetic and not a disagreement -- it is the same weights over a corpus that still contained four postings which were not job postings. Anything published before `303f7b9` says 145 and is right about the corpus it had; anything after says 144. THE OTHER TWO SELECTION FIGURES DID NOT MOVE AT ALL: 19 of the top 20 are entry-level x uses_ai_tools before and after, and the shared floor is 55 postings with 51 clearing before and after -- none of the four removed rows was entry-level x uses_ai_tools, so that population is untouched. config/pursuit-criteria.json's _selection_note quotes 145/19/51 as the figures the weight set was SELECTED on, which is a statement about 2026-07-28 and is deliberately left standing; this file is what reproduces today.",
+  "_what_moved": "WHAT MOVED IN THE PINS, exhaustively. NO PINNED SCORE CHANGED -- all thirty are identical, which is the expected result: score_job() is pure and reads one posting's facts, so deleting four unrelated rows cannot move any other row's score. FIFTEEN PINNED RANKS MOVED, every one of them DOWN by 1 to 4 places, purely because rows above them were deleted. EVERY PINNED RANK OF 20 OR BETTER IS UNCHANGED, so both top-20 assertions rest on exactly the same ordering as before -- the worst-placed removed row was rank 126 and the best-placed moved pin is now 144. The fifteen, old -> new: c9e9930f 145->144, 3480ca1d 159->158, 72c09b6b 256->255, fb9726fd 331->329, 6f524628 369->367, 1417e677 432->430, ebba133d 444->442, 02efcf5e 473->471, 1ae4a53b 506->503, 2dc6c043 537->534, 3e9ac42c 556->553, 4170b899 560->557, 57518d31 593->589, 95c16482 704->700, ee8ea8ea 837->833. The other fifteen pins, which are every id ranked above 126, did not move.",
+  "profile": "pursuit",
+  "criteria_file": "config/pursuit-criteria.json",
+  "corpus_file": "evals/fixtures/pursuit-criteria-corpus.jsonl",
+  "corpus_rows": 859,
+  "facts_version": 3,
+  "match_floor": 40,
+  "generated": "2026-07-28",
+  "target_roles": [
+    {
+      "job_id": "00ad8a0fbbf34cc7e4ae9825",
+      "title": "Implementation Analyst",
+      "company": "Maybern",
+      "location": "New York Office",
+      "why": "Implementation analyst, entry-signalled title, NYC. The archetype this profile prices joint-highest.",
+      "pinned_score": 90,
+      "pinned_rank": 2
+    },
+    {
+      "job_id": "14082fbbc1c6a4b3ac170e29",
+      "title": "Business Applications Specialist (Salesforce & GenAI)",
+      "company": "Taboola",
+      "location": "New York City (NYC), New York, United States",
+      "why": "Salesforce plus generative AI in the title, Specialist, NYC. Business-systems work with an explicit AI tool.",
+      "pinned_score": 43,
+      "pinned_rank": 113
+    },
+    {
+      "job_id": "17cb80e94f320fdb90769219",
+      "title": "Associate Solutions Engineer | Housing",
+      "company": "EliseAI",
+      "location": "New York City",
+      "why": "Associate-level solutions role, NYC, at an AI product company in a non-tech vertical.",
+      "pinned_score": 88,
+      "pinned_rank": 4
+    },
+    {
+      "job_id": "1ae4a53b0cf941799222fc8e",
+      "title": "IT Associate",
+      "company": "Braze",
+      "location": "New York City",
+      "why": "Internal IT ops, Associate, NYC -- the it_internal work this profile prices +10 and the author's prices -20.",
+      "pinned_score": 0,
+      "pinned_rank": 503
+    },
+    {
+      "job_id": "3480ca1d04156ad88e612ec4",
+      "title": "AI Prompt Engineer & RPA Implementation Specialist",
+      "company": "Experienced Recruiting Partners",
+      "location": "New York, NY",
+      "why": "Prompt engineering plus robotic process automation, Specialist, NYC. Reads as the target role almost verbatim.",
+      "pinned_score": 37,
+      "pinned_rank": 158
+    },
+    {
+      "job_id": "40c450e8175355e633f0b8d7",
+      "title": "FT/PT Remote AI Prompt Engineering & Evaluation - Will Train",
+      "company": "DataAnnotation.tech",
+      "location": "United States",
+      "why": "'Will Train' plus prompt engineering, remote. Named in the gate's own _title_include_note as one of the best rows in the set.",
+      "pinned_score": 80,
+      "pinned_rank": 9
+    },
+    {
+      "job_id": "5a183480553fd60f4186296a",
+      "title": "Salesforce System Analyst",
+      "company": "Taboola",
+      "location": "New York City (NYC), New York, United States",
+      "why": "Internal business-systems analyst, NYC. A configuration role a career changer with tool fluency can hold.",
+      "pinned_score": 55,
+      "pinned_rank": 68
+    },
+    {
+      "job_id": "6f524628c00d918f1915c08d",
+      "title": "Support Operations Data Analyst",
+      "company": "Harvey",
+      "location": "New York",
+      "why": "Support operations, Analyst, NYC. MISSED: extracted ai_involvement = 'none' -- the AI is the employer, not the role.",
+      "pinned_score": 7,
+      "pinned_rank": 367
+    },
+    {
+      "job_id": "7370e6a6e933717e6add7217",
+      "title": "AI Operations Specialist | Housing (New Grads 2025-2026)",
+      "company": "EliseAI",
+      "location": "New York City",
+      "why": "The single closest posting in the corpus to the cohort's stated target: AI operations, explicitly new-grad, NYC.",
+      "pinned_score": 88,
+      "pinned_rank": 5
+    },
+    {
+      "job_id": "80d00a869f58f3085a29fe36",
+      "title": "Remote Technical Implementation Specialist",
+      "company": "Lucem Health",
+      "location": "Minneapolis, MN",
+      "why": "Remote implementation specialist at a healthcare employer -- the all-industries, non-tech destination this retarget exists for.",
+      "pinned_score": 77,
+      "pinned_rank": 14
+    },
+    {
+      "job_id": "88e6a35ad4fedd2dce07a311",
+      "title": "AI Solutions Associate",
+      "company": "Omnea",
+      "location": "New York",
+      "why": "AI solutions work at Associate level, NYC.",
+      "pinned_score": 86,
+      "pinned_rank": 6
+    },
+    {
+      "job_id": "8beacfd4c5124d521a38e87e",
+      "title": "Associate Marketing Operations/ Automation Manager",
+      "company": "Yext",
+      "location": "New York, NY",
+      "why": "Marketing ops and automation, Associate, NYC. 'Automation' is the word the gate's _ai_vocab_note calls the single best one for these roles.",
+      "pinned_score": 55,
+      "pinned_rank": 69
+    },
+    {
+      "job_id": "91a910138eab7f57af964317",
+      "title": "Executive Coordinator, Revenue",
+      "company": "Justworks",
+      "location": "New York, New York",
+      "why": "Administrative coordination, NYC -- admin_ops, which the author's profile prices -35 and this one +12.",
+      "pinned_score": 78,
+      "pinned_rank": 12
+    },
+    {
+      "job_id": "b9e6dbefd1c6c16c55aa7a58",
+      "title": "Implementation Specialist",
+      "company": "Maigrate",
+      "location": "Lawrence, NY",
+      "why": "Implementation specialist, NYC metro (Nassau County), small non-tech employer.",
+      "pinned_score": 52,
+      "pinned_rank": 80
+    },
+    {
+      "job_id": "c547a5a65fbfbfa8e250ba6c",
+      "title": "Proposal Enablement Associate",
+      "company": "Via",
+      "location": "New York",
+      "why": "Enablement/proposal operations, Associate, NYC. Document-and-process work an AI-fluent person is immediately faster at.",
+      "pinned_score": 76,
+      "pinned_rank": 18
+    },
+    {
+      "job_id": "c9e9930fcadafd5b7d0977ec",
+      "title": "ABM (Account-Based Marketing) Associate",
+      "company": "Via",
+      "location": "New York City",
+      "why": "Marketing operations, Associate, NYC.",
+      "pinned_score": 40,
+      "pinned_rank": 144
+    },
+    {
+      "job_id": "d1b5fd4c9be25a96f7b5d385",
+      "title": "Product Solutions Analyst | Housing",
+      "company": "EliseAI",
+      "location": "New York City",
+      "why": "Product-support analyst, NYC, AI product in a non-tech vertical.",
+      "pinned_score": 90,
+      "pinned_rank": 3
+    },
+    {
+      "job_id": "d62d4112ada403711babd515",
+      "title": "Associate Technical Partner Manager",
+      "company": "Yext",
+      "location": "New York, NY",
+      "why": "Associate-level technical partner work, NYC -- bridge-shaped and customer-facing.",
+      "pinned_score": 86,
+      "pinned_rank": 8
+    },
+    {
+      "job_id": "e2d89bab2ebfcd2f090d3de6",
+      "title": "Revenue Cycle Management (RCM) Associate",
+      "company": "Sailor Health",
+      "location": "New York City (Soho)",
+      "why": "Healthcare back-office operations, Associate, NYC. Exactly the non-tech NYC employer the plan says the corpus lacks.",
+      "pinned_score": 57,
+      "pinned_rank": 61
+    },
+    {
+      "job_id": "ebba133dc8f553e2d6c79fe3",
+      "title": "IT Operations Analyst",
+      "company": "Harvey",
+      "location": "New York",
+      "why": "Internal IT operations, Analyst, NYC. MISSED: extracted ai_involvement = 'none' and remote_policy = 'onsite'.",
+      "pinned_score": 3,
+      "pinned_rank": 442
+    }
+  ],
+  "senior_software_roles": [
+    {
+      "job_id": "02efcf5ecf065cd11632bd74",
+      "title": "Distinguished Engineer",
+      "company": "Pinterest",
+      "location": "Seattle, WA, US; Palo Alto, CA, US; Remote, US",
+      "why": "The most senior IC title in the corpus.",
+      "pinned_score": 0,
+      "pinned_rank": 471
+    },
+    {
+      "job_id": "1417e6773680294cf24ebe57",
+      "title": "Engineering Manager, GRC Platform",
+      "company": "Anthropic",
+      "location": "San Francisco, CA | New York City, NY | Seattle, WA",
+      "why": "Engineering management. NYC is one of its locations, so it is not excluded on geography.",
+      "pinned_score": 3,
+      "pinned_rank": 430
+    },
+    {
+      "job_id": "2dc6c043e82da7e381572a2e",
+      "title": "Technical Lead Manager, Planner Tech",
+      "company": "Waymo",
+      "location": "Mountain View, California, USA; San Francisco, California, USA",
+      "why": "Staff-level tech lead manager.",
+      "pinned_score": 0,
+      "pinned_rank": 534
+    },
+    {
+      "job_id": "3e9ac42caf6b9d197bb472b6",
+      "title": "Lead Full Stack developer",
+      "company": "Capgemini",
+      "location": "New York, NY",
+      "why": "Lead full-stack engineering, NYC -- the geography is right and everything else is wrong.",
+      "pinned_score": 0,
+      "pinned_rank": 553
+    },
+    {
+      "job_id": "4170b899ba58b3f0c8125282",
+      "title": "Engineering Manager, AI-First Platform & Agent Teams (Remote)",
+      "company": "LumiMeds",
+      "location": "Anywhere",
+      "why": "Remote, AI-heavy in the title, and engineering management -- the AI vocabulary must not rescue it.",
+      "pinned_score": 0,
+      "pinned_rank": 557
+    },
+    {
+      "job_id": "57518d310ddbf33f04e115d5",
+      "title": "Engineering Manager, Zo",
+      "company": "Zocdoc",
+      "location": "New York, NY",
+      "why": "Engineering management at an NYC health-tech employer.",
+      "pinned_score": 0,
+      "pinned_rank": 589
+    },
+    {
+      "job_id": "72c09b6bc633fb6e01a28e70",
+      "title": "Lead Agent Engineer (Langchain)",
+      "company": "Focused",
+      "location": "New York, NY",
+      "why": "The hardest of the ten: NYC, remote-friendly, and agent/LLM work by name. Senior seniority is the only thing keeping it out.",
+      "pinned_score": 25,
+      "pinned_rank": 255
+    },
+    {
+      "job_id": "95c1648233415494cd5e6081",
+      "title": "Software Engineer 3, Atlas Vector Search",
+      "company": "MongoDB",
+      "location": "San Francisco",
+      "why": "A numbered senior IC ladder rung with no seniority word in the title.",
+      "pinned_score": 0,
+      "pinned_rank": 700
+    },
+    {
+      "job_id": "ee8ea8ead181f21f60cce9d6",
+      "title": "Engineering Manager I, Threat Detection",
+      "company": "Datadog",
+      "location": "New York, New York, USA",
+      "why": "Entry-level ENGINEERING MANAGEMENT in NYC -- 'I' is an entry signal on a level the cohort cannot reach.",
+      "pinned_score": 0,
+      "pinned_rank": 833
+    },
+    {
+      "job_id": "fb9726fdab6232e2755f1089",
+      "title": "Lead Software Engineer, Front End",
+      "company": "Capital One",
+      "location": "New York, NY",
+      "why": "Lead front-end engineering at a large NYC employer.",
+      "pinned_score": 13,
+      "pinned_rank": 329
+    }
+  ]
+}

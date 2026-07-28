@@ -55,6 +55,27 @@ alone (profiles.upsert only bumps when asked). Re-running WITHOUT --active
 after someone has activated the profile will deactivate it again -- that is
 the safe direction, but it is a real effect, so it is reported before it
 happens.
+
+TASK 13 HAS LANDED, WHICH CHANGES WHAT RE-RUNNING THIS COSTS
+    The two stand-ins below are no longer the profile's contents.
+    config/pursuit-criteria.json and config/pursuit-persona.json are, imported
+    by migrations/migrate_profiles.py. So a re-run of THIS script -- the
+    obvious thing to do to refresh the relevance gate, which it is still the
+    owner of -- would overwrite real weights and real prose with the stand-ins
+    and leave the profile ranking uniformly again, at a criteria_version the
+    matcher considers current. Nothing downstream would notice: job_matches
+    would still be full, still look fresh, and every score would be `base`.
+
+    So it now REFUSES rather than doing that. --force-placeholders is the way
+    past, and wanting it is almost always a sign that migrate_profiles.py is
+    the script you actually want. To refresh only the gate, use:
+
+        python3 migrations/migrate_profiles.py --apply --bump \\
+            --profile pursuit \\
+            --persona-file config/pursuit-persona.json \\
+            --criteria-file config/pursuit-criteria.json
+
+    ...which preserves relevance_json, or pass it a --relevance-file.
 """
 
 import argparse
@@ -365,7 +386,12 @@ COHORT_RELEVANCE = {
 }
 
 # ---------------------------------------------------------------------------
-# Placeholders. Task 13 replaces both.
+# Stand-ins. TASK 13 HAS REPLACED BOTH, in config/pursuit-criteria.json and
+# config/pursuit-persona.json. They are kept here because this script must
+# still be able to create the profile from nothing -- profiles.validate
+# rejects a persona missing any of its four required keys, so creating the row
+# needs something in them -- and because is_placeholder() below reads them to
+# decide whether a re-run would be destructive.
 # ---------------------------------------------------------------------------
 
 PLACEHOLDER_PERSONA = {
@@ -413,12 +439,30 @@ PLACEHOLDER_CRITERIA = {
 }
 
 
+def is_placeholder(profile):
+    """True if this stored profile still holds the stand-ins above.
+
+    Keyed on the CRITERIA rather than on a marker string, because the criteria
+    are what ranking depends on and because a marker is the kind of thing an
+    editor tidies away. `archetypes` empty is the specific property the
+    stand-in has and a real profile cannot: task 13's file prices all 26
+    values of extract.ARCHETYPE, and a criteria_json with no archetypes at all
+    scores every posting at `base` -- which is what PLACEHOLDER_CRITERIA's own
+    comment says it is for.
+    """
+    return not (profile.criteria or {}).get("archetypes")
+
+
 def main():
     p = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--apply", action="store_true",
                    help="write the profile (default is a dry run)")
+    p.add_argument("--force-placeholders", action="store_true",
+                   help="overwrite REAL criteria and persona with the "
+                        "stand-ins in this file. Task 13 landed the real "
+                        "ones; this throws them away.")
     p.add_argument("--active", action="store_true",
                    help="create it ACTIVE -- this starts spending extraction "
                         "budget on it. Read task 12's projection first.")
@@ -459,9 +503,12 @@ def main():
           f"{' (exists)' if existing else ' (new)'}")
     print(f"  active                  : {args.active}"
           f"{'' if args.active else '   <-- invisible to extract.py and match.py'}")
-    print(f"  persona                 : PLACEHOLDER (task 13 owns it)")
-    print(f"  criteria                : PLACEHOLDER, base only "
-          f"(task 13 owns it)")
+    print(f"  persona / criteria      : "
+          + ("the stand-ins in this file (task 13's real ones live in "
+             "config/pursuit-*.json)" if not existing or is_placeholder(existing)
+             else f"STORED ARE REAL -- "
+                  f"{len(existing.criteria.get('archetypes', {}))} archetypes "
+                  f"priced; see the refusal below"))
     print(f"  relevance patterns      : "
           f"{sum(len(g) for g in COHORT_RELEVANCE['title_include'])} include, "
           f"{len(COHORT_RELEVANCE['title_exclude'])} title_exclude, "
@@ -475,6 +522,25 @@ def main():
               "without --active will deactivate it.\n"
               "  That is the safe direction, but it will stop extract.py "
               "considering its rows. Pass --active to keep it on.")
+
+    if existing and not is_placeholder(existing) and not args.force_placeholders:
+        print(f"\nmigrate-pursuit-profile REFUSING: {args.profile!r} holds "
+              f"REAL criteria -- {len(existing.criteria.get('archetypes', {}))} "
+              f"archetypes priced, criteria_version "
+              f"{existing.criteria_version}.\n"
+              "  Task 13 wrote them (config/pursuit-criteria.json, "
+              "config/pursuit-persona.json). Applying this script would "
+              "replace them with the stand-ins in this file and leave the "
+              "profile ranking every posting at `base`, at a criteria_version "
+              "match.py considers current -- so job_matches would stay full "
+              "and look fresh while meaning nothing.\n"
+              "  To refresh the RELEVANCE GATE, which this script does own, "
+              "run migrate_profiles.py: it preserves relevance_json when no "
+              "--relevance-file is given, and takes one when there is a "
+              "change to make.\n"
+              "  --force-placeholders overrides this.")
+        conn.close()
+        sys.exit(1)
 
     if not args.apply:
         print("\ndry run -- nothing changed. Re-run with --apply.")
