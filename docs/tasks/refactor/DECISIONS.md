@@ -465,3 +465,121 @@ depends on 24 and 32. Circular as written. Recorded here rather than silently
 resolved: 33 has to split, with the tunnel standing up before 24 and the
 pipeline/app split landing after 32. Both halves sit behind a Cloudflare account
 regardless, so the cycle is not on the critical path of this run. Reversible.
+
+### EXTRACT — The majority-of-3 threshold is 0.90, and the pass count is derived not listed
+
+0.90 is task 06's own gate line, not a number invented here. Exactly one platform is
+below it and the rest sit at 91.1%+, so it is not perched on a cliff: 0.92 pulls in
+`builtin`, 0.93 pulls in greenhouse and ashby — 9,659 of 11,824 rows, no longer targeted.
+`passes_for()` derives the count from `measured_agreement` rather than reading a second
+list of platform names, so the config cannot say "3 passes" beside a measurement that no
+longer justifies it. Rejected: a threshold of 0.95 "to be safe", which is uniform
+majority-of-3 under another name. Reversible — it is one number in a config file.
+
+### EXTRACT — Uniform majority-of-3 rejected on arithmetic, not on taste
+
+3x across 11,824 rows is 23,648 extra calls, ~19 hours at task 04's 2.85 s/call, to fix
+an instability that measurement locates in 247 of them. On the six platforms at 91.1%+
+the second and third calls buy a third opinion that agrees with the first nine times in
+ten. It is also the wrong *shape*: it makes the fix invisible to whoever next asks which
+sources we are least sure about, where a per-platform table answers that by being read.
+Reversible.
+
+### EXTRACT — A self-reported confidence field rejected as circular
+
+It labels the instability without fixing it — the row written is still one unstable draw
+— and it asks the model that cannot reproduce its own `ai_involvement` answer to reliably
+rate how sure it is about that answer. Same quantity, no more trustworthy.
+`vote_unanimity` is a confidence signal derived from observed behaviour instead, and
+costs nothing once the passes are being paid for. Reversible.
+
+### EXTRACT — An unmeasured platform gets ONE pass
+
+An unmeasured source is not a bad source; tripling its cost pays for a number nobody has.
+This also decides the failure mode when a platform string is renamed out from under the
+config: it degrades to today's behaviour rather than to a 3x bill. The consequence is
+that a new Phase 3 source costs exactly what it costs today until someone measures it —
+which is the intended prompt to measure it. Reversible.
+
+### EXTRACT — Prose is carried whole from one pass, never merged
+
+`summary` and `tech_stack` are not votable. Three summaries of one posting are three
+different sentences, so a per-field majority finds no majority and any merge produces
+prose no pass wrote and no posting supports. A `tech_stack` union accumulates every
+hallucinated library across three passes; an intersection deletes a technology two passes
+named because the third did not. The pass chosen is the one whose enum vector agrees most
+with the vote, so the prose describes the reading the row actually stores rather than one
+that was outvoted. Rejected: voting per token, and unioning `tech_stack`. Reversible.
+
+### EXTRACT — `None` votes, and the integer rule is a median that never invents a value
+
+Two passes answering "the posting does not say" outrank one that names a level: that is
+the honest reading of the evidence, not a missing answer. For integers the median takes
+the lower of the two middle values rather than their mean, so the stored number is always
+one an extraction pass actually produced — averaging 3 and 5 into 4 would invent a
+`years_experience_min` no model said and no posting contains. A three-way enum tie falls
+back to the first pass, which is exactly what the script wrote before voting existed, so
+the fallback is never worse than the behaviour it replaces. Reversible.
+
+### EXTRACT — `vote_unanimity` is NULL for a single pass, not 1.0
+
+One pass agrees with itself trivially. Storing 1.0 would make an unmeasured row
+indistinguishable from a genuinely unanimous three-pass row in exactly the query the
+column exists to answer. Same reasoning as task 16's refusal to print one denominator
+alone. **Irreversible in practice** — once 1.0 is written for single-pass rows the
+distinction cannot be recovered.
+
+### EXTRACT — `extraction_passes` records what happened, not what the policy asked for
+
+A three-pass platform whose extra calls were rate-limited stores 1. Writing the intended
+number would make the column a restatement of `config/extraction-policy.json` rather than
+a measurement, and "was this row actually voted on" would be unanswerable after the fact.
+Irreversible for rows already written.
+
+### EXTRACT — The drain loop stops on a zero-progress batch, and this is the load-bearing part
+
+A `DEFERRED` row is written nowhere and stays eligible — that is what makes a 429
+retryable rather than a discarded posting — so a rate-limited endpoint re-selects the same
+batch every iteration. Without the break, the loop spins until the deadline hammering an
+endpoint already asking it to stop, which is strictly worse than the single batch it
+replaces. A batch that extracts nothing and rejects nothing has learned nothing. Pinned
+by a test. Reversible, and should not be.
+
+### EXTRACT — The deadline is checked between batches only, and never before the first
+
+One batch per invocation is the old behaviour and the floor this must not fall below, so
+a deadline of zero still does one batch. Checking mid-batch would abandon calls already
+paid for. The real ceiling is therefore one batch of overshoot, which at 40 postings is
+~114 seconds. Reversible.
+
+### EXTRACT — A connection per batch, not one held across the drain
+
+These connections are not autocommit, so one `execute()` opens a transaction that stays
+open until the next commit — holding one across an hour of LLM calls is the "idle in
+transaction" zombie that once blocked a run behind an `ACCESS EXCLUSIVE` lock. A handful
+of connects a night costs nothing next to that. Reversible.
+
+### EXTRACT — Never-extracted first, then FIFO; plain FIFO rejected
+
+`ORDER BY first_seen DESC` is what CLAUDE.md forbids for eval corpora (~85%
+greenhouse/ashby) and it was making that selection in production, where it decides which
+postings are never looked at. Plain FIFO was rejected because after a `FACTS_VERSION` bump
+it queues tonight's postings behind ~5,000 re-extractions — the freshest postings served
+last. Never-extracted-first keeps new postings in front; FIFO within each group guarantees
+nothing starves, since everything ahead of a row leaves the queue once extracted.
+Reversible.
+
+### EXTRACT — `FACTS_VERSION` deliberately NOT bumped, and the debt is recorded at the constant
+
+Extraction semantics changed and "Versions are cache keys" says the number should move.
+It does not, because task 12 owns the next bump and must carry this change — one
+re-extraction paying for both rather than two burn-downs a week apart. Until then
+`job_facts.extraction_passes` is what tells the two generations apart. The warning lives
+at `schema.py:158` rather than only here, because that is where someone would be standing
+when tempted to tidy it up. **Task 12 must not be run without it.**
+
+### EXTRACT — `backend/docs/SCORING.md` marked superseded rather than rewritten
+
+Its 40/day paragraph is task 04's finding and the reason the code changed, so it is kept
+and annotated rather than replaced. CLAUDE.md's rule for hand-written docs: write at
+decision time, mark stale, fix at phase boundaries. Reversible.

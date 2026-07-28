@@ -635,3 +635,116 @@ The design is unchanged and the correction strengthens it; only the numbers were
 The comment records what it *used to say* rather than quietly replacing it, and
 `docs/ingestion_tests/README.md` keeps the n=17 figures under a "Superseded" heading with
 a per-field verdict rather than deleting them.
+
+---
+
+## 2026-07-28 — the two extraction decisions landed (`943d899`), 429 → 470 tests
+
+Neither of these is a task file. They are the two decisions the repo owner made in
+conversation, which existed nowhere but [`HANDOFF.md`](HANDOFF.md) — and the two agents
+that were mid-flight on them when the previous session ended left **nothing in the
+tree**. Both were re-run from scratch. Nothing downstream had depended on them, so the
+loss cost time and not correctness.
+
+New: `backend/config/extraction-policy.json`,
+`backend/migrations/migrate_extraction_passes.py`, `backend/tests/test_extract.py` (41
+tests, which is the whole of the increase). Changed: `backend/extract.py`,
+`backend/schema.py`, `backend/docs/SCORING.md`.
+
+### Selective majority-of-3 — one platform qualifies, and that is the point
+
+The threshold is **0.90**, and it is not a new number: it is the line in task 06's own
+gate table, the row that fired. At that threshold exactly one platform is below —
+`hn_whoishiring` at 77.8% — and the six others sit at 91.1% or better, so the threshold
+is not perched on a cliff. 0.92 would additionally pull in `builtin`; 0.93 would pull in
+greenhouse and ashby, which is 9,659 of 11,824 rows and no longer a targeted remedy.
+
+**It costs +4.2% of calls, not 3x.** `hn_whoishiring` is 247 of 11,824 rows (2.1%), and
+each qualifying row pays two extra calls. Over a full re-extraction that is 494 extra
+calls, ~23 minutes of wall clock at task 04's measured 2.85 s/call effective. Nightly it
+is less than that and *bursty* rather than steady — hn is a single monthly thread, so its
+rows arrive on one night a month and the other 29 nights pay nothing.
+
+The pass count is **derived** from the measured agreement rather than stored as a second
+list of platform names, so the config cannot come to say "hn_whoishiring: 3 passes" next
+to a measurement that no longer justifies it. An unmeasured platform gets one pass: an
+unmeasured source is not a bad source, and tripling it would be paying for a number
+nobody has. That also makes a renamed platform string degrade to today's behaviour rather
+than to a 3x bill.
+
+### `vote_facts()` is pure, and the prose is not voted on
+
+Enums and booleans take a plain majority, integers take a median, and `summary` and
+`tech_stack` are carried **whole** from a single pass — the one whose enum vector agrees
+most with the vote. Three summaries of one posting are three different sentences: a
+per-field majority finds no majority, and any merge produces prose no pass wrote and no
+posting supports. A union of `tech_stack` would accumulate every hallucinated library
+across three passes; an intersection would delete a technology two passes named because
+the third did not.
+
+It votes on the **normalized** dicts, not raw model JSON, so "Mid-Level" and "mid" are one
+vote rather than two. Voting before normalization would count formatting differences as
+disagreement and manufacture instability that is not there.
+
+`None` votes, deliberately, in both the enum and the integer rule: two passes answering
+"the posting does not say" outrank one that names a level, because that is the honest
+reading of that evidence. And the integer rule takes the lower of two middle values rather
+than their mean — averaging 3 and 5 into 4 would invent a `years_experience_min` no model
+ever said and no posting contains.
+
+### The stability signal records what happened, not what was asked for
+
+`job_facts.extraction_passes` and `.vote_unanimity`. A three-pass platform whose second
+and third calls were rate-limited records **1**, not 3 — otherwise the column would be a
+restatement of the config rather than a measurement. `vote_unanimity` is **NULL** for a
+single pass rather than 1.0: one pass agrees with itself trivially, and 1.0 would make an
+unmeasured row indistinguishable from a genuinely unanimous three-pass row in exactly the
+query the column exists to answer. Task 11 consumes both.
+
+The migration backfills `extraction_passes = 1` on all 5,328 existing rows and leaves
+`vote_unanimity` NULL. The backfill is a fact rather than a guess — until this change the
+script could not make a second call. Verified after applying: 5,328 rows at 1, zero
+non-NULL unanimity.
+
+### The 40/day ceiling, both halves, because it was two defects
+
+`EXTRACT_BATCH_SIZE = 40` against one `extract.py` entry in `run-daily.py` was a hard
+40/day ceiling against 43/day intake and 80/day recently. `main()` now drains batches
+until the backlog is empty or `EXTRACT_DEADLINE_SECS` (3600) passes. At 2.85 s/call
+effective that hour is ~1,260 calls — roughly 15x headroom on a normal night, and it
+closes the ~6,000-row burn-down after a `FACTS_VERSION` bump in about five nights instead
+of the 150 the old ceiling needed.
+
+**The zero-progress break is the load-bearing part.** A `DEFERRED` row is written nowhere
+and stays eligible — that is what makes a 429 retryable rather than a discarded posting.
+It also means a rate-limited endpoint re-selects the *same* batch every iteration, so
+without the break the loop would spin until the deadline against an endpoint already
+asking it to stop. That is the one way this change could have made things worse than the
+single batch it replaces, and it is pinned by a test.
+
+The summary line reports `stopped=drained|deadline|no-progress` on every run, including a
+clean one. Silence is this system's failure mode, and "the backlog is growing" is
+precisely the condition that otherwise looks like a normal quiet night.
+
+### The selection order was making CLAUDE.md's forbidden selection in production
+
+`ORDER BY first_seen DESC` is what CLAUDE.md forbids for eval corpora — it is ~85%
+greenhouse/ashby, so it measures the easy sources. `extract.py:191` was making the same
+selection in **production**, where it decides which postings are never looked at at all.
+
+Now: never-extracted rows first, then FIFO within each group. Plain FIFO was rejected —
+after a `FACTS_VERSION` bump it would queue tonight's postings behind ~5,000
+re-extractions, so the freshest postings would be the last served. This ordering keeps new
+postings in front while FIFO within each group guarantees nothing starves.
+
+`select_unextracted_jobs` and `remaining()` are now both built from one `_eligible_sql()`.
+Their docstrings used to *promise* they matched ("if one changes the other must"); it is
+structural now.
+
+### `FACTS_VERSION` deliberately not bumped
+
+Extraction semantics moved, and under "Versions are cache keys" the number should have
+moved with them. It does not, because **task 12 owns the next bump and must carry this
+change** — one re-extraction paying for both instead of two burn-downs a week apart. The
+debt is recorded at the constant itself (`schema.py:158`) with a warning not to bump it
+"to tidy up" without doing task 12's measurement, since the bump re-extracts ~5,300 rows.

@@ -7,11 +7,12 @@ Written 2026-07-28 to hand this run to a fresh session. Read this first, then
 
 ## State at handoff
 
-**Branch `webapp-service`, HEAD `5092568`, suite green at 429 tests** (task files say
-263; it has grown — 429 is the floor now). Working tree clean apart from untracked
-`scripts/`, which predates this run and is not ours.
+**Branch `webapp-service`, HEAD `943d899`, suite green at 470 tests** (task files say
+263; it has grown — 470 is the floor now). Working tree state depends on which of the
+in-flight agents below have written; `scripts/` is untracked, predates this run, and is
+not ours.
 
-Eight tasks committed, one experiment:
+Nine tasks committed, one experiment, plus the two conversational decisions:
 
 | | task | commit |
 |---|---|---|
@@ -23,42 +24,63 @@ Eight tasks committed, one experiment:
 | 16 | ATS token discovery | `49d51bf` |
 | 22 | JobSpy spike | `66c9d18` |
 | — | Google Jobs query-bank experiment | `eee979d` |
+| — | **the two extraction decisions** | `943d899` |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
-## Two decisions the repo owner made in conversation
+## The two decisions the repo owner made in conversation — LANDED
 
-**These exist nowhere else. They are the most important content in this file.**
+They existed nowhere but this file, and the two agents mid-flight on them at the previous
+handoff left **nothing in the tree**. Both were re-run from scratch and are now committed
+in `943d899`. Kept here because they are the *why*, and the commit is only the *what*.
 
 **1. Selective majority-of-3, keyed on measured per-source agreement.** Task 06's gate
 fired its stop branch — `ai_involvement` self-agrees only 77.8% on `hn_whoishiring`
 against 92.2% on greenhouse/ashby, and it is the cohort's entire targeting mechanism.
-The chosen remedy: sources measured below a threshold get three extraction passes and a
-majority vote; sources above it stay at one. This satisfies both fired gate branches with
-one mechanism — it fixes instability where it exists and *is* the per-source quality
-budget the 14.4-point clean/messy gap demands. Rejected: uniform majority-of-3, a
-confidence field alone, and proceeding as-is.
+Sources measured below a threshold get three extraction passes and a majority vote;
+sources above it stay at one. This satisfies both fired gate branches with one mechanism.
+Rejected: uniform majority-of-3, a confidence field alone, and proceeding as-is.
+
+**As built:** threshold 0.90 (task 06's own gate line), so exactly one platform qualifies
+— **+4.2% of calls, not 3x**. `config/extraction-policy.json`, `extract.vote_facts()`,
+and `job_facts.extraction_passes` / `.vote_unanimity` as the stability signal task 11
+consumes.
 
 **2. The 40/day extraction ceiling: drain loop with a wall-clock guard, AND fix the
-selection order.** Both, not either. Task 04 found `EXTRACT_BATCH_SIZE = 40`
-(`extract.py:70`) against one `extract.py` invocation in `run-daily.py`, so the pipeline
-caps at 40 postings a night against 43/day intake and 80/day recently — the backlog grows
-without bound. Selection is currently `ORDER BY first_seen DESC`, which CLAUDE.md forbids
-for eval corpora and which is silently making the same biased selection in production.
+selection order.** Both, not either. `EXTRACT_BATCH_SIZE = 40` against one `extract.py`
+invocation in `run-daily.py` capped the pipeline at 40 postings a night against 43/day
+intake and 80/day recently. Selection was `ORDER BY first_seen DESC`, which CLAUDE.md
+forbids for eval corpora and which was making the same biased selection in production.
 
-## In flight at handoff — verify or discard
+**As built:** `drain_loop()` with `EXTRACT_DEADLINE_SECS=3600`, a **zero-progress break**
+(without it a rate-limited endpoint re-selects the same batch until the deadline —
+strictly worse than one batch), `stopped=drained|deadline|no-progress` in the summary
+line, and never-extracted-first-then-FIFO selection.
 
-Two agents were spawned immediately before this handoff and may have left **uncommitted
-work in the tree**. Nobody verified it. Check `git status` first.
+**`FACTS_VERSION` was deliberately NOT bumped. Task 12 must carry it.** The debt is
+recorded at `schema.py:158`.
 
-- **`task-extract-policy`** — implements both decisions above, in `backend/extract.py`
-  and `backend/run-daily.py`.
-- **`task-10-gate`** — task 10, the description-first relevance gate, in
-  `backend/config/relevance.json`, `backend/relevance.py`,
-  `backend/tools/relevance-report.py`.
+## In flight — verify or discard
 
-If the tree is dirty and you do not trust it: `git checkout .` and re-run them from the
-briefs implied by the sections below. Nothing downstream depends on their output yet.
+Agents spawned in the session after `943d899`, each with an explicit do-not-touch list.
+**Check `git status` first**; the previous handoff's two in-flight agents left nothing at
+all, so assume nothing.
+
+- **`task-10-gate`** — task 10, description-first relevance gate. `relevance.py`,
+  `config/relevance.json`, `tools/relevance-report.py`, a `pursuit` profile migration,
+  `docs/pursuit-description-gate.md`.
+- **`task-07-labels`** — task 07's tooling only, stopping short of the act of labelling.
+  `evals/labels.py`, `evals/metrics.py`, `evals/corpus.py`, `api/`.
+- **`task-17-ats`** — task 17, retarget `ingest/ats.py` onto `company_ats`, four new ATS
+  platforms. Owns the cassette machinery.
+- **`task-18-workday`** — task 18, Workday CXS with upstream relevance gating. New file
+  under `ingest/`.
+- **`task-14-nycopendata`** — task 14, NYC Open Data via SODA, running anonymously
+  (no Socrata token).
+
+**None of them may touch `run-daily.py`'s `STEPS`** — several would collide. Each reports
+the line it wants added; the orchestrator wires it at commit time. **Three ingest steps
+are therefore probably unwired.** Check `STEPS` against what is in `backend/ingest/`.
 
 ## How this run works
 
@@ -132,20 +154,33 @@ Each of these is a documented claim that is **wrong about the code as it now sta
 
 ## Recommended next steps
 
-1. **Resolve the in-flight work** — verify or discard, as above.
-2. **Task 07's tooling** (`labels.py`, labelling CLI usable by a non-engineer, metrics,
-   Axis A/B held independently). `selfcheck` already exists — task 06 built it in full,
-   satisfying 07's first Definition-of-done bullet. Stop at the act of labelling.
-3. **Task 11**, once 10 lands — archetype superset, `role_track`, missingness. Note the
-   majority-of-3 decision gives it a stability signal to record.
+1. **Resolve the in-flight work** — verify or discard, as above, and **wire the ingest
+   steps into `run-daily.py`**, which no subagent was allowed to do.
+2. **Task 11**, once 10 lands — archetype superset, `role_track`, missingness. The
+   majority-of-3 decision gives it `job_facts.vote_unanimity` as a stability signal to
+   record per row.
+3. **Task 12** — and it **must** carry the `FACTS_VERSION` bump for the majority-of-3
+   change. See `schema.py:158`. One re-extraction pays for both; do not bump separately.
 4. **Task 08** — score validation; needs 07's tooling but not its human labels.
-5. **Task 23, descoped** — 2 provider adapters not 8, no JobSpy adapter, no canary, no
+5. **Tasks 19, 21** — the remaining unblocked Phase 3 ingest. 15 and 20 need credentials.
+6. **Task 23, descoped** — 2 provider adapters not 8, no JobSpy adapter, no canary, no
    router step 2. But see the reprioritisation argument in `DECISIONS.md`: on the
    evidence, **25 is where the 12x yield difference lives and it is a config edit**, and
    **24 is 7,500 searches/month against code already written and tested**. 23 lists
    `contributor.py` as one adapter among eight; it may be the product.
-6. **Phase 3 ingest tasks** — 14, 17, 18, 19, 21 are unblocked; 09's cassettes and 16's
-   `company_ats` are what they need.
+
+## How this session ran it, and what worked
+
+Five subagents concurrently, each with an explicit file-ownership list, orchestrator
+verifying and committing. Two mechanics worth keeping:
+
+- **`run-daily.py`'s `STEPS` is orchestrator-only.** It is the one file every ingest task
+  wants to edit. Agents report the line they want; the orchestrator wires it.
+- **The handoff is rolling, not terminal.** This file, `DECISIONS.md`, `CLAUDE_UPDATES.md`
+  and `README.md` are updated in the same turn as each commit. The previous handoff was
+  written once, at the end, from a context that was already spent — which is why it read
+  as recall rather than as a record. Update at every commit boundary and the session can
+  end anywhere.
 
 ## Pending follow-ups with no task of their own
 

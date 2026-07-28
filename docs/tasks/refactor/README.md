@@ -26,6 +26,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | 04 | [Quota and wall-clock baseline](04-quota-baseline.md) | `cost-test.py` measuring requests and seconds, not dollars — **the binding constraint is `EXTRACT_BATCH_SIZE=40`, not quota** | done |
 | 05 | [Corpus volume under a widened gate](05-widened-gate-volume.md) | a number: how many rows a Pursuit gate would admit — **N = 43/day**, [`docs/pursuit-gate-volume.md`](../../pursuit-gate-volume.md) | done |
 | 06 | [Re-run self-consistency at n=120](06-self-consistency-n120.md) | whether the 76% figure is real — **no; and the gate says STOP**, `ai_involvement` 77.8% on hn_whoishiring | done |
+| — | Extraction policy — the two conversational decisions (`943d899`) | `config/extraction-policy.json`, `extract.vote_facts()`, `drain_loop()` — **selective majority-of-3 at +4.2% of calls, and the 40/day ceiling lifted**. No task file; see [`HANDOFF.md`](HANDOFF.md) | done |
 
 ## Phase 1 — Finish the evals harness
 
