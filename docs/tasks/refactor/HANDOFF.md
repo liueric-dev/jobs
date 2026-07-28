@@ -186,7 +186,11 @@ Then, in order:
    `data-testid="conversation-turn-136"` — some ingest path captured a browser DOM rather
    than a posting body, and it is silently poisoning extraction input. Found by task 10,
    out of its scope, still has no task of its own.
-8. **Task 23, descoped** — but see the reprioritisation argument in `DECISIONS.md`: on the
+8. **Workday will not scale sequentially.** Task 18 costs ~14 min of nightly window at
+   **four** tenants at 1.5s apart. `18-ingest-workday-cxs.md:97` anticipates ~50. The
+   delay, the concurrency or the per-tenant cadence has to change before task 16's tenant
+   backlog is drained into it. Measured and recorded, not solved.
+9. **Task 23, descoped** — but see the reprioritisation argument in `DECISIONS.md`: on the
    evidence **25 is where the 12x yield difference lives and it is a config edit**, and
    **24 is 7,500 searches/month against code already written and tested**.
 
@@ -207,6 +211,12 @@ the other side.
 **Extraction capacity is no longer the constraint.** The drain loop replaced a hard 40/day
 ceiling with ~1,260 calls/hour of headroom against 43–80/day of intake. Whatever binds
 next, it is not this.
+
+**Silence is still the failure mode, and it was caught live.** Task 18's first run dropped
+**161 of NewYork-Presbyterian's postings** — real NYC hospital jobs — while printing
+`4/4 tenants ok`. The task found it itself, on a third run, after having already reported
+success. Nothing else in the pipeline would have noticed. When a source's numbers look
+clean that is not evidence: reconcile against the count the API itself returned.
 
 ## How this session ran it, and what worked
 
