@@ -7,8 +7,9 @@ Written 2026-07-28 to hand this run to a fresh session. Read this first, then
 
 ## State at handoff
 
-**Branch `webapp-service`, HEAD `fabe381`, suite green at 663 tests** (task files say 263; it
-has grown — 663 is the floor now). **The whole suite passes** — `python3 -m unittest
+**Branch `webapp-service`, suite green at 663 tests** (task files say 263; it has grown —
+663 is the floor now). The last code commit is `fabe381`; the commits after it are this
+tree's own documentation. **The whole suite passes** — `python3 -m unittest
 discover -s backend/tests` from the repo root. Working tree is clean apart from untracked
 `scripts/`, which predates this run and is not ours.
 
@@ -16,7 +17,7 @@ discover -s backend/tests` from the repo root. Working tree is clean apart from 
 modules fail to import and always have. Not a regression, and not covered by the count
 above.
 
-Ten tasks committed, one experiment, plus the two conversational decisions:
+Twelve tasks committed, one experiment, plus the two conversational decisions:
 
 | | task | commit |
 |---|---|---|
