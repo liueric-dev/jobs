@@ -256,3 +256,144 @@ FIXTURES = {
     3: prefix_assumed,
     4: result_cap,
 }
+
+
+# ---------------------------------------------------------------------------
+# 5. `total` on the first page only, and an offset past the end wraps
+# ---------------------------------------------------------------------------
+#
+# ADDED BY TASK 18, AND NOT FROM READING ANYTHING. The four fixtures above
+# encode shapes 18-ingest-workday-cxs.md:20-59 documents. This one encodes a
+# shape measured on 2026-07-28 against all four live tenants in `company_ats`,
+# after the ingest loop this file was written for failed on every one of them
+# with "collected 40 of 0".
+#
+# It is kept OUT of FIXTURES deliberately. That dict is "the four failures the
+# task file numbers", and a fifth entry would quietly restate the task file as
+# having said something it does not say. The provenance difference is the
+# point: four are a specification, this one is an observation.
+
+#: msk.wd108's real numbers on 2026-07-28. 88, not the 87 `company_ats`
+#: recorded at validation -- boards move, which is why nothing here reconciles
+#: against a stored count.
+FIRST_PAGE_ONLY_TOTAL = 88
+
+
+def total_only_on_first_page():
+    """total=88 at offset 0, total=0 on every later page, and a wrap at the end.
+
+    Both halves of the fifth failure in one cassette, because in the wild they
+    arrive together and a loop has to survive both:
+
+      * A walk that re-reads `total` from each page reconciles 88 collected
+        against 0 -- and, before that, ends at page two because `offset >= 0`.
+      * A walk that waits for an empty page never gets one: offset=100 against
+        an 88-posting board returns the FIRST page again, so the loop cycles
+        forever at one request per delay.
+
+    The interactions past the end are what a wrapping endpoint does, spelled
+    out: offset 100 and 120 both answer with page 0's postings.
+    """
+    interactions = []
+    for offset in range(0, 160, PAGE_LIMIT):
+        remaining = max(0, min(PAGE_LIMIT, FIRST_PAGE_ONLY_TOTAL - offset))
+        if remaining == 0:
+            # The wrap: page 0's postings, and page 0's `total` with them.
+            body = {"total": FIRST_PAGE_ONLY_TOTAL,
+                    "jobPostings": [posting(i) for i in range(PAGE_LIMIT)]}
+        else:
+            body = {"total": FIRST_PAGE_ONLY_TOTAL if offset == 0 else 0,
+                    "jobPostings": [posting(offset + i)
+                                    for i in range(remaining)]}
+        interactions.append(_post(offset, body))
+    return _cassette(
+        "workday-total-first-page-only",
+        f"total={FIRST_PAGE_ONLY_TOTAL} at offset 0 and total=0 at every "
+        f"later offset, as msk.wd108 really answers; offsets past the end "
+        f"return page 0 again instead of an empty array. A loop that re-reads "
+        f"`total` reconciles a complete walk against zero; a loop that waits "
+        f"for an empty page never terminates.",
+        interactions)
+
+
+#: Failures found by running the loop against live tenants rather than by
+#: reading the task file. Numbered from 5 to continue FIXTURES' sequence.
+FIXTURES_FOUND_LIVE = {
+    5: total_only_on_first_page,
+}
+
+
+# ---------------------------------------------------------------------------
+# The recorded happy path -- real bytes, added by task 18
+# ---------------------------------------------------------------------------
+#
+# Everything above is CONSTRUCTED and says so. The docstring at the top of this
+# file asks for the missing half: "The moment task 16 produces a real tenant,
+# `record_cassettes.py` should gain a recipe that records the happy path, and
+# `page()` below should be checked against it -- there is a test asserting the
+# shape stays as documented so that check is a diff rather than a re-read."
+#
+# Task 16 has since run, and it turns out the recording ALREADY EXISTS. Its
+# `ats-validation` recipe (`evals/record_cassettes.py:198-209`) probes the
+# Workday CXS list endpoint on nvidia.wd5 with the documented body, and
+# `evals/fixtures/cassettes/ats-validation.json` holds 20 real postings and a
+# real `total` of 2,000 -- the very tenant and the very number CLAUDE.md's
+# landmine cites. So rather than record a second cassette against a stranger's
+# board to obtain bytes already committed, this lifts that one interaction out.
+#
+# WHAT IT PROVES THAT THE CONSTRUCTED FIXTURES CANNOT. It is the only thing
+# here that can falsify the SHAPE. It did, immediately: the real list response
+# carries `postedOn` ("Posted Today"), NOT the `startDate` and
+# `jobRequisitionLocation` that 18-ingest-workday-cxs.md:27-30 attributes to
+# it. Those are on the DETAIL document. See recorded_shape_note().
+
+RECORDED_CASSETTE = "ats-validation"
+RECORDED_TENANT = "nvidia"
+RECORDED_DC = "wd5"
+RECORDED_SITE = "NVIDIAExternalCareerSite"
+
+#: Fields the real list response actually carries, measured 2026-07-28 against
+#: the recording above and against msk.wd108 live. A normalizer may rely on
+#: these and on nothing else at list time.
+RECORDED_LIST_FIELDS = ("title", "externalPath", "locationsText", "postedOn",
+                        "bulletFields")
+
+#: Fields 18-ingest-workday-cxs.md:27-30 says the list carries and it does not.
+LIST_FIELDS_THE_TASK_FILE_IS_WRONG_ABOUT = ("startDate", "jobRequisitionLocation")
+
+
+def recorded_list_page():
+    """The real nvidia.wd5 list interaction, as a one-interaction Cassette.
+
+    Raises CassetteError if `ats-validation` has not been recorded, the same
+    as any other cassette load; `cassettes.available(RECORDED_CASSETTE)` is the
+    skip condition a test should use.
+    """
+    from evals.cassettes import Cassette         # local: avoids an import cycle
+    source = Cassette.load(RECORDED_CASSETTE)
+    wanted = f"{RECORDED_TENANT}.{RECORDED_DC}.myworkdayjobs.com"
+    interactions = [i for i in source.interactions
+                    if wanted in i.url and i.method == "POST"]
+    if not interactions:
+        raise LookupError(
+            f"{RECORDED_CASSETTE} holds no POST to {wanted}; "
+            f"evals/record_cassettes.py's ATS_VALIDATION_PROBES no longer "
+            f"probes a Workday tenant and this fixture is stale")
+    return Cassette(name="workday-recorded-list-page",
+                    source=f"{wanted} (RECORDED, lifted from "
+                           f"{RECORDED_CASSETTE})",
+                    note="One real CXS list page: total=2000, 20 postings, "
+                         "the limit=20 landmine's own tenant. Real bytes, so "
+                         "this is the only fixture here that can falsify the "
+                         "documented response shape -- and it does.",
+                    recorded_at=source.recorded_at,
+                    recorded_by=source.recorded_by,
+                    interactions=interactions)
+
+
+def recorded_shape_note():
+    """One line naming what the recording contradicts. Printed by the test."""
+    return (f"recorded {RECORDED_TENANT}.{RECORDED_DC} list fields: "
+            f"{', '.join(RECORDED_LIST_FIELDS)}; NOT present despite "
+            f"18-ingest-workday-cxs.md:27-30: "
+            f"{', '.join(LIST_FIELDS_THE_TASK_FILE_IS_WRONG_ABOUT)}")

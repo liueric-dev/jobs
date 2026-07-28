@@ -144,6 +144,12 @@ STEPS = [
     # operation, run by hand, not something to spend every month unattended.
     ["tools/ats-discover.py", "--apply", "--nightly", "--limit", "40"],
     "ingest/ats.py",
+    # After ats-discover.py, so a tenant discovered this morning is pulled the
+    # same night, and beside ats.py because the two are the same shape of
+    # source. ~8 minutes of nightly window at four tenants -- and that is WITH
+    # the upstream gate: without it the same run is 1,366 detail requests and
+    # 34 minutes. See docs/ingest/workday.md.
+    "ingest/workday.py",
     "ingest/builtin-nyc.py",
     # With the other NYC-scoped source, and before extract.py -- which is the
     # only ordering constraint that matters. Yields ~1.8 relevant postings/day

@@ -1,26 +1,36 @@
-"""The four Workday CXS silent failures each reproduce, before task 18 exists.
+"""The four Workday CXS silent failures, driven through the REAL ingest loop.
 
 `docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:41` requires that
-each of the four "needs a cassette fixture from task 09 that reproduces it,
-and a test that fails loudly". Task 09 owes the fixture. This file proves the
-fixtures actually reproduce what they claim to, which is the part that can
-silently stop being true -- a fixture that no longer triggers its own failure
-is worse than no fixture, because it reads like coverage.
+each of the four "needs a cassette fixture from task 09 that reproduces it, and
+a test that fails loudly". Task 09 wrote the fixtures
+(`evals/workday_fixtures.py`) and this file proved they reproduce what they
+claim. Task 18 has now written the loop, so its Definition of done
+(18-...md:118-121) asks for one more thing: "Drive the real ingest loop through
+them and delete that file's stand-in `_collect_naively`/`_collect_reconciled`."
 
-WHY THERE IS A LOOP IN THIS FILE
+WHAT WAS DELETED, WHAT WAS KEPT, AND WHY THAT IS NOT THE WHOLE INSTRUCTION
 
-`_collect_naively` and `_collect_reconciled` below are NOT the ingest script
-and must not become it. They are the two-line difference the whole task is
-about: one treats a failed page as the end of the list, the other retries and
-then compares what it collected against the `total` the API returned. Writing
-both here is what lets the fixture demonstrate a 1,960-row loss today, with
-nothing to import yet. When task 18 lands, these get deleted and its real
-loop is driven through the same four fixtures.
+`_collect_reconciled` is gone. `ingest/workday.py:collect_postings` replaces it
+and every test that used it now calls that instead -- which is the point: a
+fixture proving a hand-written loop in a test file behaves correctly proves
+nothing about the loop that runs at 03:00.
 
-The postings themselves are constructed rather than recorded, and
-`evals/workday_fixtures.py` says so at length: `company_ats` has no Workday
-tenant until task 16 runs, and you cannot ask a stranger's Akamai to throttle
-you on demand. The SHAPES are quoted from 18-...md:20-37.
+`_collect_naively` is KEPT, deliberately, against the letter of that
+instruction. It is not a stand-in for the ingest loop; it is a stand-in for the
+DEFECT, and it is the only thing here that can show a fixture still bites. This
+file's original docstring made the argument itself -- "a fixture that no longer
+triggers its own failure is worse than no fixture, because it reads like
+coverage" -- and deleting the naive walker would delete exactly that check.
+Every one of these fixtures is CONSTRUCTED, so nothing but a demonstration
+keeps them honest.
+
+WHAT THE RECORDED PAGE ADDED, AND WHAT IT CONTRADICTS
+
+`workday_fixtures.recorded_list_page()` is real bytes (nvidia.wd5, lifted from
+the `ats-validation` recording), and it falsifies part of the task file:
+18-...md:27-30 attributes `startDate` and `jobRequisitionLocation` to the LIST
+response, and the list carries neither. They are on the DETAIL document. See
+TestTheRecordingContradictsTheTaskFile below.
 """
 
 import json
@@ -34,16 +44,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from evals import cassettes                                   # noqa: E402
 from evals import workday_fixtures as wf                      # noqa: E402
+from evals.ingest_modules import load as load_ingest          # noqa: E402
 
+workday = load_ingest("workday")
 
-class Reconciliation(RuntimeError):
-    """Collected fewer postings than `total` said existed.
-
-    18-ingest-workday-cxs.md:52: "a mismatch is an error, not a shrug."
-    """
+#: Every call below replays; nothing sleeps between pages. `delay=0` is the
+#: ingest loop's own politeness pause, `cassettes.no_sleep()` is lib/http.py's
+#: retry backoff, and both have to go or a retry test costs eight seconds.
+NO_DELAY = {"delay": 0, "sleep": lambda _s: None}
 
 
 def _post(offset, limit=wf.PAGE_LIMIT, facets=None, dc=wf.DC):
+    """A single raw request. Kept because three assertions are about the
+    RESPONSE rather than about the loop -- see failure 1."""
     req = urllib.request.Request(
         wf.jobs_url(dc), data=wf.body(offset, limit, facets),
         headers={"Content-Type": "application/json"}, method="POST")
@@ -52,7 +65,12 @@ def _post(offset, limit=wf.PAGE_LIMIT, facets=None, dc=wf.DC):
 
 
 def _collect_naively(limit=wf.PAGE_LIMIT, facets=None, dc=wf.DC, max_pages=600):
-    """The defect: any failure, or any short page, ends the walk."""
+    """The defect: any failure, or any short page, ends the walk.
+
+    NOT the ingest loop and must never become it. This is the two-line
+    difference the whole task is about, kept so each fixture can be shown to
+    still lose the data it says it loses.
+    """
     collected, total, offset = [], None, 0
     for _ in range(max_pages):
         try:
@@ -68,31 +86,10 @@ def _collect_naively(limit=wf.PAGE_LIMIT, facets=None, dc=wf.DC, max_pages=600):
     return collected, total
 
 
-def _collect_reconciled(limit=wf.PAGE_LIMIT, facets=None, dc=wf.DC,
-                        max_pages=600, retries=3):
-    """The fix: retry a failed page, then reconcile against `total`."""
-    collected, total, offset = [], None, 0
-    for _ in range(max_pages):
-        payload = None
-        for _attempt in range(retries):
-            try:
-                payload = _post(offset, limit, facets, dc)
-                break
-            except urllib.error.HTTPError:
-                continue
-        if payload is None:
-            raise Reconciliation(f"page at offset {offset} never succeeded")
-        total = payload.get("total")
-        postings = payload.get("jobPostings") or []
-        if not postings:
-            break
-        collected.extend(postings)
-        offset += limit
-    if total is not None and len(collected) != total:
-        raise Reconciliation(
-            f"collected {len(collected)} of {total} postings -- a page was "
-            f"lost silently")
-    return collected, total
+def _collect(**kw):
+    """The REAL loop, against the fixture tenant."""
+    return workday.collect_postings(wf.TENANT, kw.pop("dc", wf.DC), wf.SITE,
+                                    **{**NO_DELAY, **kw})
 
 
 class TestFailure1LimitCannotExceed20(unittest.TestCase):
@@ -122,11 +119,35 @@ class TestFailure1LimitCannotExceed20(unittest.TestCase):
         self.assertEqual(collected, [])
         self.assertEqual(total, wf.TOTAL)
 
-    def test_reconciliation_catches_it(self):
-        with cassettes.replay(cassette=wf.limit_over_20()):
-            with self.assertRaises(Reconciliation) as caught:
-                _collect_reconciled(limit=100)
-        self.assertIn(f"0 of {wf.TOTAL}", str(caught.exception))
+    def test_the_ingest_loop_refuses_to_make_the_request_at_all(self):
+        """The primary defence: the guard is in list_body(), so it fires
+        before any request rather than after a wasted one."""
+        with cassettes.replay(cassette=wf.limit_over_20()) as player:
+            with self.assertRaises(workday.LimitTooLarge) as caught:
+                _collect(limit=100)
+        self.assertEqual(player.requests, [],
+                         "a limit>20 must not reach the network at all")
+        self.assertIn("20", str(caught.exception))
+
+    def test_every_request_path_goes_through_the_guard(self):
+        """A future editor cannot route around it by calling a lower level:
+        list_body() is the only place a body is built, and it checks."""
+        for call in (lambda: workday.list_body(0, 100),
+                     lambda: workday.fetch_list_page("t", "wd1", "s", 0,
+                                                     limit=21),
+                     lambda: workday.collect_postings("t", "wd1", "s",
+                                                      limit=100, **NO_DELAY)):
+            with self.subTest(call=call):
+                self.assertRaises(workday.LimitTooLarge, call)
+
+    def test_the_ceiling_is_20_and_the_default_is_the_ceiling(self):
+        self.assertEqual(workday.MAX_PAGE_LIMIT, 20)
+        self.assertEqual(workday.PAGE_LIMIT, workday.MAX_PAGE_LIMIT)
+        self.assertEqual(workday.PAGE_LIMIT, wf.PAGE_LIMIT)
+        # 20 is honoured, 21 is not -- the boundary, pinned.
+        self.assertEqual(workday._check_page_limit(20), 20)
+        self.assertRaises(workday.LimitTooLarge, workday._check_page_limit, 21)
+        self.assertRaises(workday.LimitTooLarge, workday._check_page_limit, 0)
 
 
 class TestFailure2AThrottledPageIsNotTheEnd(unittest.TestCase):
@@ -140,24 +161,108 @@ class TestFailure2AThrottledPageIsNotTheEnd(unittest.TestCase):
         self.assertEqual(total, wf.TOTAL)
         self.assertEqual(total - len(collected), 1960)
 
-    def test_retrying_and_reconciling_collects_all_2000(self):
+    def test_the_ingest_loop_retries_and_collects_all_2000(self):
         with cassettes.no_sleep(), cassettes.replay(
                 cassette=wf.throttled_page()):
-            collected, total = _collect_reconciled()
+            collected, total = _collect()
         self.assertEqual(len(collected), wf.TOTAL)
         self.assertEqual(total, wf.TOTAL)
+
+    def test_a_page_that_never_succeeds_raises_rather_than_terminating(self):
+        """The reconciliation half. A 500 that outlives lib/http's retries
+        must not read as the end of the list."""
+        broken = wf.throttled_page()
+        # Every interaction for offset 40 replaced by a permanent 500, so
+        # lib/http.py exhausts its retries and gives up.
+        target = wf._post(wf.THROTTLE_AT_OFFSET, {}, status=500,
+                          reason="Internal Server Error")
+        broken.interactions = [
+            target if i.request_body_sha256 == target.request_body_sha256
+            else i for i in broken.interactions]
+        with cassettes.no_sleep(), cassettes.replay(cassette=broken):
+            with self.assertRaises(workday.Shortfall) as caught:
+                _collect()
+        self.assertIn("NOT", str(caught.exception))
+        self.assertIn(str(wf.THROTTLE_AT_OFFSET), str(caught.exception))
 
     def test_the_throttled_response_carries_retry_after(self):
         """So lib/http.py:78 backs off on it rather than raising, which is
         the cheap half of the fix -- use lib/http, do not hand-roll urlopen
-        the way four of the six existing scripts do."""
-        from lib import http
+        the way four of the six existing scripts do. fetch_list_page does."""
         with cassettes.no_sleep(), cassettes.replay(
                 cassette=wf.throttled_page()):
-            payload = http.post_json(
-                wf.jobs_url(),
-                json.loads(wf.body(wf.THROTTLE_AT_OFFSET).decode()))
+            payload = workday.fetch_list_page(
+                wf.TENANT, wf.DC, wf.SITE, wf.THROTTLE_AT_OFFSET)
         self.assertEqual(len(payload["jobPostings"]), wf.PAGE_LIMIT)
+
+    def test_a_board_that_moves_mid_walk_is_drift_not_a_shortfall(self):
+        """Measured 2026-07-28: Nordstrom answered total=867 and yielded 865
+        distinct postings over the 100 seconds that followed, because two
+        requisitions closed mid-walk. Equality turns that into a shortfall, and
+        a shortfall means the tenant is not written at all -- so a strict check
+        would cost the largest boards whole nights for doing nothing wrong.
+        The threshold is one page, because a lost PAGE is the failure this
+        check exists for."""
+        moved = wf.throttled_page()
+        keep = [i for i in moved.interactions if i.status == 200]
+        moved.interactions = keep
+        # Claim two more than the fixture can deliver: 2 < PAGE_LIMIT.
+        for interaction in moved.interactions:
+            body = json.loads(interaction.body)
+            if body.get("total"):
+                body["total"] = wf.TOTAL + 2
+                interaction.body = json.dumps(body)
+        with cassettes.no_sleep(), cassettes.replay(cassette=moved):
+            collected, total = _collect()
+        self.assertEqual(len(collected), wf.TOTAL)
+        self.assertEqual(total, wf.TOTAL + 2)
+
+    def test_a_deficit_of_a_whole_page_still_raises(self):
+        """The boundary. One page short is the failure; one page minus one is
+        churn."""
+        for deficit, raises in ((wf.PAGE_LIMIT - 1, False),
+                                (wf.PAGE_LIMIT, True)):
+            with self.subTest(deficit=deficit):
+                cas = wf.throttled_page()
+                cas.interactions = [i for i in cas.interactions
+                                    if i.status == 200]
+                for interaction in cas.interactions:
+                    body = json.loads(interaction.body)
+                    if body.get("total"):
+                        body["total"] = wf.TOTAL + deficit
+                        interaction.body = json.dumps(body)
+                with cassettes.no_sleep(), cassettes.replay(cassette=cas):
+                    if raises:
+                        self.assertRaises(workday.Shortfall, _collect)
+                    else:
+                        _collect()
+
+    def test_an_excess_is_never_fatal(self):
+        """Postings ADDED mid-walk are not data loss. One page of 20 against a
+        `total` of 15 -- what a board that grew between the front page and the
+        walk looks like."""
+        cas = cassettes.Cassette(
+            name="workday-more-than-total",
+            source="constructed",
+            interactions=[wf._post(0, {"total": 15,
+                                       "jobPostings": [wf.posting(i)
+                                                       for i in range(20)]})])
+        with cassettes.no_sleep(), cassettes.replay(cassette=cas):
+            collected, total = _collect()
+        self.assertEqual(len(collected), 20)
+        self.assertEqual(total, 15)
+
+    def test_a_short_collection_is_an_error_not_a_smaller_board(self):
+        """Reconciliation, on its own: pages stop early but `total` says 2000."""
+        truncated = wf.throttled_page()
+        truncated.interactions = [
+            i for i in truncated.interactions
+            if i.status == 200][:2] + [wf._post(40, {"total": wf.TOTAL,
+                                                     "jobPostings": []})]
+        with cassettes.no_sleep(), cassettes.replay(cassette=truncated):
+            with self.assertRaises(workday.Shortfall) as caught:
+                _collect()
+        self.assertIn(f"of {wf.TOTAL}", str(caught.exception))
 
 
 class TestFailure3TheDataCentrePrefixVaries(unittest.TestCase):
@@ -171,19 +276,36 @@ class TestFailure3TheDataCentrePrefixVaries(unittest.TestCase):
         self.assertEqual(len(good["jobPostings"]), wf.PAGE_LIMIT)
 
     def test_a_wrong_prefix_reads_as_one_more_unreachable_tenant(self):
-        """Why this counts as silent. Every ingest script in this repo catches
-        HTTPError per source and continues -- ats.py:333-338 is the template
-        Phase 3 copies -- so a hardcoded `wd1` costs a whole tenant and
-        produces one line in a fifty-line noise floor."""
+        """Why this counts as silent, in the naive shape."""
         with cassettes.replay(cassette=wf.prefix_assumed()):
             collected, total = _collect_naively(dc=wf.WRONG_DC)
         self.assertEqual(collected, [])
         self.assertIsNone(total, "nothing was ever learned about this tenant")
 
+    def test_the_ingest_loop_raises_on_the_wrong_prefix(self):
+        """Loud, not one quiet line in a fifty-line noise floor. The tenant is
+        still isolated -- ingest_tenant catches it -- but it is REPORTED, and
+        `status='failed'` is what the summary counts."""
+        with cassettes.no_sleep(), cassettes.replay(cassette=wf.prefix_assumed()):
+            with self.assertRaises(workday.Shortfall):
+                _collect(dc=wf.WRONG_DC)
+
+    def test_the_prefix_is_read_and_never_defaulted(self):
+        """There is no wd-anything literal in the ingest module: the data
+        centre only ever arrives from company_ats.workday_dc."""
+        path = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "ingest", "workday.py")
+        with open(path, encoding="utf-8") as fh:
+            src = fh.read()
+        code = "\n".join(line for line in src.splitlines()
+                         if not line.lstrip().startswith("#"))
+        code = code.split('"""')[0] + '"""'.join(code.split('"""')[2:])
+        self.assertNotIn('"wd', code, "a literal wd-prefix in the code is a "
+                                      "default, and 18-...md:54 forbids one")
+        self.assertNotIn("'wd", code)
+
     def test_the_prefix_is_not_guessable_from_the_tenant(self):
-        """wd1/wd3/wd5 are data centres, not a function of the name. The
-        fixture pins that the fixture itself does not use wd1, so a test
-        written against it cannot accidentally pass by defaulting."""
+        """wd1/wd5/wd108/wd501 are data centres, not a function of the name."""
         self.assertNotEqual(wf.DC, wf.WRONG_DC)
         self.assertIn(wf.WRONG_DC, wf.host(wf.WRONG_DC))
 
@@ -197,53 +319,263 @@ class TestFailure4TheTenThousandResultCap(unittest.TestCase):
         self.assertEqual(total, wf.CAPPED_TOTAL)
         self.assertEqual(total - len(collected), wf.CAPPED_TOTAL - wf.RESULT_CAP)
 
-    def test_reconciliation_detects_the_cap_but_cannot_fix_it(self):
+    def test_the_ingest_loop_detects_it_and_refuses_a_short_list(self):
         """The distinction that decides the design: for failures 1 and 2 the
-        reconciliation check IS the fix. Here it only tells you to slice."""
-        with cassettes.replay(cassette=wf.result_cap()):
-            with self.assertRaises(Reconciliation):
-                _collect_reconciled()
+        reconciliation check IS the fix. Here it only says to slice -- and
+        with no facet advertised, there is nothing to slice by, so the honest
+        answer is to raise."""
+        with cassettes.no_sleep(), cassettes.replay(cassette=wf.result_cap()):
+            with self.assertRaises(workday.ResultCapUnsliceable) as caught:
+                workday.collect_tenant(wf.TENANT, wf.DC, wf.SITE, **NO_DELAY)
+        self.assertIn(str(wf.CAPPED_TOTAL - wf.RESULT_CAP),
+                      str(caught.exception))
 
     def test_a_faceted_slice_enumerates_completely(self):
-        with cassettes.replay(cassette=wf.result_cap()):
-            collected, total = _collect_reconciled(facets=wf.FACET)
+        with cassettes.no_sleep(), cassettes.replay(cassette=wf.result_cap()):
+            collected, total = _collect(facets=wf.FACET)
         self.assertEqual(len(collected), wf.FACETED_TOTAL)
         self.assertEqual(total, wf.FACETED_TOTAL)
         self.assertLess(total, wf.RESULT_CAP)
 
+    def test_facet_slices_partitions_a_real_advertised_facet_list(self):
+        """`facet_slices` is fed the response's OWN facets, so the slicing
+        needs no hardcoded facet name. Exercised against the facets block of
+        the recorded nvidia page rather than an invented one."""
+        # The page's own total (2,000) with a cap set just above its largest
+        # facet value: the shape of a board over the real 10,000 cap, without
+        # inventing counts.
+        page = _recorded_page_body()
+        slices = workday.facet_slices(page, cap=1900)
+        self.assertTrue(slices, "the recorded page advertises facets that "
+                                "partition it; if this fails the response "
+                                "shape has changed")
+        params = {next(iter(s)) for s in slices}
+        self.assertEqual(len(params), 1, "one parameter per slice set")
+        for s in slices:
+            (values,) = s.values()
+            self.assertEqual(len(values), 1)
+
+    def test_facet_slices_refuses_a_facet_that_does_not_cover_the_board(self):
+        page = {"total": 100, "facets": [
+            {"facetParameter": "locations",
+             "values": [{"id": "a", "count": 10}, {"id": "b", "count": 20}]}]}
+        self.assertEqual(workday.facet_slices(page, cap=1000), [],
+                         "30 of 100 is not a partition, and merging those "
+                         "slices would be short by construction")
+
+    def test_facet_slices_refuses_a_value_still_over_the_cap(self):
+        page = {"total": 100, "facets": [
+            {"facetParameter": "locations",
+             "values": [{"id": "a", "count": 99}, {"id": "b", "count": 1}]}]}
+        self.assertEqual(workday.facet_slices(page, cap=50), [])
+
+
+class TestFailure5TotalIsOnlyOnTheFirstPage(unittest.TestCase):
+    """Not in the task file. Found by running the loop against live tenants.
+
+    All four tenants in `company_ats` failed with "collected 40 of 0" on
+    2026-07-28 before this was understood, and nothing in the suite could have
+    predicted it: both the constructed fixtures above and NVIDIA's real
+    recorded page repeat `total` on every page, because a one-page recording
+    has no later page to disagree.
+    """
+
+    def test_the_fixture_reproduces_what_the_endpoint_really_does(self):
+        cas = wf.total_only_on_first_page()
+        with cassettes.replay(cassette=cas):
+            first = _post(0)
+            second = _post(20)
+            past_the_end = _post(100)
+        self.assertEqual(first["total"], wf.FIRST_PAGE_ONLY_TOTAL)
+        self.assertEqual(second["total"], 0,
+                         "every page after the first answers total: 0")
+        self.assertEqual(len(second["jobPostings"]), wf.PAGE_LIMIT,
+                         "...while still returning a full page of postings")
+        self.assertEqual(len(past_the_end["jobPostings"]), wf.PAGE_LIMIT,
+                         "an offset past the end returns page 0 again, not an "
+                         "empty array")
+
+    def test_a_walk_that_re_reads_total_ends_at_page_two(self):
+        """The defect, in the shape it was actually written. `total` becomes 0
+        on page two, `offset >= total` is immediately true, and the walk stops
+        with 40 of 88 -- then reconciles 40 against 0 and calls the SHORT walk
+        a shortfall for the wrong reason."""
+        with cassettes.replay(cassette=wf.total_only_on_first_page()):
+            # max_pages bounds it at all: the fixture wraps, so an unbounded
+            # naive walk is an infinite loop, not a short one.
+            collected, total = _collect_naively(max_pages=8)
+        # The naive walker has no `offset >= total` rule at all, so it walks to
+        # the wrap and then never stops -- bounded here only by max_pages.
+        self.assertGreater(len(collected), wf.FIRST_PAGE_ONLY_TOTAL,
+                           "waiting for an empty page collects duplicates "
+                           "forever; the wrap is why a bound is not optional")
+        distinct = {p["externalPath"] for p in collected}
+        self.assertEqual(len(distinct), wf.FIRST_PAGE_ONLY_TOTAL,
+                         "and every posting past the 88th is a repeat")
+        self.assertEqual(total, wf.FIRST_PAGE_ONLY_TOTAL,
+                         "the wrap even hands back a plausible `total`, so the "
+                         "run ends looking correct")
+
+    def test_the_ingest_loop_latches_the_first_total_and_collects_them_all(self):
+        with cassettes.no_sleep(), cassettes.replay(
+                cassette=wf.total_only_on_first_page()):
+            collected, total = _collect()
+        self.assertEqual(total, wf.FIRST_PAGE_ONLY_TOTAL)
+        self.assertEqual(len(collected), wf.FIRST_PAGE_ONLY_TOTAL)
+
+    def test_the_wrap_cannot_make_the_loop_run_forever(self):
+        """Every page is a full page of the SAME postings, and `total` never
+        arrives, so neither the short-page rule nor the offset rule can end the
+        walk. Only the fresh-postings guard can."""
+        cas = wf.total_only_on_first_page()
+        wrap = wf._post(0, {"jobPostings": [wf.posting(i)
+                                            for i in range(wf.PAGE_LIMIT)]})
+        cas.interactions = [
+            wf._post(off, {"jobPostings": [wf.posting(i)
+                                           for i in range(wf.PAGE_LIMIT)]})
+            for off in range(0, 200, wf.PAGE_LIMIT)] + [wrap]
+        with cassettes.no_sleep(), cassettes.replay(cassette=cas) as player:
+            collected, total = _collect()
+        self.assertIsNone(total, "this fixture never reports one")
+        self.assertEqual(len(collected), wf.PAGE_LIMIT)
+        self.assertEqual(len(player.requests), 2,
+                         "one page, then one that adds nothing new, then stop")
+
+    def test_it_is_registered_apart_from_the_task_file_s_four(self):
+        """The provenance distinction: four are a specification of documented
+        traps, this one is an observation of an undocumented one."""
+        self.assertEqual(sorted(wf.FIXTURES), [1, 2, 3, 4])
+        self.assertEqual(sorted(wf.FIXTURES_FOUND_LIVE), [5])
+        cas = wf.FIXTURES_FOUND_LIVE[5]()
+        self.assertIn("CONSTRUCTED", cas.source)
+        self.assertTrue(cas.note)
+
+
+def _recorded_page_body():
+    return json.loads(wf.recorded_list_page().interactions[0].body)
+
+
+@unittest.skipUnless(cassettes.available(wf.RECORDED_CASSETTE),
+                     f"cassette {wf.RECORDED_CASSETTE} not recorded")
+class TestTheRecordingContradictsTheTaskFile(unittest.TestCase):
+    """Real bytes, and the one thing constructed fixtures structurally cannot do.
+
+    Everything else in `evals/workday_fixtures.py` encodes the shape
+    18-ingest-workday-cxs.md:20-37 DOCUMENTS. That makes those fixtures a
+    specification of the trap and not evidence about the endpoint -- their own
+    module docstring says so. This class is the evidence, and it disagrees with
+    the specification.
+    """
+
+    def test_provenance_is_printed_not_assumed(self):
+        cas = wf.recorded_list_page()
+        print("  " + cas.provenance_line())
+        print("  " + wf.recorded_shape_note())
+        self.assertIn("RECORDED", cas.source)
+
+    def test_the_real_list_response_carries_total_and_twenty_postings(self):
+        body = _recorded_page_body()
+        self.assertEqual(body["total"], 2000)
+        self.assertEqual(len(body["jobPostings"]), wf.PAGE_LIMIT)
+
+    def test_the_task_file_is_wrong_about_the_list_response_fields(self):
+        """18-...md:27-30 says the list carries `startDate` (native ISO, "no
+        'posted 3 days ago' parsing") and `jobRequisitionLocation`. It carries
+        neither -- it carries `postedOn`, which is exactly the relative string
+        the task file says this source avoids. Both fields are on the DETAIL
+        document instead, which is why apply_detail() is where posted_at comes
+        from and why normalize_listing() leaves it None."""
+        posting = _recorded_page_body()["jobPostings"][0]
+        for field in wf.RECORDED_LIST_FIELDS:
+            self.assertIn(field, posting)
+        for field in wf.LIST_FIELDS_THE_TASK_FILE_IS_WRONG_ABOUT:
+            self.assertNotIn(
+                field, posting,
+                f"{field} is documented at 18-ingest-workday-cxs.md:27-30 as a "
+                f"LIST field. If it has appeared, the endpoint changed and "
+                f"normalize_listing() can be simplified.")
+        self.assertRegex(posting["postedOn"], r"(?i)posted")
+
+    def test_the_ingest_loop_normalizes_the_real_bytes(self):
+        """The contract every source owes: every key in schema.COLUMNS."""
+        import schema
+        employer = {"employer_name": "NVIDIA", "token": wf.RECORDED_TENANT,
+                    "dc": wf.RECORDED_DC, "site": wf.RECORDED_SITE}
+        body = _recorded_page_body()
+        records = [workday.normalize_listing(employer, p)
+                   for p in body["jobPostings"]]
+        self.assertEqual(len(records), wf.PAGE_LIMIT)
+        for rec in records:
+            for column in schema.COLUMNS:
+                self.assertIn(column, rec)
+            self.assertEqual(rec["platform"], "workday")
+            self.assertTrue(rec["source_id"])
+            self.assertIsNone(rec["description_text"],
+                              "a list row has no description, by construction")
+            self.assertIsNone(rec["posted_at"],
+                              "posted_at is hashed; a relative string must "
+                              "never reach it")
+        self.assertEqual(len({schema.make_job_id(r) for r in records}),
+                         len(records),
+                         "source_id must be externalPath, not bulletFields: "
+                         "the recorded page carries two postings of one "
+                         "requisition and keying on the req id collapses them")
+
+    def test_the_real_loop_replays_the_recorded_page(self):
+        """One page, `total` 2000 -- so the walk is SHORT and reconciliation
+        fires. That is the correct outcome: this cassette is one page of a
+        2,000-posting board, and a loop that reported success on it would be
+        the bug. `max_pages=1` because the cassette holds one page and a
+        CassetteMiss on page two would measure the harness, not the loop."""
+        with cassettes.no_sleep(), cassettes.replay(
+                cassette=wf.recorded_list_page()):
+            with self.assertRaises(workday.Shortfall) as caught:
+                workday.collect_postings(wf.RECORDED_TENANT, wf.RECORDED_DC,
+                                         wf.RECORDED_SITE, max_pages=1,
+                                         **NO_DELAY)
+        self.assertIn("20 of 2000", str(caught.exception))
+
 
 class TestTheFixturesMatchTheDocumentedShape(unittest.TestCase):
-    """If Workday's contract changes, these fail here rather than in task 18.
-
-    Everything asserted is quoted from 18-ingest-workday-cxs.md:20-37, so a
-    reviewer can diff the doc against the code without reading either twice.
-    """
+    """If Workday's contract changes, these fail here rather than in task 18."""
 
     def test_the_request_is_the_documented_body(self):
         self.assertEqual(json.loads(wf.body(40).decode()),
                          {"appliedFacets": {}, "limit": 20, "offset": 40,
                           "searchText": ""})
 
+    def test_the_ingest_script_sends_byte_identical_requests(self):
+        """The fixtures key on the sha256 of the body (cassettes.py:374), so
+        this is not stylistic: a different key order is a different request and
+        every cassette here would miss."""
+        for offset, limit, facets in ((0, 20, None), (40, 20, None),
+                                      (0, 20, wf.FACET)):
+            with self.subTest(offset=offset, facets=facets):
+                self.assertEqual(workday.list_body(offset, limit, facets),
+                                 wf.body(offset, limit, facets))
+
     def test_the_url_is_the_documented_endpoint(self):
         self.assertEqual(
             wf.jobs_url(),
             f"https://{wf.TENANT}.{wf.DC}.myworkdayjobs.com"
             f"/wday/cxs/{wf.TENANT}/{wf.SITE}/jobs")
+        self.assertEqual(workday.jobs_url(wf.TENANT, wf.DC, wf.SITE),
+                         wf.jobs_url())
 
     def test_a_posting_carries_every_field_the_normalizer_will_want(self):
         p = wf.posting(7)
         for field in ("title", "locationsText", "externalPath", "startDate",
                       "jobRequisitionLocation"):
             self.assertIn(field, p)
-        # startDate is native ISO -- 18-...md:29, "no 'posted 3 days ago'
-        # parsing", which is why this source does not need
-        # text.parse_relative_posted_at at all.
         self.assertRegex(p["startDate"], r"^\d{4}-\d{2}-\d{2}$")
 
     def test_the_public_job_url_is_built_the_documented_way(self):
         path = wf.posting(3)["externalPath"]
         self.assertEqual(wf.job_url(path),
                          f"{wf.host()}/en-US/{wf.SITE}{path}")
+        self.assertEqual(
+            workday.public_url(wf.TENANT, wf.DC, wf.SITE, path),
+            wf.job_url(path))
 
     def test_all_four_fixtures_are_registered_and_distinct(self):
         built = {n: f() for n, f in wf.FIXTURES.items()}
