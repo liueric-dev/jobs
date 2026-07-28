@@ -870,3 +870,76 @@ new `unknown_penalty` block and the fourteen archetype weights take effect only 
 magnitudes are unfitted, and `years_experience_min` alone is NULL on 52.9% of the corpus,
 so bumping would re-rank the live profile on a guess. Verified inert — `match.py --dry-run`
 reports **0 matched** for both active profiles after every change in this commit.
+
+### 12 — Retarget the extraction gate instead of optimising the re-extraction
+
+The bump was costed at 5,317 rows, 5,659 calls and ~5 nights. The instinct was to
+make bumps cheaper — a lazy or tiered staleness policy, so a version change did
+not invalidate the whole corpus at once. **Rejected, because it was solving the
+wrong problem.** `extract._eligible_sql` gates on `relevance.union_sql(ACTIVE
+profiles)`, and both software-engineer job-search profiles were still active. The
+5,317 rows were not the cohort's corpus; they were the repo owner's.
+
+Deactivating `tech`/`frontend` and activating `pursuit` took the same bump to 863
+rows and 28m31s. **The version-comparison predicate is good design that was
+pointed at the wrong corpus**, and a second notion of staleness alongside it would
+have added a mechanism to work around a configuration mistake. Rejected also:
+pruning `jobs` — 190 MB total and ingest costs no LLM calls, so storage was never
+where the money was.
+
+Reversible by construction: `prune_orphans` runs inside the loop over *active*
+profiles, so nothing was deleted and flipping back resumes the old behaviour at
+the old price.
+
+### 12 — Snapshot the table rather than build `--dry-run --limit` into `extract.py`
+
+Task 12 step 3 asks for a 100-row dry run diffed field by field. `extract.py`
+takes no arguments at all — no argparse — so that meant new CLI surface, and
+`update_job_facts` is `ON CONFLICT DO UPDATE`, so the old values are destroyed as
+it goes. Under the owner's staging-data stance the cheaper answer was
+`CREATE TABLE job_facts_v2_snapshot AS SELECT *`: 6 MB, seconds, dropped after
+the diff. It also produced a **better** artifact than the task asked for — a
+284-row exhaustive comparison rather than a 100-row sample — with no code to
+maintain afterwards.
+
+The cost is real and recorded: once the snapshot was dropped, the per-field table
+and the 427-row reachability figure became non-reproducible without re-extracting.
+
+### 12 — The Axis A gate was waived, not satisfied
+
+`12-facts-version-bump.md` gates the bump on task 07's Axis A labels, before and
+after. Those tables are empty by design and filling them is task 29, which needs
+~10 people. **Waived on the staging-data stance**: at 28 minutes the re-extraction
+is cheap enough to redo, which is the property that made the gate skippable. Under
+the old 5-night cost it would not have been. Recorded so that nobody reads the
+completed task as evidence the gate was met.
+
+### 19 — Measure before building, and drop on the evidence
+
+Task 19 was scoped as a build. It was run as a spike instead, on the grounds that
+three Phase 3 estimates had already come back 3x–30x high. The measurement — 2 of
+55 employers publishing `JobPosting`, 1 of 35 in the actual target population,
+and that one lacking `validThrough` — makes the 30–60/day estimate 13x–53x a
+ceiling that is not reachable. **Dropped, not descoped.**
+
+`extruct` was deliberately not installed. `requirements.txt` records psycopg as
+the pipeline's only third-party dependency, and a spike whose job is to decide
+whether to build a thing must not install that thing's dependency as a side
+effect of deciding. Stdlib only, 333 requests, no LLM calls.
+
+### 08 — `score.normalize()` gets its own vocabulary, not `extract._enum()`
+
+The two coercers look interchangeable and are not. Extraction's vocabulary is
+snake_case and `_enum()` lowercases; scoring's is Title Case with spaces
+(`Core SWE`, `Bridge & Solutions`). Reusing it would have **silently rewritten
+every stored value** rather than failing. D15 names this trap specifically, and it
+is the reason the task exists rather than being a two-line fix.
+
+### 08 — D16 fixed in `build_prompt`, not by requiring `buckets` in `profiles.py`
+
+The obvious fix — add `buckets` to `profiles.validate`'s required keys — would
+have rejected the `pursuit` profile, which has no buckets and which task 12 had
+just made the only active one. It would also have converted a scoring-time
+KeyError into a save-time failure rather than removing it. The section is omitted
+when the key is absent instead. A persona with no positioning buckets is
+legitimate under the Pursuit scope.

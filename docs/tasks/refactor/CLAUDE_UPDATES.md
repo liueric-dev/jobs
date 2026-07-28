@@ -1134,3 +1134,95 @@ in extraction, not only in scoring.
   0 matched for both active profiles.
 - **The `role_track` vocabulary is provisional.** Derived pre-Phase-3 from a tech-heavy
   corpus; the task file expects revision and the tool exists to re-run it.
+
+---
+
+## 2026-07-28 — tasks 08, 12 and 19, three agents in one round
+
+Three subagents in parallel with disjoint file ownership; the orchestrator took
+the baseline, verified every claim against the code and the database, and
+committed. Nothing was committed by a subagent. Zero collisions across
+eleven files.
+
+### The finding that reframes the run: the cost was configuration, not corpus
+
+Task 12's bump was costed at 5,317 rows / 5,659 calls / ~5 nights. It cost **863
+rows and 28m31s** because `extract._eligible_sql` gates the queue on the
+relevance union of the *active* profiles, and both of the owner's
+software-engineer job-search profiles were still on. The re-extraction that had
+been described as expensive was mostly re-extracting a corpus the repo is being
+retargeted away from.
+
+### The negative result: widening the vocabulary made `other` worse
+
+Task 11 went from 12 archetypes to 26 to shrink the unclassifiable bucket. After
+re-extraction `other` is **31.1%** of the cohort corpus against 8.0% before —
+**4.6%** on rows that already had facts, **44.0%** on the 579 first-time
+extractions. The vocabulary fits the corpus it was derived from and fails on the
+part of the cohort corpus nobody had examined. Task 13 should price the weights
+knowing that.
+
+The ops five also came in **42 under** their title-probe floor. That direction is
+falsifiable where an overshoot is not: the extractor read whole postings and the
+probe read titles, so it had strictly more information and still applied those
+values to fewer postings.
+
+### What task 08 settled
+
+`primary_track` reproduces at **89%**, `fit_score` at **24%** with a maximum
+self-disagreement of 33 points, `fit_score` as an ordering at **ρ 0.915**. The
+bucket is stable, the number is not, the ordering is fine — which is task 30's
+argument, now measured. It also found two defects nobody was looking for: **D43**
+(a tombstone left the previous score in place; 3 `FAILED:` rows carry a real
+`fit_score`) and **D44** (`evals run` raised `UnboundLocalError` for *every*
+task, from a branch-local import that made a name function-local at compile time).
+
+### What task 19 settled, and the defect it found on the way
+
+2 of 55 employers publish parseable `JobPosting`; **1 of the 35 in the actual
+target population**, and that one publishes no `validThrough`. Dropped. On the way
+it found **D45**: `company_ats.status = 'never_found'` holds 35 rows against a
+true population of 139, and the 35 are a contiguous alphabetical block
+(`M=8 N=20 O=2 P=5`) — a partial write-back. Task 19's brief was written against
+25% of the set it meant to describe, and tasks 16 and 17 read the same column.
+
+### The defect that got worse rather than better
+
+The browser-DOM poisoning found by task 10 survived the re-extraction and was
+**laundered into version-3 facts**: `ff9f9d9f9643e185af0f48ca` produced
+`role_archetype = 'data'` and `role_track = 'data_and_analytics'` from scraped
+ChatGPT web-UI markup. Three postings carry DOM markers. Extraction has no
+input-sanity gate, so any ingest path that captures the wrong bytes gets
+structured facts written from it, confidently.
+
+### What is deliberately still outstanding
+
+- **The majority-of-3 vote has still never fired.** `hn_whoishiring` contributes
+  0 of the 863, so `extraction_passes = 1` and `vote_unanimity IS NULL` on all
+  5,907 rows. The `FACTS_VERSION` debt is paid on paper; the mechanism is
+  unexercised and its first real run is still ahead.
+- **Task 11's 203/54 `other` prediction is untested, not falsified.** Only 25 of
+  those 427 rows survive the pursuit union. Testing it means reactivating `tech`.
+- **No `criteria_version` bump.** `pursuit` is active with `archetypes = {}`, so
+  every value prices through `match.py:191`'s `:unpriced` path. Ranking is live
+  and not yet a product; task 13 owns it.
+- **`job_scores` still has no version key.** Task 08 documented it and did not add
+  one, because `schema.py` was another agent's file that round. Task 13 edits the
+  persona, so this bites next.
+
+### Verification that earned its keep this round
+
+Ranked by what actually caught something:
+
+1. **Recomputing a headline number independently.** Caught that only 25 of task
+   11's 427 `other` rows were reachable, which changed what the deliverable could
+   claim, and confirmed all seven of task 08's production figures.
+2. **Re-running an agent's own tool and reconciling its sub-counts.** Task 19's
+   summary reported 2 employers over sub-lines summing to 1 — the second was found
+   by a discovery path with no line in the output. A correct headline with an
+   unreconcilable breakdown.
+3. **Checking whether a known defect survived the change.** Nobody asked; the
+   browser-DOM row turned out to have been re-extracted into confident facts.
+4. **Asking where an artifact is.** Task 08's selfcheck table was quoted from a
+   run whose `--out` file was never committed, making the session's best
+   measurement cost 165 live calls to re-verify. Now committed.
