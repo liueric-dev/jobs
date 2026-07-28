@@ -204,21 +204,51 @@ recorded at `schema.py:158`.
 
 ## Nothing is in flight
 
-**The tree is clean.** Every agent across all three sessions completed, was verified
+**The tree is clean.** Every agent across all four sessions completed, was verified
 against the code and the database, and was committed — six in the session that landed
-03–18, three in the session that landed 11, three in the session that landed 08/12/19.
-Nothing is half-written and nothing is waiting on a reply.
+03–18, three in the session that landed 11, three in the session that landed 08/12/19,
+three in the session that landed 13/35/D45. Nothing is half-written and nothing is
+waiting on a reply. Untracked `scripts/` predates this run and is not ours.
 
 `run-daily.py`'s `STEPS` is fully wired — `ingest/workday.py` and `ingest/nyc-open-data.py`
-were added by the orchestrator, and `ats.py` was already there. **Tasks 08, 12 and 19
-touched no ingest path and no scheduled step**, so the nightly run is unchanged in shape.
-What changed underneath it: the nightly `extract.py` step now serves one profile instead of
-two and has a much smaller queue, and `score.py` writes nothing at all because `pursuit`'s
-`daily_narrative_budget` is 0.
+were added by the orchestrator, and `ats.py` was already there. **No task since 12 has
+touched `STEPS`**, so the nightly run is unchanged in shape. Three things changed
+underneath it:
+
+- the nightly `extract.py` step serves one profile with a much smaller queue (task 12);
+- **it can now REJECT before calling the model** (task 35). A posting whose prompt window
+  is ≥1% markup is tombstoned for zero LLM calls and counted in `unusable` on the summary
+  line. If that counter starts climbing, an ingest path is capturing the wrong bytes —
+  `tools/audit-description-markup.py` is the instrument;
+- `match.py` now writes a real ranking instead of 863 identical scores (task 13), and
+  `score.py` still writes nothing at all because `pursuit`'s `daily_narrative_budget`
+  is 0.
 
 **Start here:** `python3 -m unittest discover -s backend/tests` from the repo root should
-report **782, OK**. `backend/.env` is not exported by default — scripts that reach the
+report **837, OK**. `backend/.env` is not exported by default — scripts that reach the
 database need `cd backend && (set -a; . ./.env; set +a; python3 ...)`.
+
+**Then read this, because it is the one thing a fresh session will get wrong:** task 13
+is committed and its Definition of done is *not* met. See the top of this file. A
+completed task here is not a validated one.
+
+### The next session's likely first question, answered
+
+**"Why is `pursuit` only matching 144 postings when it used to match 863?"** Because the
+weights are real now. 863 was every posting scoring exactly `base = 50` against a floor
+of 40. Nothing regressed. `match.py --rebuild` reproduces it.
+
+**"Can I re-tune the weights?"** Not usefully, and see the top of this file. There is
+nothing to fit against until task 29 produces labels — no `job_events`, no L0. The
+weights are unfitted guesses by construction and are *recorded as such* in
+`config/pursuit-criteria.json`'s `_comment` blocks. Changing them costs one
+`match.py --rebuild` and buys no information.
+
+**"Where do the eval fixtures come from?"** `backend/evals/fixtures/pursuit-criteria-corpus.jsonl`
+(859 frozen `job_facts` rows) and `pursuit-criteria-goldens.json` (20 + 10 hand-picked
+`job_id`s with pinned scores and ranks). **There is no generator script for either** —
+they were produced ad hoc and re-pinned by hand once already. Anyone regenerating them
+writes that code, and should probably leave it behind as `tools/`.
 
 **Live state after this session**, so a fresh session can tell drift from damage:
 ```
@@ -292,9 +322,18 @@ standing in for it makes the measurement circular, the exact defect `03:13` name
 `claude-bench.py:417`, which treats `sonnet-batch-1` as ground truth. **07's tooling is
 now built (`3a8b42c`) and produced zero labels, by design and by test.** The form is
 server-rendered HTML at `/v1/label` behind the existing Google SSO; what is missing is
-people. Task **29** is the labelling session itself and stops entirely. **30** sits behind it. **12** needs Axis A figures. **13** additionally
-needs product judgement — the 20 plausible Pursuit target roles and the weights are
-cohort calls, not implementation.
+people. Task **29** is the labelling session itself and stops entirely. **30** sits behind it. **12** needs Axis A figures.
+
+**13 is committed but its judgement inputs were supplied provisionally, and that is now
+the sharpest open question.** The weights were chosen by the repo owner from three
+simulated variants, and the "20 plausible Pursuit target roles" were picked by an agent
+from titles, companies and locations — blind to the scores, which is what makes them a
+valid test, but not blind to the fact that an agent rather than a Builder decided what a
+Builder wants. **The 30 picks in
+`backend/evals/fixtures/pursuit-criteria-goldens.json` are the artifact a human should
+review first**, ahead of the weights: if the list is wrong, the 16/20 and 10/20 figures
+measure nothing, and if it is right, they are the sharpest statement available about how
+the weights are doing. Reviewing 30 titles is an hour; the labelling session is a day.
 
 **Credentials needing an account:** **15** (USAJobs key, Adzuna `app_id`/`app_key`),
 **20** (Firecrawl), **24** (Builder key onboarding), **33** (Cloudflare domain), and
