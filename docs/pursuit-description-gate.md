@@ -2,9 +2,18 @@
 
 **Task:** `docs/tasks/refactor/tranche_two/10-description-first-gate.md`
 **Measured:** 2026-07-28, at commit `2725949`, against the live database (11,824 rows in `jobs`).
+**Amended:** 2026-07-29 — the gate **moved out of the migration** into
+`backend/config/pursuit-relevance.json` (`4eefb7e`, proven a no-op), and two defects
+that `docs/mock-acceptance.md` found were fixed (`e8f3b72`, `9dab9e6`).
 **Method:** SQL only. No LLM calls. Nothing extracted or scored. The only write is the
 `pursuit` profile row created by `backend/migrations/migrate_pursuit_profile.py`, which
 is `active=False`.
+
+> **Read the *Amendment, 2026-07-29* section before citing any number below.**
+> Everything from *What changed in the code* onward is the 2026-07-28 measurement at
+> commit `2725949` and has not been re-derived. The gate it describes is still the gate,
+> with two lists changed and one file moved; the counts it quotes are one day and 1,623
+> rows out of date.
 
 ---
 
@@ -29,6 +38,169 @@ The author's `frontend` and `tech` profiles are byte-for-byte unaffected.
 
 ---
 
+## Amendment, 2026-07-29
+
+`docs/mock-acceptance.md` ran 55 synthetic postings through this gate and measured
+something no live sample can: **recall**. It was **48.3%** — 15 of 29 intended-good
+postings rejected, every one of them tier 3 and every one carrying AI vocabulary in the
+description but not the title. Those are exactly the ordinary-employer roles this
+profile exists to reach. Two causes, both fixed here; the mock corpus now reports
+**89.7%**.
+
+**`48.3% → 89.7%` is a statement about that corpus, which was built to contain the
+failure mode it measures. It is not this gate's real recall and must never be quoted as
+one.** What it is worth in production is the 11 rows below.
+
+Four changes landed: `4eefb7e` (the move), `e8f3b72` (cause 1), `9dab9e6` (cause 2), and
+one database write — `migrate_profiles.py --apply`, **without `--bump`** — to rewrite the
+profile's `relevance_json` from the file. Re-measured with
+`tools/mock-acceptance.py --dry-run` and with SQL; **no LLM calls**.
+
+### Where the gate lives now (`4eefb7e`)
+
+**`backend/config/pursuit-relevance.json`.** It was a dict literal inside
+`migrations/migrate_pursuit_profile.py`. **Any citation anywhere pointing at
+`COHORT_RELEVANCE` in the migration as the definition of a pattern group is stale** —
+the migration still exposes `COHORT_RELEVANCE`, but as a read of the file
+(`migrate_pursuit_profile.py:149`, `load_gate()`), so it remains the name to import and
+is no longer the place to edit. Current line references:
+
+| group | location |
+|---|---|
+| `title_include` | `config/pursuit-relevance.json:14` |
+| `description_include` | `:55` |
+| `title_exclude` | `:101` |
+| `platform_exclude` | `:158` |
+| the split's rationale and rejections | `:97`, `_description_entry_level_note` |
+| the `title_exclude` review | `:145`, `_title_exclude_note` |
+
+The move was proven a no-op: same config object, same emitted SQL, same row counts.
+
+### The two fixes, and what they cost
+
+**1. The entry-level group was title vocabulary applied to descriptions (`e8f3b72`).**
+The gate is conjunctive — one AI term **and** one entry-level term in the **same
+field** — and the eleven terms were nouns that appear in *titles*. A description does
+not repeat its own title's seniority noun, so on the description path the AI half
+matched and the entry half did not. The group is now **split**: `title_include` keeps
+the same eleven nouns **byte for byte**, and `description_include` carries those eleven
+**plus three phrases**, making it a **strict superset**. That shape is the guarantee —
+the title path cannot change, the description path can only gain rows. Raw live
+description matches, 18 / 0 / 11:
+
+```
+\yno\y[^.;:]{0,40}\y(?:experience|background|license)\y[^.;:]{0,25}\y(?:required|needed|necessary)\y
+\ydoes not require\y[^.;:]{0,40}\y(?:experience|background)\y
+\ytraining (?:is |will be )?provided\y
+```
+
+Term 2 matches **0** live rows and is kept deliberately, on the same standing as
+`\yattorney\y` under `config/relevance.json:_dead_patterns_note`: verified working
+against `mock_012`, waiting for its first live posting. `--dead` will report it.
+
+**2. `title_exclude` gates both paths, and was excluding the target population
+(`9dab9e6`).** `\ycustomer success\y` was **narrowed to four manager-and-above forms**,
+not removed — removing it outright imports 5 *"Manager, Customer Success"* rows that the
+seniority block deliberately does not catch, because `\ymanager\y` was measured and
+rejected (see *What was rejected, and why*). The four terms admit exactly **7** rows.
+
+`\yexecutive assistant\y` was **kept**, and the reason is a census rather than an
+argument: all 12 open EA postings at the blocked employers were read, and they require
+3+, 5+, 5+, 5+, 6+, 6+, 7+, 7+ and 10+ years of executive support (one states no
+figure). Most are not NYC — Singapore, São Paulo, Seoul, Costa Rica, DC. Those are
+senior administrative roles.
+
+**The list was edited; `tier_sql` was not, and that was the decision.** `title_exclude`
+applying to both include paths is deliberate and documented in the source
+(`relevance.py:227-231`) and pinned by a test asserting it holds on **both** tier arms
+(`test_relevance.py:203-211`). Changing `tier_sql` so it gated only the title path would
+break that test and re-admit the **1,906** rows `config/relevance.json:121` counts as
+sitting at tier 3 *because* of `title_exclude` — account executive, recruiter, nurse,
+controller, VP.
+
+### Live counts
+
+Over **13,447 open rows**, 2026-07-29. **This is a different population from the 876 in
+the Headline**, which is whole-table, all statuses, on 2026-07-28 at 11,824 rows. Do not
+diff the two.
+
+| step | tier ≤ 2 |
+|---|---|
+| before | 869 |
+| after the vocabulary split (`e8f3b72`) | 873 |
+| after the `title_exclude` narrowing (`9dab9e6`) | **880** |
+
+Final distribution: **tier 1 456, tier 2 424, tier 3 12,567.**
+
+`extract.remaining` went **2 → 13**. That backlog is under half of one
+`EXTRACT_BATCH_SIZE=40` batch (`extract.py:113`) — about **$0.004** — and drains on the
+first nightly run.
+
+### Hand-check of the delta: a census, not a sample
+
+All **11** added rows were read, not sampled, so there is no sampling error to argue
+about:
+
+| | n |
+|---|---|
+| on-target | ~7 |
+| clear false positive | 1 |
+| ambiguous | 3 |
+
+That is **~64% strict**, against the incumbent gate's **10.0% strict / 23.3%
+generous** measured on n=30 in *Hand-check, n=30* below. **The rows being added are
+better than the rows already in.** The one clear miss is honest rather than a dialect
+error: *Research Engineer, Interpretability | Anthropic* really does say "no research
+experience is required".
+
+### The four phrase families that were rejected — and why the mock corpus could not decide them
+
+The mock corpus's three surviving false negatives are reachable only through four more
+phrase families, and **on that corpus all four are free — zero added false positives.**
+Compiled through `relevance.tier_sql` against the same 13,447 open rows they admit:
+
+| family | live rows added |
+|---|---|
+| "we provide / offer … training" | +17 |
+| "we (will) train" | +5 |
+| "preferred but not required" | +5 |
+| "experience … preferred / is a plus" | **+123** |
+
+**All of them are senior engineering requisitions at AI employers** — `Software
+Engineer, RL Training Infra | OpenAI`, `Full-Stack Software Engineer, Reinforcement
+Learning | Anthropic`. `\ywe train\y` matched OpenAI's *"we train models"*, a false
+friend that **cannot exist on a synthetic corpus** because no author writing a mock
+rejection would think to write it. They score free there because every intended-bad mock
+posting carrying that phrasing has no AI vocabulary at all, so the conjunction stops it
+whatever the entry-level list says.
+
+**A synthetic corpus can bound recall but cannot price precision, because its negatives
+were written by whoever wrote its positives.** Recall stops at 89.7% on purpose. Nothing
+in the mock run licenses these four; adding them on its evidence would have bought a
+100% mock score and roughly +136 live rows of senior engineering -- a deduplicated
+union, measured 2026-07-29 with zero overlap between the four.
+
+### What a widened gate actually costs
+
+**A widened gate is priced by the one-time backlog it creates, not by steady state.**
+The earlier framing in this document — widening the gate widens the extraction queue —
+points at the wrong risk. Extraction has roughly **15× headroom** against the volumes in
+*Volume, for task 12*, and a one-off 11-row backlog is $0.004. **The real cost of
+widening is precision**, which is why the census above is the number that mattered and
+`extract.remaining` is not.
+
+### What this does not deliver
+
+**11 postings on a pool of 869 is +1.3%.** It does **not** meaningfully change what task
+29's labellers will see, and it moves GATE 2's ">= 200/day" question **not at all**.
+
+Doing it first was still right — the defect was real, the fix was cheap, and a labelling
+session run through a knowingly-broken gate is wasted work. But nobody should read a
+recovery into it that it does not deliver. Everything the Headline says still holds:
+**the bottleneck is sourcing, not gating.**
+
+---
+
 ## What changed in the code
 
 ### `description_include` (`backend/relevance.py:189-300`)
@@ -43,7 +215,8 @@ location columns. It now composes a second include path:
 | 3 | everything else |
 
 The OR is built at `relevance.py:223-226`; `title_exclude` is appended to the combined
-predicate at `:232-234` so it gates **both** paths, and the two tier arms repeat the whole
+predicate at `:227-234` — deliberately, and the comment there says so — so it gates
+**both** paths, and the two tier arms repeat the whole
 `row_ok` (`:297-299`) so an excluded title cannot merely drop from tier 1 to tier 2. A
 `COALESCE(description_text, '')` guards the include path (`:220`) for the same reason
 `description_exclude` has one (`:276`): 37 rows have no description, and `NULL ~* pattern`
@@ -170,7 +343,9 @@ It is also the only path for the 37 rows that have no `description_text` at all.
 
 ## The patterns
 
-Postgres `~*`. Word boundary is `\y`.
+Postgres `~*`. Word boundary is `\y`. **[2026-07-29]** These lists now live in
+`backend/config/pursuit-relevance.json`, not in the migration, and two of them have
+changed — see *Amendment*. What follows is as measured on 2026-07-28.
 
 **AI vocabulary** — task 05's list (`docs/pursuit-gate-volume.md:42`) plus three terms:
 
@@ -198,6 +373,13 @@ The omission mattered: internships and new-grad programmes are the most reliably
 entry-level postings in the corpus, and **both** rows judged genuine in the hand-check
 below are Databricks intern/new-grad requisitions. Rejected: bare `\yintern` without a
 trailing boundary — it matches `internal`, which appears in most job descriptions.
+
+**[2026-07-29] This group is no longer shared between the two include paths.** The
+eleven nouns above are the **title** group and are unchanged, byte for byte;
+`description_include` carries them plus three phrases and is a strict superset. The
+defect that forced it, the measurements, and the four phrase families that were
+measured and rejected are in *Amendment* and in
+`config/pursuit-relevance.json:_description_entry_level_note`.
 
 ### What was rejected, and why
 
@@ -233,6 +415,15 @@ The shared list is **copied, not referenced**. `relevance.load` merges a profile
 over `DISABLED`, not over the file (`relevance.py:88-89`) — deliberately, so a profile's
 behaviour never depends on a file it does not mention. The cost is that the two can
 drift; check them against each other when either moves.
+
+**[2026-07-29] The list was reviewed against the cohort's own target population and one
+term narrowed.** Six of the inherited terms are exclusions on roles this cohort wants.
+Rows each was blocking, alone, live: `\ycustomer success\y` 12, `\yexecutive assistant\y`
+9, `\yfacilities\y` 1, `\yoffice manager\y` 0, `\ywarehouse\y` 0, `\ydriver\y` 0.
+`\ycustomer success\y` became four manager-and-above forms; `\yexecutive assistant\y`
+was kept on a 12-posting census; the three that block nothing are undecidable by
+measurement and are recorded as such. Full reasoning in *Amendment* and in
+`config/pursuit-relevance.json:_title_exclude_note`.
 
 ### `\y` vs `\b`
 
@@ -431,7 +622,11 @@ and agrees with it:
 11.3% have any AI signal in the title, against task 05's 4.3% for the vocabulary alone
 and against a hand-checked 10.0%. The three agree.
 
-**What this means for task 12 and task 13.** The gate is worth shipping — 13.2/day for a
+**What this means for task 12 and task 13.** **[2026-07-29] The extraction-volume half
+of this paragraph prices the wrong risk** — see *What a widened gate actually costs*.
+The conclusion is unchanged; the reason is that widening costs a one-time backlog, not
+steady-state throughput, and the binding constraint is precision. The gate is worth
+shipping — 13.2/day for a
 13.7% increase in extraction volume is cheap, `job_facts` is shared so the marginal cost
 is only the 8.9/day that no active profile already wants, and it recovers rows like
 Harvey's and Notion's that were invisible. It is **not** worth ranking on. Something
@@ -461,7 +656,10 @@ Created by `backend/migrations/migrate_pursuit_profile.py`, following
   not this task's to make. Copying the `tech` profile's numbers would be worse than
   leaving them empty: they encode one software engineer's positioning.
 - **`daily_narrative_budget=0`**, for the same reason.
-- **`relevance_json` is real**, and carries a `_comment` on every group: `_gate_shape_note`,
+- **`relevance_json` is real**, and **[2026-07-29]** is now read from
+  `backend/config/pursuit-relevance.json` rather than defined in the migration
+  (`migrate_pursuit_profile.py:149`, `COHORT_RELEVANCE = load_gate()`). It carries a
+  `_comment` on every group: `_gate_shape_note`,
   `_regex_dialect`, `_ai_vocab_note`, `_entry_level_note`, `_title_include_note`,
   `_description_include_note`, `_title_exclude_note`, `_company_exclude_note`,
   `_platform_exclude_note`, `_description_exclude_note`, `_location_note`,

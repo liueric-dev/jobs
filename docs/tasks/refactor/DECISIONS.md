@@ -1263,3 +1263,171 @@ apostrophe in an unquoted value opens a run that prose then closes.
 posting replaced by Tailwind class soup, not appended to. Remediation ran before the
 rewrite, deliberately: the reverse order leaves clean text with soup-derived facts
 under it.
+
+## D49 — the pursuit gate lives in a file, and the harness reads that file
+
+**2026-07-29.** The gate was a Python dict literal, `COHORT_RELEVANCE`, at
+`migrations/migrate_pursuit_profile.py:147-386` — inside a script that **cannot run**.
+Its guard (`:442-453`, refusal at `:526-543`) exits 1 whenever the stored
+`criteria_json.archetypes` is non-empty; it holds 26, and the refusal fires *before* the
+`--apply` check, so even a dry run exits 1. The source of truth for a gate three things
+read lived inside the one path that could not execute.
+
+**Decided:** `config/pursuit-relevance.json`, beside `config/relevance.json`,
+`config/pursuit-criteria.json` and `config/pursuit-persona.json`, written through
+`migrate_profiles.py --relevance-file` (`:159-163`) — an option that had existed all
+along and had never been exercised with a real file, because none existed.
+
+**The no-op was proven three ways rather than asserted:** the loaded dict equal to the
+stored `profiles.relevance_json` key-for-key *and in key order*; `relevance.tier_sql`
+compiling byte-identical SQL (799 chars) and identical params from file, migration and
+stored row; `tools/mock-acceptance.py --dry-run` still 14/15/10/15.
+
+**The load-bearing part is the harness.** `mock-acceptance.py`'s `cohort_relevance()`
+(`:314-329`) pulled the dict out of the migration **by file path**, via
+`importlib.util.spec_from_file_location`. It was repointed at the JSON in the same
+commit. Had it not been, the harness would have kept compiling the old literal while the
+pipeline ran the new file, and reported the gate unchanged — which reads as *the fix did
+nothing*, not as *the instrument is pointed at the wrong object*. The invariant was
+already written down, in prose, in `install_profiles`'s own docstring (`:286-289`), and
+nothing enforced it: `tests/test_profiles_migration.py:52` imports the migration and
+touches only `is_placeholder`, never `COHORT_RELEVANCE`. It is now asserted
+(`tests/test_pursuit_gate.py`).
+
+`relevance_json` is deliberately **not** comment-stripped
+(`migrate_profiles.py:130-135`), because `relevance.load()` drops `_`-prefixed keys at
+read time (`relevance.py:88-97`) — so the rationale for every list survives into the
+database. That asymmetry with `criteria_json` is now pinned by test rather than by
+convention.
+
+## D50 — the entry-level vocabulary is split by field, and the description list is a superset by construction
+
+**2026-07-29.** The gate is conjunctive: one AI term **and** one entry-level term, in
+the *same* field (`migrate_pursuit_profile.py:216,229`). Task 10 built the
+description-first path and handed it the **title** vocabulary — eleven seniority nouns,
+`\yentry.?level\y` through `\yintern(ship)?s?\y`. A description does not restate its own
+title's seniority noun, so on the description path the AI half matched and the entry
+half did not; it was discarding 51.7% of the postings the cohort exists to find.
+mock_022's "No retail or e-commerce experience required; training provided" matched
+neither `\yno experience\y` nor `\ywill train\y`.
+
+**Decided:** `description_include`'s entry group opens with the same eleven nouns byte
+for byte, then adds three phrases. The title path therefore *cannot* change and the
+description path can only gain rows — the same superset-by-construction argument D48
+used. Live over 13,447 open rows: gate 869 → 873 (tier 1 450 → 453, tier 2 419 → 420).
+Mock: good_admitted 14 → 25, recall 48.3% → 86.2%, bad_admitted **unchanged at 10 — the
+same ten ids**, not merely the same count. Raw live description matches for the three
+added terms: 18 / 0 / 11.
+
+**Rejected, and this is the one that matters: the phrases *instead of* the nouns.**
+Measured, that takes the live gate from 869 rows to **39**, because the conjunction
+needs both signals in one field and descriptions restate their own title 81% of the time
+(`migrate_pursuit_profile.py:222`).
+
+**Rejected: one widened list shared by both fields.** 873 — identical to the split,
+because titles do not contain sentences. It buys nothing and gives up a provable
+invariant.
+
+**Rejected: `degree` in the noun set.** "No engineering degree required" pulled in a
+Scale AI consultant role and recovers nothing; the persona treats no-degree as a
+**constraint**, not a seniority signal.
+
+Two dialect details, both measured. The window is `[^.;:]{0,40}` because `{0,30}` loses
+mock_025's "No insurance license or prior claims experience required", and the negated
+class stops it crossing a sentence or a bullet colon. Alternations are wrapped in
+`(?:...)` because `relevance._alternation` (`:112-120`) joins terms with a bare `|` and
+`--dead` tests each term standalone — a term carrying a top-level `|` is two terms
+wearing a trenchcoat.
+
+`\ydoes not require\y…` matches **0** live rows and is kept on purpose, with the same
+standing as `\yattorney\y` under `config/relevance.json`'s `_dead_patterns_note`:
+verified against mock_012, a working pattern waiting for its first live posting.
+
+## D51 — a synthetic corpus can measure recall but cannot price precision
+
+**2026-07-29.** Four further phrase families were compiled through `relevance.tier_sql`
+against 13,447 open postings before being rejected. Live rows each admits:
+"we provide/offer … training" **+17**; "we (will) train" **+5**; "preferred but not
+required" **+5**; "experience … preferred / is a plus" **+123**. What they admit:
+`Software Engineer, RL Training Infra | OpenAI`, `Full-Stack Software Engineer,
+Reinforcement Learning | Anthropic`, `Product Manager, Gen AI | Scale AI`. **`\ywe
+train\y` matched OpenAI's "we train models"** — a false friend that cannot exist on a
+synthetic corpus.
+
+On the mock corpus all four add **zero** false positives, because every intended-bad
+mock posting carrying that phrasing has no AI vocabulary at all, so the conjunction
+rejects it on the other half. That is a property of a corpus written to a specification,
+not of the world — CLAUDE.md's "fixtures written from a specification test the
+specification" firing on the very deliverable that introduced the rule (D46).
+
+**Decided:** refused, at mock recall 89.7% rather than 100%, to avoid ~136 live junk
+rows — and the refusal is *recorded* rather than silently omitted, in
+`_rejected_phrase_families_note` and in a sentinel test in `tests/test_pursuit_gate.py`
+that asserts their absence and carries the live counts in its docstring. The harness will
+keep saying they are free.
+
+**The general rule:** a synthetic corpus's negatives were written by the same person who
+wrote its positives, so it can bound recall and cannot price precision. Any vocabulary
+decision taken on the mock harness alone is untrusted; compile the candidate through
+`relevance.tier_sql` against the live table before shipping it.
+
+## D52 — `title_exclude` narrowed to manager-and-above, and `executive assistant` kept on a census
+
+**2026-07-29.** `title_exclude` gates **both** paths — a title-only regex ANDed onto an
+already-OR'd `row_ok` (`relevance.py:232-234`), deliberate and documented at `:227-231`,
+pinned by `test_relevance.py:203-211`. Six of its terms were inherited from the
+*author's* software-engineer profile, and several were exclusions on the *cohort's* own
+target population. Rows each was blocking alone, live: `\ycustomer success\y` 12,
+`\yexecutive assistant\y` 9, `\yfacilities\y` 1, `\yoffice manager\y` 0,
+`\ywarehouse\y` 0, `\ydriver\y` 0.
+
+**Decided: narrowed, not removed.** `\ycustomer success\y` became four
+manager-and-above terms (`\ycustomer success manager\y`, `\ymanager, customer
+success\y`, `\yhead of customer success\y`, `\ydirector of customer success\y`), raw
+title matches 120/7/4/1, none dead. Removing it outright would import 5 "Manager,
+Customer Success" rows that the seniority block deliberately does not catch — bare
+`\ymanager\y` was rejected at `:299-307` as genuinely ambiguous. Measured: admits
+exactly 7 rows (Customer Success Associate at Datadog ×4 and AlphaSense, Customer
+Success Specialist at EliseAI, Applied AI Specialist at Samsara), blocks exactly the 5
+manager rows, removes none. Gate 873 → 880.
+
+**`\yexecutive assistant\y` kept, decided on a census rather than a sample** — step 0
+left this the one genuinely open question, so all 12 open EA postings at the blocked
+employers were read rather than sampled. Required experience: 3+, 5+, 5+, 5+, 6+, 6+,
+7+, 7+, 10+ years of executive support, one unstated. The lowest (Ramp, the only NYC
+one) wants "Legal, Finance, Investment Banking, Private Equity"; most are not NYC at all
+— Singapore, São Paulo, Seoul, Costa Rica, DC. The persona's `honest_gaps` says prior
+seniority does not transfer.
+
+The three zero-row terms stay, with their zeros written into `_title_exclude_note`. **No
+measurement can decide a term that admits nothing** — deciding them is a persona
+question, not a data one — so the counts are recorded so the next person decides with
+them instead of re-deriving them.
+
+The database write carried all three files with no `--bump`, and the blast radius was
+checked afterwards rather than argued: live tier ≤ 2 880 (t1 456 / t2 424),
+`extract.remaining` 2 → 13, `job_matches` content digest byte-identical across the write
+(`c98c4bbceed1b77d82979e83dfad70cc`, 3,521 rows), `md5(persona_json)` and
+`md5(criteria_json)` unchanged, `criteria_version` still 2.
+
+## D53 — the gate is data, and the suite only tested code
+
+**2026-07-29.** At 1,030 tests, **nothing** asserted on the AI vocabulary, the
+entry-level vocabulary, or the pursuit `title_exclude`. That is exactly how a defect
+costing half the gate's recall (D50) sat green: every test was about the code that
+compiles the gate, and the gate is a JSON document.
+
+**Decided:** `backend/tests/test_pursuit_gate.py`, suite 1,030 → 1,058, structured
+around the defect classes rather than the current values — the superset invariant, the
+Postgres dialect, the recovered postings, the rejected families, the narrowed excludes,
+and the harness-reads-the-same-file check from D49. Its defect-class tests fail 8
+subtests against the previous gate. **A test that cannot fail on the code it was written
+for is documentation, not a test**, so that was checked by running it against the old
+gate rather than reasoned about.
+
+**Found while writing its Postgres-backed class:** `NULL !~* 'x'` is NULL, not TRUE, so
+a NULL `company_name` or `platform` makes the whole `row_ok` conjunction NULL and the
+row falls silently to tier 3. Not live — 0 of 14,049 rows have a NULL in either column —
+but a fixture built with NULLs reports every row rejected, and every "expected rejected"
+assertion then passes for the wrong reason. Pinned by a test rather than worked around,
+because the failure mode is a green suite.

@@ -211,7 +211,7 @@ class TestTheDescriptionGateAdmitsTheRolesItWasBuiltFor(unittest.TestCase):
 
     #: The eight that the description phrases recover. mock_016/017/018 are
     #: NOT here: they are reachable only through the four rejected phrase
-    #: families below, at +145 live junk rows, and that trade was refused.
+    #: families below, at roughly +136 live junk rows, and that trade was refused.
     RECOVERED = ("mock_012", "mock_019", "mock_022", "mock_023",
                  "mock_025", "mock_029", "mock_044", "mock_045")
 
