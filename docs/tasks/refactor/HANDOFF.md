@@ -9,12 +9,20 @@ then [`DECISIONS.md`](DECISIONS.md) (why each choice was made) and
 [`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
 [`README.md`](README.md)'s status column is the ordered index.
 
+**If you are a fresh session, the whole of your job is task 29 and its first two commands
+are mechanical.** `python3 -m evals label init-schema`, then `evals label sample`. The
+label tables do not exist yet. Nothing else in this plan is both unblocked and cheap.
+
 ## Orientation — there are three "READ THIS FIRST" sections, in this order
 
 That is two too many, and the file has earned each one. If you read nothing else:
 
-1. **Task 29 is the whole critical path and it needs people, not an agent**
-   (§ *what is blocked*). Step 0 is done, so nothing cheap is left in front of it.
+1. **Task 29 is the whole critical path** (§ *what is blocked*). Step 0 is done, so nothing
+   cheap is left in front of it. **Two corrections to how this file used to describe it:**
+   its first two steps are mechanical and unblocked — `python3 -m evals label init-schema`
+   then `evals label sample`, minutes, no credential, and **the label tables do not exist
+   in the live database yet**. And **the 55 postings in `docs/tasks/refactor/mock/` are
+   not its data** — they are invented, and reduce its scope by zero postings.
 2. **Do not re-tune task 13's weights** (§ *the ranking is a product now*). Its DoD is
    unmet on purpose. Nothing measured since — including the mock corpus's 5-of-5 on
    branding traps — licenses changing them. Only task 29 does.
@@ -29,7 +37,10 @@ all four as costing nothing and they admit ~136 live junk rows.
 
 **The one sentence a fresh session most often gets wrong:** a completed task here is not
 a validated one. 13 is committed and unmet; the mock acceptance run is a *specification*
-test and does not reduce task 29 by one posting.
+test and does not reduce task 29 by one posting. **The corollary, asked out loud once
+already: `docs/tasks/refactor/mock/` is not task 29's data.** Those 55 postings do not
+exist — `source = 'mock'`, invented to a specification, and forbidden from `eval_labels`
+by `tests/test_labels.py:423`.
 
 **Verify before you trust — including this file.** It has been measurably wrong about
 its own line numbers, about which three tests a change would break, about its own SQL,
@@ -342,9 +353,13 @@ recorded at `schema.py:158`.
 
 ## Nothing is in flight
 
-**Step 0 is implemented, committed and written to the database.** Six agents ran in the
-implementing session — three read-only verification up front, three writing documentation
-on disjoint files at the end. The orchestrator made every code edit, every measurement and
+**Nothing is half-written and nothing is waiting on a reply.** Step 0 is implemented,
+committed and written to the database; the docs were rolled forward in the same session.
+The working tree is clean apart from untracked `scripts/`, which predates this run and is
+not ours. **The next session starts from a finished state**, not from a handover.
+
+**Six agents ran in the implementing session** — three read-only verification up front,
+three writing documentation on disjoint files at the end. The orchestrator made every code edit, every measurement and
 every commit itself, because the four commits were strictly sequential and each gated on
 the previous one's numbers.
 
@@ -399,9 +414,34 @@ completed task here is not a validated one.
 
 ### The next session's likely first question, answered
 
-**"Step 0 is done. What is actually next?"** Task 29, and it needs people. There is no
-longer a cheap unblocked item in front of it. Everything else is credentials (15, 20), a
-re-scope (21), or a call for the repo owner (GATE 2).
+**"Step 0 is done. What is actually next?"** Task 29. There is no longer a cheap unblocked
+item in front of it. Its first two steps — `evals label init-schema` and
+`evals label sample` — take minutes and need no credential; see § *what is blocked*.
+Everything else is credentials (15, 20), a re-scope (21), or a call for the repo owner
+(GATE 2).
+
+**"Isn't task 29's data already in `docs/tasks/refactor/mock/`?"** **No, and this is the
+single easiest mistake to make in this repo — it was asked once already.** That directory
+holds `mock-postings-v3.json`, its answer key and an addendum: **55 postings that do not
+exist**, invented to a specification, with `source = 'mock'` on every one and
+`generated_by ∈ {human, claude, gpt, glm}`. Nexora AI, Aurelian Intelligence and Vireo
+Cognitive Systems are not companies.
+
+They are a **specification test** (D46). They measure agreement with an author's intent,
+which is why an agent could produce them at all — and it is precisely why they are not
+labels. Writing them into `eval_labels` would reproduce `claude-bench.py:417`'s defect
+inside the tool built to detect it, and `tests/test_labels.py:423` forbids it
+structurally. Nothing from that corpus has ever reached the database.
+
+**Task 29 needs ~200 REAL postings from the live table, labelled by ~10 human Builders on
+two axes.** Axis B *is* Builder preference; there is no artifact that can stand in for it.
+The label tables are currently empty — in fact they do not exist yet.
+
+**What the mock corpus legitimately did** is pre-answer one narrow slice: task 29's
+*fourth stratum* asks whether the gate rejects good postings, and 25 constructed rejects
+with known verdicts could bound that without people. It fired, at 48.3%, and step 0 acted
+on it. **That is one question of one bucket, on invented postings.** It reduced task 29's
+scope by zero postings.
 
 **"The mock harness says the four rejected phrase families cost nothing. Why not add
 them?"** Because the mock corpus cannot see their cost. They admit +17/+5/+5/+123 live
@@ -665,8 +705,34 @@ inter-annotator agreement, needing two people. Axis B *is* Builder preference �
 standing in for it makes the measurement circular, the exact defect `03:13` names in
 `claude-bench.py:417`, which treats `sonnet-batch-1` as ground truth. **07's tooling is
 now built (`3a8b42c`) and produced zero labels, by design and by test.** The form is
-server-rendered HTML at `/v1/label` behind the existing Google SSO; what is missing is
-people. Task **29** is the labelling session itself and stops entirely. **30** sits behind it. **12** needs Axis A figures.
+server-rendered HTML at `/v1/label` behind the existing Google SSO. Task **29** is the
+labelling session itself and stops entirely. **30** sits behind it. **12** needs Axis A
+figures.
+
+**"What is missing is people" was not the whole truth, and this matters because it makes
+task 29 look more shovel-ready than it is.** Checked 2026-07-29:
+
+- **The label tables do not exist in the live database.** `eval_label_sets`,
+  `eval_label_items` and `eval_labels` are defined in `evals/labels.py:255-330` and a
+  query for `table_name LIKE '%label%'` in `public` returns **nothing**. They are created
+  by `webapp/schema_web.py:167` calling `_labels.ensure_schema(conn)` — and **`fastapi` is
+  not installed here**, so that path has never run.
+- **There is a second path that does not need `fastapi`**, and it is the one to use:
+  `python3 -m evals label init-schema` reaches the same function deliberately, so the two
+  cannot drift (`schema_web.py:161-166` says so). `sample`, `export`, `status` and
+  `report` are on the same CLI.
+- **No eval set has ever been drawn.** `evals label sample` is what pins task 29's
+  stratified 200 (50 top-20 / 60 ranks 20–50 / 40 below `MATCH_FLOOR` / 30 gate-rejected /
+  20 the `fit_score` tie block) by sorted `job_id`.
+- **The form itself does need `fastapi`.** Serving `/v1/label` to ten people is the step
+  that requires installing it and standing the webapp up — which is also task 33's
+  territory.
+
+**So the honest ordering for task 29 is: `init-schema`, then `sample`, then get the form
+served, then find ten Builders.** The first two are minutes and need no credential. **Draw
+the sample AFTER the gate fix** — which is now done, so that ordering constraint is
+discharged and the fourth stratum will be drawn against the 880-row gate rather than the
+869-row one.
 
 **13 is committed but its judgement inputs were supplied provisionally, and that is now
 the sharpest open question.** The weights were chosen by the repo owner from three
@@ -739,6 +805,18 @@ Each of these is a documented claim that is **wrong about the code as it now sta
   open live postings. The fix is correct and shipped, but **"recall was 48.3% and is now
   89.7%" is a statement about the mock corpus and must be written that way wherever it is
   quoted.**
+- **"Task 29 is blocked on people" was incomplete, and it made the task look more
+  shovel-ready than it is.** Its three tables do not exist in the live database — a
+  `LIKE '%label%'` query over `public` returns nothing — because the only wired creation
+  path is `webapp/schema_web.py:167` and `fastapi` is not installed here. `python3 -m
+  evals label init-schema` reaches the same function without the webapp, deliberately
+  (`schema_web.py:161-166`). No eval set has ever been drawn either. **Two mechanical
+  minutes were being described as "what is missing is people".**
+- **`docs/tasks/refactor/mock/` is NOT task 29's data**, and the question has been asked
+  out loud, so it will be asked again. 55 invented postings at `source = 'mock'`, written
+  to a specification, forbidden from `eval_labels` by `tests/test_labels.py:423`, and
+  reducing task 29's scope by **zero postings**. They legitimately pre-answered one
+  question of one of its five strata — gate recall — and nothing more.
 - **`AI_VOCAB` had exactly ONE copy, not two.** Step 0 required a test asserting "the two
   copies are equal"; it was one list referenced twice (`:216`, `:229`), so the assertion
   could not fail. Moving the gate to JSON is what created two literals and gave the test
@@ -996,13 +1074,31 @@ cheap unblocked item in front of it. What is left needs people (29) or credentia
    **What it did NOT buy: +1.3%.** Eleven postings on an 869-row pool. It does not
    meaningfully change what task 29 sees and it moves GATE 2 not at all.
 
-1. **Task 29 — the labelling session.** 07's tooling is built and produced zero
-   labels by design. The form is at `/v1/label` behind the existing Google SSO.
-   What is missing is ~10 Builders and an afternoon. **Two specific questions are
-   now waiting on it**, which is new: task 08 asked whether the ops shortfall is
-   the title probe over-counting or the extractor under-applying; task 13 asks
-   whether its four floor misses — postings at `ai_involvement = 'none'` whose
-   employers are AI companies — are the weights being wrong or being right.
+1. **Task 29 — the labelling session, and it is now the only thing on the critical
+   path.** 07's tooling is built and produced zero labels by design.
+
+   **Do these two first — they are mechanical, take minutes, need no credential and
+   no `fastapi`, and this file previously implied neither existed:**
+
+   ```
+   cd backend && (set -a; . ./.env; set +a; python3 -m evals label init-schema)
+   cd backend && (set -a; . ./.env; set +a; python3 -m evals label sample ...)
+   ```
+
+   `init-schema` creates `eval_label_sets`, `eval_label_items` and `eval_labels`,
+   **which do not exist in the live database today** — the only other path that
+   creates them is `webapp/schema_web.py:167`, and `fastapi` is not installed here,
+   so it has never run. `sample` draws the stratified 200 and pins it by sorted
+   `job_id`. **Draw it now rather than earlier**: the gate fix landed, so the
+   gate-rejected stratum will be drawn against the 880-row gate.
+
+   Only then does it need ~10 Builders and an afternoon — and serving `/v1/label`
+   needs `fastapi` installed and the webapp stood up, which overlaps task 33.
+
+   **Two specific questions are waiting on it**: task 08 asked whether the ops
+   shortfall is the title probe over-counting or the extractor under-applying; task
+   13 asks whether its four floor misses — postings at `ai_involvement = 'none'`
+   whose employers are AI companies — are the weights being wrong or being right.
 
    **This is also the only thing that makes re-tuning 13 legitimate.** The weights
    are unfitted by construction and `tools/calibrate-match.py` can sweep them for
