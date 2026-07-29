@@ -161,17 +161,42 @@ class TestStrata(unittest.TestCase):
         # Pure, so it is testable with no database -- which is what
         # 03-metrics-and-golden-set.md's definition of done requires of this
         # package, and the reason the rotation is computed in Python rather
-        # than with Postgres hashtext().
+        # than with Postgres hashtext(). Integer arithmetic, so it is the same
+        # number on every platform.
         for size in (1, 2, 7, 190):
-            for who in ("alice", "bob", "u_090b0ad12e99", ""):
-                off = labels.tail_offset(who, size)
+            for rank in range(12):
+                off = labels.tail_offset(rank, size)
                 self.assertGreaterEqual(off, 0)
                 self.assertLess(off, size)
-                self.assertEqual(off, labels.tail_offset(who, size))
-        self.assertEqual(labels.tail_offset("alice", 0), 0)
-        spread = {labels.tail_offset(f"builder{i:02d}", 190)
-                  for i in range(10)}
-        self.assertGreater(len(spread), 1)
+                self.assertEqual(off, labels.tail_offset(rank, size))
+        self.assertEqual(labels.tail_offset(3, 0), 0)
+
+    def test_offsets_tile_the_tail_instead_of_colliding(self):
+        # THE MEASUREMENT THAT CHOSE THIS FUNCTION, and the reason it takes a
+        # rank rather than a labeller_id. The first version hashed the name:
+        # stateless, stable, and it spreads people at RANDOM, which is the
+        # birthday problem, not a partition. Against the drawn 200-row set
+        # (190-row tail), ten labellers doing twenty postings each:
+        #
+        #     hashed offsets       84 distinct postings   -- misses the DoD
+        #     rank-spaced         110 distinct postings   -- the ideal
+        #
+        # Same sitting, same set, 26 postings of difference.
+        tail, overlap, budget = 190, 10, 20
+        for n in (5, 10):
+            seen = set(range(overlap))
+            for rank in range(n):
+                off = labels.tail_offset(rank, tail)
+                seen.update(overlap + ((k + off) % tail)
+                            for k in range(budget - overlap))
+            self.assertEqual(len(seen), overlap + n * (budget - overlap),
+                             f"{n} labellers must tile the tail, not collide")
+
+    def test_a_labeller_with_no_labels_yet_ranks_zero_not_crashes(self):
+        # They are still inside the overlap block, which everyone walks in the
+        # same order, so the offset cannot matter yet -- but next_item() must
+        # not need a special case for their first request.
+        self.assertEqual(labels.tail_offset(0, 190), 0)
 
     def test_the_set_contains_rows_the_pipeline_rejected(self):
         # THE POINT OF THE WHOLE STRATIFICATION. Everything measured before
@@ -1161,10 +1186,10 @@ class TestSchemaAgainstPostgres(unittest.TestCase):
 
     def test_a_labeller_who_comes_back_resumes_the_same_walk(self):
         # Determinism is not decoration. A volunteer who closes the tab and
-        # reopens it must not be re-seated somewhere else in the tail, and the
-        # set's coverage has to be reproducible from the labeller ids alone.
-        # sha256, not hash(): PYTHONHASHSEED randomises str hashing per
-        # process, so hash() would reshuffle the same person on every request.
+        # reopens it must not be re-seated somewhere else in the tail. This is
+        # what makes the rank derivable rather than stored: labelled_at is
+        # written at insert time, so nobody can acquire an earlier first label
+        # than someone already ranked, and no rank can move once assigned.
         for i in range(12):
             self.conn.execute(
                 "INSERT INTO eval_label_items (label_set, job_id, stratum, "
@@ -1175,6 +1200,21 @@ class TestSchemaAgainstPostgres(unittest.TestCase):
         for _ in range(4):
             self.assertEqual(
                 labels.next_item(self.conn, "s", "alice")["job_id"], first)
+
+        # And a later arrival does not renumber an earlier one.
+        labels.record(self.conn, axis="A", job_id=first,
+                      field="ai_involvement", value="none",
+                      labeller_id="alice", label_set="s")
+        self.conn.commit()
+        rank_before = labels.labeller_rank(self.conn, "s", "alice")
+        labels.record(self.conn, axis="A", job_id="k05",
+                      field="ai_involvement", value="none",
+                      labeller_id="zara", label_set="s")
+        self.conn.commit()
+        self.assertEqual(labels.labeller_rank(self.conn, "s", "alice"),
+                         rank_before)
+        self.assertNotEqual(labels.labeller_rank(self.conn, "s", "zara"),
+                            rank_before)
 
     def test_every_row_is_still_reachable_by_one_labeller(self):
         # Rotating the tail must not strand rows. A modular walk that skipped

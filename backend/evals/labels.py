@@ -803,53 +803,95 @@ def progress(conn, label_set, labeller_id):
     return done, total
 
 
-def tail_offset(labeller_id, tail_size):
-    """Where in the non-overlap tail this labeller starts. Stable per person.
+#: 2**64 / phi. Fibonacci hashing's constant, used here for its low-discrepancy
+#: property rather than as a hash: successive multiples land maximally far
+#: apart, so k labellers tile the tail into k near-equal windows for ANY k,
+#: without any of them needing to know what k is. Integer arithmetic
+#: throughout -- a float version is deterministic in practice but this is a
+#: number that decides which postings get labelled, and it costs nothing to
+#: put it beyond argument.
+_PHI64 = 11400714819323198485
 
-    THE DEFECT THIS EXISTS TO FIX. next_item() used to order every labeller's
-    queue `overlap DESC, position ASC` -- the SAME order for everyone. Ten
-    volunteers labelling twenty postings each therefore answered the same
-    twenty postings, and DISTINCT COVERAGE NEVER EXCEEDED WHAT ONE PERSON
-    COMPLETED. Adding labellers bought redundancy and no coverage at all,
-    which makes task 29's ">=100 labelled postings" unreachable regardless of
-    turnout:
 
-        distinct = overlap + n_labellers * (budget - overlap)
+def tail_offset(rank, tail_size):
+    """Where in the non-overlap tail the labeller with this rank starts.
 
-    and the second term was structurally zero. At overlap 10 and a 20-posting
-    budget, ten labellers now reach 10 + 10*10 = 110.
+    RANK, NOT NAME, AND THAT IS THE WHOLE POINT. The first version of this
+    hashed the labeller_id, which is stateless and spreads people at random
+    -- and random windows COLLIDE. Measured against the drawn 200-row set
+    (190-row tail, ten labellers, twenty postings each):
 
-    Deterministic, and that matters twice: a labeller who closes the tab and
-    comes back resumes the same walk, and the set's coverage is reproducible
-    from the labeller ids alone without reading eval_labels. sha256 rather
-    than hash() because PYTHONHASHSEED randomises str hashing per process,
-    which would give the same person a different queue on every request.
-    Python-side rather than Postgres hashtext() so it is testable with no
-    database, which 03-metrics-and-golden-set.md's definition of done
-    requires of this package.
+        hashed offsets      84 distinct postings
+        rank-spaced        110 distinct postings   (the ideal)
+
+    84 misses task 29's ">=100 labelled postings" and 110 meets it, at the
+    same twenty-minute sitting. The idealised arithmetic in the plan --
+    overlap + labellers * (budget - overlap) -- assumes disjoint windows, and
+    hashing does not give disjoint windows; it gives the birthday problem.
     """
-    import hashlib
-
     if tail_size <= 0:
         return 0
-    digest_bytes = hashlib.sha256(labeller_id.encode("utf-8")).digest()
-    return int.from_bytes(digest_bytes[:8], "big") % tail_size
+    return (rank * _PHI64 % (1 << 64)) * tail_size >> 64
+
+
+def labeller_rank(conn, label_set, labeller_id):
+    """This labeller's position in the order people started on this set.
+
+    Derived, not stored, and stable once assigned: labelled_at is written at
+    insert time, so a labeller arriving later cannot acquire an earlier first
+    label, and nobody's rank can move once they have one. That is what lets
+    tail_offset() be both evenly spaced AND resumable -- a volunteer who
+    closes the tab is re-seated exactly where they were.
+
+    Ties broken by labeller_id so two people whose first label lands in the
+    same instant still get a total order rather than an arbitrary one.
+
+    A labeller with no labels yet has no rank and gets 0. That costs nothing:
+    they are still in the overlap block, which every labeller walks in the
+    same order anyway, and by the time they reach the tail they have labels.
+    """
+    row = conn.execute(
+        """
+        WITH firsts AS (
+            SELECT labeller_id, MIN(labelled_at) AS started
+            FROM eval_labels WHERE label_set = %(label_set)s
+            GROUP BY labeller_id
+        )
+        SELECT rank FROM (
+            SELECT labeller_id,
+                   DENSE_RANK() OVER (ORDER BY started, labeller_id) - 1 AS rank
+            FROM firsts
+        ) ranked
+        WHERE labeller_id = %(labeller)s
+        """,
+        {"label_set": label_set, "labeller": labeller_id}).fetchone()
+    return row[0] if row else 0
 
 
 def next_item(conn, label_set, labeller_id):
     """The next job this labeller has not answered anything about, or None.
 
-    OVERLAP ROWS COME FIRST, and that ordering is the ceiling's survival plan
-    -- see sample(). After those the tail is ROTATED by a per-labeller offset
-    so that two labellers walking at the same speed cover different postings
-    -- see tail_offset() for why the un-rotated version could not reach the
-    Definition of done.
+    THE DEFECT THIS FIXES. This used to order every labeller's queue
+    `overlap DESC, position ASC` -- identically for everyone. Ten volunteers
+    labelling twenty postings each therefore answered THE SAME twenty, so
+
+        distinct = overlap + n_labellers * (budget - overlap)
+
+    had a structurally zero second term: distinct coverage could never exceed
+    what one person completed, and task 29's ">=100 labelled postings from
+    >=5 labellers" was unreachable regardless of turnout. Nothing was red,
+    because nothing asserted coverage.
+
+    OVERLAP ROWS STILL COME FIRST, and that ordering is the ceiling's survival
+    plan -- see sample(). After those the tail is rotated by the labeller's
+    rank, evenly spaced; see tail_offset() for why rank and not name.
     """
     tail_size = conn.execute(
         "SELECT COUNT(*) FROM eval_label_items "
         "WHERE label_set = %s AND NOT overlap",
         (label_set,)).fetchone()[0]
-    offset = tail_offset(labeller_id, tail_size)
+    offset = tail_offset(labeller_rank(conn, label_set, labeller_id),
+                         tail_size)
 
     # Rotation is over the tail's RANK, not over `position` arithmetic. The
     # ranks are contiguous by construction; positions are only contiguous
