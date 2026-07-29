@@ -313,6 +313,62 @@ class TestRejectedPhraseFamiliesStayRejected(unittest.TestCase):
         self.assertTrue(matches_group(entry, "No prior experience needed; training provided."))
 
 
+class TestTitleExcludeKeepsTheCohortsOwnRoles(unittest.TestCase):
+    """title_exclude gates BOTH paths (relevance.py:232-234, pinned by
+    test_relevance.py:203-211), so a title term vetoes a posting whose
+    description passes both required groups. Six of these terms were inherited
+    from the AUTHOR's software-engineer profile, where excluding them was
+    right, and several were exclusions on the COHORT's target population.
+
+    These assertions are about the DECISIONS, not the counts -- a count moves
+    every night. They exist because the reasoning is worth more than the list
+    and lived nowhere executable."""
+
+    def setUp(self):
+        self.excludes = gate()["title_exclude"]
+
+    def test_customer_success_is_narrowed_to_manager_and_above(self):
+        """The bare term blocked 12 rows: 6 Associate/Specialist the cohort
+        wants, 5 Manager/CSM it does not, 1 Applied AI Specialist. Removing it
+        outright would have imported the 5 -- the seniority block deliberately
+        does not catch \\ymanager\\y. Narrowing admits exactly the 7 and blocks
+        exactly the 5. It is also the only thing that recovers mock_045."""
+        self.assertNotIn("\\ycustomer success\\y", self.excludes)
+        for term in ("\\ycustomer success manager\\y",
+                     "\\ymanager, customer success\\y",
+                     "\\yhead of customer success\\y",
+                     "\\ydirector of customer success\\y"):
+            self.assertIn(term, self.excludes)
+
+    def test_a_customer_success_associate_is_no_longer_vetoed(self):
+        exclude = [as_python(p) for p in self.excludes]
+        def blocked(title):
+            return any(re.search(p, title, re.I) for p in exclude)
+        self.assertFalse(blocked("Customer Success Associate"))
+        self.assertFalse(blocked("Customer Success Specialist | Housing"))
+        self.assertFalse(blocked("Applied AI Specialist, Commercial Customer Success"))
+        self.assertTrue(blocked("Customer Success Manager"))
+        self.assertTrue(blocked("Manager, Customer Success"))
+        self.assertTrue(blocked("Director of Customer Success"))
+
+    def test_executive_assistant_is_kept(self):
+        """Decided on a census, not a sample: all 12 open EA postings at the
+        blocked employers were read and every one asks for 3+ to 10+ years of
+        executive support. The persona's honest_gaps says prior seniority does
+        not transfer. If this is ever revisited, revisit it with descriptions
+        -- see _title_exclude_note for the figures."""
+        self.assertIn("\\yexecutive assistant\\y", self.excludes)
+
+    def test_the_seniority_block_survives_the_widened_description_group(self):
+        """Load-bearing, and MORE so after the split: it is the only thing
+        between the description path and every senior requisition at an AI
+        employer. \\ywe train\\y matching OpenAI's "we train models" is what
+        that failure looks like when the block is missing."""
+        for term in ("\\ysenior\\y", "\\ysr\\.?\\y", "\\ystaff\\y",
+                     "\\yprincipal\\y", "\\ydirector\\y", "\\yhead of\\y"):
+            self.assertIn(term, self.excludes)
+
+
 class TestTheHarnessMeasuresTheGateThePipelineRuns(unittest.TestCase):
     """tools/mock-acceptance.py used to importlib the gate out of
     migrations/migrate_pursuit_profile.py. When the gate moved to a config file
