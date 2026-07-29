@@ -644,9 +644,47 @@ def sample(rows, n, *, seed=0, quota=None, overlap=0):
     # Pinned by sorted job_id, per CLAUDE.md, so the set has one canonical
     # order and two sessions cannot disagree about what it contains.
     picked.sort(key=lambda r: r["job_id"])
+
+    # THE OVERLAP BLOCK IS STRATIFIED, NOT THE FIRST n BY job_id. It carries
+    # the ENTIRE inter-annotator ceiling -- it is the only part of the set
+    # more than one person sees -- so its composition decides what that
+    # ceiling is a ceiling ON. Taking the head of a job_id sort is a draw
+    # with no stratification guarantee, and the first draw of pursuit-v1
+    # returned 6 gate_rejected / 3 surfaced / 1 below_floor against a set
+    # that is 25/50/25 (~2% likely). Six of ten rows would then have been
+    # postings the pipeline threw away -- "Senior Mechanical Engineer",
+    # "Branch Operations Coordinator" -- on which every labeller answers
+    # Axis B "no" and agreement is near-unanimous for free. THAT INFLATES
+    # THE CEILING BY MEASURING IT ON THE EASY CASES, which is the same
+    # failure mode as evaluating on the population the pipeline already
+    # chose, one level in.
+    #
+    # Proportional allocation by largest remainder, so the block mirrors the
+    # set it is drawn from and the arithmetic is exact rather than rounded
+    # into a short block.
+    by_stratum = {}
+    for row in picked:
+        by_stratum.setdefault(row["stratum"], []).append(row)
+
+    overlap = min(overlap, len(picked))
+    exact = {s: overlap * len(rs) / len(picked) for s, rs in by_stratum.items()}
+    want = {s: int(v) for s, v in exact.items()}
+    for s in sorted(by_stratum, key=lambda s: (-(exact[s] - want[s]), s)):
+        if sum(want.values()) >= overlap:
+            break
+        want[s] += 1
+
+    shared = set()
+    for stratum, rows_in in by_stratum.items():
+        shared.update(r["job_id"] for r in rows_in[:want[stratum]])
+
+    # Shared rows first, then the rest, each half still in job_id order so
+    # the set stays canonically ordered and next_item()'s tail rotation has
+    # a contiguous block to rotate.
+    picked.sort(key=lambda r: (r["job_id"] not in shared, r["job_id"]))
     for i, row in enumerate(picked):
         row["position"] = i
-        row["overlap"] = i < overlap
+        row["overlap"] = row["job_id"] in shared
     return picked
 
 

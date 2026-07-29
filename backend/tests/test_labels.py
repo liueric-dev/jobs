@@ -255,6 +255,37 @@ class TestStrata(unittest.TestCase):
         flags = [r["overlap"] for r in picked]
         self.assertEqual(flags[:6], [True] * 6)
         self.assertNotIn(True, flags[6:])
+        # Still canonically ordered within each half.
+        for half in (picked[:6], picked[6:]):
+            self.assertEqual([r["job_id"] for r in half],
+                             sorted(r["job_id"] for r in half))
+
+    def test_the_overlap_block_mirrors_the_set_it_is_drawn_from(self):
+        # THE OVERLAP BLOCK IS THE WHOLE INTER-ANNOTATOR CEILING -- it is the
+        # only part of the set more than one person sees. Taking the head of a
+        # job_id sort has no stratification guarantee, and the first draw of
+        # pursuit-v1 returned 6 gate_rejected / 3 surfaced / 1 below_floor
+        # against a 25/50/25 set. Six of ten rows would have been postings the
+        # pipeline threw away, on which every labeller answers Axis B "no" and
+        # agreement is near-unanimous for free: a ceiling measured on the easy
+        # cases, which is the failure this whole stratification exists to
+        # avoid, one level in.
+        pool = [r for r in _pool_rows() if r["stratum"]]
+        picked = labels.sample(pool, 24, seed=3, overlap=8)
+        shared = [r for r in picked if r["overlap"]]
+        self.assertEqual(len(shared), 8)
+        for stratum in labels.STRATA:
+            in_set = sum(1 for r in picked if r["stratum"] == stratum)
+            in_block = sum(1 for r in shared if r["stratum"] == stratum)
+            expected = 8 * in_set / len(picked)
+            self.assertLessEqual(
+                abs(in_block - expected), 1,
+                f"{stratum}: block has {in_block}, set implies {expected:.1f}")
+
+    def test_an_overlap_larger_than_the_set_is_clamped(self):
+        pool = [r for r in _pool_rows() if r["stratum"]]
+        picked = labels.sample(pool, 6, seed=1, overlap=99)
+        self.assertEqual(sum(1 for r in picked if r["overlap"]), len(picked))
 
     def test_the_gate_the_pool_classifies_against_is_the_profiles_own(self):
         # THE DEFECT. pool()/pool_query() defaulted to relevance.load(), the
