@@ -1,21 +1,26 @@
 # Handoff — the `docs/tasks/refactor/` run
 
-Written 2026-07-28, and rolling — last updated after the **mock acceptance run and the
-`strip_html` fix**, which were recommended next step 3 and a new measurement. Before
-that: **`job_scores`' version keys** (`d18ea54`), and **13, 35 and D45** (`fa2d7a7`,
+Written 2026-07-28, and rolling — last updated after a **planning-only session that
+measured the gate fix (step 0) against the live corpus and wrote no code**. Its finding
+inverts step 0's own vocabulary recommendation; read § *the gate fix is planned and
+measured* before touching anything. Before that: the **mock acceptance run and the
+`strip_html` fix**, which were recommended next step 3 and a new measurement; **`job_scores`'
+version keys** (`d18ea54`); and **13, 35 and D45** (`fa2d7a7`,
 `303f7b9`, `e11fabf`). Read this first, then
 [`DECISIONS.md`](DECISIONS.md) (why each choice was made) and
 [`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
 [`README.md`](README.md)'s status column is the ordered index.
 
-## Orientation — there are three "READ THIS FIRST" sections, in this order
+## Orientation — there are four "READ THIS FIRST" sections, in this order
 
-That is two too many, and the file has earned each one. If you read nothing else:
+That is three too many, and the file has earned each one. If you read nothing else:
 
-1. **Do the gate fix** (§ *the gate throws away half the cohort*). Unblocked, small,
-   free to re-measure, and the largest measured loss in the pipeline. It is step **0**
-   under "Recommended next steps" and it goes before task 29, because every posting the
-   gate rejects is one the labelling session will never be shown.
+1. **Do the gate fix — it is now planned, measured and ready to implement** (§ *the gate
+   throws away half the cohort*, then § *the gate fix is planned and measured*). Unblocked,
+   small, free to re-measure, and the largest measured loss in the pipeline. It is step
+   **0** under "Recommended next steps" and it goes before task 29, because every posting
+   the gate rejects is one the labelling session will never be shown. **Do not re-derive
+   the vocabulary from the mock corpus — that is the trap the measurement caught.**
 2. **Do not re-tune task 13's weights** (§ *the ranking is a product now*). Its DoD is
    unmet on purpose. Nothing measured since — including the mock corpus's 5-of-5 on
    branding traps — licenses changing them. Only task 29 does.
@@ -105,6 +110,82 @@ deliverable: fixtures written from a specification test the specification. The c
 was built to contain the failure modes being looked for. It does not reduce task 29 by
 one posting and nothing from it reached `eval_labels`.
 
+## READ THIS FIRST: the gate fix is planned and measured, and the mock corpus lied about it
+
+**Session of 2026-07-29, planning only. No code was written, nothing was committed, the
+database was read but never written.** The deliverable is a plan and seven numbers. The
+plan is at `~/.claude/plans/read-the-handoff-document-squishy-flurry.md`, outside the repo
+and not durable. **Step 0 below is the source of truth and carries everything load-bearing**
+— it was rewritten from that plan rather than pointing at it, deliberately, so nothing here
+depends on a file the repo does not hold.
+
+**The finding: candidate fixes ranked on the mock corpus rank the opposite way on the live
+corpus.** Step 0 named three phrase families to recover the 15 lost postings. Each was
+compiled through `relevance.tier_sql` against the live table (13,447 open rows, read-only):
+
+| family | mock recall recovered | live rows admitted | verdict |
+|---|---|---:|---|
+| `no <X> experience/background/license required/needed/necessary` | 11 of 15 | **+4** | ship |
+| `does not require … experience/background` | 1 (mock_012) | +0 | ship, dead-but-kept |
+| `training (is) provided` | 0 new | +0 | ship |
+| `we provide/offer … training` | 1 (mock_017) | **+17** | **reject** |
+| `we (will) train` | 0 new | **+5** | **reject** |
+| `preferred but not required` | 1 (mock_016) | **+5** | **reject** |
+| `experience … preferred / is a plus` | 1 (mock_018) | **+123** | **reject** |
+
+What the rejected four admit live: `Software Engineer, RL Training Infra | OpenAI`,
+`Full-Stack Software Engineer, Reinforcement Learning | Anthropic`, `Product Manager,
+Gen AI | Scale AI`. **`\ywe train\y` matched OpenAI's "we train models"** — a false friend
+that cannot exist on a synthetic corpus.
+
+**On the mock corpus all four measured as FREE — zero added false positives.** They look
+free there because every intended-bad mock posting carrying that phrasing has no AI
+vocabulary at all, which is a property of a corpus written to a specification and not of
+the world. This is `CLAUDE.md`'s *"fixtures written from a specification test the
+specification"* firing on the deliverable that introduced the rule. **The four rejected
+families are the single most likely thing for a future session to re-add**, because the
+harness will say they cost nothing. A sentinel test is specified in step 0 for exactly
+that reason.
+
+**Measured end state of the planned fix:**
+
+| metric | before | after |
+|---|---|---|
+| mock gate recall | 14/29 = 48.3% | **26/29 = 89.7% [73.6–96.4]** |
+| mock gate precision | 14/24 = 58.3% | **26/36 = 72.2%** |
+| mock false positives | 10 ids | **the same 10 ids, unchanged** |
+| live tier ≤2, open | 869 (t1 450 / t2 419) | **880 (t1 456 / t2 424)** |
+| `extract.remaining` | 2 | **13** |
+
+**Recall stops at 89.7%, not 100%, on purpose.** mock_016, mock_017 and mock_018 are
+reachable only through the rejected families, at +145 live junk rows. That trade is
+refused and the refusal is recorded rather than silently omitted.
+
+**The backlog is 11 extraction calls** — under half of one `EXTRACT_BATCH_SIZE=40` batch
+(`extract.py:113-134`), ~$0.004, drained on the first nightly run. **HANDOFF's own caution
+pointed at the cheap risk.** "Widening the gate widens the extraction queue — check the
+volume against `extract.py`'s drain" is answered and was never the constraint. The
+expensive risk is precision, and it is concentrated in precisely the families the mock
+corpus scores as free.
+
+**The 11-row delta was hand-checked as a census, not a sample:** ~7 on-target (Customer
+Success Associate/Specialist ×6, Applied AI Specialist), 1 clear false positive
+(`Research Engineer, Interpretability | Anthropic`, which really does say "no research
+experience is required"), 3 ambiguous. **~64% strict, against the incumbent gate's 10.0%
+strict / 23.3% generous** (`migrate_pursuit_profile.py:166-167`). The rows being added are
+better than the rows already in — that comparison is the argument for shipping and belongs
+in the commit message.
+
+**Six things step 0 said that the code does not support**, recorded under *Findings later
+tasks must not inherit* below. The two that will bite hardest: **`tools/mock-acceptance.py`
+is a consumer of the thing being edited, not a neutral instrument** — it `importlib`s the
+gate out of `migrate_pursuit_profile.py` (`:314-331`), so if the source of truth moves to
+JSON without repointing that function, the harness keeps measuring the old gate and
+reports "no change", which reads as *the fix did nothing*. And **`title_exclude` gating
+both paths is deliberate and pinned by test** (`relevance.py:227-231`,
+`test_relevance.py:203-211`), not a silent override — the fix is to edit the *list*, never
+`tier_sql`.
+
 ## The measurement that should shape what comes next
 
 **The cohort's addressable set is 55 postings.** Over the 859 at `facts_version = 3`:
@@ -182,9 +263,10 @@ Thirteen tasks committed, one experiment, plus the two conversational decisions:
 | 35 | extraction input-sanity gate — **8 poisoned rows, not 3** | `303f7b9` |
 | 13 | cohort criteria profile — **DoD 122-123 unmet, not tuned** | `fa2d7a7` |
 | — | **`job_scores` version keys — inert by default, 0 rows re-scored** | `d18ea54` |
-| — | **mock acceptance run — gate recall 48.3%, the finding** | this session |
-| — | **`lib/text.strip_html()` fixed — 6 corrupted rows restored** | this session |
-| — | task-07 gaps: per-platform breakout, `fit_score` blindness pinned | this session |
+| — | **mock acceptance run — gate recall 48.3%, the finding** | `8306e7b` |
+| — | **`lib/text.strip_html()` fixed — 6 corrupted rows restored** | `8306e7b` |
+| — | task-07 gaps: per-platform breakout, `fit_score` blindness pinned | `8306e7b` |
+| — | **step 0 planned and measured against the live corpus** | **NO COMMIT — plan only** |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -283,7 +365,14 @@ recorded at `schema.py:158`.
 
 ## Nothing is in flight
 
-**The tree is clean.** Every agent across all six sessions completed, was verified
+**The 2026-07-29 planning session wrote no code and made no commit.** Four agents ran —
+three read-only exploration, one design pass that compiled candidate gates through
+`relevance.tier_sql` against the live table. **Every database access was a `SELECT`**; no
+scratch schema was created, no row was written, `profiles` was read and not modified. The
+only files changed are this one and the plan outside the repo. Its output is step 0 above;
+implementation has not started.
+
+**The tree is clean.** Every agent across all six prior sessions completed, was verified
 against the code and the database, and was committed — six in the session that landed
 03–18, three in the session that landed 11, three in the session that landed 08/12/19,
 three in the session that landed 13/35/D45, two in the session that landed the
@@ -326,6 +415,22 @@ is committed and its Definition of done is *not* met. See the top of this file. 
 completed task here is not a validated one.
 
 ### The next session's likely first question, answered
+
+**"Step 0 says it is planned and measured. Can I just implement it, or do I need to
+re-derive anything?"** Implement it. The vocabulary, the `title_exclude` decision, the
+commit sequence and every gate figure in step 0 came from compiling candidate configs
+through `relevance.tier_sql` against the live table on 2026-07-29. **Re-confirm the
+baselines first** — the nightly has run since, so the absolute counts (450/419/12,578,
+`extract.remaining` = 2) will have moved even though the deltas should not. The two things
+still genuinely open are the `\yexecutive assistant\y` call, which wants 9 descriptions
+read, and the `\yfacilities\y` single row.
+
+**"The mock harness says the four rejected phrase families cost nothing. Why not add
+them?"** Because the mock corpus cannot see their cost. They admit +17/+5/+5/+123 live
+rows of senior engineering requisitions at AI employers. This is the single most likely
+thing for a fresh session to "fix", which is why step 0 specifies a sentinel test that
+asserts their absence and carries the counts in its docstring. See § *the gate fix is
+planned and measured*.
 
 **"The mock corpus measured gate recall at 48.3%. Does that mean task 29 is done, or
 partly done?"** Neither. It measured task 29's *fourth stratum* on **constructed**
@@ -564,6 +669,56 @@ Each of these is a documented claim that is **wrong about the code as it now sta
   description path, so a posting whose description passes both required groups is still
   rejected on a title term. Anyone reading `docs/pursuit-description-gate.md` as "the
   gate now reads descriptions" will be wrong about 1 of every 15 good postings.
+  **AMENDED 2026-07-29: "silently" was wrong.** It is documented as deliberate at
+  `relevance.py:227-231` and pinned by `test_relevance.py:203-211`. The behaviour is real
+  and the consequence is real; the framing is not. **The fix is to edit the LIST.**
+  Changing `tier_sql` so `title_exclude` gates only the title path would break the pinned
+  test and re-admit the 1,906 rows `config/relevance.json:121` counts. And the exclusions
+  are load-bearing on the description path specifically: the seniority block is the only
+  thing standing between it and every senior requisition at an AI employer.
+- **The mock-acceptance harness is a CONSUMER of the gate, not a neutral instrument.**
+  `tools/mock-acceptance.py:314-331` `importlib`s the gate out of
+  `migrate_pursuit_profile.py` — not from the database, and it never reads the `pursuit`
+  row at all (it installs its own copy into the scratch schema, `:272-311`). **A green mock
+  run does not mean production changed**, and moving the gate to a config file without
+  repointing that function leaves the harness measuring the old object while reporting "no
+  change". HANDOFF presented `--dry-run` as free re-measurement; it is free, and it is
+  measuring whatever the migration module holds.
+- **Candidate gate terms ranked on the mock corpus rank the OPPOSITE way on the live
+  corpus, and the mock corpus scores the bad ones as free.** Measured 2026-07-29:
+  `we provide … training` +17 live rows, `we (will) train` +5, `preferred but not required`
+  +5, `experience … is a plus` +123 — all four admitting senior engineering requisitions at
+  AI employers, and `\ywe train\y` matching OpenAI's *"we train models"*. On the mock corpus
+  all four add **zero** false positives, because every intended-bad mock posting carrying
+  that phrasing has no AI vocabulary at all. **That is a property of a corpus written to a
+  specification.** Any vocabulary decision taken on `mock-acceptance.py` alone is untrusted;
+  compile the candidate through `relevance.tier_sql` against the live table before shipping
+  it. See step 0.
+- **Step 0's cost caution pointed at the wrong risk.** "Widening the gate widens the
+  extraction queue — check the volume against `extract.py`'s drain" is answered and was
+  never the constraint: the planned fix is **+11 rows**, `extract.remaining` 2 → 13, under
+  half of one `EXTRACT_BATCH_SIZE=40` batch. Extraction has ~15x headroom
+  (`EXTRACT_DEADLINE_SECS=3600` × 3 workers ≈ 1,260 calls/hour against 43–80/day intake),
+  and `drain_loop` (`extract.py:1125-1159`) lifted the old 40/day ceiling. **A widened gate
+  is priced by the one-time backlog it creates, not by steady state**, and the real cost is
+  precision.
+- **Fixing the gate does not meaningfully change what task 29's labellers see.** +11
+  postings on an 869-row pool is **+1.3%**. Doing it first is still right — the defect is
+  real, the fix is cheap, and a labelling session run through a knowingly-broken gate is
+  wasted — but step 0's ordering rationale implies a recovery it does not deliver, and it
+  moves the GATE 2 "≥200/day" question not at all.
+- **48.3% is a recall figure against a corpus built to contain the failure mode it
+  measures.** The best new term matches **19 rows anywhere** in 13,447 open live postings.
+  The fix is still correct, but "recall was 48.3% and is now 89.7%" is a statement about
+  the mock corpus and must be written that way wherever it is quoted.
+- **`migrate_profiles.py` does NOT leave criteria and persona untouched.** It overwrites
+  both wholesale from the files on every run (`:124-128`, `:256-261`), and `--persona-file`
+  defaults to `config/persona.json`, **the author's tech persona** (`profiles.py:221-224`).
+  Only `relevance_json`, `daily_narrative_budget` and `active` are preserve-on-absent
+  (`resolve_preserved`, `:112-145`). Running it against `pursuit` without both file flags
+  writes the wrong persona. It is safe for step 0's commit 4 only because both files were
+  confirmed dict-equal to the stored values first — **that is a pre-flight check, not a
+  property of the script.**
 - **`ENTRY_LEVEL` is a title vocabulary and the pursuit gate applies it to descriptions.**
   Measured: it fails on 14 of 15 rejected good postings. The gate is conjunctive
   (`migrate_pursuit_profile.py:216,229`), so this single group is what makes recall 48%.
@@ -768,32 +923,171 @@ quality beats volume. That is a call for the repo owner, not for an implementer.
 cannot be done by an agent.** But the order below changed: **the gate fix now goes
 first**, because it is unblocked, cheap, and the largest measured loss in the pipeline —
 and because every posting the gate rejects is one task 29's labellers will never be
-shown. Fixing it before the labelling session changes what the session can measure.
+shown. **Measured since, and the rationale needs qualifying:** the fix adds 11 postings to
+an 869-row pool, **+1.3%**, so it does not meaningfully change what the labellers see. It
+still goes first — the defect is real, the fix is cheap, and a labelling session run
+through a knowingly-broken gate is wasted — but do not expect it to move GATE 2.
 
-0. **Fix the relevance gate. NEW, AND IT GOES BEFORE 29.** Measured 48.3% recall —
-   15 of 29 intended-good postings never enter (see the section at the top of this file,
-   and `docs/mock-acceptance.md`). Two independent changes, both small:
+0. **Fix the relevance gate. PLANNED AND MEASURED 2026-07-29 — IMPLEMENT IT.** Measured
+   48.3% recall on the mock corpus, 15 of 29 intended-good postings rejected (see the two
+   sections at the top of this file, and `docs/mock-acceptance.md`). The plan below is
+   measured end to end against the **live** corpus; the numbers are in § *the gate fix is
+   planned and measured*. **Nothing here is a guess except where it says so.**
 
-   - **A description-phrased entry-level vocabulary.** The current `ENTRY_LEVEL` group
-     is title nouns (`associate`, `coordinator`, `assistant`, …) and the pursuit gate is
-     conjunctive, so on a description the AI half matches and the entry half does not
-     (`migrate_pursuit_profile.py:216,229`). Phrase it the way postings actually do:
-     `mock_022`'s *"No retail or e-commerce experience required; training provided"*
-     currently matches neither `\yno experience\y` nor `\ywill train\y`.
-   - **Review `title_exclude` against the cohort's target roles.** It applies to **both**
-     paths (`relevance.py:232-234`), so it silently overrides the description-first gate
-     task 10 built. `pursuit` still carries `customer success`, `executive assistant`,
-     `office manager`, `facilities`, `warehouse`, `driver` from the software-engineer
-     profile — several are exclusions on the target population itself.
+   **The whole change is config.** No change to `relevance.py`, no change to `tier_sql`,
+   no change to `config/relevance.json`.
 
-   **Re-measuring is free.** `python3 tools/mock-acceptance.py --dry-run` produces the
-   gate figure with **zero LLM calls**, in a scratch schema. Run it before and after.
+   **(a) Split the entry-level vocabulary; do not widen it.** `ENTRY_LEVEL`
+   (`migrate_pursuit_profile.py:133-145`) becomes `ENTRY_LEVEL_TITLE` — the same 11 nouns,
+   byte-identical — and `ENTRY_LEVEL_DESCRIPTION`, **a strict superset**: those same 11
+   nouns plus three phrases. `title_include` keeps the title group, so the title path can
+   only be unchanged and the description path can only gain rows. Superset by
+   construction, the same argument the `strip_html` fix used.
 
-   **Two cautions.** `relevance.json`'s `_max_tier_note` and the entry under "Findings
-   later tasks must not inherit" both apply: `max_tier_to_score = 3` is an unconditional
-   pass, not a wider gate, and is not the fix. And widening the gate widens the
-   extraction queue — check the volume against `extract.py`'s drain before shipping it,
-   because the whole cost model of this pipeline is the size of that queue.
+   **This is not a stylistic preference and the alternative is catastrophic.** Measured:
+   the description group with the phrases *instead of* the nouns takes the live gate from
+   **869 rows to 39**, because the conjunction needs both signals in one field and
+   descriptions restate their own title 81% of the time (`_title_include_note`). One
+   shared widened list gives 873 against the split's 873 — identical, because titles do
+   not contain sentences — so it buys nothing and gives up a provable invariant.
+
+   The three terms, Postgres dialect, all three already executed against live Postgres so
+   `ARE` validity and `\y` behaviour are confirmed (2.1–3.1s vs 1.8s baseline over 13,447
+   rows). Raw live match counts, for the `_comment`: **19 / 0 / 11**.
+
+   ```
+   \yno\y[^.;:]{0,40}\y(?:experience|background|license)\y[^.;:]{0,25}\y(?:required|needed|necessary)\y
+   \ydoes not require\y[^.;:]{0,40}\y(?:experience|background)\y
+   \ytraining (?:is |will be )?provided\y
+   ```
+
+   - **`degree` is deliberately absent** from the first noun set. *"No engineering degree
+     required"* pulled in a Scale AI consultant role and recovers nothing; the persona
+     treats no-degree as a **constraint**, not a seniority signal.
+   - **The window is `{0,40}`.** `{0,30}` loses mock_025's *"No insurance license or prior
+     claims experience required"*. `[^.;:]` stops it crossing a sentence or a bullet colon.
+   - **The alternations are wrapped in `(?:…)`** because `relevance._alternation`
+     (`:112-120`) joins terms with a bare `|` and `--dead` tests each term standalone — a
+     term with a top-level `|` is two terms wearing a trenchcoat.
+   - **Term 2 matches 0 live rows and is kept on purpose.** Same standing as `\yattorney\y`
+     under `config/relevance.json`'s `_dead_patterns_note`: verified against mock_012, a
+     working pattern waiting for its first live posting. `--dead` will report it. Do not
+     delete it on that report alone; do check it is still `\y` and not `\b`.
+
+   **(b) `title_exclude`: narrow one term, decide one, leave three, record the zeros.**
+   Rows each of the six inherited terms alone is blocking, live, under the widened
+   description group:
+
+   | term | rows blocked | what they are |
+   |---|---:|---|
+   | `\ycustomer success\y` | **12** | 6× CS Associate/Specialist (Datadog, AlphaSense, EliseAI), 5× Manager/CSM, 1× Applied AI Specialist |
+   | `\yexecutive assistant\y` | **9** | EA at Databricks, Scale AI, Braze ×2, Figma ×3, Ramp |
+   | `\yfacilities\y` | 1 | `Critical Facilities Technical Instructor \| Per Scholas` |
+   | `\yoffice manager\y` / `\ywarehouse\y` / `\ydriver\y` | **0** | — |
+
+   - **`\ycustomer success\y` — narrow, do NOT remove.** Removing it imports 5
+     `Manager, Customer Success` rows that the seniority block deliberately does not catch
+     (`\ymanager\y` was rejected at `:299-307`). Replace the one term with four:
+     `\ycustomer success manager\y`, `\ymanager, customer success\y`,
+     `\yhead of customer success\y`, `\ydirector of customer success\y`. Measured: admits
+     exactly the 7 target rows, blocks the 5 manager rows, all four non-dead (120/7/4/1 raw
+     title matches). This is also the only thing that recovers mock_045.
+   - **`\yexecutive assistant\y` — decide it on 9 read descriptions, not on a paragraph.**
+     n=9 is the whole population, so decide it completely rather than sample. The persona's
+     `scoring_instructions` name "administrative" as a target, but `honest_gaps` says prior
+     seniority does not transfer — an EA at Figma wanting 5 years supporting executives is
+     a mismatch even though the function is in scope. **If undecided, ship without it.** A
+     relevance list is cheap to widen later and expensive to have widened wrongly.
+   - **The three zero-row terms — leave them, and record the zeros.** No measurement can
+     decide a term that admits nothing; deciding them is a persona question. Put the counts
+     in `_title_exclude_note` so the next person decides with them rather than re-deriving
+     them — exactly what `:306-307` already does for `\ymanager\y` and `\ylead\y`.
+   - **The seniority block (`:281-286`) is untouched.** `_entry_level_note:211-214` is right
+     that it is what catches "Associate Director"; the widened description group makes it
+     *more* load-bearing, not less, because it is the only thing between the description
+     path and every senior requisition at an AI employer.
+
+   **(c) Move the gate into `config/pursuit-relevance.json`, as a separate no-op commit
+   first.** Today the gate is a Python dict inside a migration script that **refuses to
+   run** (`migrate_pursuit_profile.py:526-543`, because a re-run would clobber task 13's
+   weights), whose own docstring (`:71-78`) tells you to use a different script and a file
+   that **does not exist**. Every sibling is already a file. `migrate_profiles.py
+   --relevance-file` (`:159-163`) has nothing to point at.
+
+   **Repoint `tools/mock-acceptance.py:314-331` in the same commit.** `cohort_relevance()`
+   `importlib`s the gate out of the migration module. **This is the highest-consequence
+   edit in the task:** miss it and the harness measures the old gate and reports "no
+   change", which reads as *the fix did nothing* rather than *the instrument is looking at
+   the wrong object*. Its own docstring at `:286-290` states the invariant.
+
+   **Four commits, and nothing is written to `profiles` until the last.**
+
+   1. **Extract the gate to JSON as a proven no-op.** Byte-faithful dump including every
+      `_comment` (`relevance_json` is deliberately *not* comment-stripped,
+      `migrate_profiles.py:130-135`); repoint the migration and the harness; extend
+      `TestCohortConfigFilesAreImportable` (`test_profiles_migration.py:203-215`).
+      **Gate:** `tier_sql` SQL **and** params byte-identical; mock `--dry-run` still
+      14/15/10/15; suite ≥1030. **Do not touch the vocabulary here** — a combined change
+      makes the mock delta unattributable.
+   2. **The description-group superset + the new tests.** **Gate:** mock 26/29 with
+      `bad_admitted` unchanged at the same 10 ids; live 869→873; `--dead` shows exactly one
+      new dead term; suite green.
+   3. **Narrow `\ycustomer success\y`.** **Gate:** live 873→880; the 7 admitted CS rows are
+      the Associate/Specialist ones; all four new terms non-dead; mock_045 recovered. The
+      `\yexecutive assistant\y` call ships here or not at all.
+   4. **The write.**
+      ```
+      cd backend && (set -a; . ./.env; set +a; python3 migrations/migrate_profiles.py --apply \
+          --profile pursuit \
+          --persona-file config/pursuit-persona.json \
+          --criteria-file config/pursuit-criteria.json \
+          --relevance-file config/pursuit-relevance.json)
+      ```
+      **No `--bump`** — relevance gates extraction, not scoring inputs, so `criteria_version`
+      stays 2, `match.py:381` recomputes nothing and existing `job_matches` are untouched.
+      **`--persona-file` and `--criteria-file` are mandatory, not optional:** `criteria_json`
+      and `persona_json` are overwritten wholesale on every run (`:124-128`, `:256-261`) and
+      `--persona-file` defaults to `config/persona.json`, **the author's tech persona**.
+      Both files were confirmed read-only to be dict-equal to the stored values — that
+      confirmation is a pre-flight step, not a property of the script. **Run it without
+      `--apply` first: absence of the criteria WARNING (`:242-249`) is the proof the write
+      is criteria-neutral.** If it appears, stop. **Never `--force-placeholders`.**
+
+   **Tests: the suite has ZERO coverage of the vocabulary.** Nothing in the 1030 asserts on
+   `AI_VOCAB`, `ENTRY_LEVEL` or the pursuit `title_exclude` — which is exactly why a 48%
+   recall defect sat green. New `backend/tests/test_pursuit_gate.py`, five classes, all but
+   the last DB-free: shape invariants (the two `AI_VOCAB` copies equal, the description
+   group a superset, `params["rel_include2"]` pinned so **the title path is provably
+   byte-identical**); regex dialect (no `\b` anywhere, `make\.com`'s dot escaped); **the
+   defect itself** — verbatim `description_text` from mock_012/019/022/023/025/029/044/045
+   must clear both description groups, which **fails today**; **a sentinel asserting the
+   four rejected phrases stay absent**, carrying the live +17/+5/+5/+123 counts in its
+   docstring; and one `@skipUnless(scratchdb.available())` class putting ~8 synthetic rows
+   through the real `tier_sql`, the only test that exercises the actual Postgres dialect.
+   `test_relevance.py` needs **no** changes — its golden is over `config/relevance.json`,
+   which this task does not touch.
+
+   **Baseline before you start, read-only, outside the 04:00–05:00 cron window** — the
+   nightly fires ~04:08 and is the other agent in the room. `SELECT count(*),
+   max(first_seen) FROM jobs GROUP BY status`; `tools/relevance-report.py --profile pursuit`
+   (expect **450 / 419 / 12,578**); the same with `--dead`, to tell new dead terms from
+   incumbents; `extract.remaining(conn, cfgs)` (expect **2** — `extract.py` has no CLI, so
+   this is a five-line throwaway script, and `load_active` returns **only `pursuit`**);
+   `criteria_version`, budget, `active` and an md5 of each of the three JSON columns;
+   `tools/mock-acceptance.py --dry-run` against
+   `backend/data/mock-acceptance-scratch_c1388ee2.json`. **All the live figures above were
+   taken 2026-07-29 and the nightly has run since — re-confirm them before attributing
+   anything.**
+
+   **Stop conditions, any one of which halts the sequence:** `bad_admitted` moves off 10 on
+   the mock corpus; more than one new dead term; live tier ≤2 moves by more than ~30 rows;
+   the criteria WARNING appears on the dry run; the suite drops below 1030; `first_seen`
+   shows the cron ran mid-sequence (re-baseline, do not attribute).
+
+   **One caution that still stands unchanged.** `relevance.json`'s `_max_tier_note` and the
+   entry under "Findings later tasks must not inherit": **`max_tier_to_score = 3` is an
+   unconditional pass, not a wider gate**, and is not the fix. It would disable
+   `title_include`, `title_exclude`, `company_exclude` and `description_exclude` at once.
 
 1. **Task 29 — the labelling session.** 07's tooling is built and produced zero
    labels by design. The form is at `/v1/label` behind the existing Google SSO.
