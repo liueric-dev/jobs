@@ -1,28 +1,38 @@
 # Handoff — the `docs/tasks/refactor/` run
 
-Written 2026-07-28, and rolling — last updated after **step 0, the gate fix, was
-implemented and written to the database**. Gate recall on the mock corpus went 48.3% →
-89.7% and live tier ≤2 went 869 → 880. Before that: the planning session that measured
-it; the **mock acceptance run and the `strip_html` fix**; **`job_scores`' version keys**
-(`d18ea54`); and **13, 35 and D45** (`fa2d7a7`, `303f7b9`, `e11fabf`). Read this first,
-then [`DECISIONS.md`](DECISIONS.md) (why each choice was made) and
-[`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
+Written 2026-07-28, and rolling — last updated after **task 29 was unblocked: four
+defects fixed in the sampler, the label tables created, and the 200-row set drawn, redrawn
+and pinned** (`c65d34b`, `2f64e08`, `90170d1`). Before that: **step 0, the gate fix**, implemented and
+written to the database (mock gate recall 48.3% → 89.7%, live tier ≤2 869 → 880); the
+planning session that measured it; the **mock acceptance run and the `strip_html` fix**;
+**`job_scores`' version keys** (`d18ea54`); and **13, 35 and D45** (`fa2d7a7`, `303f7b9`,
+`e11fabf`). Read this first, then [`DECISIONS.md`](DECISIONS.md) (why each choice was
+made) and [`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
 [`README.md`](README.md)'s status column is the ordered index.
 
-**If you are a fresh session, the whole of your job is task 29 and its first two commands
-are mechanical.** `python3 -m evals label init-schema`, then `evals label sample`. The
-label tables do not exist yet. Nothing else in this plan is both unblocked and cheap.
+~~**If you are a fresh session, the whole of your job is task 29 and its first two commands
+are mechanical.**~~ **That sentence was WRONG and it is the headline of this update.** The
+first command was mechanical; the second would have drawn a set that measured the wrong
+gate, starved its own key stratum, and could not have reached task 29's Definition of done
+at any turnout. See § *task 29's "two mechanical minutes"*. **Task 29 is still the whole of
+a fresh session's job, and what is left of it is now genuinely only people**: Google OAuth
+credentials and ten Builders, both the repo owner's.
 
-## Orientation — there are three "READ THIS FIRST" sections, in this order
+## Orientation — there are four "READ THIS FIRST" sections, in this order
 
-That is two too many, and the file has earned each one. If you read nothing else:
+That is three too many, and the file has earned each one. If you read nothing else:
 
-1. **Task 29 is the whole critical path** (§ *what is blocked*). Step 0 is done, so nothing
-   cheap is left in front of it. **Two corrections to how this file used to describe it:**
-   its first two steps are mechanical and unblocked — `python3 -m evals label init-schema`
-   then `evals label sample`, minutes, no credential, and **the label tables do not exist
-   in the live database yet**. And **the 55 postings in `docs/tasks/refactor/mock/` are
-   not its data** — they are invented, and reduce its scope by zero postings.
+1. **Task 29 is the whole critical path** (§ *what is blocked*), and **its schema, its
+   sampler and its 200-row set are now DONE** (§ *task 29's "two mechanical minutes"*).
+   ~~Its first two steps are mechanical and unblocked — minutes, no credential.~~
+   **SUPERSEDED 2026-07-29, and this file was wrong in the expensive direction:** the
+   second of those two commands carried **four** defects, none of them red, and the set it
+   would have drawn measured the wrong gate. Fixed, drawn, **redrawn once more after the
+   set was already committed**, pinned at
+   `backend/evals/fixtures/labelset-pursuit-v1.jsonl`. **What is left really is only
+   people** — Google OAuth credentials and ten Builders. And **the 55 postings in
+   `docs/tasks/refactor/mock/` are still not its data** — they are invented, and reduce
+   its scope by zero postings.
 2. **Do not re-tune task 13's weights** (§ *the ranking is a product now*). Its DoD is
    unmet on purpose. Nothing measured since — including the mock corpus's 5-of-5 on
    branding traps — licenses changing them. Only task 29 does.
@@ -39,13 +49,262 @@ all four as costing nothing and they admit ~136 live junk rows.
 a validated one. 13 is committed and unmet; the mock acceptance run is a *specification*
 test and does not reduce task 29 by one posting. **The corollary, asked out loud once
 already: `docs/tasks/refactor/mock/` is not task 29's data.** Those 55 postings do not
-exist — `source = 'mock'`, invented to a specification, and forbidden from `eval_labels`
-by `tests/test_labels.py:423`.
+exist — `source = 'mock'`, invented to a specification, and reducing 29's scope by zero.
+~~Forbidden from `eval_labels` by `tests/test_labels.py:423`.~~ **That citation was wrong:
+the containment is `backend/evals/mock_corpus.py:3-6`, pinned by
+`backend/tests/test_mock_corpus.py:939`. The conclusion survives; the reason changed.**
+See § *task 29's "two mechanical minutes"*.
 
 **Verify before you trust — including this file.** It has been measurably wrong about
 its own line numbers, about which three tests a change would break, about its own SQL,
-and — caught while implementing step 0 — about how many copies of `AI_VOCAB` existed and
-about which script owns a flag. Cite `file:line`, then re-read the line.
+about how many copies of `AI_VOCAB` existed, about which script owns a flag, and — this
+update — **about whether `fastapi` is installed, about which test forbids what, and about
+which of its own next steps were mechanical.** Cite `file:line`, then re-read the line: the
+wrong-test claim died the moment someone opened `tests/test_labels.py:423`. **And it kept
+dying differently** — that line resolved to three different pieces of code inside a single
+day's editing, and none of the three had anything to do with mock rows. **A line number
+is a pointer into a file that is still being written**; quote the line's *text* when the
+claim depends on it. The `fastapi` claim needed a different instrument again —
+**ask which interpreter the observation was made with**, because "it fails to import" is a
+fact about an environment, not about a repo.
+
+## READ THIS FIRST: task 29's "two mechanical minutes" were four defects, and the set is drawn
+
+**Done 2026-07-29, three commits: `c65d34b` (three sampler fixes), `2f64e08` (rank spacing
+and the drawn set) and `90170d1` (the stratified overlap block, and a redraw), plus the
+label tables created in the live database.**
+
+**This file said task 29's first two commands were "mechanical" and called them "two
+mechanical minutes"** — in its own Orientation, in § *what is blocked*, and in
+§ *recommended next steps*. **They were not.** `init-schema` was. `evals label sample`,
+as it stood, would have drawn a 200-row set that
+
+- **(a)** classified every row against a gate the pipeline does not run,
+- **(b)** starved the one stratum the precision figure is quoted from,
+- **(c)** could not have reached task 29's Definition of done at any turnout, and
+- **(d)** put the inter-annotator ceiling on the easy cases.
+
+**None of the four was red.** Nothing asserted coverage, `sample()` under-fills in silence,
+a set drawn against the wrong gate looks exactly like a set drawn against the right one,
+and **(d) was found only after the set had been drawn, pinned and committed** — by looking
+at the ten rows the block actually contained rather than at the strata totals, which were
+correct. All four are fixed and the set has been redrawn.
+
+### The four defects, each measured against the live corpus
+
+**1. The sampler classified against the AUTHOR's gate, not the cohort's.** `labels.pool()`
+(`evals/labels.py:498`) and `pool_query()` (`:440`) defaulted `cfg` to `relevance.load()`
+— the shared `config/relevance.json` — while taking a **profile** as the argument that
+names the population. `classify()` tests `tier > max_tier` **before** it looks at
+`match_score` (`evals/labels.py:544-546`, in `classify()` at `:542`), so the gate decides
+the stratum first and everything else second. The rationale now lives in `pool_query()`'s
+own docstring at `:444-453`, with these numbers in it — the argument is `cfg IS REQUIRED`
+rather than a defaulted one, so the defect cannot be reintroduced by omission.
+
+| classified `surfaced` | count |
+|---|---:|
+| under the shared author gate | 59 |
+| under `pursuit`'s own gate | **144** |
+
+**85 postings the pipeline actively surfaces would have been filed as `gate_rejected`** —
+the one stratum whose entire value is being identified correctly. Fixed with
+`relevance.for_profile()` (`relevance.py:100-109`); the CLI now loads the profile row and
+hands its gate in explicitly rather than letting the default resolve
+(`evals/__main__.py:279-292`).
+
+**And this is what made this file's own ordering constraint real.** "Draw the sample AFTER
+the gate fix" (§ *what is blocked*) bought **nothing** while the sampler was reading a
+different gate from the one commit 4 wrote. The constraint was correct and inoperative,
+which is the worst of both — it is a real dependency that no artifact would have shown you
+was being violated.
+
+**2. The recency window starved `surfaced`.** `--per-platform` defaulted to 400 rows per
+platform, which held **29 of pursuit's 144** surfaced postings: greenhouse 6/65, ashby
+13/52, google_jobs 9/26. `sample()` takes what a stratum has and moves on. `PARTITION BY
+platform` answers CLAUDE.md's "~85% greenhouse/ashby" composition complaint and does
+nothing at all about the recency truncation underneath it — **two different traps, one of
+which was being mistaken for the other.** The default is now the whole table (`jobs` is
+~14,000 rows; one `SELECT` over all of it is free), and `cmd_label_sample` **exits 2 and
+names the shortfall** on any under-filled stratum (`evals/__main__.py:306-345`).
+
+**3. Distinct coverage was capped at ONE labeller's throughput.** `next_item()`
+(`evals/labels.py:924`, the defect written up at `:927-936`) served every labeller the
+identical queue — `overlap DESC, position ASC` for everyone. Ten volunteers doing
+twenty postings each therefore answered **the same twenty**, so
+
+```
+distinct = overlap + n_labellers * (budget - overlap)
+```
+
+had a structurally **zero second term**: distinct coverage could never exceed what one
+person completed, and task 29's "≥100 labelled postings from ≥5 labellers" was unreachable
+**regardless of turnout**. The tail is now rotated by the labeller's rank; overlap rows
+still come first, because they are what makes the agreement ceiling measurable.
+
+**4. The overlap block was not stratified, and it carries the ENTIRE inter-annotator
+ceiling.** `sample()` marked the first `overlap` rows of a `job_id` sort — stratified by
+nothing at all. The overlap block is the only part of the set more than one person sees, so
+it is not a sample of the set: **it is the whole of one of the three quantities task 29
+exists to produce.** The first draw of `pursuit-v1` came back
+
+| overlap block | first draw | redrawn | set proportion |
+|---|---:|---:|---:|
+| `surfaced` | 3 | **5** | 5.0 |
+| `below_floor` | 1 | **3** | 2.5 |
+| `gate_rejected` | **6** | **2** | 2.5 |
+
+against a set that is 50 / 25 / 25. That particular draw was ~2% likely — **but the
+mechanism carried no guarantee against it**, which is the defect; the draw is only how it
+was noticed. **Six of ten rows would have been postings the pipeline threw away** —
+*"Senior Mechanical Engineer, Systems Integration"*, *"Branch Operations Coordinator
+Borough Park"* — on which every labeller answers Axis B "no" and agreement is
+near-unanimous **for free**. **That is a ceiling measured on the easy cases**, which is the
+same failure as evaluating on the population the pipeline already chose, one level in.
+CLAUDE.md names the outer version of it; this was the inner one.
+
+Fixed by proportional allocation across strata, largest remainder, at
+`evals/labels.py:665-679`, with the rationale and these numbers at `:648-664`. The redrawn
+block reads as real judgement calls — **AI Engineer at Brex, Legal Engineer at Harvey,
+Operations Analyst at NYC DYCD** — which is what an agreement ceiling has to be measured on
+to mean anything.
+
+**Two things about the redraw that are counterintuitive and must be stated precisely:**
+
+- **The pin did NOT move.** `sha256(sorted job_id)` is still
+  `afb2d58f5d369dfd03ad9237a8b16396cea31b838a67343f51aceecf70cd1763`. **Set membership is
+  unchanged**; only which ten of the 200 rows are marked `overlap` moved. Every digest and
+  every stratum count already written in this file is still correct — verified by
+  recomputing both from the committed fixture.
+- **The redraw was safe only because `eval_labels` was empty, and it CHECKED that rather
+  than assuming it.** Redrawing a set somebody has already labelled silently reassigns what
+  their answers were answers to. The check is the difference between a correction and a
+  data loss, and it cost nothing to make.
+
+### The methodological finding, and it is the reusable one
+
+The first version of fix 3 rotated by `sha256(labeller_id)` — stateless, no rank to
+derive, obviously adequate. The plan asserted it would give 110 distinct postings, from
+the formula above.
+
+**Verified against the drawn set rather than against the formula: 84.**
+
+| rotation | distinct postings (190-row tail, ten labellers, twenty each) |
+|---|---:|
+| `sha256(labeller_id)` | **84** |
+| rank-spaced by `2**64/phi` | **110** — the ideal |
+
+Hashing spreads people at *random*, and random windows **collide**; the formula assumes
+*disjoint* windows. It is the birthday problem, and here it cost **26 postings and the
+Definition of done** — 84 misses "≥100", 110 meets it, at the same twenty-minute sitting.
+The reasoning is recorded in the code that earned it — `tail_offset()` at
+`evals/labels.py:869`, both numbers in its docstring at `:874-883`, and `_PHI64` at `:866`
+under a comment (`:859-865`) explaining that the constant is there for its
+low-discrepancy property and not as a hash. **That comment is the guard**: without it,
+`2**64/phi` reads like an arbitrary magic number and the obvious "simplification" back to a
+hash costs 26 postings silently.
+
+**An idealised formula is not a measurement.** This file already says to verify a plan's
+claims *about the code* before implementing them (§ *how this run works*). This is the
+same rule one level up: **verify a plan's claims about its own arithmetic against the
+artifact, not against the algebra.** The algebra was not wrong; it was describing a
+different mechanism from the one being built.
+
+**And the sharper version, which defect 4 paid for: A TOTAL IS NOT A COMPOSITION.** The
+drawn set's strata totals were **exactly right** — 100 / 50 / 50, checked, committed,
+reported. The ten-row block *inside* them was 6/3/1 against 2.5/5/2.5, and the totals could
+not see it, because every marginal a check was being run against still summed correctly.
+**Three of this session's four defects were found by measuring an artifact that had already
+passed its own checks** — the gate misclassification by counting `surfaced` two ways, the
+84-vs-110 by counting distinct postings instead of trusting the formula, and the overlap
+skew by reading the ten rows rather than their totals. **The check that finds this class of
+defect is always the same one: disaggregate, and look at what is actually in the bucket.**
+
+### What landed
+
+- **The three label tables now exist in the live database.** `eval_label_sets`,
+  `eval_label_items`, `eval_labels`, created by `python3 -m evals label init-schema` run as
+  `jobs_pipeline`, which holds CREATE on `public`. **This file was right that they did not
+  exist.** `jobs_web` was then granted SELECT / SELECT+INSERT / sequence USAGE per
+  `labels.WEB_PRIVILEGES` (`evals/labels.py:240`), and `labels.verify_schema()` (`:353`)
+  passes.
+- **The set is drawn, redrawn and pinned: `pursuit-v1`.** n=200, seed 0, overlap 10,
+  profile `pursuit`, drawn against the cohort gate over the full window. **surfaced 100 /
+  below_floor 50 / gate_rejected 50**, nine platforms with none above 54.
+  `sha256(sorted job_id)` =
+  `afb2d58f5d369dfd03ad9237a8b16396cea31b838a67343f51aceecf70cd1763`, committed at
+  `backend/evals/fixtures/labelset-pursuit-v1.jsonl`. **The redraw for defect 4 did not
+  change any of those numbers** — it changed which ten rows are marked `overlap`, from
+  3/1/6 to **5 surfaced / 3 below_floor / 2 gate_rejected**. All of it re-verified from the
+  committed fixture rather than from the tool that wrote it.
+- **Six rows were excluded from `below_floor`, deliberately.** SQL called them below-floor
+  because they have no `job_matches` row; `score_job()` recomputes them **at or above the
+  floor**, which means `match.py` had not caught up with their facts. "No `job_matches`
+  row" has two causes and they are indistinguishable in SQL. Keeping them would have
+  contaminated a recall stratum with a measurement of the scheduler.
+- **`eval_labels` is EMPTY, and `pursuit-v1` is an eval set.** CLAUDE.md: pinned by sorted
+  `job_id`, **never train on it, never recycle it.** Its emptiness is also what made the
+  defect-4 redraw safe, and **that window is now closed** — once a labeller has answered
+  anything, the set cannot be redrawn without invalidating their answers.
+- **The repo owner set overlap 10 and a budget of ~20 items per labeller.** That **breaks
+  one line of task 29's Definition of done** — it asks for 20 postings overlapped and gets
+  10 — and buys **110 distinct postings** in the twenty-minute sitting the task specifies.
+  Recorded rather than quietly met. **At the DoD's 5-labeller fallback, ≥100 distinct needs
+  ~28 items each.** That is the number a smaller turnout will need, and it is worth knowing
+  before the session rather than at 7pm on the night. **Both figures were re-verified on the
+  redrawn set**, not carried over from the first one.
+
+### Two of this file's own facts were wrong, and both were load-bearing
+
+**`fastapi` IS installed.** This file said it was not — at `:218-220` and `:927-930`
+before this update shifted them, now struck through in § *state at handoff* and in
+§ *findings later tasks must not inherit* (cited by section, because inserting this one
+moved both, which is the drift this file already warns about) — and said that five webapp
+modules therefore always fail to import. It is installed in
+**`backend/webapp/.venv`** — fastapi 0.140.0, plus uvicorn, starlette, pydantic and httpx
+— and `.venv/bin/python -m unittest discover -s tests -t .` under `backend/webapp/` reports
+**55 tests, OK** (re-run 2026-07-29 while writing this). **`backend/webapp/requirements.txt`
+is a SEPARATE file from `backend/requirements.txt`** and lists exactly those five packages;
+its own header records that the venv sets `include-system-site-packages = false`, so
+"anything missing here is missing at runtime and nowhere else". **The "five modules fail to
+import" observation was made with system python** — a true statement about the wrong
+interpreter, and `backend/requirements.txt` being `psycopg[binary]` alone is what made it
+look confirmed.
+
+**The consequence is the part that matters: serving `/v1/label` needs no install and no
+code.** The route already exists — `backend/webapp/label.py:218` (the form), `:256`
+(submit), `:311` (progress) — wired at `backend/webapp/app.py:91`, server-rendered HTML,
+and already blind to `fit_score`. **Every estimate in this file that priced "get the form
+served" as an install plus task 33's territory was pricing work that is done.**
+
+**`tests/test_labels.py:423` does not forbid mock rows in `eval_labels`.** This file cites
+it for that twice. Open the line. **Today it reads**
+
+```
+                _label(job, "role_archetype", "backend", "alice", round_no=1),
+```
+
+— a fixture row inside `test_the_two_ceilings_are_different_quantities` (`:416`), which is
+about intra- versus inter-annotator agreement being different quantities. It says nothing
+about `source = 'mock'`, and it never did: **checked twice within one day it resolved to
+two different lines, neither of them a mock assertion**, because that file was being edited
+underneath the citation. Quote the text, not just the number.
+
+The real containment is **`backend/evals/mock_corpus.py:3-6`** — the module docstring, and
+it is the binding statement: *"Nothing in this module may ever reach `eval_labels`."* It is
+pinned by **`backend/tests/test_mock_corpus.py:939`**
+(`test_the_module_says_plainly_that_it_is_not_a_label`), which asserts the caveat travels
+with the module, and backed by two structural tests: **`:919`** — no module under `ingest/`
+references it — and **`:930`** — no step in `run-daily.py`'s `STEPS` does either. Those two
+are the ones that matter, because `ingest/` is the only path to the production `jobs`
+table. **And `pool_query()` has no platform filter of any kind**, so nothing downstream
+stops a `platform = 'mock'` row being sampled if one ever existed.
+
+**This is not a live risk.** The `jobs` table carries nine platforms and none of them is
+`mock`; nothing has ever written one. So the conclusion — *"nothing from that corpus has
+ever reached the database"* — **stands, for a different reason than the one given.** The
+citation was wrong and the containment is real and lives somewhere else. That is exactly
+the failure mode the "cite `file:line`, then re-read the line" rule exists for, and it
+survived two sessions inside the rule.
 
 ## READ THIS FIRST: the ranking is a product now, and the DoD it did not meet
 
@@ -209,15 +468,28 @@ still holds.
 
 ## State at handoff
 
-**Branch `webapp-service`, suite green at 1058 tests** (task files say 263, earlier
-handoffs 782, 837, 878 and 1030; **1058 is the floor now**).
+**Branch `webapp-service`, suite green at 1070 tests** (task files say 263, earlier
+handoffs 782, 837, 878, 1030 and 1058; **1070 is the floor now**).
 **The whole suite passes** — `python3 -m unittest discover -s backend/tests` from
 the repo root. Working tree is clean apart from untracked `scripts/`, which
 predates this run and is not ours.
 
-`backend/webapp/tests/` is a separate matter: **`fastapi` is not installed here**, so five
-modules fail to import and always have. Not a regression, and not covered by the count
-above.
+**On that number: it was 1067, then 1068, then 1070 across a single afternoon** — the
+implementing session's report, a re-run an hour later, and a re-run after `90170d1` added
+the overlap-stratification tests. All three were correct when taken. This file already
+records that test counts drift under concurrent agents (§ *how this run works*); **1070 is
+what a re-run reported as this paragraph was written, and it is the floor because it is the
+largest.** Re-run before quoting it, and do not treat a number quoted in a handoff as a
+number you have measured.
+
+~~`backend/webapp/tests/` is a separate matter: **`fastapi` is not installed here**, so five
+modules fail to import and always have.~~ **WRONG, corrected 2026-07-29.** `fastapi`
+**is** installed, in **`backend/webapp/.venv`**, which is a separate environment with a
+separate `requirements.txt`. Under it, `backend/webapp/` reports **55 tests, OK**. The
+original observation was made with system python. `backend/tests/` is still the suite that
+gates work here and still does not cover `webapp/`; the two are run with two interpreters.
+See § *task 29's "two mechanical minutes"* for what this changes — chiefly that serving
+`/v1/label` needs no install.
 
 Thirteen tasks committed, one experiment, plus the two conversational decisions:
 
@@ -255,6 +527,10 @@ Thirteen tasks committed, one experiment, plus the two conversational decisions:
 | — | **step 0 — entry-level vocabulary split, recall 48.3% → 86.2%** | `e8f3b72` |
 | — | **step 0 — `title_exclude` narrowed, recall → 89.7%** | `9dab9e6` |
 | — | **step 0 — the gate written to `profiles`** | no commit — a database write |
+| 29 | **sampler — three defects: wrong gate, starved window, one-labeller ceiling** | `c65d34b` |
+| 29 | **rank spacing (84 → 110 distinct) + `pursuit-v1` drawn and pinned** | `2f64e08` |
+| 29 | **overlap block stratified — the ceiling was on the easy cases; set redrawn, pin unchanged** | `90170d1` |
+| 29 | **the three label tables created and granted** | no commit — a database write |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -354,9 +630,32 @@ recorded at `schema.py:158`.
 ## Nothing is in flight
 
 **Nothing is half-written and nothing is waiting on a reply.** Step 0 is implemented,
-committed and written to the database; the docs were rolled forward in the same session.
-The working tree is clean apart from untracked `scripts/`, which predates this run and is
-not ours. **The next session starts from a finished state**, not from a handover.
+committed and written to the database, and so are task 29's four sampler fixes and its
+drawn set; the docs were rolled forward in the same session each time. The working tree is
+clean apart from untracked `scripts/`, which predates this run and is not ours. **The next
+session starts from a finished state**, not from a handover — and for task 29 it starts
+from a finished state that is waiting on the repo owner, not on an implementer.
+
+**What the task-29 session wrote to the database**, all of it new and none of it touching
+anything that existed: the three label tables created by `evals label init-schema` as
+`jobs_pipeline`, the `jobs_web` grants from `labels.WEB_PRIVILEGES`, and one registered
+set — `pursuit-v1`, 200 rows in `eval_label_items`, **re-registered once when defect 4
+forced a redraw**. **`eval_labels` is empty and must stay that way until people put labels
+in it** — and it being empty is what made that redraw safe.
+
+**Proof that nothing else moved.** Content digests byte-identical either side:
+
+| table | rows | content digest |
+|---|---:|---|
+| `job_matches` | 3,521 | `383a9266c3b862716ff977e08491dd0e` |
+| `job_scores` | 1,293 | `6960a9c3a1f39cdfbd8f8ecb838b645b` |
+| `job_facts` | 5,923 | `df46e5ee2a1b63ab93d080fdbf6f5a7e` |
+
+**These digests are computed over a DIFFERENT COLUMN SET from the ones quoted earlier in
+this file** (`c98c4bbc…`, `90715a5f…`, `af8a273f…`). They are before-and-after pairs within
+this session and prove nothing was overwritten *during it*; they are **not** comparable to
+the older values and a difference against those means nothing. Say which columns went into
+a digest, or it is a number that can only mislead the next reader.
 
 **Six agents ran in the implementing session** — three read-only verification up front,
 three writing documentation on disjoint files at the end. The orchestrator made every code edit, every measurement and
@@ -405,8 +704,10 @@ underneath it:
   with no reachable trigger and remove it as dead code.
 
 **Start here:** `cd backend && python3 -m unittest discover -s tests -t .` should report
-**1030, OK**. `backend/.env` is not exported by default — scripts that reach the
-database need `cd backend && (set -a; . ./.env; set +a; python3 ...)`.
+**1070, OK**. `backend/.env` is not exported by default — scripts that reach the
+database need `cd backend && (set -a; . ./.env; set +a; python3 ...)`. **The webapp is a
+second environment**: `cd backend/webapp && .venv/bin/python -m unittest discover -s tests
+-t .` reports **55, OK**, reads `backend/webapp/.env`, and is not covered by the 1070.
 
 **Then read this, because it is the one thing a fresh session will get wrong:** task 13
 is committed and its Definition of done is *not* met. See the top of this file. A
@@ -414,11 +715,18 @@ completed task here is not a validated one.
 
 ### The next session's likely first question, answered
 
-**"Step 0 is done. What is actually next?"** Task 29. There is no longer a cheap unblocked
-item in front of it. Its first two steps — `evals label init-schema` and
-`evals label sample` — take minutes and need no credential; see § *what is blocked*.
-Everything else is credentials (15, 20), a re-scope (21), or a call for the repo owner
-(GATE 2).
+**"Step 0 is done, the schema exists and the set is drawn. What is actually next?"**
+**Nothing an agent can do on task 29.** ~~Its first two steps take minutes and need no
+credential~~ — they are done, and they were not minutes; see § *task 29's "two mechanical
+minutes"*. What remains is **two things, both the repo owner's**: Google OAuth credentials
+in `backend/webapp/.env`, and ten Builders with an `app_users` row each. § *what is
+blocked* has the specifics. Everything else in the plan is credentials (15, 20), a
+re-scope (21), or a call for the repo owner (GATE 2).
+
+**"The set is drawn. Can I start measuring against it?"** No. `eval_labels` is **empty**.
+`pursuit-v1` is a pinned eval set of 200 `job_id`s and nothing else — no labels, no Axis B,
+no consensus. It is the thing the labelling session labels, and CLAUDE.md's rule applies
+from now: **never train on it, never recycle it.**
 
 **"Isn't task 29's data already in `docs/tasks/refactor/mock/`?"** **No, and this is the
 single easiest mistake to make in this repo — it was asked once already.** That directory
@@ -430,15 +738,27 @@ Cognitive Systems are not companies.
 They are a **specification test** (D46). They measure agreement with an author's intent,
 which is why an agent could produce them at all — and it is precisely why they are not
 labels. Writing them into `eval_labels` would reproduce `claude-bench.py:417`'s defect
-inside the tool built to detect it, and `tests/test_labels.py:423` forbids it
-structurally. Nothing from that corpus has ever reached the database.
+inside the tool built to detect it. ~~and `tests/test_labels.py:423` forbids it
+structurally~~ — **CORRECTED 2026-07-29: that line does no such thing**, and it has not
+held still long enough for a line number to describe it (see § *task 29's "two mechanical
+minutes"* for what it actually says). The containment is `backend/evals/mock_corpus.py:3-6`,
+pinned by `backend/tests/test_mock_corpus.py:939`, with `:919` and `:930` asserting that
+nothing under `ingest/` and no step in `STEPS` references the module — and
+**`pool_query()` has no platform filter at all**.
+**Nothing from that corpus has ever reached the database**, and that remains true: the
+`jobs` table has nine platforms and none of them is `mock`. The claim was right and the
+citation was not.
 
 **Task 29 needs ~200 REAL postings from the live table, labelled by ~10 human Builders on
 two axes.** Axis B *is* Builder preference; there is no artifact that can stand in for it.
-The label tables are currently empty — in fact they do not exist yet.
+**The 200 are now drawn** — `pursuit-v1`, pinned at
+`backend/evals/fixtures/labelset-pursuit-v1.jsonl` — and **`eval_labels` is empty**, which
+is the state it should be in until people fill it.
 
 **What the mock corpus legitimately did** is pre-answer one narrow slice: task 29's
-*fourth stratum* asks whether the gate rejects good postings, and 25 constructed rejects
+`gate_rejected` stratum (this file used to call it the *fourth* of five; `classify()`
+produces **three**, and `pursuit-v1` drew 50 of them) asks whether the gate rejects good
+postings, and 25 constructed rejects
 with known verdicts could bound that without people. It fired, at 48.3%, and step 0 acted
 on it. **That is one question of one bucket, on invented postings.** It reduced task 29's
 scope by zero postings.
@@ -469,9 +789,10 @@ nothing at all about a changed gate** (`:242-249` has no relevance equivalent), 
 a gate write with `tools/relevance-report.py` and an md5, not with the script's output.
 
 **"The mock corpus measured gate recall at 48.3%. Does that mean task 29 is done, or
-partly done?"** Neither. It measured task 29's *fourth stratum* on **constructed**
+partly done?"** Neither. It measured task 29's `gate_rejected` stratum on **constructed**
 postings, which is why it could be done at all without people. Nothing was written to
-`eval_labels`, no Axis B exists, and the corpus was built to contain the failure modes
+`eval_labels` — it is still empty — no Axis B exists, and the corpus was built to contain
+the failure modes
 it then found — `HANDOFF.md:805-808`. Task 29's scope is unchanged. What did change is
 that one of its four gate rows has now fired early, and it is the one that says fix the
 gate before anything downstream.
@@ -633,6 +954,27 @@ script that refuses to run before it checks `--apply`. **Step 0 had itself been 
 a careful session with live measurements.** Its numbers were all correct; its claims about
 the code were not. Those are different things and they fail independently.
 
+**And verify the plan's ARITHMETIC against the artifact, not against the algebra.** Task
+29's plan asserted that rotating labellers by `sha256(labeller_id)` would give 110 distinct
+postings, from `distinct = overlap + n * (budget - overlap)`. Counted against the drawn
+200-row set: **84.** The formula assumes disjoint windows; hashing gives random ones, and
+random windows collide. **The formula was not wrong — it was describing a different
+mechanism from the one being built**, which is the failure a re-read of the code cannot
+catch, because the code matched the plan. Rank spacing gives 110. **26 postings and a
+Definition of done**, and the only thing that found it was computing the number the plan
+had asserted.
+
+**A finished artifact is where to look for the defects the checks cannot see. Three of task
+29's four were found that way** — after the code was written, the tests were green and, for
+the fourth, after the artifact had been committed. The gate misclassification surfaced from
+counting `surfaced` two ways; the 84-vs-110 from counting distinct postings instead of
+trusting the formula; the overlap skew from **reading the ten rows in the block rather than
+the strata totals above them, which were correct.** In all three the marginals summed. **A
+total is not a composition**, and a suite that is green tells you the code does what it was
+written to do, not that what it was written to do is what was wanted. **Budget a pass that
+looks at the output itself, after everything is green — it is where the expensive ones
+were.**
+
 **A measurement's denominator needs an adversarial reader who cannot see how the
 numerator was built.** The mock-acceptance session gave two agents the same contract and
 no sight of each other's work: one wrote the answer key, the other wrote the loader that
@@ -709,30 +1051,63 @@ server-rendered HTML at `/v1/label` behind the existing Google SSO. Task **29** 
 labelling session itself and stops entirely. **30** sits behind it. **12** needs Axis A
 figures.
 
-**"What is missing is people" was not the whole truth, and this matters because it makes
-task 29 look more shovel-ready than it is.** Checked 2026-07-29:
+~~**"What is missing is people" was not the whole truth, and this matters because it makes
+task 29 look more shovel-ready than it is.**~~ **SUPERSEDED 2026-07-29 — the schema, the
+sampler and the set are all done, and "what is missing is people" is now the whole truth
+after all.** The block below is kept because it is the record of what was believed, and
+because one line of it turned out to be the expensive one. Struck through where it is now
+false:
 
-- **The label tables do not exist in the live database.** `eval_label_sets`,
-  `eval_label_items` and `eval_labels` are defined in `evals/labels.py:255-330` and a
-  query for `table_name LIKE '%label%'` in `public` returns **nothing**. They are created
-  by `webapp/schema_web.py:167` calling `_labels.ensure_schema(conn)` — and **`fastapi` is
-  not installed here**, so that path has never run.
-- **There is a second path that does not need `fastapi`**, and it is the one to use:
-  `python3 -m evals label init-schema` reaches the same function deliberately, so the two
-  cannot drift (`schema_web.py:161-166` says so). `sample`, `export`, `status` and
+- ~~**The label tables do not exist in the live database.**~~ **They exist now.**
+  `eval_label_sets`, `eval_label_items` and `eval_labels`, defined in `evals/labels.py` and
+  created by `python3 -m evals label init-schema` run as `jobs_pipeline`, with `jobs_web`
+  granted per `labels.WEB_PRIVILEGES` (`:240`) and `verify_schema()` (`:353`) passing. **The
+  file was right that they did not exist** — a `LIKE '%label%'` query really did return
+  nothing.
+- **There is a second path that does not need the webapp**, and it is the one that was
+  used: `python3 -m evals label init-schema` reaches the same function deliberately, so the
+  two cannot drift (`schema_web.py:161-166` says so). `sample`, `export`, `status` and
   `report` are on the same CLI.
-- **No eval set has ever been drawn.** `evals label sample` is what pins task 29's
-  stratified 200 (50 top-20 / 60 ranks 20–50 / 40 below `MATCH_FLOOR` / 30 gate-rejected /
-  20 the `fit_score` tie block) by sorted `job_id`.
-- **The form itself does need `fastapi`.** Serving `/v1/label` to ten people is the step
+- ~~**No eval set has ever been drawn.**~~ **`pursuit-v1` is drawn and pinned** —
+  n=200, seed 0, overlap 10, **surfaced 100 / below_floor 50 / gate_rejected 50**,
+  `sha256(sorted job_id)` `afb2d58f…`, at
+  `backend/evals/fixtures/labelset-pursuit-v1.jsonl`. **The strata are not the five this
+  paragraph used to name** (50/60/40/30/20); `classify()` produces three, plus a `None` for
+  rows the pipeline has not yet had an opinion about.
+- ~~**The form itself does need `fastapi`.** Serving `/v1/label` to ten people is the step
   that requires installing it and standing the webapp up — which is also task 33's
-  territory.
+  territory.~~ **WRONG on both halves.** `fastapi` is installed, in `backend/webapp/.venv`;
+  the route exists at `backend/webapp/label.py:218/:256/:311`, wired at
+  `webapp/app.py:91`. **No install, no code, and it does not wait on task 33.**
 
-**So the honest ordering for task 29 is: `init-schema`, then `sample`, then get the form
-served, then find ten Builders.** The first two are minutes and need no credential. **Draw
-the sample AFTER the gate fix** — which is now done, so that ordering constraint is
-discharged and the fourth stratum will be drawn against the 880-row gate rather than the
-869-row one.
+~~**So the honest ordering for task 29 is: `init-schema`, then `sample`, then get the form
+served, then find ten Builders.** The first two are minutes and need no credential.~~
+**The first two were not minutes.** `sample` carried **four** defects — wrong gate, starved
+window, one-labeller ceiling, and an unstratified overlap block that put the
+inter-annotator ceiling on the easy cases — and none of them was red. The fourth was found
+**after the set had been drawn, pinned and committed.** See § *task 29's "two mechanical
+minutes"*. **And "draw the sample AFTER the gate fix" was correct and inoperative**: the
+sampler was resolving `relevance.load()` rather than the profile's own gate, so the
+constraint this file had recorded bought nothing until `relevance.for_profile()` made it
+real. A real dependency that no artifact shows you is being violated is worse than one
+nobody wrote down.
+
+**What task 29 is blocked on now, and it is only two things, both the repo owner's:**
+
+1. **Google OAuth credentials.** `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are empty
+   strings in `backend/webapp/.env`, so `/v1/auth/login` returns **503**
+   (`webapp/auth.py:235-239`). And `FRONTEND_ORIGIN` is `http://localhost:5173`: it must
+   point at the origin the service is actually served from, or **sign-in succeeds and lands
+   nowhere** — the post-login redirect is built from it (`auth.py:359-360`). **There is no
+   auth bypass anywhere in `webapp/`, and that is deliberate.** Do not add one to get a
+   labelling session started.
+2. **Ten Builders, each with a row**: `manage_app_users.py add --email ... --profile
+   pursuit`. **Note the two-allowlist trap**: while the consent screen is unverified, an
+   address must be in the Google console's **Test users** list *and* in `app_users`, and
+   **only one of those two failures produces an error message from this service**
+   (`backend/webapp/README.md:149-151`). Also note that the **single existing `app_users`
+   row is on profile `tech`**, which is inactive — it is not a working example of a cohort
+   labeller.
 
 **13 is committed but its judgement inputs were supplied provisionally, and that is now
 the sharpest open question.** The weights were chosen by the repo owner from three
@@ -805,18 +1180,80 @@ Each of these is a documented claim that is **wrong about the code as it now sta
   open live postings. The fix is correct and shipped, but **"recall was 48.3% and is now
   89.7%" is a statement about the mock corpus and must be written that way wherever it is
   quoted.**
-- **"Task 29 is blocked on people" was incomplete, and it made the task look more
-  shovel-ready than it is.** Its three tables do not exist in the live database — a
-  `LIKE '%label%'` query over `public` returns nothing — because the only wired creation
-  path is `webapp/schema_web.py:167` and `fastapi` is not installed here. `python3 -m
-  evals label init-schema` reaches the same function without the webapp, deliberately
-  (`schema_web.py:161-166`). No eval set has ever been drawn either. **Two mechanical
-  minutes were being described as "what is missing is people".**
+- ~~**"Task 29 is blocked on people" was incomplete, and it made the task look more
+  shovel-ready than it is.** … **Two mechanical minutes were being described as "what is
+  missing is people".**~~ **CORRECTED 2026-07-29, and the correction was itself wrong in
+  the other direction.** The tables genuinely did not exist and no set had been drawn — that
+  much held. But **the two commands were not two mechanical minutes**: `evals label sample`
+  classified against the shared author gate rather than the profile's (**59 `surfaced`
+  against 144**), truncated its pool to 400 rows per platform (**29 of 144 surfaced rows
+  reachable**), served every labeller an identical queue (**distinct coverage capped at
+  one person's throughput**), and marked an **unstratified** overlap block (**6 of 10 rows
+  `gate_rejected` against an expected 2.5**). All four fixed in `c65d34b` / `2f64e08` /
+  `90170d1`; see § *task 29's "two mechanical minutes"*. **Calling work mechanical is a
+  claim about code, and it fails the same way every other claim about code in this file has
+  failed — by not being checked against the code.**
+- **A tool that takes a `profile` argument and resolves its config by default will read
+  the wrong config, and nothing will look wrong.** `labels.pool()` / `pool_query()`
+  defaulted `cfg` to `relevance.load()` — the shared `config/relevance.json` — while its
+  first parameter was the profile naming the population. Fixed by
+  `relevance.for_profile()` (`relevance.py:100-109`) and by having the caller load the
+  profile row and pass the gate in explicitly (`evals/__main__.py:279-292`). **The general
+  form: if a function takes the name of a thing, it must not independently default the
+  thing's configuration.** `relevance.load()` is a legitimate default for a caller that has
+  no profile; it is never a legitimate default for one that does.
+- **A TOTAL IS NOT A COMPOSITION, and the sub-block that carries a whole measurement needs
+  its own stratification.** `sample()` marked the first `overlap` rows of a `job_id` sort.
+  The set's strata totals were exactly right — 100/50/50, checked and committed — while the
+  ten-row overlap block inside them was **6 `gate_rejected` / 3 `surfaced` / 1
+  `below_floor`** against an expected 2.5/5/2.5. **That block is the entire inter-annotator
+  ceiling**, so six rows of discarded postings, on which every labeller says "no" and agrees
+  for free, would have inflated it. Fixed by largest-remainder proportional allocation
+  (`evals/labels.py:665-679`, rationale `:648-664`). **Three of this session's four defects
+  were found by measuring an artifact that had already passed its own checks** — every
+  marginal still summed correctly in all three cases. **Disaggregate, and look at what is in
+  the bucket.**
+- **A drawn eval set can be redrawn only while `eval_labels` is empty, and that must be
+  CHECKED rather than assumed.** Redrawing after anyone has labelled silently reassigns
+  what their answers were answers to. The defect-4 redraw checked and refused on it; **that
+  window is now closed for `pursuit-v1` the moment the first Builder submits.** Note also
+  that a redraw does not necessarily move the pin: `sha256(sorted job_id)` was unchanged,
+  because membership did not change — **only the `overlap` flags did, and no digest in this
+  file could see that.**
+- **An idealised formula is not a measurement, and here the gap was 26 postings and a
+  Definition of done.** `distinct = overlap + n * (budget - overlap)` assumes **disjoint**
+  windows. Rotating labellers by `sha256(labeller_id)` gives *random* windows, which
+  collide — the birthday problem. The formula predicted 110; **verifying against the drawn
+  set gave 84.** Rank spacing by `2**64/phi` gives 110. Recorded with both numbers in
+  `tail_offset()`'s docstring (`evals/labels.py:874-883`), and the constant `_PHI64`
+  (`:866`) carries its own comment (`:859-865`) saying it is there for low discrepancy and
+  not as a hash — so it cannot be simplified back to one. **Verify a plan's arithmetic
+  against the artifact, not against the algebra.**
+- **`sample()` under-fills a stratum in silence, and `PARTITION BY platform` does not fix
+  the window underneath it.** These are two different traps and one was being read as a
+  guard against the other: platform partitioning answers CLAUDE.md's "~85%
+  greenhouse/ashby" composition complaint and says nothing about recency truncation.
+  `cmd_label_sample` now exits 2 and names the shortfall (`evals/__main__.py:306-345`).
+- **`pool_query()` has NO platform filter of any kind.** Nothing structurally prevents a
+  `platform = 'mock'` row being drawn into an eval set. **Not live** — the `jobs` table
+  carries nine platforms and none is `mock` — and the containment that does exist is
+  upstream, at `backend/evals/mock_corpus.py:3-6` with
+  `backend/tests/test_mock_corpus.py:919` and `:930`. Recorded rather than fixed, because the
+  right guard is the one that stops such a row being *written*, not one that filters it at
+  read time.
 - **`docs/tasks/refactor/mock/` is NOT task 29's data**, and the question has been asked
   out loud, so it will be asked again. 55 invented postings at `source = 'mock'`, written
-  to a specification, forbidden from `eval_labels` by `tests/test_labels.py:423`, and
-  reducing task 29's scope by **zero postings**. They legitimately pre-answered one
-  question of one of its five strata — gate recall — and nothing more.
+  to a specification, and reducing task 29's scope by **zero postings**. They legitimately
+  pre-answered one question of one stratum — gate recall — and nothing more.
+  ~~forbidden from `eval_labels` by `tests/test_labels.py:423`~~ **— WRONG CITATION,
+  corrected 2026-07-29.** Today that line is a `role_archetype` fixture row inside
+  `test_the_two_ceilings_are_different_quantities` (`:416`); it says nothing about
+  `source = 'mock'` and never did. **The conclusion is still true and the reason is
+  different**: `mock_corpus.py:3-6` binds the module, `test_mock_corpus.py:939` pins the
+  caveat to it, and `:919` / `:930` assert no `ingest/` module and no `STEPS` entry
+  references it. **A wrong citation survived two sessions inside a file whose own rule is
+  to re-read the line** — and while it was being corrected, the line moved twice more.
+  **Quote the line's text when a claim rests on it.**
 - **`AI_VOCAB` had exactly ONE copy, not two.** Step 0 required a test asserting "the two
   copies are equal"; it was one list referenced twice (`:216`, `:229`), so the assertion
   could not fail. Moving the gate to JSON is what created two literals and gave the test
@@ -924,10 +1361,20 @@ Each of these is a documented claim that is **wrong about the code as it now sta
   which describes a NULL-handling bug in code that never produced a NULL**. **Read the code
   before trusting a task file's account of it**, and expect the Definition-of-done counts
   to be off.
-- **`fastapi` is not installed in this environment**, so `backend/webapp/tests/` cannot
-  run at all — five modules fail to import, four of which predate this run. It is not a
-  regression and not task 07's doing. `backend/tests/` is the suite that gates work here;
-  anything under `webapp/` is unverified by CI as things stand.
+- ~~**`fastapi` is not installed in this environment**, so `backend/webapp/tests/` cannot
+  run at all — five modules fail to import, four of which predate this run.~~ **WRONG,
+  corrected 2026-07-29.** `fastapi` **is** installed — 0.140.0, with uvicorn, starlette,
+  pydantic and httpx — in **`backend/webapp/.venv`**, a separate environment with a
+  separate `backend/webapp/requirements.txt` listing exactly those five packages and
+  `include-system-site-packages = false`. Under it, `backend/webapp/` reports **55 tests,
+  OK**. **The original observation was made with system python**, and
+  `backend/requirements.txt` being `psycopg[binary]` alone is what made it look confirmed.
+  **The consequence: serving `/v1/label` needs no install and no code** — the route is at
+  `backend/webapp/label.py:218/:256/:311`, wired at `webapp/app.py:91`, server-rendered and
+  already blind to `fit_score`. Every estimate here that priced it as an install plus task
+  33's territory was pricing work already done. `backend/tests/` is still the suite that
+  gates work here and still does not cover `webapp/`; **there are two interpreters, and a
+  claim about an import is a claim about which one you ran.**
 - **`docs/ingest/*.md` claim `generated:` frontmatter but no generator exists.** Task 34
   must decide: write generators, or drop the claim.
 - **This file's own browser-DOM query was wrong, and its number was wrong.** The
@@ -1056,9 +1503,10 @@ quality beats volume. That is a call for the repo owner, not for an implementer.
 ## Recommended next steps
 
 **Task 29 is the whole critical path and it is still the one thing in this plan that
-cannot be done by an agent.** Step 0 — the gate fix — is done, so there is no longer a
-cheap unblocked item in front of it. What is left needs people (29) or credentials
-(15, 20) or a re-scope (21).
+cannot be done by an agent.** Step 0 — the gate fix — is done, and so is everything on 29
+that an agent *could* do: the schema, the sampler and the drawn set. **What is left of 29
+is two asks of the repo owner** — OAuth credentials and ten Builders. Everything else in
+this list needs credentials (15, 20) or a re-scope (21).
 
 0. ~~**Fix the relevance gate.**~~ **DONE 2026-07-29** — `4eefb7e`, `e8f3b72`, `9dab9e6`
    and a database write. Mock gate recall 48.3% → 89.7%, live tier ≤2 869 → 880,
@@ -1077,23 +1525,42 @@ cheap unblocked item in front of it. What is left needs people (29) or credentia
 1. **Task 29 — the labelling session, and it is now the only thing on the critical
    path.** 07's tooling is built and produced zero labels by design.
 
-   **Do these two first — they are mechanical, take minutes, need no credential and
-   no `fastapi`, and this file previously implied neither existed:**
+   ~~**Do these two first — they are mechanical, take minutes, need no credential and
+   no `fastapi`:** `init-schema`, then `sample`.~~ **DONE 2026-07-29 — `c65d34b`,
+   `2f64e08`, `90170d1`, plus a database write — and they were not mechanical.** The schema
+   exists, the grants are issued, and **`pursuit-v1` is drawn and pinned**: n=200, seed 0,
+   overlap 10, surfaced 100 / below_floor 50 / gate_rejected 50, `sha256(sorted job_id)`
+   `afb2d58f…`, at `backend/evals/fixtures/labelset-pursuit-v1.jsonl`, with a stratified
+   overlap block of 5/3/2. `sample` had **four** defects first — wrong gate, starved window,
+   one-labeller ceiling, unstratified overlap — none of them red, and **the fourth was
+   found after the set was committed**. § *task 29's "two mechanical minutes"* is the
+   record.
 
-   ```
-   cd backend && (set -a; . ./.env; set +a; python3 -m evals label init-schema)
-   cd backend && (set -a; . ./.env; set +a; python3 -m evals label sample ...)
-   ```
+   **Do not redraw this set.** It can only be redrawn while `eval_labels` is empty, and
+   the first submitted label closes that window.
 
-   `init-schema` creates `eval_label_sets`, `eval_label_items` and `eval_labels`,
-   **which do not exist in the live database today** — the only other path that
-   creates them is `webapp/schema_web.py:167`, and `fastapi` is not installed here,
-   so it has never run. `sample` draws the stratified 200 and pins it by sorted
-   `job_id`. **Draw it now rather than earlier**: the gate fix landed, so the
-   gate-rejected stratum will be drawn against the 880-row gate.
+   **What is left is two asks of the repo owner and nothing else:**
 
-   Only then does it need ~10 Builders and an afternoon — and serving `/v1/label`
-   needs `fastapi` installed and the webapp stood up, which overlaps task 33.
+   - **Google OAuth credentials** in `backend/webapp/.env`. `GOOGLE_CLIENT_ID` and
+     `GOOGLE_CLIENT_SECRET` are empty strings, so `/v1/auth/login` returns 503
+     (`webapp/auth.py:235-239`), and `FRONTEND_ORIGIN` must point at the serving origin or
+     sign-in succeeds and lands nowhere (`auth.py:359-360`). **There is no auth bypass in
+     `webapp/` and none should be added.**
+   - **Ten Builders**, each with `manage_app_users.py add --email ... --profile pursuit`.
+     **Two allowlists have to agree** while the consent screen is unverified — Google
+     console Test users *and* `app_users` — and only one of the two failures produces an
+     error from this service (`backend/webapp/README.md:149-151`). The one existing
+     `app_users` row is on `tech`, which is inactive.
+
+   **Serving `/v1/label` needs no install and no code.** `fastapi` is in
+   `backend/webapp/.venv` and the route exists at `backend/webapp/label.py:218/:256/:311`,
+   wired at `webapp/app.py:91`. This item used to say otherwise and used to route through
+   task 33; it does not.
+
+   **Budget, decided by the repo owner: overlap 10, ~20 items each.** That breaks one DoD
+   line (20 overlapped → 10) and buys **110 distinct postings** at ten labellers in a
+   twenty-minute sitting. **At the DoD's 5-labeller fallback, ≥100 distinct needs ~28 items
+   each** — know that before the night, not during it.
 
    **Two specific questions are waiting on it**: task 08 asked whether the ops
    shortfall is the title probe over-counting or the extractor under-applying; task
