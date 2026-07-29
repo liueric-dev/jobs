@@ -180,6 +180,32 @@ class TestStripHtml(unittest.TestCase):
         self.assertIsNone(text.strip_html(""))
         self.assertIsNone(text.strip_html("<p></p>"))
 
+    def test_a_gt_inside_a_quoted_attribute_value_does_not_end_the_tag(self):
+        """lib/text._TAG's whole purpose, frozen as a vector.
+
+        The old `<[^>]+>` stopped at the ">" inside the class attribute and
+        emitted `*]:mt-2">` and everything after it as prose. Six live rows
+        were written that way; tests/test_extract.py's cassette classes hold
+        the real bytes, and this is the same defect at one line so that a
+        reader of THIS file can see what changed without a network fixture.
+        """
+        self.assertEqual(
+            text.strip_html('<div class="[&>*]:mt-2" data-x="a>b">Hello</div>'),
+            "Hello")
+
+    def test_the_old_pattern_is_still_the_fallback_for_a_broken_tag(self):
+        """The bound on the change: _TAG's second alternative IS `<[^>]+>`.
+
+        An unbalanced quote inside a tag cannot be parsed as attributes, so
+        the quote-aware alternative fails and the historical one takes it,
+        span for span. Without that fallback a malformed tag would either be
+        left in the text or swallow the prose after it -- both of which
+        rewrite content_hash on rows that have nothing to do with this fix.
+        """
+        self.assertEqual(text.strip_html('<img alt="unclosed>after'), "after")
+        # And a bare "<>" is matched by neither alternative, exactly as before.
+        self.assertEqual(text.strip_html("a <> b"), "a <> b")
+
 
 class TestPostedAt(unittest.TestCase):
     """posted_at is in the Google and Built In hash tuples, so its parsing

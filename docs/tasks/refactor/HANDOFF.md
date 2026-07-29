@@ -1,8 +1,9 @@
 # Handoff — the `docs/tasks/refactor/` run
 
-Written 2026-07-28, and rolling — last updated after **`job_scores`' version keys**
-landed (`d18ea54`), which was recommended next step 2 below and is now done. Before
-that: **13, 35 and D45** (`fa2d7a7`, `303f7b9`, `e11fabf`). Read this first, then
+Written 2026-07-28, and rolling — last updated after the **mock acceptance run and the
+`strip_html` fix**, which were recommended next step 3 and a new measurement. Before
+that: **`job_scores`' version keys** (`d18ea54`), and **13, 35 and D45** (`fa2d7a7`,
+`303f7b9`, `e11fabf`). Read this first, then
 [`DECISIONS.md`](DECISIONS.md) (why each choice was made) and
 [`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
 [`README.md`](README.md)'s status column is the ordered index.
@@ -30,6 +31,55 @@ weight errors, and task 29's labels are the only thing that can settle it.**
 **Do not re-tune to close that gap before 29.** The weights are unfitted by
 construction — no labels, no `job_events` — and `match_score` is free arithmetic,
 so the cost of the current set being wrong is one `match.py --rebuild`.
+
+## READ THIS FIRST: the gate throws away half the cohort, and it is now measured
+
+**Gate recall is 48.3% [31.4–65.6]. Fifteen of twenty-nine intended-good postings are
+tier 3 and never enter the pipeline.** Measured 2026-07-29 against a 55-posting
+synthetic corpus with a quote-backed answer key —
+[`docs/mock-acceptance.md`](../../mock-acceptance.md), harness
+`backend/tools/mock-acceptance.py`, 90 live calls, run entirely in a scratch schema.
+
+This is the **fourth stratum of task 29's sample measured early**, and it is the one
+quantity nothing else in this repo can produce: every existing figure is precision
+over rows the pipeline already chose to surface. It fires 29's own gate row — *"task
+10's gate is too tight. Fix before anything else, because no ranking work recovers a
+posting that never entered."*
+
+**Two distinct causes, needing different fixes:**
+
+1. **`ENTRY_LEVEL` is title vocabulary applied to descriptions (14 of the 15).** The
+   pursuit gate is conjunctive — one AI term **and** one entry-level term in the *same
+   field* (`migrate_pursuit_profile.py:216,229`). The entry group is `associate,
+   coordinator, assistant, specialist, analyst, …`: title nouns. A description does not
+   repeat its own title's seniority noun, so the AI half matches and the entry half
+   does not. `mock_022`'s *"No retail or e-commerce experience required; training
+   provided"* matches neither `\yno experience\y` nor `\ywill train\y`. **Task 10 built
+   a description-first gate and gave it a title vocabulary.**
+2. **`title_exclude` silently overrides the description-first gate.**
+   `relevance.py:232-234` applies it to **both** paths, so a title exclusion vetoes a
+   posting whose description passes both groups. `pursuit`'s list still carries
+   `customer success`, `executive assistant`, `office manager`, `facilities`,
+   `warehouse`, `driver` — inherited from the software-engineer profile, and several are
+   exclusions on the cohort's own target population.
+
+**What the same run says about the rest of the pipeline, so the gate is read in
+proportion:** extraction pooled **86.4%** [82.8–89.3] with `ai_involvement` at
+**98.1%**; `score_job()` separates intended-good from intended-bad at **AP 91.9%,
+precision@20 90.0%** against a 53.7% chance level. **The ranking is good and the gate
+in front of it is the constraint.**
+
+**And it answers HANDOFF's standing branding-trap question, for constructed
+instances.** All five AI-branded employers whose roles use no AI tools were extracted
+`ai_involvement = none` — matching the key 5 of 5 — and all five scored below the
+floor. **The extractor is not fooled by the company name.** That is evidence the
+mechanism works when the trap is unambiguous; it is **not** evidence about task 13's
+four actual floor misses, which remain unlabelled. **Do not re-tune on it.**
+
+**Read the limitation with the number.** `HANDOFF.md`'s own rule applies to this
+deliverable: fixtures written from a specification test the specification. The corpus
+was built to contain the failure modes being looked for. It does not reduce task 29 by
+one posting and nothing from it reached `eval_labels`.
 
 ## The measurement that should shape what comes next
 
@@ -70,9 +120,8 @@ still holds.
 
 ## State at handoff
 
-**Branch `webapp-service`, suite green at 878 tests** (task files say 263, an earlier
-handoff 782, the last one 837; **878 is the floor now**). The last code commit is
-`d18ea54`.
+**Branch `webapp-service`, suite green at 1030 tests** (task files say 263, earlier
+handoffs 782, 837 and 878; **1030 is the floor now**).
 **The whole suite passes** — `python3 -m unittest discover -s backend/tests` from
 the repo root. Working tree is clean apart from untracked `scripts/`, which
 predates this run and is not ours.
@@ -109,6 +158,9 @@ Thirteen tasks committed, one experiment, plus the two conversational decisions:
 | 35 | extraction input-sanity gate — **8 poisoned rows, not 3** | `303f7b9` |
 | 13 | cohort criteria profile — **DoD 122-123 unmet, not tuned** | `fa2d7a7` |
 | — | **`job_scores` version keys — inert by default, 0 rows re-scored** | `d18ea54` |
+| — | **mock acceptance run — gate recall 48.3%, the finding** | this session |
+| — | **`lib/text.strip_html()` fixed — 6 corrupted rows restored** | this session |
+| — | task-07 gaps: per-platform breakout, `fit_score` blindness pinned | this session |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -275,7 +327,18 @@ rule; if re-scoring is ever made automatic, that rule has to be renegotiated fir
 they were produced ad hoc and re-pinned by hand once already. Anyone regenerating them
 writes that code, and should probably leave it behind as `tools/`.
 
-**Live state after this session**, so a fresh session can tell drift from damage:
+**Live state after the mock-acceptance / strip_html session (2026-07-29T05:40Z).**
+Baseline taken before any agent started, digests re-checked after: `jobs` 14,049,
+`job_facts` **5,923**, `job_matches` 3,521, `job_scores` 1,293. The only deltas this
+session caused are the **−2 `job_facts`** rows remediated as markup-derived; the
+`job_matches` and `job_scores` content digests (`90715a5f…`, `af8a273f…`) are
+**byte-identical** before and after, which is the proof nothing was overwritten. The
+mock run touched `public` not at all: 0 rows at `platform='mock'`, no `mock_all`
+profile, no new scratch schemas. `scratch_5ce56323` and `scratch_cafb8b05` are still
+the only orphans and still predate this run.
+
+**Numbers below are from the previous session and are superseded by the paragraph
+above**, kept because their commentary is still the reasoning:
 ```
 job_facts  5,903 = 859 @v3 (the pursuit corpus) + 5,029 @v2 + 15 @v1
            4 v3 rows deleted by task 35's remediation -- they were markup, not postings
@@ -626,10 +689,37 @@ is either blocked on it or cheaper after it.
    `--stale-report` first — and note that `profiles.load_one` ignores `active`,
    so `score.py --profile tech` can already reach those rows.
 
-3. **Fix `lib/text.strip_html()`, which task 35 gated but did not repair.**
-   **This is now the top unblocked implementation item**, since step 2 is done.
-   Four things were established about it on 2026-07-29 without touching it, so the
-   next session does not have to re-derive them:
+3. ~~**Fix `lib/text.strip_html()`, which task 35 gated but did not repair.**~~
+   **DONE this session.** `lib/text.py`'s `_TAG` is now an alternation whose first
+   branch treats a double-quoted attribute run as opaque and whose second is the exact
+   old pattern — a **superset by construction**, so it can only match where `<[^>]+>`
+   already matched and only match further. `HTMLParser` was rejected deliberately:
+   `strip_html` must unescape *exactly once* (greenhouse is escaped a level deeper,
+   `ingest/ats.py:559-581`) and `convert_charrefs` would decode `&amp;nbsp;` to `\xa0`,
+   deleting the guard at `tests/test_ats_descriptions.py:62-70` rather than satisfying
+   it. Single-quote and comment handling were implemented, swept over 21,350 markup
+   strings from 13,066 live rows, found byte-identical on all of them, and dropped as
+   cost without benefit.
+
+   **The defect was worse than "markup leaked".** The old pattern ended a tag at the
+   first `>` inside a quoted attribute, so on six greenhouse rows the *rest of the
+   posting* was replaced by Tailwind class soup. `migrations/migrate_description_rehash.py`
+   rebuilt them from `raw_json`; `tools/audit-description-markup.py` reports **0 rows
+   above threshold, from 5**. Two `job_facts` rows extracted from the soup were
+   remediated first, in that order, because the reverse leaves clean text with soup-derived
+   facts under it. The migration proves its own hash reconstruction by reproducing the
+   stored hash on **10,405/10,405 untouched rows** before writing anything.
+
+   **Three tests changed, and one of the three HANDOFF predicted was the wrong one.**
+   The stripper test was *inverted* rather than deleted (same cassette, asserting the
+   markup is now gone). The two that actually broke were task 35's **gate** tests —
+   fixing the source cleaned the fixture the gate is tested against. They were
+   re-pointed at input still poisoned after the fix, plus a new
+   `test_the_rows_already_written_by_the_old_stripper_are_still_rejected`, because the
+   gate still guards 13,000 rows written by the old stripper. `test_row_identity.py`'s
+   pinned sha256 **did not move**.
+
+   The four things established before it landed, kept because they are the reasoning:
 
    - **A fix must be stdlib-only.** `requirements.txt` is `psycopg[binary]` alone,
      deliberately; no bs4/lxml/html5lib/selectolax is installed or vendored. The

@@ -284,6 +284,123 @@ def _num(x, places=3):
     return " n/a" if x is None else f"{x:.{places}f}"
 
 
+#: Width of one breakout cell, "~ 88% [ 53- 98] n=8". Wide enough that the
+#: n and the interval are never the thing that gets truncated: they are what
+#: makes a cell over three items distinguishable from one over three hundred,
+#: which is the entire reason the breakout is printed rather than the rate
+#: alone.
+_CELL_W = 22
+
+
+def _breakout_cell(cell):
+    """One cell of the per-platform table: rate, interval, n -- or '-'.
+
+    `~` marks a cell whose interval is wider than labels.THIN_CI_POINTS. It
+    is a prefix rather than a footnote because the failure this table exists
+    to prevent is somebody reading one number out of it in a month's time,
+    and a footnote is a thing people read once.
+    """
+    from . import labels as labels_mod
+    if not cell or not cell.get("n"):
+        return "-"
+    rate = cell.get("rate")
+    if rate is None:
+        rate = cell.get("agree2")
+    mark = "~" if labels_mod.is_thin(cell) else " "
+    return f"{mark}{_pct(rate)} {_ci(*labels_mod.cell_ci(cell))} n={cell['n']}"
+
+
+def _render_label_platforms(triples, inter, measured):
+    """The three quantities again, per source platform. 29:106.
+
+    WHY IT IS BELOW THE BLENDED TABLE AND NOT INSTEAD OF IT
+        29:87-89 asks for the breakout because a blended number would hide
+        degradation on messy sources. It does not ask for the blended number
+        to go away, and it must not: at 100 labels over six platforms these
+        cells are single digits, and the honest reading of most of them is
+        "not measured here". The headline is the row above.
+
+    WHY A ROW CAN BE PRINTED WITH A MISSING CELL
+        labels.Interpretable has already refused any field that lacks a
+        floor, a ceiling or a measured figure, so no field reaches this
+        table without all three. Within a field, a platform may still be
+        missing one -- the selfcheck corpus and the label set are different
+        samples and need not cover the same sources. Those rows are marked
+        `!` and their absent cells print `-`, which is the whole point: a
+        model number on a platform with no floor beside it is a diagnostic
+        and the reader has to be able to see that it is.
+    """
+    ceiling_block = (inter.get("by_platform") or {}).get("fields") or {}
+    measured_block = (measured.get("by_platform") or {}).get("fields") or {}
+    floor_blocks = {t.field: (t.floor_by_platform or {}).get("fields") or {}
+                    for t in triples}
+    if not any(ceiling_block.values()) and not any(measured_block.values()) \
+            and not any(floor_blocks.values()):
+        return ["", "  per platform: nothing to break out -- no floor, "
+                    "ceiling or model cell carries a platform.",
+                "    eval_label_items.platform is where it comes from "
+                "(labels.py:273); a set registered without one",
+                "    cannot answer 29:106."]
+
+    lines = [
+        "",
+        "  per platform -- the same three quantities, beside the blended row "
+        "above and not instead of it",
+        "    29:87-89: task 06 predicts extraction degrades on messy sources "
+        "and Phase 3 added several.",
+        f"    `~` the 95% interval spans more than "
+        f"{100 * _thin_points():.0f} points, which is wider than the gap this "
+        f"table is looking for.",
+        "        Read the n, not the percentage. Every cell carries both for "
+        "exactly this reason.",
+        "    `!` this platform is missing a floor or a ceiling, so its model "
+        "number has nothing to be read between.",
+    ]
+    for t in triples:
+        floors = floor_blocks.get(t.field) or {}
+        ceilings = ceiling_block.get(t.field) or {}
+        models = measured_block.get(t.field) or {}
+        platforms = sorted(set(floors) | set(ceilings) | set(models))
+        lines += ["", f"  {t.field}"]
+        head = ("      " + "platform".ljust(18) + "floor".rjust(_CELL_W)
+                + "ceiling".rjust(_CELL_W) + "model".rjust(_CELL_W))
+        lines += [head, "      " + "-" * (len(head) - 6)]
+        if not platforms:
+            lines.append("      (no platform recorded for any labelled item)")
+            continue
+        for platform in platforms:
+            cells = (floors.get(platform), ceilings.get(platform),
+                     models.get(platform))
+            flag = "!" if (models.get(platform) and
+                           not (floors.get(platform)
+                                and ceilings.get(platform))) else " "
+            lines.append(
+                f"    {flag} " + platform.ljust(18)
+                + "".join(_breakout_cell(c).rjust(_CELL_W) for c in cells))
+        # Pooled, and this is the row with enough n to actually read. The
+        # split is metrics.CLEAN_PLATFORMS, the same one the self-consistency
+        # table uses -- one definition, so the two tables are comparable.
+        def _pooled(block, key):
+            return ((block.get("by_platform") or {}).get(key)
+                    or {}).get(t.field)
+
+        for pooled, label in (("clean", "clean (gh+ashby)"),
+                              ("messy", "messy (all others)")):
+            cells = ((t.floor_by_platform or {}).get(pooled),
+                     _pooled(inter, pooled), _pooled(measured, pooled))
+            if not any(c and c.get("n") for c in cells):
+                continue
+            lines.append("      " + label.ljust(18)
+                         + "".join(_breakout_cell(c).rjust(_CELL_W)
+                                   for c in cells))
+    return lines
+
+
+def _thin_points():
+    from . import labels as labels_mod
+    return labels_mod.THIN_CI_POINTS
+
+
 def render_labels(triples, *, inter, intra, measured, label_set=None):
     """The three-quantity table. The ONLY renderer for a model-vs-human figure.
 
@@ -307,6 +424,14 @@ def render_labels(triples, *, inter, intra, measured, label_set=None):
         the world -- it has been shown to be unstable, and a golden set cannot
         fix that. A model at or above the ceiling has saturated what the label
         can resolve; the remaining disagreement is between people.
+
+    AND THEN AGAIN PER SOURCE PLATFORM, WHICH IS 29:106
+        _render_label_platforms() prints the same three columns broken out by
+        platform. It is strictly below the blended table: 29:87-89 wants the
+        breakout so that degradation on messy sources cannot hide inside an
+        average, and it wants it BESIDE the average, not in place of one. No
+        field reaches that table that labels.Interpretable did not already
+        admit, so the breakout adds no route around the refusal.
     """
     lines = [
         "",
@@ -356,6 +481,10 @@ def render_labels(triples, *, inter, intra, measured, label_set=None):
     if measured["no_model_output"]:
         lines.append(f"  {len(measured['no_model_output'])} labelled job(s) "
                      "had no model output to compare against")
+
+    # 29:106. Below the blended table and its notes, because the blended
+    # figure is the headline and this is the diagnostic beside it.
+    lines += _render_label_platforms(triples, inter, measured)
 
     if intra["fields"]:
         lines += ["", "  intra-annotator (same person, two rounds) -- the "

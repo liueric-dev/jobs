@@ -94,6 +94,67 @@ def bounded_json(obj, limit, long_field="description"):
     return json.dumps({"_truncated": True, "_original_chars": len(json.dumps(obj))})
 
 
+#: One HTML tag. Two alternatives, and the order between them is the whole fix.
+#:
+#: WHAT WAS WRONG WITH `<[^>]+>`
+#:     `[^>]+` cannot cross a ">", so a tag ended at the FIRST ">" in the
+#:     source -- including one inside a quoted attribute value. Modern Tailwind
+#:     class names contain them:
+#:
+#:         <div class="[&:has([data-writing-block])>*]:pointer-events-auto">
+#:
+#:     stripped to `*]:pointer-events-auto"> ` and the rest of the tag --
+#:     attribute names, CSS custom properties, `data-testid=` -- was emitted as
+#:     prose and stored in description_text. Task 35 (`303f7b9`) built
+#:     extract.is_unusable_input() to REJECT such a posting before it costs an
+#:     LLM call; it never stopped the bytes being written.
+#:
+#: THE FIRST ALTERNATIVE treats a double-quoted run as opaque, so a ">" inside
+#: one no longer ends the tag. The second is the old pattern, unchanged, kept
+#: as a fallback. That ordering is what bounds the blast radius: at every "<"
+#: the engine tries the quote-aware form first and falls back to the exact
+#: previous behaviour if it cannot parse, so this can only ever match where
+#: `<[^>]+>` already matched, and can only ever match FURTHER -- never less,
+#: never somewhere new. Both alternatives require at least one character
+#: between the brackets, so a bare "<>" is still left alone as it was.
+#:
+#: WHY NOT html.parser.HTMLParser
+#:     It is the only in-repo precedent (tools/jsonld-probe.py) and it is the
+#:     wrong tool here for a specific reason: with convert_charrefs at its
+#:     default it decodes character references, and this function must unescape
+#:     EXACTLY ONCE. Greenhouse serves markup escaped one level deeper than
+#:     every other source (ingest/ats.py:559-581), so `&amp;nbsp;` must arrive
+#:     here and leave as `&nbsp;` -- tests/test_ats_descriptions.py:62-70 is the
+#:     guard on that, and a parser that decoded it to "\xa0" would delete the
+#:     guard rather than satisfy it. Turning charref conversion off and
+#:     re-emitting each reference by hand reproduces this function through a
+#:     state machine with a far larger set of behaviour changes (CDATA mode for
+#:     <script>/<style>, bare "<" in prose, unclosed tags at EOF), every one of
+#:     which reaches a stored content_hash. A superset-by-construction regex is
+#:     the change whose effect can be bounded and then measured.
+#:
+#: WHY THE QUOTED RUN MAY NOT CONTAIN "<"
+#:     `[^"<]*` rather than `[^"]*`. An unbalanced quote inside a tag -- which
+#:     real postings do contain -- would otherwise scan forward to whatever
+#:     quote character appears next, possibly thousands of characters of prose
+#:     away, and swallow the intervening tags. Stopping at "<" bounds the
+#:     damage from a malformed tag to that tag: the alternative fails, and the
+#:     fallback below restores the old behaviour for it.
+#:
+#: WHY SINGLE-QUOTED VALUES ARE NOT HANDLED, AND COMMENTS ARE NOT EITHER
+#:     Measured, not assumed. Both were implemented and swept over every markup
+#:     string in the live corpus -- 21,350 strings from 13,066 rows carrying
+#:     raw_json, each tested at every level of escaping. They changed the same
+#:     6 rows this pattern changes and produced byte-identical output on all
+#:     21,350. They are therefore cost without benefit here, and single quotes
+#:     carry a real risk this does not: an apostrophe in an unquoted attribute
+#:     value ("<img alt=don't>") opens a quoted run that prose then closes.
+_TAG = re.compile(
+    r'<(?:"[^"<]*"|[^<>"])+>'   # a tag, double-quoted attribute values opaque
+    r"|<[^>]+>"                 # anything the line above cannot parse
+)
+
+
 def strip_html(markup, unescape=True):
     """Rough tag-stripper -- good enough for keyword heuristics and display,
     not meant to be a correct HTML parser. Truncated because raw_json
@@ -112,11 +173,24 @@ def strip_html(markup, unescape=True):
     and three of the four callers already did it. ats.py passes False to
     preserve its stored hashes; switching it costs a one-time rewrite of
     its rows and would be an improvement, just not a silent one.
+
+    (That last sentence is now history rather than description: no caller in
+    this repo passes unescape=False any more -- migrate_ats_descriptions.py
+    moved ats.py onto the default and re-hashed its rows. The parameter and
+    its two frozen vectors in tests/test_row_identity.py:174-177 stay because
+    the stored hashes it produced are still what a re-ingest is compared
+    against.)
+
+    Tag stripping is _TAG above, not `<[^>]+>`. Read its note before changing
+    it: it is a superset of that pattern by construction, and that property is
+    the only reason this could be changed at all -- description_text feeds
+    content_hash on every source, so a stripper edit that is not bounded is a
+    silent rewrite of the whole table.
     """
     if not markup:
         return None
     text = html_module.unescape(markup) if unescape else markup
-    text = re.sub(r"<[^>]+>", " ", text)
+    text = _TAG.sub(" ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text[:MAX_DESCRIPTION_CHARS] if text else None
 

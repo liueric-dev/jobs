@@ -28,8 +28,10 @@ WHY THESE TESTS AND NOT OTHERS
 Nothing here touches a database or an endpoint.
 """
 
+import html
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -41,7 +43,7 @@ import extract  # noqa: E402
 import llm  # noqa: E402
 import schema  # noqa: E402
 from evals import cassettes, ingest_modules, scratchdb  # noqa: E402
-from lib import dbconn, envfile  # noqa: E402
+from lib import dbconn, envfile, text as text_module  # noqa: E402
 
 #: The pipeline's own .env, the way run-daily.py loads it -- see
 #: tests/test_scratchdb.py, which does the same. Tests must not depend on the
@@ -256,13 +258,13 @@ DOMSOUP_CLEAN = ("https://boards-api.greenhouse.io/v1/boards/taboola/jobs/"
     f"cassette {DOMSOUP_CASSETTE} not recorded; "
     f"python3 evals/record_cassettes.py {DOMSOUP_CASSETTE}")
 class InputSanityCassetteTests(unittest.TestCase):
-    """The gate, driven from the bytes greenhouse actually served.
+    """The stripper AND the gate, driven from the bytes greenhouse served.
 
     WHY A CASSETTE AND NOT A STRING IN THIS FILE. The contaminating token is
     `[&:has([data-writing-block])>*]:pointer-events-auto`, and what makes it
     dangerous is a detail nobody writing a fixture from a description would
-    include: the ">" inside the class attribute ends lib/text.strip_html()'s
-    `<[^>]+>` early, so the remainder of the tag is emitted as prose. A
+    include: the ">" inside the class attribute ended lib/text.strip_html()'s
+    old `<[^>]+>` early, so the remainder of the tag was emitted as prose. A
     hand-written "some markup" fixture tests the sentence "some markup", which
     is the trap HANDOFF.md:571-574 names -- all three failure modes task 18
     found live were invisible to its four constructed fixtures.
@@ -270,6 +272,33 @@ class InputSanityCassetteTests(unittest.TestCase):
     It also runs the REAL ingest function (ats.greenhouse_description) rather
     than a copy, so the chain under test is the production one: greenhouse
     bytes -> the double unescape -> strip_html -> description_text -> the gate.
+
+    WHAT CHANGED WHEN lib/text._TAG LANDED
+        This class used to assert that the markup SURVIVED into
+        description_text, and said in its own docstring that failing was the
+        correct signal once the stripper was fixed. It was, and it did. The
+        assertion is now its own inverse -- the same recorded bytes must come
+        out as prose -- which turns a test that pinned the defect into one
+        that pins the fix, against the same real bytes.
+
+    TWO PROPERTIES, NOW INDEPENDENT. READ THIS BEFORE DELETING ANYTHING.
+        Fixing the stripper did NOT make task 35's gate dead code, and the
+        two facts must not be collapsed:
+
+          1. THIS class: strip_html no longer PRODUCES this class of input
+             from these bytes.
+          2. InputSanityGateTests below: the gate still REJECTS this class of
+             input if anything else ever produces it -- and things still can.
+             `_TAG` handles double-quoted attribute values and deliberately
+             not single-quoted ones (lib/text.py:139-155, measured), and no
+             tag-stripper of any kind can remove markup that arrives with no
+             tags in it at all.
+
+        A reader who finds the gate with no reachable trigger through THIS
+        path and concludes it is unreachable has read half the file.
+        extract.is_unusable_input() (extract.py:517) is the last line of
+        defence for any future ingest path that captures the wrong bytes, and
+        the `unusable` counter on the run summary is the alarm that one has.
     """
 
     @classmethod
@@ -287,29 +316,42 @@ class InputSanityCassetteTests(unittest.TestCase):
                 "description_text": self.ats.greenhouse_description(
                     body.get("content"))}
 
-    def test_the_markup_survived_strip_html_in_the_first_place(self):
-        """The defect is upstream of extraction and this pins where.
+    def test_a_gt_inside_an_attribute_value_no_longer_leaks(self):
+        """THE REGRESSION TEST for lib/text._TAG, on the bytes that caused it.
 
-        If strip_html() is ever fixed to handle ">" inside an attribute value,
-        this test fails -- and that is the correct signal, not a nuisance: it
-        means the leak is gone at the source and the gate below is guarding
-        something that can no longer happen through this path.
+        Every token asserted absent here was present in the stored
+        description_text of ff9f9d9f9643e185af0f48ca until the stripper was
+        fixed, and every one of them is a fragment of a tag that a `<[^>]+>`
+        pattern stopped short of: the class attribute holding
+        `[&:has([data-writing-block])>*]` ends at its own ">", so `data-testid`
+        and everything after it was prose as far as the stripper was concerned.
         """
         description = self._job(self.poisoned)["description_text"]
-        self.assertIn("data-testid=", description)
-        self.assertIn("pointer-events-auto", description)
+        for leaked in ("data-testid=", "pointer-events-auto", "data-turn-id=",
+                       "var(--", "--thread-response-height"):
+            self.assertNotIn(leaked, description,
+                             f"{leaked!r} still leaks out of strip_html")
+        # Not merely absent -- the prose it was displacing is present, and
+        # first, which is what distinguishes a fix from an over-eager stripper
+        # that ate the posting along with the soup.
+        self.assertTrue(description.startswith("Realize your potential"),
+                        description[:120])
+        self.assertIn("Product Analytics team", description)
 
-    def test_a_pasted_browser_dom_is_rejected_without_an_llm_call(self):
+    def test_the_poisoned_posting_now_extracts_like_any_other(self):
+        """It was REJECTED without a call; it is a real Taboola posting.
+
+        The gate was always a mitigation. This is the measurement that says
+        the underlying input is repaired rather than merely tolerated: the
+        same cassette bytes now reach the model exactly once.
+        """
         calls = []
         outcome, facts, passes, unanimity = extract.extract_facts(
             self._job(self.poisoned),
             call=lambda prompt: calls.append(prompt) or response())
-        self.assertEqual(outcome, extract.REJECTED)
-        self.assertIsNone(facts)
-        self.assertEqual(passes, 0)
-        # THE POINT. score.py's REJECTED normally means "the model answered
-        # and the answer was unusable"; here the model is never reached.
-        self.assertEqual(calls, [])
+        self.assertEqual(outcome, extract.EXTRACTED)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(extract.markup_ratio(calls[0]), 0.0)
 
     def test_an_ordinary_posting_from_the_same_board_is_untouched(self):
         """The control, and it is a real posting rather than a synthetic one.
@@ -318,6 +360,10 @@ class InputSanityCassetteTests(unittest.TestCase):
         report a false-positive rate. This is one real greenhouse posting,
         fetched from the same board on the same day as the poisoned one, going
         all the way through to an extraction.
+
+        It is also the byte-identity check on the stripper change: this
+        posting's `content` carries no ">" inside any attribute value, so a
+        change that altered it would be a change to 13,060 other rows too.
         """
         calls = []
         outcome, facts, passes, unanimity = extract.extract_facts(
@@ -329,20 +375,196 @@ class InputSanityCassetteTests(unittest.TestCase):
         # And the posting itself reached the model, not just the instructions.
         self.assertIn("Taboola", calls[0])
 
+    def test_neither_cassette_posting_carries_markup_any_more(self):
+        """Both ratios in one assertion -- the numeric form of the test above.
+
+        The CLIFF this used to assert between these two postings has moved to
+        InputSanityGateTests, because there is no longer a gap through THIS
+        path and that is the fix working, not the gate weakening. What the
+        gate's threshold was measured against (extract.py:436-449) was a
+        population the old stripper produced; the gate itself still needs a
+        cliff under test, on input that is still poisoned today.
+        """
+        poisoned = extract.markup_ratio(
+            extract.prompt_description(self._job(self.poisoned)))
+        clean = extract.markup_ratio(
+            extract.prompt_description(self._job(self.clean)))
+        self.assertEqual((poisoned, clean), (0.0, 0.0))
+
+
+#: The tag pattern lib/text.strip_html() used before lib/text._TAG landed.
+#:
+#: A COPY, DELIBERATELY, and the one place in this repo where that is right.
+#: evals/cassettes.py's rule is ADAPTERS, NEVER COPIES, and it applies to code
+#: that still exists -- an adapter cannot be pointed at behaviour that has been
+#: deleted. What this reconstructs is not a current code path but the bytes
+#: 14,003 described rows were written by, which is a fact about the DATABASE
+#: and stays true until migrations/migrate_description_rehash.py is applied.
+_PRE_FIX_TAG = re.compile(r"<[^>]+>")
+
+#: Markup residue carrying no tags at all: rendered CSS pasted into a
+#: description field as prose. Tokens lifted from e93ddca38b45bb929e6e46cd and
+#: ff9f9d9f9643e185af0f48ca, the live rows, not invented.
+#:
+#: THE POINT OF ITS EXISTENCE: no tag-stripper of any design can remove this,
+#: because there is no tag. It is the permanent floor under task 35's gate --
+#: the class of input that stays reachable no matter what lib/text.py does.
+TAGLESS_CSS_RESIDUE = (
+    "About the role Perks and benefits --tw-ring-color: "
+    "var(--color-blue-500); [&>*]:mt-2 !important"
+)
+
+
+@unittest.skipUnless(
+    cassettes.available(DOMSOUP_CASSETTE),
+    f"cassette {DOMSOUP_CASSETTE} not recorded; "
+    f"python3 evals/record_cassettes.py {DOMSOUP_CASSETTE}")
+class InputSanityGateTests(unittest.TestCase):
+    """Task 35's gate, on input that is STILL POISONED after the stripper fix.
+
+    WHY THIS CLASS EXISTS AND MUST NOT BE FOLDED BACK INTO THE ONE ABOVE
+        Fixing lib/text.strip_html() cleaned the fixture the gate was tested
+        against. It did not make the gate unnecessary: the gate guards a CLASS
+        of input, not one cassette, and extract.is_unusable_input()
+        (extract.py:517) is the last line of defence for any future ingest
+        path that captures the wrong bytes. Retiring these assertions because
+        one upstream producer stopped producing would retire a live alarm --
+        the `unusable` counter on the run summary -- as a side effect of
+        fixing something upstream of it.
+
+    THE INPUTS ARE SYNTHETIC HERE, AND THAT IS THE CORRECT CHOICE
+        The class above states the rule: a fixture written from a
+        specification tests the specification. It applies to the STRIPPER,
+        whose subject is what real employers really emit. The subject HERE is
+        the gate, and the gate's contract is over the shape of its input, so
+        constructing that shape is testing the thing itself.
+
+        Neither input is invented from a description even so. Both are
+        derived from bytes that were really served:
+
+          1. THE SAME CASSETTE, RE-QUOTED. `_TAG` treats double-quoted
+             attribute values as opaque and single-quoted ones deliberately
+             not -- measured over 21,350 live markup strings, single-quote
+             handling changed nothing and risks apostrophes in unquoted
+             values (lib/text.py:139-155). So the identical recorded posting,
+             with `&quot;` swapped for `&#39;` as any hand-written or
+             non-Greenhouse source might emit it, still leaks. It reproduces
+             the pre-fix length exactly, which is the assertion that says
+             `_TAG` fell back to `<[^>]+>` here rather than doing something
+             new.
+          2. TAGLESS_CSS_RESIDUE above, for the case no stripper can ever
+             reach.
+
+    AND THE ROWS ALREADY IN THE TABLE. The last test covers the third
+    population: description_text is in HASH_FIELDS_ATS and HASH_FIELDS_SHORT
+    (schema.py:131-135), so lib/upsert.py takes the touch branch and never
+    rewrites a row whose content hash still matches upstream. Until the
+    migration is applied, the poisoned bytes are what extract.py reads.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.ats = ingest_modules.load("ats")
+        from lib import http
+        with cassettes.replay(DOMSOUP_CASSETTE):
+            cls.poisoned = http.get_json(DOMSOUP_POISONED)
+            cls.clean = http.get_json(DOMSOUP_CLEAN)
+
+    def _job(self, description):
+        return {"id": "8035268", "title": "Product Analyst",
+                "company_name": "Taboola", "location_raw": "New York",
+                "platform": "greenhouse", "description_text": description}
+
+    def _single_quoted(self, body):
+        """The recorded posting as a source emitting single-quoted attributes.
+
+        Greenhouse serves `content` escaped once, so an attribute quote is
+        `&quot;` in the raw bytes. Swapping it for `&#39;` before the REAL
+        ingest function runs means the whole production chain is exercised --
+        the double unescape, strip_html, the cap -- on real markup that lands
+        in `_TAG`'s documented blind spot.
+        """
+        content = (body.get("content") or "").replace("&quot;", "&#39;")
+        return self.ats.greenhouse_description(content)
+
+    def test_the_inputs_are_still_poisoned_after_the_stripper_fix(self):
+        """Guard on the guards. If either stops leaking, these tests are
+        asserting nothing and the fixture must be re-sourced, not deleted."""
+        requoted = self._single_quoted(self.poisoned)
+        self.assertIn("data-testid=", requoted)
+        self.assertIn("pointer-events-auto", requoted)
+        # `_TAG` fell back to the historical pattern for these tags rather
+        # than inventing a third behaviour: same bytes out, to the character.
+        self.assertEqual(len(requoted), 4838)
+        # And the tagless case survives strip_html untouched, by construction.
+        self.assertEqual(text_module.strip_html(TAGLESS_CSS_RESIDUE),
+                         TAGLESS_CSS_RESIDUE)
+
+    def test_a_pasted_browser_dom_is_rejected_without_an_llm_call(self):
+        calls = []
+        outcome, facts, passes, unanimity = extract.extract_facts(
+            self._job(self._single_quoted(self.poisoned)),
+            call=lambda prompt: calls.append(prompt) or response())
+        self.assertEqual(outcome, extract.REJECTED)
+        self.assertIsNone(facts)
+        self.assertEqual(passes, 0)
+        # THE POINT. score.py's REJECTED normally means "the model answered
+        # and the answer was unusable"; here the model is never reached.
+        self.assertEqual(calls, [])
+
+    def test_markup_with_no_tags_at_all_is_rejected_too(self):
+        """The case a stripper fix can never address, so the gate always must."""
+        calls = []
+        outcome, facts, passes, unanimity = extract.extract_facts(
+            self._job(TAGLESS_CSS_RESIDUE),
+            call=lambda prompt: calls.append(prompt) or response())
+        self.assertEqual(outcome, extract.REJECTED)
+        self.assertEqual(passes, 0)
+        self.assertEqual(calls, [])
+
     def test_the_gate_is_a_cliff_not_a_slope_between_these_two(self):
         """Both ratios, printed as one assertion, so the margin is visible.
 
         The threshold's justification is the GAP it sits in, not the value
         itself. If a re-recording narrows that gap the number to change is
         extract.MARKUP_REJECT_RATIO, and this is where you find out.
+
+        THE MARGIN IS NARROWER THAN IT WAS AND THE REASON IS NOT THE FIX.
+        The stored row scored 0.1290; this re-quoted form of the same bytes
+        scores 0.0613 -- still 6x the threshold, but half of what the same
+        leak used to score. `_MARKUP_RESIDUE`'s attribute alternative
+        (extract.py:425) is `[A-Za-z][A-Za-z0-9_-]*="`, which requires a
+        DOUBLE quote, so `data-testid='x'` is leaked markup the predicate does
+        not count. That is a real blind spot in the gate, recorded here
+        because this is the test that surfaced it.
         """
         poisoned = extract.markup_ratio(
-            extract.prompt_description(self._job(self.poisoned)))
+            extract.prompt_description(self._job(self._single_quoted(self.poisoned))))
         clean = extract.markup_ratio(
-            extract.prompt_description(self._job(self.clean)))
+            extract.prompt_description(self._job(self._single_quoted(self.clean))))
         self.assertEqual(clean, 0.0)
         self.assertGreater(poisoned, extract.MARKUP_REJECT_RATIO * 5,
                            f"poisoned={poisoned}, clean={clean}")
+
+    def test_the_rows_already_written_by_the_old_stripper_are_still_rejected(self):
+        """The third population: what is in the table right now.
+
+        Reconstructed from the same cassette through _PRE_FIX_TAG, because
+        until migrate_description_rehash.py is applied these bytes -- not the
+        clean ones -- are what extract.py will read for those six rows.
+        """
+        markup = html.unescape(html.unescape(self.poisoned.get("content") or ""))
+        stripped = re.sub(r"\s+", " ", _PRE_FIX_TAG.sub(" ", markup)).strip()
+        stored = stripped[:text_module.MAX_DESCRIPTION_CHARS]
+        self.assertIn("data-testid=", stored)  # the reconstruction still leaks
+
+        calls = []
+        outcome, facts, passes, unanimity = extract.extract_facts(
+            self._job(stored),
+            call=lambda prompt: calls.append(prompt) or response())
+        self.assertEqual(outcome, extract.REJECTED)
+        self.assertEqual(passes, 0)
+        self.assertEqual(calls, [])
 
 
 class MarkupRatioTests(unittest.TestCase):

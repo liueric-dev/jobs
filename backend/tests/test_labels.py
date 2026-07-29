@@ -20,6 +20,7 @@ THE DATABASE TESTS ARE REAL, AND THAT IS DELIBERATE
     cleanly where no Postgres is reachable.
 """
 
+import ast
 import json
 import os
 import sys
@@ -27,7 +28,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evals import labels, report, scratchdb           # noqa: E402
+from evals import labels, metrics, report, scratchdb  # noqa: E402
 from evals.tasks import extract as extract_task       # noqa: E402
 from lib import envfile                               # noqa: E402
 
@@ -38,15 +39,22 @@ envfile.load(os.path.join(os.path.dirname(os.path.dirname(
 
 
 def _label(job_id, field, value, who, *, axis=labels.AXIS_A, round_no=1,
-           profile=None):
+           profile=None, platform=None):
     return {"axis": axis, "label_set": "s", "job_id": job_id, "field": field,
             "value": value, "profile": profile, "labeller_id": who,
             "round_no": round_no, "labelled_at": "2026-07-28T00:00:00",
-            "note": None}
+            "note": None, "platform": platform}
 
 
-def _cell(n, agree2):
-    return {"n": n, "agree2": agree2, "agree2_ci": (0.0, 1.0)}
+def _cell(n, agree2, ci=(0.0, 1.0)):
+    """A metrics.field_cell()-shaped stub, only as far as the reader reads it.
+
+    `ci` defaults to the whole range because most assertions here do not care
+    -- but the breakout's thin-cell marker is computed FROM the interval
+    (labels.is_thin), so a fixture standing in for a real 98-record cell has
+    to carry a real 98-record interval or it reads as thin.
+    """
+    return {"n": n, "agree2": agree2, "agree2_ci": ci}
 
 
 KINDS = extract_task.FIELD_KINDS
@@ -336,6 +344,274 @@ class TestAgreement(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------
+# Broken out by source platform -- 29:106, for the reason at 29:87-89
+# --------------------------------------------------------------------------
+
+def _agreeing(job, platform, *, agree=True, field="ai_involvement"):
+    """One item two people labelled, agreeing or not."""
+    other = "uses_ai_tools" if agree else "none"
+    return [_label(job, field, "uses_ai_tools", "alice", platform=platform),
+            _label(job, field, other, "bob", platform=platform)]
+
+
+class TestThePerPlatformBreakout(unittest.TestCase):
+    """Task 29:106 asks for the three quantities per field per platform.
+
+    29:87-89 says why: task 06's reconciliation predicts extraction degrades
+    on messy sources and Phase 3 just added several, so a blended number
+    would hide exactly that effect.
+    """
+
+    def _rows(self):
+        rows = []
+        for i in range(4):
+            rows += _agreeing(f"gh{i}", "greenhouse", agree=i < 3)
+        for i in range(2):
+            rows += _agreeing(f"hn{i}", "hn_whoishiring", agree=False)
+        return rows
+
+    def test_the_blended_number_is_still_the_headline(self):
+        # The breakout is a diagnostic BESIDE the blended figure, never a
+        # replacement -- 29:87-89 asks for the split, not for the average to
+        # be dropped. `fields` must keep meaning what it meant.
+        out = labels.inter_annotator(self._rows(), KINDS)
+        cell = out["fields"]["ai_involvement"]
+        self.assertEqual(cell["n"], 6)
+        self.assertAlmostEqual(cell["agree2"], 3 / 6)
+
+    def test_a_cell_is_metrics_field_cell_and_not_new_arithmetic(self):
+        # labels.py's inter_annotator docstring: reusing field_cell() is what
+        # makes agree2 mean the same thing here as it does in the
+        # self-consistency table. A second implementation would make the
+        # floor and the ceiling two statistics that merely look alike.
+        out = labels.inter_annotator(self._rows(), KINDS)
+        cell = out["by_platform"]["fields"]["ai_involvement"]["greenhouse"]
+        expected = metrics.field_cell("enum", [
+            ("uses_ai_tools", "uses_ai_tools")] * 3
+            + [("none", "uses_ai_tools")])
+        self.assertEqual(cell, expected)
+
+    def test_every_breakout_cell_carries_its_n(self):
+        # A bare percentage over n=3 reads exactly like one over n=300.
+        # CLAUDE.md: "n=17 is not a result."
+        out = labels.inter_annotator(self._rows(), KINDS)
+        block = out["by_platform"]["fields"]["ai_involvement"]
+        self.assertEqual(block["greenhouse"]["n"], 4)
+        self.assertEqual(block["hn_whoishiring"]["n"], 2)
+        self.assertEqual(out["by_platform"]["platform_counts"],
+                         {"greenhouse": 4, "hn_whoishiring": 2})
+
+    def test_a_thin_cell_is_distinguishable_from_a_thick_one(self):
+        # The test is on the INTERVAL, not on n, and that is the point: 5/10
+        # and 10/10 are the same n and only one of them says anything.
+        self.assertTrue(labels.is_thin(metrics.field_cell(
+            "enum", [("a", "a")] * 3)))
+        self.assertFalse(labels.is_thin(metrics.field_cell(
+            "enum", [("a", "a")] * 300)))
+        self.assertTrue(labels.is_thin(metrics.field_cell(
+            "enum", [("a", "a")] * 5 + [("a", "b")] * 5)))
+        self.assertTrue(labels.is_thin({}), "an absent cell is not a rate")
+        self.assertTrue(labels.is_thin({"n": 0, "agree2": None}))
+
+    def test_the_clean_messy_axis_is_metrics_own_and_not_a_second_one(self):
+        # metrics.CLEAN_PLATFORMS, reused. A second definition here would
+        # make the floor's clean/messy columns and the ceiling's
+        # non-comparable, which is the same failure reusing field_cell()
+        # exists to prevent.
+        out = labels.inter_annotator(self._rows(), KINDS)
+        block = out["by_platform"]
+        self.assertEqual(block["clean"]["ai_involvement"]["n"], 4)
+        self.assertEqual(block["messy"]["ai_involvement"]["n"], 2)
+        self.assertIn("greenhouse", metrics.CLEAN_PLATFORMS)
+        self.assertNotIn("hn_whoishiring", metrics.CLEAN_PLATFORMS)
+
+    def test_an_unrecorded_platform_is_unknown_and_pools_into_messy(self):
+        # metrics.selfcheck() calls it `unknown` too (metrics.py:406), and it
+        # counts as messy there. A posting whose source was not recorded is
+        # not evidence of a clean one.
+        rows = _agreeing("j1", None) + _agreeing("j2", None, agree=False)
+        block = labels.inter_annotator(rows, KINDS)["by_platform"]
+        self.assertEqual(
+            set(block["fields"]["ai_involvement"]), {labels.UNKNOWN_PLATFORM})
+        self.assertEqual(block["messy"]["ai_involvement"]["n"], 2)
+        self.assertEqual(block["clean"]["ai_involvement"]["n"], 0)
+
+    def test_the_platform_rides_on_the_row_and_a_map_overrides_it(self):
+        # fetch() carries it (labels._FETCH_COLUMNS), so the normal path needs
+        # no argument at all. `platforms` is for a caller holding a set file
+        # rather than a database.
+        rows = _agreeing("j1", "greenhouse")
+        self.assertEqual(labels.platform_index(rows), {"j1": "greenhouse"})
+        self.assertEqual(labels.platform_index(rows, {"j1": "lever"}),
+                         {"j1": "lever"})
+        block = labels.inter_annotator(
+            rows, KINDS, platforms={"j1": "lever"})["by_platform"]
+        self.assertEqual(list(block["fields"]["ai_involvement"]), ["lever"])
+
+    def test_model_vs_human_breaks_out_the_consensus_column_only(self):
+        # vs_each's pairs come from the same item and are not independent
+        # (metrics.py:30), so it carries no interval even blended. Splitting a
+        # number that cannot have an interval into single-digit cells would
+        # produce the most quotable and least supportable figures here.
+        rows = self._rows()
+        out = labels.model_vs_human(
+            rows, {r["job_id"]: {"ai_involvement": "uses_ai_tools"}
+                   for r in rows}, KINDS)
+        block = out["by_platform"]["fields"]["ai_involvement"]
+        self.assertEqual(set(block), {"greenhouse"})
+        self.assertEqual(block["greenhouse"]["n"], 3)
+        self.assertEqual(block["greenhouse"]["rate"], 1.0)
+        # hn_whoishiring's two items were both ties, and a tie is not broken.
+        self.assertEqual(out["no_consensus"], 3)
+
+    def test_a_measured_cell_keeps_the_measured_shape_not_field_cell_s(self):
+        # A per-platform cell has to mean what the column it sits under
+        # means. Building this one from field_cell() would silently swap
+        # `rate` (model vs the majority human answer) for `agree2` (two
+        # answers about the same item) and the table would still print.
+        rows = _agreeing("gh0", "greenhouse")
+        out = labels.model_vs_human(
+            rows, {"gh0": {"ai_involvement": "none"}}, KINDS)
+        cell = out["by_platform"]["fields"]["ai_involvement"]["greenhouse"]
+        self.assertEqual(set(cell), {"kind", "n", "k", "rate", "ci"})
+        self.assertEqual(cell, out["vs_consensus"]["ai_involvement"])
+
+    def test_intra_annotator_computes_the_breakout_it_does_not_print(self):
+        # The original design is 5-10 jobs labelled twice, so a per-platform
+        # cell here is n=1. It is in the dict because a JSON consumer can
+        # pool it across sessions; it is off the page because a table of
+        # single-item cells is noise.
+        rows = [
+            _label("j1", "seniority_level", "mid", "alice", round_no=1,
+                   platform="greenhouse"),
+            _label("j1", "seniority_level", "mid", "alice", round_no=2,
+                   platform="greenhouse"),
+        ]
+        out = labels.intra_annotator(rows, KINDS)
+        self.assertEqual(
+            out["by_platform"]["fields"]["seniority_level"]["greenhouse"]["n"],
+            1)
+        text = report.render_labels(
+            [], inter={"labellers": [], "single_labeller_items": {},
+                       "abstained": {}},
+            intra=out,
+            measured={"vs_consensus": {}, "vs_each": {}, "no_consensus": 0,
+                      "no_model_output": []})
+        self.assertNotIn("greenhouse", text)
+
+
+class TestTheBreakoutIsRenderedBesideTheBlendedNumber(unittest.TestCase):
+
+    #: Task 06's real figures, intervals included: 92.2% [85-96] on the clean
+    #: ATS end against 77.8% [55-91] on everything else. That 14-point gap is
+    #: the effect 29:87-89 predicts and the reason this breakout exists.
+    FLOOR = {"ai_involvement": {
+        "overall": _cell(115, 0.907, (0.84, 0.95)),
+        "by_platform": {"greenhouse": _cell(98, 0.922, (0.85, 0.96))},
+        "clean": _cell(98, 0.922, (0.85, 0.96)),
+        "messy": _cell(17, 0.778, (0.55, 0.91))}}
+
+    def _report(self):
+        rows = []
+        for i in range(4):
+            rows += _agreeing(f"gh{i}", "greenhouse", agree=i < 3)
+        rows += _agreeing("hn0", "hn_whoishiring")
+        model = {r["job_id"]: {"ai_involvement": "uses_ai_tools"}
+                 for r in rows}
+        inter = labels.inter_annotator(rows, KINDS)
+        measured = labels.model_vs_human(rows, model, KINDS)
+        triples = labels.interpretable(floor=self.FLOOR,
+                                       ceiling=inter["fields"],
+                                       measured=measured["vs_consensus"])
+        return report.render_labels(
+            triples, inter=inter,
+            intra=labels.intra_annotator(rows, KINDS), measured=measured)
+
+    def test_the_floor_s_own_platform_cells_come_free_from_the_selfcheck(self):
+        # metrics.selfcheck() already stores by_platform/clean/messy beside
+        # `overall` (metrics.py:419-429), so the floor column of the breakout
+        # cost interpretable() no new argument.
+        triples = labels.interpretable(
+            floor=self.FLOOR,
+            ceiling={"ai_involvement": _cell(6, 0.5)},
+            measured={"ai_involvement": {"n": 6, "k": 5, "rate": 0.83,
+                                         "ci": (0.4, 0.97)}})
+        self.assertEqual(triples[0].floor, _cell(115, 0.907, (0.84, 0.95)))
+        self.assertEqual(triples[0].floor_by_platform["fields"],
+                         {"greenhouse": _cell(98, 0.922, (0.85, 0.96))})
+        self.assertEqual(triples[0].floor_by_platform["messy"],
+                         _cell(17, 0.778, (0.55, 0.91)))
+
+    def test_the_table_prints_a_row_per_platform_under_the_blended_row(self):
+        text = self._report()
+        self.assertIn("per platform", text)
+        self.assertIn("greenhouse", text)
+        self.assertIn("hn_whoishiring", text)
+        # The blended row is still there and still first.
+        self.assertLess(text.index("ceiling = two different people"),
+                        text.index("per platform"))
+
+    def test_a_small_cell_is_marked_and_a_large_one_is_not(self):
+        # This is the property that stops n=2 being quoted as a rate. The
+        # floor cell over 98 records prints bare; every cell over the handful
+        # of labels this set holds prints with `~`.
+        text = self._report()
+        self.assertIn("~", text)
+        self.assertIn("n=98", text)
+        self.assertIn("n=1", text)
+        for line in text.splitlines():
+            if "n=98" in line:
+                self.assertNotIn("~  92%", line)
+
+    def test_a_platform_missing_a_floor_or_a_ceiling_is_flagged(self):
+        # Not suppressed: the selfcheck corpus and the label set are
+        # different samples and need not cover the same sources. A model
+        # number with nothing to be read between is a diagnostic, and the
+        # reader has to be able to see that it is.
+        text = self._report()
+        flagged = [ln for ln in text.splitlines()
+                   if ln.strip().startswith("! hn_whoishiring")]
+        self.assertEqual(len(flagged), 1, text)
+
+    def test_the_pooled_clean_messy_row_is_the_one_with_any_n(self):
+        text = self._report()
+        self.assertIn("clean (gh+ashby)", text)
+        self.assertIn("messy (all others)", text)
+
+    def test_a_set_with_no_platforms_says_so_rather_than_printing_blanks(self):
+        rows = _agreeing("j1", None) + _agreeing("j2", None, agree=False)
+        model = {"j1": {"ai_involvement": "uses_ai_tools"},
+                 "j2": {"ai_involvement": "uses_ai_tools"}}
+        inter = labels.inter_annotator(rows, KINDS)
+        measured = labels.model_vs_human(rows, model, KINDS)
+        # Every item still has a platform -- `unknown` -- so the table prints
+        # it rather than claiming nothing is there. What must never happen is
+        # a silent empty block.
+        text = report.render_labels(
+            labels.interpretable(floor={"ai_involvement": {
+                                     "overall": _cell(115, 0.907)}},
+                                 ceiling=inter["fields"],
+                                 measured=measured["vs_consensus"]),
+            inter=inter, intra=labels.intra_annotator(rows, KINDS),
+            measured=measured)
+        self.assertIn(labels.UNKNOWN_PLATFORM, text)
+
+    def test_the_breakout_opens_no_route_around_the_refusal(self):
+        # Interpretable still requires all three blended quantities. A field
+        # with a rich per-platform floor and no measured figure raises, so
+        # nothing can reach the per-platform table that the gate rejected.
+        with self.assertRaises(labels.Uninterpretable):
+            labels.interpretable(floor=self.FLOOR,
+                                 ceiling={"ai_involvement": _cell(6, 0.5)},
+                                 measured={"ai_involvement": {"n": 0}})
+        with self.assertRaises(labels.Uninterpretable):
+            labels.interpretable(floor=self.FLOOR, ceiling={},
+                                 measured={"ai_involvement": {
+                                     "n": 6, "k": 5, "rate": 0.83,
+                                     "ci": (0.4, 0.97)}})
+
+
+# --------------------------------------------------------------------------
 # The gate: three quantities or nothing
 # --------------------------------------------------------------------------
 
@@ -449,6 +725,140 @@ class TestNoLabelIsEverGenerated(unittest.TestCase):
             labels.record(_Conn(), axis=labels.AXIS_A, job_id="j",
                           field="seniority_level", value="Mid-Level",
                           labeller_id="alice")
+
+
+_BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _code_only(path):
+    """A module's source with docstrings and comments removed.
+
+    ast.unparse() never emits `#` comments -- they are not in the tree -- and
+    dropping the leading string Expr of every module, class and function
+    removes the docstrings. What is left is code, which is the only thing a
+    "this module never queries X" assertion should be reading.
+
+    Grepping the raw file would be wrong in both directions here:
+    webapp/label.py's docstrings legitimately DISCUSS `job_facts` and
+    `jobs_app` while querying neither, so a raw grep both fails on prose and
+    would tempt the next person to reword a comment to make a test pass.
+    """
+    with open(path, encoding="utf-8") as fh:
+        tree = ast.parse(fh.read())
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if not isinstance(body, list) or not body:
+            continue
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                                 ast.AsyncFunctionDef)):
+            continue
+        first = body[0]
+        if (isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)):
+            body.pop(0)
+    return ast.unparse(tree)
+
+
+def _module_constant(path, name):
+    """One module-level literal, without importing the module.
+
+    webapp/ imports fastapi, which is not installed in this environment (five
+    modules there have always failed to import). The property below is too
+    load-bearing to be pinned only in a suite that cannot run, so it is read
+    out of the AST instead -- the same device
+    test_no_module_in_the_package_calls_a_model_to_label uses one class down.
+    """
+    with open(path, encoding="utf-8") as fh:
+        tree = ast.parse(fh.read())
+    for node in tree.body:
+        targets = ([node.target] if isinstance(node, ast.AnnAssign)
+                   else getattr(node, "targets", []))
+        for target in targets:
+            if isinstance(target, ast.Name) and target.id == name:
+                return ast.literal_eval(node.value)
+    raise AssertionError(f"{path} has no module-level {name}")
+
+
+class TestTheLabellerIsBlindToTheModelsAnswer(unittest.TestCase):
+    """29:105 -- "Labellers were blind to `fit_score`".
+
+    29:72-73 calls seeing it "the single easiest way to invalidate the whole
+    exercise", because a human shown the model's number first collapses their
+    judgement onto it. The property holds by construction in webapp/label.py
+    and, until this class, nothing asserted it.
+
+    IT IS PINNED HERE AND NOT ONLY BESIDE THE MODULE IT GUARDS. There is a
+    matching class in webapp/tests/test_label_form.py, which is the natural
+    home -- but `fastapi` is not installed in this environment, so that suite
+    cannot run at all and never has. A property this load-bearing needs an
+    assertion that actually executes. These read the source rather than
+    import it, which is what makes that possible.
+    """
+
+    PATH = os.path.join(_BACKEND, "webapp", "label.py")
+
+    #: Everything that would leak the pipeline's own opinion of a posting: the
+    #: score tables, their columns, and the schema constants that name them.
+    #: `job_facts` is on the list too, and not only `job_scores`: showing a
+    #: labeller the model's extracted `seniority_level` would anchor axis A
+    #: exactly as showing fit_score anchors axis B, and axis A is the half of
+    #: this exercise that outlives the cohort (29:29).
+    FORBIDDEN = ("fit_score", "match_score", "job_scores", "job_matches",
+                 "job_facts", "SCORES_TABLE", "MATCHES_TABLE", "FACTS_TABLE",
+                 "jobs_app")
+
+    def test_the_form_reads_six_columns_of_jobs_and_none_is_a_score(self):
+        # label.py:78. _job() (label.py:112-128) selects exactly these and
+        # nothing else, so what the page can render is bounded by this tuple.
+        columns = _module_constant(self.PATH, "_DETAIL_COLUMNS")
+        self.assertEqual(columns, ("id", "title", "company_name",
+                                   "location_raw", "platform",
+                                   "description_text"))
+        for column in columns:
+            self.assertNotIn("score", column)
+
+    def test_no_score_table_is_reachable_from_the_module_at_all(self):
+        # Not "the form does not display it" -- the module never asks for it.
+        # A future _job() that widened its SELECT would fail here before
+        # anybody had to notice a number on the page.
+        code = _code_only(self.PATH)
+        for name in self.FORBIDDEN:
+            self.assertNotIn(name, code,
+                             f"webapp/label.py must not reach {name}. "
+                             f"29:105 requires labellers blind to the "
+                             f"model's answer, and 29:72-73 calls breaking "
+                             f"that the single easiest way to invalidate "
+                             f"the whole exercise")
+
+    def test_the_only_tables_named_are_the_corpus_and_the_eval_set(self):
+        # The positive half of the same claim, so the test above cannot be
+        # satisfied by renaming things. `jobs` for the posting,
+        # eval_label_items for set membership, and nothing else.
+        code = _code_only(self.PATH)
+        self.assertIn("FROM jobs WHERE id = %s", code)
+        self.assertIn("FROM eval_label_items", code)
+        self.assertEqual(code.count("FROM"), 2,
+                         "two queries: the posting, and its membership of the "
+                         "eval set. A third is a change to what a labeller "
+                         "can be shown.")
+
+    def test_the_stratum_is_never_handed_to_the_renderer(self):
+        # A stratum name is the pipeline's verdict in one word: "surfaced"
+        # tells a labeller the ranker already liked this posting, and
+        # "gate_rejected" tells them it never made it in. next_item() returns
+        # it (labels.py:750) and the route deliberately does not pass it on.
+        with open(self.PATH, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        renderer = [n for n in ast.walk(tree)
+                    if isinstance(n, ast.FunctionDef)
+                    and n.name == "_render_form"]
+        self.assertEqual(len(renderer), 1)
+        args = [a.arg for a in renderer[0].args.args]
+        self.assertNotIn("stratum", args)
+        self.assertEqual(args, ["job", "question_list", "label_set", "done",
+                                "total", "overlap"])
+        self.assertNotIn("stratum", _code_only(self.PATH))
 
 
 class TestGrantsAreDeclaredOnce(unittest.TestCase):
@@ -635,6 +1045,63 @@ class TestSchemaAgainstPostgres(unittest.TestCase):
         # makes the two of them comparable at all.
         self.assertEqual(
             labels.next_item(self.conn, "s", "bob")["job_id"], "b")
+
+    def test_fetch_carries_the_platform_the_breakout_needs(self):
+        # 29:106 needs a per-platform split and eval_labels has no platform
+        # column -- deliberately, because the platform is a property of the
+        # posting and eval_label_items already records it once (labels.py:273).
+        # fetch() joins it on, so the export, corpus.load() and all three
+        # agreement functions get it without a second query or a second copy
+        # that can disagree with the first.
+        self.conn.execute(
+            "INSERT INTO eval_label_items (label_set, job_id, stratum, "
+            "platform, overlap, position) VALUES "
+            "('s','j1','surfaced','hn_whoishiring',FALSE,0)")
+        labels.record(self.conn, axis="A", job_id="j1",
+                      field="ai_involvement", value="none",
+                      labeller_id="alice", label_set="s")
+        self.conn.commit()
+        rows = labels.fetch(self.conn)
+        self.assertEqual([r["platform"] for r in rows], ["hn_whoishiring"])
+
+    def test_a_label_outside_any_set_still_comes_back(self):
+        # LEFT JOIN, not INNER. record() allows a NULL label_set and axis A is
+        # deliberately not owned by whichever set sampled the row
+        # (ensure_schema's comment). An inner join would delete evidence in
+        # order to add a column, which is the same defect pool_query() warns
+        # about at labels.py:414.
+        labels.record(self.conn, axis="A", job_id="orphan",
+                      field="ai_involvement", value="none",
+                      labeller_id="alice")
+        self.conn.commit()
+        rows = labels.fetch(self.conn)
+        self.assertEqual([(r["job_id"], r["platform"]) for r in rows],
+                         [("orphan", None)])
+        # ... and it reports as `unknown`, not as absent.
+        block = labels.inter_annotator(
+            rows + [dict(rows[0], labeller_id="bob")], KINDS)["by_platform"]
+        self.assertEqual(list(block["fields"]["ai_involvement"]),
+                         [labels.UNKNOWN_PLATFORM])
+
+    def test_one_label_cannot_be_fanned_out_by_the_join(self):
+        # eval_label_items' primary key is (label_set, job_id), so at most one
+        # item matches. Pinned because a join that duplicates rows would
+        # double every n in the report and nothing else would notice.
+        for label_set in ("s", "s2"):
+            if label_set != "s":
+                self.conn.execute(
+                    "INSERT INTO eval_label_sets (label_set, created_at, seed,"
+                    " n, profile, job_id_sha256) VALUES (%s, 't', 0, 1, "
+                    "'pursuit', 'sha')", (label_set,))
+            self.conn.execute(
+                "INSERT INTO eval_label_items (label_set, job_id, stratum, "
+                "platform, overlap, position) VALUES (%s,'j1','surfaced',"
+                "'greenhouse',FALSE,0)", (label_set,))
+        labels.record(self.conn, axis="A", job_id="j1",
+                      field="ai_involvement", value="none",
+                      labeller_id="alice", label_set="s")
+        self.conn.commit()
+        self.assertEqual(len(labels.fetch(self.conn)), 1)
 
     def test_verify_schema_names_a_missing_table(self):
         problems = labels.verify_schema(

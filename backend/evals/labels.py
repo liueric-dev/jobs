@@ -51,6 +51,20 @@ THREE QUANTITIES, AND THE THIRD CANNOT BE PRINTED ALONE
     render, and it raises `Uninterpretable` for any field that has a measured
     cell without a floor cell and a ceiling cell. There is no flag to pass.
 
+AND ALL THREE ARE BROKEN OUT BY SOURCE PLATFORM
+    29:106 requires it and 29:87-89 gives the reason: task 06's
+    reconciliation predicts extraction degrades on messy sources and Phase 3
+    just added several, so a blended number would hide exactly that effect.
+
+    The breakout is a DIAGNOSTIC BESIDE the blended figure, never a
+    replacement for it. At the label counts this session can realistically
+    collect -- 100 postings across six platforms -- a per-platform cell is
+    single digits, and a bare percentage over n=3 reads exactly like one over
+    n=300. So every cell carries its n and its interval, and is_thin() marks
+    the ones whose interval is too wide to separate a good platform from a
+    bad one. Same axis as the self-consistency table: metrics.CLEAN_PLATFORMS,
+    reused rather than redefined.
+
 ABSTAIN IS A VALUE AND IS NEVER FOLDED AWAY
     A labeller who cannot tell from the posting records NULL. Recording a
     guess instead is precisely the poison this module exists to avoid.
@@ -656,6 +670,21 @@ def register_set(conn, label_set, rows, *, seed, profile, note=None):
 _LABEL_COLUMNS = ("axis", "label_set", "job_id", "field", "value", "profile",
                   "labeller_id", "round_no", "labelled_at", "note")
 
+#: What fetch() returns: the label, plus the platform of the posting it is
+#: about. `platform` is NOT a column of `eval_labels` and must not become one
+#: -- it is a property of the posting, already recorded once on
+#: eval_label_items (ensure_schema above), and a second copy on every label
+#: row is a copy that can disagree with the first.
+#:
+#: It rides along on the read because the per-platform breakout task 29's
+#: Definition of done asks for (29:106) has to happen somewhere, and every
+#: consumer downstream of here -- the export JSONL, corpus.load(), the three
+#: agreement functions -- takes label rows and nothing else. Carrying it on
+#: the row means the breakout needs no second query, no second argument
+#: threaded through __main__, and no chance of the platform map being built
+#: from a different set than the labels.
+_FETCH_COLUMNS = _LABEL_COLUMNS + ("platform",)
+
 
 def record(conn, *, axis, job_id, field, value, labeller_id, label_set=None,
            profile=None, round_no=1, note=None, now=None):
@@ -696,20 +725,34 @@ def record(conn, *, axis, job_id, field, value, labeller_id, label_set=None,
 
 
 def fetch(conn, *, axis=None, label_set=None):
-    """Every label, as dicts. Small by construction -- this is human output."""
+    """Every label, as dicts. Small by construction -- this is human output.
+
+    LEFT JOIN, NOT INNER, and for the same reason pool_query() gives. A label
+    may carry a NULL `label_set` (record() allows one, and the CLI's
+    axis-A-is-not-owned-by-a-set rule is why), and an inner join would drop
+    those rows silently -- deleting evidence to add a column. A row with no
+    matching item simply has `platform` None, which the breakout reports as
+    `unknown` rather than as absent.
+
+    At most one item can match: eval_label_items' primary key is
+    (label_set, job_id), so this cannot fan a label out into several rows.
+    """
     where, params = [], []
     if axis:
-        where.append("axis = %s")
+        where.append("l.axis = %s")
         params.append(axis)
     if label_set:
-        where.append("label_set = %s")
+        where.append("l.label_set = %s")
         params.append(label_set)
     clause = ("WHERE " + " AND ".join(where)) if where else ""
-    cols = ", ".join(_LABEL_COLUMNS)
+    cols = ", ".join(f"l.{c}" for c in _LABEL_COLUMNS)
     rows = conn.execute(
-        f"SELECT {cols} FROM eval_labels {clause} ORDER BY job_id, field, "
-        f"labeller_id, round_no", params).fetchall()
-    return [dict(zip(_LABEL_COLUMNS, r)) for r in rows]
+        f"SELECT {cols}, i.platform FROM eval_labels l "
+        f"LEFT JOIN eval_label_items i "
+        f"  ON i.label_set = l.label_set AND i.job_id = l.job_id "
+        f"{clause} ORDER BY l.job_id, l.field, l.labeller_id, l.round_no",
+        params).fetchall()
+    return [dict(zip(_FETCH_COLUMNS, r)) for r in rows]
 
 
 def progress(conn, label_set, labeller_id):
@@ -763,6 +806,120 @@ def active_set(conn):
 # Agreement
 # --------------------------------------------------------------------------
 
+#: What a platform is called when the label set recorded none. The same
+#: string metrics.selfcheck() uses (metrics.py:406), so a row in the breakout
+#: below lines up with the row of the same name in the self-consistency
+#: table instead of reading as a different population.
+UNKNOWN_PLATFORM = "unknown"
+
+#: A cell whose 95% interval is wider than this is marked `~` and must never
+#: be quoted as a rate.
+#:
+#: THE TEST IS ON THE INTERVAL, NOT ON n, AND THAT IS THE POINT. A stratified
+#: set of 100 postings across six platforms leaves single-digit cells, and a
+#: bare percentage over n=3 reads exactly like one over n=300 -- CLAUDE.md:
+#: "n=17 is not a result". But n alone is the wrong predicate: 10/10 spans
+#: [72-100] and does say something, while 5/10 spans [24-76] at the same n and
+#: says nothing at all. Width is the quantity that decides whether a cell can
+#: separate a good platform from a bad one, and field_cell() already computes
+#: it -- so this introduces no new estimate, only a threshold on an existing
+#: one.
+#:
+#: 30 points, calibrated against the numbers this table exists to be compared
+#: with rather than picked round. Task 06's clean/messy figures on
+#: `ai_involvement` are 92.2% [85-96] and 77.8% [55-91] -- intervals of 11 and
+#: 23 points, differing by 14. A cell wider than 30 points is wider than the
+#: entire spread of the quantities it would be read against, so it cannot
+#: participate in that comparison whatever its point estimate says. In
+#: practice that is every cell under about ten items, which is the honest
+#: description of a 100-posting set spread over six platforms.
+THIN_CI_POINTS = 0.30
+
+
+def cell_ci(cell):
+    """(lo, hi) for either cell shape, because there are two.
+
+    metrics.field_cell() names its interval `agree2_ci` -- floor and ceiling
+    are both field_cell() outputs. model_vs_human()'s cells are a different
+    quantity (the model against the majority human answer, one trial per
+    item) and name theirs `ci`. Reading both here rather than unifying them
+    is deliberate: the two columns must keep meaning what they mean, and a
+    shared key would be the first step to averaging them.
+    """
+    if not cell:
+        return 0.0, 1.0
+    lo, hi = cell.get("ci") or cell.get("agree2_ci") or (0.0, 1.0)
+    return lo, hi
+
+
+def is_thin(cell):
+    """Is this cell too wide to be read as a rate? Empty cells are thin."""
+    if not cell or not cell.get("n"):
+        return True
+    lo, hi = cell_ci(cell)
+    return (hi - lo) > THIN_CI_POINTS
+
+
+def platform_index(rows, platforms=None):
+    """job_id -> platform, from the label rows themselves.
+
+    fetch() carries `platform` on every row (see _FETCH_COLUMNS), so the
+    normal case needs no argument. `platforms` is for a caller holding a set
+    file rather than a database -- save_set() writes the same field -- and it
+    wins where both are present, because a caller passing an explicit map is
+    being specific on purpose.
+    """
+    index = {}
+    for row in rows:
+        platform = row.get("platform")
+        if platform:
+            index.setdefault(str(row["job_id"]), platform)
+    for job_id, platform in (platforms or {}).items():
+        if platform:
+            index[str(job_id)] = platform
+    return index
+
+
+def _platform_blocks(per_field_platform, field_kinds, make=None):
+    """The breakout, in metrics.selfcheck()'s shape and no other.
+
+    Returns `fields` (one cell per field per platform), `clean` and `messy`
+    (the same cells pooled), and `platform_counts`. That is deliberately the
+    same shape metrics.selfcheck() returns at metrics.py:419-429 and that
+    report.render_selfcheck() already prints, so the two tables can be read
+    against each other rather than each needing its own explanation.
+
+    CLEAN_PLATFORMS IS THE RIGHT AXIS HERE, reused rather than redefined.
+    It was drawn for the model's input -- clean ATS HTML against scraped free
+    text -- and task 29:87-89 predicts degradation on exactly that boundary.
+    It survives the move to a human ceiling for the same reason: a person
+    reading an hn_whoishiring comment whose title the parser guessed at also
+    has less to go on than one reading a greenhouse posting. A second
+    definition here would make the floor's clean/messy columns and this one's
+    non-comparable, which is precisely what the reuse of field_cell() exists
+    to prevent.
+
+    `unknown` pools into messy, as it does in metrics.selfcheck(): a posting
+    whose source was not recorded is not evidence of a clean one.
+    """
+    make = metrics.field_cell if make is None else make
+    fields, clean, messy, counts = {}, {}, {}, {}
+    for field, groups in sorted(per_field_platform.items()):
+        kind = field_kinds.get(field, "enum")
+        fields[field] = {p: make(kind, v) for p, v in sorted(groups.items())}
+        clean_values, messy_values = [], []
+        for platform, values in sorted(groups.items()):
+            counts[platform] = counts.get(platform, 0) + len(values)
+            if platform in metrics.CLEAN_PLATFORMS:
+                clean_values.extend(values)
+            else:
+                messy_values.extend(values)
+        clean[field] = make(kind, clean_values)
+        messy[field] = make(kind, messy_values)
+    return {"fields": fields, "clean": clean, "messy": messy,
+            "platform_counts": counts}
+
+
 def _item_key(row):
     """Axis A ignores profile; axis B does not. The keys are independent."""
     if row["axis"] == AXIS_A:
@@ -779,7 +936,8 @@ def _group(rows, axis):
     return grouped
 
 
-def inter_annotator(rows, field_kinds, *, axis=AXIS_A, round_no=1):
+def inter_annotator(rows, field_kinds, *, axis=AXIS_A, round_no=1,
+                    platforms=None):
     """THE CEILING: how often two different people give the same answer.
 
     This is the quantity that gives every other number here a scale. Without
@@ -807,11 +965,21 @@ def inter_annotator(rows, field_kinds, *, axis=AXIS_A, round_no=1):
     posting", which is a real and useful answer but not one that can agree or
     disagree with anything. Folding them in as a value would score two people
     who both gave up as two people who concurred.
+
+    `fields` STAYS THE HEADLINE AND `by_platform` SITS BESIDE IT. Task
+    29:106 asks for the breakout and 29:87-89 says why -- task 06's
+    reconciliation predicts extraction degrades on messy sources and Phase 3
+    added several, so a blended number would hide exactly that. It does not
+    ask for the blended number to be replaced, and it must not be: the
+    per-platform cells are single-digit at any label count this session can
+    realistically collect, which is what is_thin() exists to make visible.
     """
     grouped = _group(rows, axis)
-    per_field, abstained, thin = {}, {}, {}
+    index = platform_index(rows, platforms)
+    per_field, per_platform, abstained, thin = {}, {}, {}, {}
     for (key, group) in sorted(grouped.items()):
         field = key[1]
+        platform = index.get(str(key[0])) or UNKNOWN_PLATFORM
         answers = {}
         for row in group:
             if row["round_no"] != round_no:
@@ -825,12 +993,15 @@ def inter_annotator(rows, field_kinds, *, axis=AXIS_A, round_no=1):
             continue
         values = tuple(answers[k] for k in sorted(answers))
         per_field.setdefault(field, []).append(values)
+        per_platform.setdefault(field, {}).setdefault(
+            platform, []).append(values)
 
     return {
         "axis": axis,
         "round": round_no,
         "fields": {f: metrics.field_cell(field_kinds.get(f, "enum"), v)
                    for f, v in sorted(per_field.items())},
+        "by_platform": _platform_blocks(per_platform, field_kinds),
         "abstained": abstained,
         "single_labeller_items": thin,
         "labellers": sorted({r["labeller_id"] for r in rows
@@ -838,7 +1009,7 @@ def inter_annotator(rows, field_kinds, *, axis=AXIS_A, round_no=1):
     }
 
 
-def intra_annotator(rows, field_kinds, *, axis=AXIS_A):
+def intra_annotator(rows, field_kinds, *, axis=AXIS_A, platforms=None):
     """The weaker ceiling: how often ONE person repeats their own answer.
 
     The original design's measurement -- 5-10 jobs labelled twice, a week
@@ -847,11 +1018,20 @@ def intra_annotator(rows, field_kinds, *, axis=AXIS_A):
     self-consistent but disagrees with everyone else has a different reading
     of the question, which is a problem with the FORM, not with the labellers,
     and only having both numbers distinguishes the two cases.
+
+    ITS BREAKOUT IS COMPUTED AND NOT PRINTED, and that is a judgement rather
+    than an omission. The original design is 5-10 jobs labelled twice
+    (03-metrics-and-golden-set.md:25), so a per-platform cell here is n=1 or
+    n=2 -- thin by any reading of is_thin(), and a table of `~` cells is
+    noise on the page. It is in the returned dict because the JSON consumer
+    can pool it across sessions, where the printed table cannot.
     """
     grouped = _group(rows, axis)
-    per_field, abstained = {}, {}
+    index = platform_index(rows, platforms)
+    per_field, per_platform, abstained = {}, {}, {}
     for key, group in sorted(grouped.items()):
         field = key[1]
+        platform = index.get(str(key[0])) or UNKNOWN_PLATFORM
         by_labeller = {}
         for row in group:
             if row["value"] is None:
@@ -864,11 +1044,14 @@ def intra_annotator(rows, field_kinds, *, axis=AXIS_A):
                 continue
             values = tuple(rounds[r] for r in sorted(rounds))
             per_field.setdefault(field, []).append(values)
+            per_platform.setdefault(field, {}).setdefault(
+                platform, []).append(values)
 
     return {
         "axis": axis,
         "fields": {f: metrics.field_cell(field_kinds.get(f, "enum"), v)
                    for f, v in sorted(per_field.items())},
+        "by_platform": _platform_blocks(per_platform, field_kinds),
         "abstained": abstained,
     }
 
@@ -901,7 +1084,7 @@ def consensus(rows, *, axis=AXIS_A, round_no=1):
 
 
 def model_vs_human(rows, model_values, field_kinds, *, axis=AXIS_A,
-                   round_no=1):
+                   round_no=1, platforms=None):
     """THE QUESTION -- and on its own it answers nothing. See interpretable().
 
     `model_values` is {job_id: normalized dict}, which is exactly what
@@ -921,6 +1104,16 @@ def model_vs_human(rows, model_values, field_kinds, *, axis=AXIS_A,
 
     Only axis A is meaningful here. There is no model prediction of "would you
     apply" and there must not be one -- CLAUDE.md: LLMs explain, never rank.
+
+    ONLY `vs_consensus` IS BROKEN OUT BY PLATFORM. It is the column that sits
+    in the three-quantity table, so it is the one 29:106 is asking about, and
+    it is one Bernoulli trial per item so its per-platform cells carry a
+    valid interval -- which is the whole basis on which a thin cell is
+    identified. `vs_each`'s pairs come from the same item and are not
+    independent (metrics.py:30), which is why it carries no interval even
+    blended; splitting a number that cannot have an interval into cells too
+    small to read would produce the most quotable and least supportable
+    figures in the report.
     """
     if axis != AXIS_A:
         raise ValueError(
@@ -929,15 +1122,18 @@ def model_vs_human(rows, model_values, field_kinds, *, axis=AXIS_A,
             "one would put an LLM between a user and an ordering.")
 
     agreed, tied = consensus(rows, axis=axis, round_no=round_no)
-    per_field_consensus, per_field_each = {}, {}
+    index = platform_index(rows, platforms)
+    per_field_consensus, per_field_each, per_platform = {}, {}, {}
     missing = set()
     for (job_id, field), human in sorted(agreed.items()):
         normalized = model_values.get(job_id)
         if normalized is None:
             missing.add(job_id)
             continue
-        per_field_consensus.setdefault(field, []).append(
-            (normalized.get(field), human))
+        pair = (normalized.get(field), human)
+        per_field_consensus.setdefault(field, []).append(pair)
+        per_platform.setdefault(field, {}).setdefault(
+            index.get(str(job_id)) or UNKNOWN_PLATFORM, []).append(pair)
 
     grouped = _group(rows, axis)
     for key, group in sorted(grouped.items()):
@@ -964,6 +1160,14 @@ def model_vs_human(rows, model_values, field_kinds, *, axis=AXIS_A,
                          for f, p in sorted(per_field_consensus.items())},
         "vs_each": {f: _cell(p, field_kinds.get(f, "enum"))
                     for f, p in sorted(per_field_each.items())},
+        # The same maker as the blended cell above, NOT metrics.field_cell().
+        # A per-platform cell has to mean what the column it sits under
+        # means; building it from field_cell() would silently swap `rate`
+        # (model vs the majority human answer) for `agree2` (two answers
+        # about the same item) and the table would still print.
+        "by_platform": _platform_blocks(
+            per_platform, field_kinds,
+            make=lambda kind, pairs: _cell(pairs, kind)),
         "no_consensus": len(tied),
         "no_model_output": sorted(missing),
     }
@@ -997,6 +1201,22 @@ class Interpretable:
     floor: dict        # model self-consistency -- metrics.selfcheck
     ceiling: dict      # inter-annotator      -- inter_annotator()
     measured: dict     # model vs human       -- model_vs_human()
+
+    #: The floor's own breakout, straight out of the selfcheck JSON
+    #: (metrics.py:419-429), in the shape _platform_blocks() returns:
+    #: {"fields": {platform: cell}, "clean": cell, "messy": cell}. Carried
+    #: here because report.render_labels() is handed the triples and not the
+    #: selfcheck blob, and the breakout needs all three columns to be a
+    #: breakout of the three quantities rather than a second table of one of
+    #: them. The clean/messy pair is the row with enough n to read: it is
+    #: where task 06's 92.2%-vs-77.8% gap on `ai_involvement` lives.
+    #:
+    #: IT DOES NOT WEAKEN THE REFUSAL. It has a default and is never checked
+    #: below, so it cannot be the thing that makes a triple constructible:
+    #: floor, ceiling and measured are still each required and still each
+    #: checked for n. A field with a per-platform floor and no blended
+    #: measured cell raises exactly as it did before.
+    floor_by_platform: dict = dataclasses.field(default_factory=dict)
 
     def __post_init__(self):
         for name in ("floor", "ceiling", "measured"):
@@ -1032,11 +1252,22 @@ def interpretable(*, floor, ceiling, measured, fields=None):
     common case is not "nothing was measured" but "the floor exists for every
     field and the ceiling exists for two of them" -- and silently dropping the
     other fields would be its own quiet lie about what was measured.
+
+    The floor's per-platform cells come free: `floor` IS metrics.selfcheck()'s
+    `fields` block, which already carries `by_platform` beside `overall`
+    (metrics.py:419-421). Nothing new is asked of the caller for the floor
+    column of the breakout, which is why this signature gained no argument.
     """
     fields = sorted(measured) if fields is None else list(fields)
-    return [Interpretable(field=f,
-                          floor=(floor.get(f) or {}).get("overall")
-                                or floor.get(f) or {},
-                          ceiling=ceiling.get(f) or {},
-                          measured=measured.get(f) or {})
-            for f in fields]
+    out = []
+    for f in fields:
+        blob = floor.get(f) or {}
+        out.append(Interpretable(
+            field=f,
+            floor=blob.get("overall") or blob or {},
+            ceiling=ceiling.get(f) or {},
+            measured=measured.get(f) or {},
+            floor_by_platform={"fields": blob.get("by_platform") or {},
+                               "clean": blob.get("clean") or {},
+                               "messy": blob.get("messy") or {}}))
+    return out

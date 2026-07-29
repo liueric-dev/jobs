@@ -112,6 +112,74 @@ class TestFormRendering(unittest.TestCase):
         self.assertNotIn("https://", body)
 
 
+class TestTheLabellerIsBlindToTheModelsAnswer(unittest.TestCase):
+    """29:105 -- "Labellers were blind to `fit_score`".
+
+    29:72-73 calls seeing it "the single easiest way to invalidate the whole
+    exercise": a human shown the model's number first collapses their
+    judgement onto it, and the resulting agreement measures the anchoring
+    rather than the extraction.
+
+    The property holds by construction -- _DETAIL_COLUMNS is six columns of
+    `jobs` (label.py:78), _job() selects only those (label.py:112-128), and
+    neither job_scores nor job_matches is queried anywhere in the module --
+    and until this class nothing asserted it.
+
+    THE SOURCE-LEVEL HALF OF THIS IS IN ../../tests/test_labels.py, because
+    `fastapi` is not installed in this environment and this whole package's
+    suite cannot run. What is here is what needs the module imported: the
+    rendered page itself.
+    """
+
+    #: A row carrying everything a future, wider _job() might hand the
+    #: renderer. _render_form reads named keys, so none of this can reach the
+    #: page today -- which is exactly the property being pinned, against the
+    #: day somebody adds `{job.get('fit_score')}` to the header for context.
+    #:
+    #: The values are sentinels rather than plausible ones, in both
+    #: directions. A bare `87` for fit_score is indistinguishable from the
+    #: stylesheet's `.87rem` and the assertion would fail for a reason that
+    #: is not about labelling; `junior` and `builds_llm_features` are printed
+    #: as radio choices, so asserting THOSE absent would be asserting the
+    #: form is broken.
+    LEAKY = {"fit_score": "FIT-SCORE-87", "match_score": "MATCH-SCORE-74",
+             "stratum": "surfaced",
+             "summary": "the model's own reading of this posting",
+             "seniority_level": "SENIORITY-FROM-JOB-FACTS",
+             "ai_involvement": "AI-INVOLVEMENT-FROM-JOB-FACTS"}
+
+    def test_the_rendered_page_carries_no_model_output(self):
+        body = _render(**self.LEAKY)
+        for value in self.LEAKY.values():
+            self.assertNotIn(str(value), body)
+        # And the field names, for the four that are not themselves questions.
+        # `ai_involvement` and `seniority_level` ARE asked, so their names
+        # appear as form input names and their absence is not the property.
+        for key in ("fit_score", "match_score", "stratum", "summary"):
+            self.assertNotIn(key, body)
+
+    def test_the_detail_columns_are_six_columns_of_jobs_and_no_score(self):
+        # label.py:78. What the page can render is bounded by this tuple, so
+        # this is the assertion that has to be maintained, not the one above.
+        self.assertEqual(label._DETAIL_COLUMNS,
+                         ("id", "title", "company_name", "location_raw",
+                          "platform", "description_text"))
+
+    def test_the_stratum_is_never_shown_to_the_labeller(self):
+        # A stratum name is the pipeline's verdict in one word: "surfaced"
+        # says the ranker already liked this posting and "gate_rejected" says
+        # it never got in. next_item() returns it (labels.py:750) and
+        # label_form deliberately passes only `overlap` to the renderer.
+        import inspect
+        self.assertNotIn(
+            "stratum", inspect.signature(label._render_form).parameters)
+        for shared in (True, False):
+            body = label._render_form(_job(), labels_mod.questions(), "ls1",
+                                      0, 30, shared).body.decode()
+            for stratum in labels_mod.STRATA:
+                self.assertNotIn(stratum, body)
+
+
 class TestTheRouteCannotWriteAModelsAnswer(unittest.TestCase):
 
     def test_the_module_never_reaches_a_model(self):

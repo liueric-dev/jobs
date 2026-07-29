@@ -1186,3 +1186,80 @@ and `--limit 0` is exactly what someone types to mean "don't spend"; `pursuit` w
 safe only by the accident of `None or 0` being 0. And `--stale-report` is handled
 *before* `main()`'s `llm.api_key()` check, so it runs on a machine with no credential
 — proved by running it that way, not by reading it.
+
+---
+
+## D46 — the mock corpus is a specification test, and is never a label
+
+**2026-07-29.** 55 synthetic postings arrived for "task 29". Task 29 is the human
+labelling session and `HANDOFF.md` calls it the one thing in the plan an agent cannot
+do. Writing synthetic values into `eval_labels` would reproduce `claude-bench.py:417`'s
+defect inside the tool built to detect it, and `tests/test_labels.py:423` already
+forbids it structurally.
+
+**Decided:** run the corpus through the real pipeline as an *acceptance* measurement,
+in a scratch schema, against a quote-backed answer key — and record it as a
+specification test, in those words, in `docs/mock-acceptance.md`. It does not reduce
+task 29's scope by one posting. Nothing from it reached `eval_labels`.
+
+**Rejected:** treating the answer key as Axis A labels (circular provenance, and it
+would contaminate the one asset task 29 exists to build); measuring only the 15
+postings with a pre-existing addendum key (n=15, and CLAUDE.md's own line is that
+n=17 is not a result).
+
+**The quote rule is what makes the derived key legitimate.** Every expected value
+carries the byte-exact substring of the posting that determines it, mechanically
+verified — 605/605 — by a validator written by a different agent than the key. That
+turns 40 derived entries from an agent's opinion into evidence a human can audit in
+twenty minutes. It does not make them independent, and the doc says so.
+
+## D47 — location flags are loader output, not extraction output
+
+**2026-07-29.** The answer key initially scored `location_is_nyc` / `location_is_remote`
+as extraction fields. They are not `job_facts` columns: `match.py:281` reads them as
+`j.location_is_nyc, j.location_is_remote` from the `jobs` table. The model never
+produces them — the ingest loader does.
+
+**Caught by an independent validator, not by review.** Two agents were given the same
+contract and no sight of each other's work; the loader's validator refused the key.
+Had it not, two of eleven "extraction accuracy" fields would have been the loader's
+mapping compared against the key's reading of the same `location` string — both from
+the same twenty characters, agreeing almost always, silently inflating the headline
+with a field the model was never asked.
+
+**Decided:** a separate `loader_fields` block with a two-directional check, so an
+extraction field can never appear there and vice versa. They are kept, because
+`score_job` prices them (−15 / −25) and this is the only thing positioned to catch a
+wrong `_location_flags()`. They are just in a different denominator.
+
+**The general rule this session earned:** a measurement's denominator deserves an
+adversarial reader who cannot see how the numerator was built.
+
+## D48 — `strip_html` fixed by a superset regex, not by a parser
+
+**2026-07-29.** `lib/text.py` is on every ingest path, which is why HANDOFF scoped this
+out once already on blast radius.
+
+**Decided:** an alternation whose first branch treats a double-quoted attribute run as
+opaque and whose second is the exact previous pattern. It can only match where
+`<[^>]+>` already matched, and only match further — the blast radius is bounded by
+construction rather than by testing.
+
+**Rejected: `html.parser.HTMLParser`**, the only in-repo precedent
+(`tools/jsonld-probe.py`). `strip_html` must unescape exactly once — greenhouse is
+escaped a level deeper (`ingest/ats.py:559-581`) — and `convert_charrefs` decodes
+`&amp;nbsp;` to `\xa0`, which would delete the regression guard at
+`tests/test_ats_descriptions.py:62-70` rather than satisfy it. Turning charrefs off and
+re-emitting by hand reproduces the function as a state machine with a far larger set of
+behaviour changes, every one reaching a stored `content_hash`.
+
+**Rejected on measurement, not taste:** single-quoted attribute values and comment
+handling were both implemented, swept over 21,350 markup strings from 13,066 live rows
+at every level of escaping, and produced byte-identical output on all of them. Cost
+without benefit — and single quotes carry a real risk this does not, since an
+apostrophe in an unquoted value opens a run that prose then closes.
+
+**The defect was worse than recorded.** Six greenhouse rows had the remainder of the
+posting replaced by Tailwind class soup, not appended to. Remediation ran before the
+rewrite, deliberately: the reverse order leaves clean text with soup-derived facts
+under it.

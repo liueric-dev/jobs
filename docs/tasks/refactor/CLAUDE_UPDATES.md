@@ -1378,3 +1378,71 @@ every number against an independently-taken baseline**. One required test —
 `test_run_daily_score_step_passes_no_rescore_flag` — was missing from an otherwise
 complete 37-test file, and was caught by checking the list against the brief rather
 than by the suite, which was green without it.
+
+---
+
+# Session — mock acceptance run, `strip_html`, task-07 gaps (2026-07-29)
+
+Five agents in parallel on disjoint files, orchestrator verifying and committing.
+Suite **878 → 1030**, green. 90 live LLM calls, all in a scratch schema.
+
+## What landed
+
+- **`backend/evals/mock_corpus.py`** + `tests/test_mock_corpus.py` — loads the 55
+  synthetic postings, maps them to all 18 `schema.COLUMNS` keys, validates the answer
+  key. `job_url` is deliberately empty so a mock row can never satisfy `jobs_app`
+  (`schema.py:711`) even if one leaked.
+- **`docs/tasks/refactor/mock/mock-postings-v3-answer-key.json`** — quote-backed ground
+  truth for all 55. 605/605 quotes verified byte-exact substrings. 5 disagreements with
+  the pre-existing addendum recorded unresolved.
+- **`backend/tools/mock-acceptance.py`** — the scratch-schema driver. Refuses to write
+  unless `schema.SCHEMA` matches `scratchdb.SCRATCH_NAME`.
+- **`average_precision` / `precision_at_k` in `evals/metrics.py`** — stdlib, not
+  sklearn (which is not in `requirements.txt`, so `learned-ranker-probe.py` does not run
+  on a clean checkout). Ties handled by the McSherry & Najork closed form.
+- **`lib/text.strip_html()` fixed** + `migrations/migrate_description_rehash.py`.
+- **Per-platform breakout** in `labels.inter_annotator` / `intra_annotator` /
+  `model_vs_human` / `report.render_labels`, closing task 29 DoD:106.
+- **`fit_score` blindness pinned** — task 29 DoD:105 — in `backend/tests/`, which runs
+  here, as well as `webapp/tests/`, which cannot (`fastapi` is not installed).
+
+## The finding
+
+**Gate recall 48.3%.** See `docs/mock-acceptance.md` and the new section at the top of
+`HANDOFF.md`.
+
+## Verification that caught things, in order of value
+
+1. **An independent validator on the same contract.** The loader agent's `load_key`
+   refused the answer-key agent's file over `location_is_nyc`. Two of eleven extraction
+   fields would otherwise have been the loader's own mapping scored against itself.
+   Neither agent could see the other's work; review by one reader would not have caught
+   it. **D47.**
+2. **Brute-force enumeration against a closed form.** `average_precision`'s tie handling
+   was checked against the mean over *every* tie-break permutation — 8 cases, max delta
+   1.1e-16. Then the orchestrator's own correction changed the function's signature, so
+   it was **re-verified after the change**: a verified-then-modified function is
+   unverified.
+3. **A migration that proves its own method before writing.** `migrate_description_rehash`
+   reproduces the stored `content_hash` on 10,405/10,405 untouched rows. A hash rebuild
+   that could not reproduce existing hashes would be caught before it touched anything.
+4. **Content digests, not row counts.** `job_matches` and `job_scores` digests were
+   byte-identical before and after, which is what proves nothing was overwritten. The
+   only delta was the intended −2 `job_facts`.
+5. **Reading the failing test list rather than the pass count.** Three tests broke on the
+   `strip_html` fix and HANDOFF had predicted the wrong ones — two were task 35's *gate*
+   tests, red because fixing the source cleaned the fixture the gate is tested against.
+
+## Method notes worth keeping
+
+- **The orchestrator fixed the shared module surface before either dependent agent
+  started.** `mock_corpus.py`'s signatures went into both briefs verbatim, so the
+  harness agent could code against a module that did not exist yet. No race, no pasting
+  values between prompts.
+- **Fixing a defect can silently disarm the alarm built for it.** Task 35's gate tests
+  went red because their poisoned fixture became clean. Deleting them would have retired
+  a live alarm as a side effect of an upstream fix. They were re-pointed at input still
+  poisoned after the fix, and a test was added for the 13,000 rows the old stripper
+  already wrote.
+- **Five of five agents went idle without sending a report.** Sixteen of sixteen across
+  the run now. Treat the notification as "go look".

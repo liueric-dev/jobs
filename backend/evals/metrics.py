@@ -48,6 +48,7 @@ A RECORD NOT OK IN EVERY REPEAT IS NOT SILENTLY DROPPED
 
 import json
 import math
+from typing import NamedTuple
 
 #: greenhouse and ashby are the "clean ATS" end that the README hypothesises
 #: the 95% figure actually describes. Everything else is the messy end.
@@ -258,6 +259,215 @@ def tie_histogram(values):
         "p_tie": p_tie,
         "top": sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])),
     }
+
+
+# --------------------------------------------------------------------------
+# Ranking against a LABEL rather than against another run.
+#
+# Everything above measures a model against itself, because for fit_score
+# there is no ground truth. A constructed corpus with an intended verdict per
+# posting is the case where there IS one, and the question changes from "does
+# the model reproduce its own ordering" to "does the ordering put the good
+# postings first". CLAUDE.md: "Report average precision as the measurement,
+# precision@20 as the objective."
+#
+# NOT sklearn. tools/learned-ranker-probe.py:133 reaches for
+# sklearn.metrics.average_precision_score, and sklearn is not in
+# requirements.txt (`psycopg[binary]` alone) -- so that probe does not run on
+# a clean checkout of this repo. These are stdlib, and they differ from
+# sklearn's in the tie handling below, deliberately.
+# --------------------------------------------------------------------------
+
+#: How average_precision() and precision_at_k() treat equal scores.
+#:
+#: TIES ARE NOT AN EDGE CASE HERE, THEY ARE THE COMMON CASE.
+#: backend/docs/HANDOFF-match-quality.md:155 (4.2) records 59 postings sharing
+#: one fit_score, and match_score is free arithmetic over a small integer
+#: weight table, so it clusters just as hard. A top-k boundary that falls
+#: inside a tie block makes half of any top-k an arbitrary draw, and a
+#: first-seen tie-break measures the sort's choice rather than the ranker's.
+#:
+#: `expected` is the default and is the only one of the three that is a
+#: property of the RANKER: it is the mean over every tie-break, so permuting
+#: the input cannot change the answer. The closed form is McSherry & Najork
+#: (2008), "Computing Information Retrieval Performance Measures Efficiently
+#: in the Presence of Tied Scores" -- an O(n) sum, not an enumeration.
+#:
+#: `optimistic` and `pessimistic` are the best and worst tie-breaks, reported
+#: together as an interval when the gap matters. They bound what a real sort
+#: could have produced; `expected` is what it produces on average.
+TIE_MODES = ("expected", "optimistic", "pessimistic")
+
+
+class Ranked(NamedTuple):
+    """A ranking statistic and the rows it could NOT be computed over.
+
+    THE DROP COUNTS ARE NOT DIAGNOSTICS, THEY ARE PART OF THE ANSWER, and
+    that is why they are in the return value rather than available from a
+    second call. A row with no score leaves the denominator (see
+    _score_blocks), and in every caller this module has, "no score" is not
+    random: it means the pipeline failed to produce one. In
+    tools/mock-acceptance.py a posting scores None exactly when extraction
+    tombstoned it or never wrote facts, and a posting whose description
+    defeats the extractor is more likely to be one of the deliberately
+    awkward ones -- so the rows that vanish are correlated with the thing
+    being measured, and EVERY DROP MAKES THE RANKER LOOK BETTER.
+
+    That is backend/docs/HANDOFF-match-quality.md:147 (trap 4.1, "do not
+    compute metrics over a floor-filtered sample") in a second costume. There
+    it was job_matches' MATCH_FLOOR hiding the low end and moving one
+    identical ranking function from +0.619 to +0.326; here it is extraction
+    failure hiding the hard end and moving it the other way.
+
+    A 5-tuple rather than the (value, n) pair the rest of this module returns,
+    deliberately: `ap, n = average_precision(...)` now raises instead of
+    quietly discarding the drop counts, so a caller written against the old
+    shape has to look at them.
+
+      value                -- the statistic, or None when it is undefined
+      n                    -- rows it was computed over
+      n_positive           -- positives among those n
+      n_dropped            -- rows with no score, excluded
+      n_dropped_positive   -- of which were labelled positive. THIS IS THE
+                              ONE THAT INFLATES THE NUMBER.
+      k                    -- precision_at_k only: the k actually used
+    """
+
+    value: object
+    n: int
+    n_positive: int
+    n_dropped: int
+    n_dropped_positive: int
+    k: object = None
+
+    @property
+    def complete(self):
+        """Was every row scorable? False means the figure is conditioned."""
+        return self.n_dropped == 0
+
+    def coverage(self):
+        """"55/120", the shape docs/score-validation.md:270 already uses.
+
+        One string so that no caller has to decide how to render it, and so
+        that a report cannot print the statistic having forgotten it.
+        """
+        return f"{self.n}/{self.n + self.n_dropped}"
+
+
+def _drops(scores, labels):
+    """(n_dropped, n_dropped_positive) for the rows with no score."""
+    n = sum(1 for s in scores if s is None)
+    pos = sum(1 for s, y in zip(scores, labels) if s is None and y)
+    return n, pos
+
+
+def _score_blocks(scores, labels):
+    """(block_size, positives_in_block) descending by score, ties grouped.
+
+    Positions where the score is None are dropped: "the ranker produced no
+    number" is not a rank, and giving it one -- last, or 0 -- would score a
+    missing answer as a confident bad one. How many were dropped, and how
+    many of those were positives, is carried out to the caller in Ranked --
+    the drop is defensible, silence about it is not.
+    """
+    rows = sorted(((s, 1 if y else 0) for s, y in zip(scores, labels)
+                   if s is not None),
+                  key=lambda r: -r[0])
+    blocks = []
+    i = 0
+    while i < len(rows):
+        j = i
+        while j + 1 < len(rows) and rows[j + 1][0] == rows[i][0]:
+            j += 1
+        blocks.append((j - i + 1, sum(r[1] for r in rows[i:j + 1])))
+        i = j + 1
+    return blocks
+
+
+def average_precision(scores, labels, *, ties="expected"):
+    """Average precision of `scores` against binary `labels`. A Ranked.
+
+    `.value` is None when there are no positives or no comparable rows -- a
+    corpus with nothing to find has no precision, and returning 0.0 there
+    would read as "the ranker failed" rather than as "the question was not
+    asked".
+
+    Never 0.5-for-random: average precision's chance level is the positive
+    RATE, so 0.55 on a corpus that is 55% positive is exactly no signal.
+    Report the rate beside it, and `.coverage()` beside that, or the number
+    is uninterpretable in two independent ways.
+    """
+    if ties not in TIE_MODES:
+        raise ValueError(f"ties must be one of {TIE_MODES}, got {ties!r}")
+    blocks = _score_blocks(scores, labels)
+    n = sum(size for size, _ in blocks)
+    n_pos = sum(r for _, r in blocks)
+    dropped, dropped_pos = _drops(scores, labels)
+    if not n_pos:
+        return Ranked(None, n, n_pos, dropped, dropped_pos)
+
+    total = 0.0
+    above, rel_above = 0, 0          # items and positives in earlier blocks
+    for size, rel in blocks:
+        if rel:
+            if ties == "optimistic":
+                # Every positive in the block ahead of every negative.
+                total += sum((rel_above + m) / (above + m)
+                             for m in range(1, rel + 1))
+            elif ties == "pessimistic":
+                # ... and behind every negative.
+                total += sum((rel_above + m) / (above + size - rel + m)
+                             for m in range(1, rel + 1))
+            else:
+                # E[precision at position j | the item there is relevant],
+                # times P(it is relevant). The inner term is 1 plus the mean
+                # of a hypergeometric draw over the rest of the block.
+                for j in range(1, size + 1):
+                    ahead = (1.0 if size == 1
+                             else 1.0 + (j - 1) * (rel - 1) / (size - 1))
+                    total += (rel / size) * (rel_above + ahead) / (above + j)
+        above += size
+        rel_above += rel
+    return Ranked(total / n_pos, n, n_pos, dropped, dropped_pos)
+
+
+def precision_at_k(scores, labels, k=TOP_K):
+    """Precision over the top k. A Ranked, with `.k` the k actually used.
+
+    `.k` is min(k, comparable rows), following top_k_overlap above: a corpus
+    of 12 has no top 20, and dividing by 20 anyway reports a ceiling of 0.6
+    that no ranker could beat. k <= 0 gives `.value` None rather than raising
+    -- an empty shortlist is a real configuration (`pursuit`'s
+    daily_narrative_budget is 0) and the table still has to print.
+
+    UNSCORABLE ROWS ARE DROPPED BEFORE k IS RESOLVED, which is the same
+    inflation Ranked describes and is worse here than for average precision:
+    dropping rows does not only remove them from the denominator, it PROMOTES
+    whatever was behind them into the top k. `.n_dropped_positive` is the
+    number that says how much of the top k was vacated rather than earned.
+
+    Ties are averaged rather than broken, for the reason in TIE_MODES: when
+    the boundary falls inside a block of equal scores, the block contributes
+    its positive rate times the slots it fills, which is the expectation over
+    every tie-break. That makes a fractional numerator possible and 0.75 over
+    2 slots a correct answer, not a rounding error.
+    """
+    blocks = _score_blocks(scores, labels)
+    n = sum(size for size, _ in blocks)
+    n_pos = sum(r for _, r in blocks)
+    dropped, dropped_pos = _drops(scores, labels)
+    kk = min(k, n)
+    if kk <= 0:
+        return Ranked(None, n, n_pos, dropped, dropped_pos, k=0)
+
+    hits, slots = 0.0, kk
+    for size, rel in blocks:
+        if slots <= 0:
+            break
+        take = min(size, slots)
+        hits += rel * take / size
+        slots -= take
+    return Ranked(hits / kk, n, n_pos, dropped, dropped_pos, k=kk)
 
 
 def ranking(per_record_values, ids, *, tolerances=SCORE_TOLERANCES, k=TOP_K):
