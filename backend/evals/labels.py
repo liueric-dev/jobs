@@ -422,9 +422,20 @@ _ITEM_COLUMNS = ("job_id", "platform", "stratum", "title", "company_name",
                  "match_score", "computed_score", "tier", "extracted")
 
 
-def pool_query(profile, cfg=None):
+def pool_query(profile, cfg):
     """The one SELECT. Read-only, and per-platform for the reason corpus.py
     gives at corpus.py:115.
+
+    `cfg` IS REQUIRED, AND IT MUST BE THE PROFILE'S OWN GATE. It used to
+    default to relevance.load() -- the shared config/relevance.json -- which
+    is a different gate from the one a cohort profile is filtered by, and the
+    argument names a profile, so the default silently answered for the wrong
+    population. Measured on the live corpus 2026-07-29, `pursuit`: the shared
+    gate classifies 59 rows as `surfaced` and the profile's own gate 144,
+    because classify() tests tier BEFORE match_score and 85 postings the
+    pipeline is actively surfacing come back tier 3 under the author's gate.
+    Resolve with relevance.for_profile(), the same helper extract.py and
+    score.py use.
 
     LEFT JOIN, NOT INNER, ON BOTH SIDES. That is the entire point of this
     query: an inner join to job_facts or job_matches reproduces exactly the
@@ -441,7 +452,6 @@ def pool_query(profile, cfg=None):
     import relevance
     from schema import TABLE, FACTS_TABLE, MATCHES_TABLE
 
-    cfg = relevance.load() if cfg is None else cfg
     tier_expr, tier_params = relevance.tier_sql(cfg, "j")
     params = dict(tier_params)
     params["profile"] = profile
@@ -470,7 +480,7 @@ def pool_query(profile, cfg=None):
     return sql, params
 
 
-def pool(conn, profile, *, per_platform=400, cfg=None):
+def pool(conn, profile, *, per_platform=100_000, cfg=None):
     """Read production and return classified candidate rows. Never writes.
 
     Generous per_platform by default for the same reason corpus.py:230 gives:
@@ -478,10 +488,26 @@ def pool(conn, profile, *, per_platform=400, cfg=None):
     thin to contain them yields a set that quietly measures only the easy
     path. Here the risk is sharper -- `gate_rejected` rows are, by
     construction, the ones the pipeline is least interested in keeping fresh.
+
+    THE PER-PLATFORM DEFAULT IS THE WHOLE TABLE, and that is a correction
+    rather than a preference. At 400 the newest-first window held 29 of
+    `pursuit`'s 144 surfaced postings (greenhouse 6/65, ashby 13/52,
+    google_jobs 9/26) -- measured 2026-07-29 -- so the stratum the precision
+    figure is quoted from was being drawn from a fifth of itself, and
+    sample() under-fills in silence. PARTITION BY platform answers CLAUDE.md's
+    "~85% greenhouse/ashby" composition complaint; it does nothing about the
+    recency truncation underneath it. `jobs` is ~14,000 rows and one SELECT
+    over all of it is free.
+
+    `cfg` defaults to THE PROFILE'S OWN GATE, not the shared file -- see
+    pool_query(). Passing it in explicitly is still preferred when the caller
+    already holds the profile row, which saves the second load.
     """
     import relevance
+    import profiles
 
-    cfg = relevance.load() if cfg is None else cfg
+    if cfg is None:
+        cfg = relevance.for_profile(profiles.load_one(conn, profile))
     sql, params = pool_query(profile, cfg)
     params["per_platform"] = per_platform
     cur = conn.execute(sql, params)
@@ -544,8 +570,18 @@ def confirm_scores(rows, criteria):
     return kept, mismatched
 
 
-def sample(rows, n, *, seed=0, quota=None, overlap=0, max_tier=2):
+def sample(rows, n, *, seed=0, quota=None, overlap=0):
     """Pick `n` rows across the strata, then mark `overlap` of them shared.
+
+    There used to be a `max_tier` parameter here. It was never referenced in
+    the body -- classification happens in pool()/classify(), which is the only
+    place that has a tier -- so it read as a second, disagreeing knob for the
+    gate boundary. Removed rather than wired up: one implementation.
+
+    UNDER-FILL IS NOT REPORTED HERE. A stratum with fewer rows than its quota
+    yields what it has and the loop moves on, because sample() cannot know
+    whether that is a starved pool or a deliberately small draw. The caller
+    compares taken against want and refuses -- __main__.cmd_label_sample.
 
     Deterministic given a seed, and stratified within each stratum by platform
     for the reason corpus.py:24 gives: an ATS posting is clean HTML with a real
@@ -767,27 +803,90 @@ def progress(conn, label_set, labeller_id):
     return done, total
 
 
+def tail_offset(labeller_id, tail_size):
+    """Where in the non-overlap tail this labeller starts. Stable per person.
+
+    THE DEFECT THIS EXISTS TO FIX. next_item() used to order every labeller's
+    queue `overlap DESC, position ASC` -- the SAME order for everyone. Ten
+    volunteers labelling twenty postings each therefore answered the same
+    twenty postings, and DISTINCT COVERAGE NEVER EXCEEDED WHAT ONE PERSON
+    COMPLETED. Adding labellers bought redundancy and no coverage at all,
+    which makes task 29's ">=100 labelled postings" unreachable regardless of
+    turnout:
+
+        distinct = overlap + n_labellers * (budget - overlap)
+
+    and the second term was structurally zero. At overlap 10 and a 20-posting
+    budget, ten labellers now reach 10 + 10*10 = 110.
+
+    Deterministic, and that matters twice: a labeller who closes the tab and
+    comes back resumes the same walk, and the set's coverage is reproducible
+    from the labeller ids alone without reading eval_labels. sha256 rather
+    than hash() because PYTHONHASHSEED randomises str hashing per process,
+    which would give the same person a different queue on every request.
+    Python-side rather than Postgres hashtext() so it is testable with no
+    database, which 03-metrics-and-golden-set.md's definition of done
+    requires of this package.
+    """
+    import hashlib
+
+    if tail_size <= 0:
+        return 0
+    digest_bytes = hashlib.sha256(labeller_id.encode("utf-8")).digest()
+    return int.from_bytes(digest_bytes[:8], "big") % tail_size
+
+
 def next_item(conn, label_set, labeller_id):
     """The next job this labeller has not answered anything about, or None.
 
     OVERLAP ROWS COME FIRST, and that ordering is the ceiling's survival plan
-    -- see sample(). After those, `position` order, which is sorted job_id, so
-    two labellers walk the set in the same order and their overlap accrues
-    even on the non-overlap rows if they both get far enough.
+    -- see sample(). After those the tail is ROTATED by a per-labeller offset
+    so that two labellers walking at the same speed cover different postings
+    -- see tail_offset() for why the un-rotated version could not reach the
+    Definition of done.
     """
+    tail_size = conn.execute(
+        "SELECT COUNT(*) FROM eval_label_items "
+        "WHERE label_set = %s AND NOT overlap",
+        (label_set,)).fetchone()[0]
+    offset = tail_offset(labeller_id, tail_size)
+
+    # Rotation is over the tail's RANK, not over `position` arithmetic. The
+    # ranks are contiguous by construction; positions are only contiguous
+    # when the overlap rows happen to occupy the low ones, which is true of
+    # any set sample() drew and not true of one assembled by hand. Modular
+    # arithmetic on a sparse column silently collides two rows onto the same
+    # slot and the spread quietly degrades.
     row = conn.execute(
         """
-        SELECT i.job_id, i.stratum, i.overlap, i.position
-        FROM eval_label_items i
-        WHERE i.label_set = %s
-          AND NOT EXISTS (SELECT 1 FROM eval_labels l
-                           WHERE l.job_id = i.job_id
-                             AND l.label_set = i.label_set
-                             AND l.labeller_id = %s)
-        ORDER BY i.overlap DESC, i.position ASC
+        WITH ordered AS (
+            SELECT i.job_id, i.stratum, i.overlap, i.position,
+                   ROW_NUMBER() OVER (ORDER BY i.position) - 1 AS tail_rank
+            FROM eval_label_items i
+            WHERE i.label_set = %(label_set)s AND NOT i.overlap
+        ),
+        queue AS (
+            SELECT job_id, stratum, overlap, position,
+                   0 AS band, position AS ord
+            FROM eval_label_items
+            WHERE label_set = %(label_set)s AND overlap
+            UNION ALL
+            SELECT job_id, stratum, overlap, position,
+                   1 AS band,
+                   (tail_rank - %(offset)s + %(tail)s) %% %(tail)s AS ord
+            FROM ordered
+        )
+        SELECT q.job_id, q.stratum, q.overlap, q.position
+        FROM queue q
+        WHERE NOT EXISTS (SELECT 1 FROM eval_labels l
+                           WHERE l.job_id = q.job_id
+                             AND l.label_set = %(label_set)s
+                             AND l.labeller_id = %(labeller)s)
+        ORDER BY q.band ASC, q.ord ASC
         LIMIT 1
         """,
-        (label_set, labeller_id)).fetchone()
+        {"label_set": label_set, "labeller": labeller_id,
+         "offset": offset, "tail": max(tail_size, 1)}).fetchone()
     if row is None:
         return None
     return {"job_id": row[0], "stratum": row[1], "overlap": row[2],

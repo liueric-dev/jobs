@@ -157,6 +157,22 @@ class TestStrata(unittest.TestCase):
         self.assertEqual(by_id["gate00"], "gate_rejected")
         self.assertIsNone(by_id["pending"])
 
+    def test_the_tail_offset_is_stable_and_stays_in_range(self):
+        # Pure, so it is testable with no database -- which is what
+        # 03-metrics-and-golden-set.md's definition of done requires of this
+        # package, and the reason the rotation is computed in Python rather
+        # than with Postgres hashtext().
+        for size in (1, 2, 7, 190):
+            for who in ("alice", "bob", "u_090b0ad12e99", ""):
+                off = labels.tail_offset(who, size)
+                self.assertGreaterEqual(off, 0)
+                self.assertLess(off, size)
+                self.assertEqual(off, labels.tail_offset(who, size))
+        self.assertEqual(labels.tail_offset("alice", 0), 0)
+        spread = {labels.tail_offset(f"builder{i:02d}", 190)
+                  for i in range(10)}
+        self.assertGreater(len(spread), 1)
+
     def test_the_set_contains_rows_the_pipeline_rejected(self):
         # THE POINT OF THE WHOLE STRATIFICATION. Everything measured before
         # this was something the pipeline already chose to surface, so only
@@ -203,6 +219,65 @@ class TestStrata(unittest.TestCase):
         flags = [r["overlap"] for r in picked]
         self.assertEqual(flags[:6], [True] * 6)
         self.assertNotIn(True, flags[6:])
+
+    def test_the_gate_the_pool_classifies_against_is_the_profiles_own(self):
+        # THE DEFECT. pool()/pool_query() defaulted to relevance.load(), the
+        # shared config/relevance.json, while taking a PROFILE as the argument
+        # that names the population. A cohort profile carrying its own
+        # relevance_json was therefore classified against the repo author's
+        # software-engineer gate.
+        #
+        # classify() tests tier BEFORE match_score, so the consequence is not
+        # a near miss: a posting the pipeline is actively surfacing comes back
+        # `gate_rejected` if the OTHER gate happens to call it tier 3. That is
+        # the one stratum whose entire value is being identified correctly
+        # (labels.py:438). Measured on the live corpus 2026-07-29: 59 rows
+        # classified `surfaced` under the shared gate against 144 under
+        # pursuit's own -- 85 misfiled.
+        import relevance
+
+        shared = {"title_include": ["engineer"], "max_tier_to_score": 2}
+        cohort = {"title_include": ["analyst"], "max_tier_to_score": 2}
+        self.assertNotEqual(relevance.load(cfg=shared),
+                            relevance.load(cfg=cohort))
+
+        # A row the cohort gate admits (tier 1) and the shared gate does not
+        # (tier 3), carrying a match_score -- i.e. the pipeline surfaced it.
+        surfaced_here = {"job_id": "j", "tier": 1, "facts_version": 3,
+                         "match_score": 70}
+        rejected_there = dict(surfaced_here, tier=3)
+        self.assertEqual(labels.classify(surfaced_here, 2), "surfaced")
+        self.assertEqual(labels.classify(rejected_there, 2), "gate_rejected")
+
+    def test_pool_query_will_not_silently_answer_for_the_wrong_gate(self):
+        # The fix is not "pass the right cfg at the one call site" -- it is
+        # that there is no longer a default that can be wrong. A keyword with
+        # a plausible fallback re-arms itself the first time someone adds a
+        # second caller.
+        import inspect
+        sig = inspect.signature(labels.pool_query)
+        self.assertIs(sig.parameters["cfg"].default,
+                      inspect.Parameter.empty,
+                      "pool_query must not default its gate")
+        # Walk the BODY, not the source text: the docstring names the old
+        # default in order to explain why it is gone, so a grep over the whole
+        # function fails on its own explanation. Same AST idiom the suite uses
+        # to check score_job()'s purity -- it does not rely on a promise.
+        import ast, textwrap
+        tree = ast.parse(textwrap.dedent(inspect.getsource(labels.pool_query)))
+        fn = tree.body[0]
+        calls = [ast.unparse(n) for n in ast.walk(ast.Module(fn.body[1:], []))
+                 if isinstance(n, ast.Call)]
+        self.assertNotIn("relevance.load()", calls)
+        self.assertIn("relevance.tier_sql(cfg, 'j')", calls)
+
+    def test_sample_has_no_second_knob_for_the_gate_boundary(self):
+        # sample() carried max_tier=2 and never referenced it. A parameter
+        # that reads as a gate control but controls nothing is worse than
+        # absent: classification happens in classify(), which is the only
+        # place that has a tier.
+        import inspect
+        self.assertNotIn("max_tier", inspect.signature(labels.sample).parameters)
 
     def test_confirm_scores_evicts_a_row_match_py_had_not_caught_up_with(self):
         # "No job_matches row" has two causes and SQL cannot tell them apart.
@@ -1039,12 +1114,88 @@ class TestSchemaAgainstPostgres(unittest.TestCase):
                       field="ai_involvement", value="none",
                       labeller_id="alice", label_set="s")
         self.conn.commit()
-        self.assertEqual(
-            labels.next_item(self.conn, "s", "alice")["job_id"], "a")
+        # After the shared row, the tail. WHICH tail row is now a function of
+        # the labeller -- see test_two_labellers_do_not_walk_the_same_tail --
+        # so this asserts only that it is one of them.
+        self.assertIn(
+            labels.next_item(self.conn, "s", "alice")["job_id"], {"a", "c"})
         # A different person still gets the shared row first: that is what
         # makes the two of them comparable at all.
         self.assertEqual(
             labels.next_item(self.conn, "s", "bob")["job_id"], "b")
+
+    def test_two_labellers_do_not_walk_the_same_tail(self):
+        # THE DEFECT THIS PINS. next_item() ordered every labeller's queue
+        # `overlap DESC, position ASC` -- identically. Ten volunteers doing
+        # twenty postings each answered THE SAME twenty, so
+        #
+        #     distinct = overlap + n_labellers * (budget - overlap)
+        #
+        # had a structurally zero second term and distinct coverage could
+        # never exceed what one person completed. Task 29's ">=100 labelled
+        # postings from >=5 labellers" was unreachable regardless of turnout,
+        # and the suite was green because nothing asserted coverage.
+        for i in range(20):
+            self.conn.execute(
+                "INSERT INTO eval_label_items (label_set, job_id, stratum, "
+                "platform, overlap, position) VALUES ('s',%s,'surfaced',"
+                "'greenhouse',%s,%s)", (f"j{i:02d}", i < 4, i))
+        self.conn.commit()
+
+        # Everyone clears the four shared rows first, then diverges.
+        firsts = set()
+        for who in ("alice", "bob", "carol", "dave", "erin"):
+            for job in ("j00", "j01", "j02", "j03"):
+                item = labels.next_item(self.conn, "s", who)
+                self.assertTrue(item["overlap"],
+                                "shared rows must still come first")
+                labels.record(self.conn, axis="A", job_id=item["job_id"],
+                              field="ai_involvement", value="none",
+                              labeller_id=who, label_set="s")
+            self.conn.commit()
+            firsts.add(labels.next_item(self.conn, "s", who)["job_id"])
+
+        self.assertGreater(len(firsts), 1,
+                           "five labellers entering a 16-row tail must not "
+                           "all be handed the same posting")
+
+    def test_a_labeller_who_comes_back_resumes_the_same_walk(self):
+        # Determinism is not decoration. A volunteer who closes the tab and
+        # reopens it must not be re-seated somewhere else in the tail, and the
+        # set's coverage has to be reproducible from the labeller ids alone.
+        # sha256, not hash(): PYTHONHASHSEED randomises str hashing per
+        # process, so hash() would reshuffle the same person on every request.
+        for i in range(12):
+            self.conn.execute(
+                "INSERT INTO eval_label_items (label_set, job_id, stratum, "
+                "platform, overlap, position) VALUES ('s',%s,'surfaced',"
+                "'ashby',FALSE,%s)", (f"k{i:02d}", i))
+        self.conn.commit()
+        first = labels.next_item(self.conn, "s", "alice")["job_id"]
+        for _ in range(4):
+            self.assertEqual(
+                labels.next_item(self.conn, "s", "alice")["job_id"], first)
+
+    def test_every_row_is_still_reachable_by_one_labeller(self):
+        # Rotating the tail must not strand rows. A modular walk that skipped
+        # one would cap the set below its own n and nothing else would notice.
+        for i in range(9):
+            self.conn.execute(
+                "INSERT INTO eval_label_items (label_set, job_id, stratum, "
+                "platform, overlap, position) VALUES ('s',%s,'surfaced',"
+                "'builtin',%s,%s)", (f"m{i:02d}", i < 2, i))
+        self.conn.commit()
+        seen = []
+        while True:
+            item = labels.next_item(self.conn, "s", "zoe")
+            if item is None:
+                break
+            seen.append(item["job_id"])
+            labels.record(self.conn, axis="A", job_id=item["job_id"],
+                          field="ai_involvement", value="none",
+                          labeller_id="zoe", label_set="s")
+            self.conn.commit()
+        self.assertEqual(sorted(seen), [f"m{i:02d}" for i in range(9)])
 
     def test_fetch_carries_the_platform_the_breakout_needs(self):
         # 29:106 needs a per-platform split and eval_labels has no platform

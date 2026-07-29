@@ -267,6 +267,7 @@ def cmd_label_sample(args):
     """
     from evals import labels
     import profiles
+    import relevance
     import schema
     import score
 
@@ -275,9 +276,17 @@ def cmd_label_sample(args):
 
     conn = _labels_conn()
     try:
-        rows = labels.pool(conn, profile, per_platform=args.per_platform)
-        criteria = profiles.load_one(conn, profile).criteria
-        rows, promoted = labels.confirm_scores(rows, criteria)
+        # The profile row is loaded FIRST and its gate handed to pool()
+        # explicitly. pool() would resolve the same thing itself, but the row
+        # is needed for criteria anyway and one load beats two. What must not
+        # happen is falling back to the shared config/relevance.json: that is
+        # a different gate from the one this profile is filtered by, and it
+        # misfiles rows the pipeline surfaces as gate-rejected. labels.py:425.
+        prof = profiles.load_one(conn, profile)
+        cfg = relevance.for_profile(prof)
+        rows = labels.pool(conn, profile, per_platform=args.per_platform,
+                           cfg=cfg)
+        rows, promoted = labels.confirm_scores(rows, prof.criteria)
         picked = labels.sample(rows, args.n, seed=args.seed,
                                overlap=args.overlap)
         if not args.dry_run:
@@ -294,9 +303,26 @@ def cmd_label_sample(args):
         key = row.get("platform") or "unknown"
         platforms[key] = platforms.get(key, 0) + 1
 
-    labels.save_set(args.out, picked)
-    print(f"wrote {args.out}: {len(picked)} rows, "
-          f"sha256(sorted job_id)={labels.digest(picked)[:16]}...")
+    # A starved stratum is the failure this command must not pass silently.
+    # sample() takes what a stratum has and moves on, so a pool too thin to
+    # fill the quota produces a set that looks fine and measures the easy
+    # path -- exactly the trap CLAUDE.md's "never select an eval corpus with
+    # ORDER BY first_seen DESC" names. Refuse, name the shortfall, and let
+    # the operator widen --per-platform or lower --n on purpose.
+    shortfall = []
+    for stratum in labels.STRATA:
+        want = int(round(args.n * labels.DEFAULT_STRATA_QUOTA.get(stratum, 0.0)))
+        got = counts.get(stratum, 0)
+        if got < want:
+            shortfall.append((stratum, want, got))
+
+    if not args.dry_run:
+        labels.save_set(args.out, picked)
+        print(f"wrote {args.out}: {len(picked)} rows, "
+              f"sha256(sorted job_id)={labels.digest(picked)[:16]}...")
+    else:
+        print(f"would write {args.out}: {len(picked)} rows, "
+              f"sha256(sorted job_id)={labels.digest(picked)[:16]}...")
     print("  strata:    " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     print("  platforms: " + ", ".join(f"{k}={v}" for k, v in sorted(platforms.items())))
     print(f"  overlap:   {sum(1 for r in picked if r['overlap'])} row(s) go to "
@@ -309,7 +335,15 @@ def cmd_label_sample(args):
         print(f"  {len(promoted)} row(s) had no job_matches row but recompute "
               f"at or above the floor -- excluded from below_floor")
     if args.dry_run:
-        print("  (dry run -- nothing registered in the database)")
+        print("  (dry run -- nothing registered in the database, "
+              "nothing written to disk)")
+    if shortfall:
+        print("REFUSED: a stratum could not be filled from the pool.")
+        for stratum, want, got in shortfall:
+            print(f"  {stratum}: wanted {want}, pool held {got}")
+        print("  Raise --per-platform, lower --n, or accept a smaller set "
+              "deliberately. A short stratum measures the easy path.")
+        return 2
     return 0
 
 
@@ -498,11 +532,18 @@ def main(argv=None):
     ls.add_argument("--label-set", default="labelset-v1")
     ls.add_argument("--profile", default=None)
     ls.add_argument("--seed", type=int, default=0)
-    ls.add_argument("--overlap", type=int, default=20,
+    ls.add_argument("--overlap", type=int, default=10,
                     help="rows shown to EVERY labeller. This is the only "
                          "thing that makes inter-annotator agreement -- the "
-                         "ceiling -- computable at all")
-    ls.add_argument("--per-platform", type=int, default=400)
+                         "ceiling -- computable at all. It also SPENDS each "
+                         "labeller's budget: distinct coverage is "
+                         "overlap + labellers * (budget - overlap), so 20 "
+                         "shared rows against a 20-posting sitting yields 20 "
+                         "distinct postings no matter how many people turn up")
+    ls.add_argument("--per-platform", type=int, default=100_000,
+                    help="newest-N per platform. The default is effectively "
+                         "the whole table on purpose: at 400 the window held "
+                         "29 of pursuit's 144 surfaced postings")
     ls.add_argument("--note", default=None)
     ls.add_argument("--dry-run", action="store_true")
     ls.set_defaults(func=cmd_label_sample)
