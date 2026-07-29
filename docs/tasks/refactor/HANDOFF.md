@@ -1,7 +1,8 @@
 # Handoff — the `docs/tasks/refactor/` run
 
-Written 2026-07-28, and rolling — last updated after **13, 35 and D45** landed
-(`fa2d7a7`, `303f7b9`, `e11fabf`). Read this first, then
+Written 2026-07-28, and rolling — last updated after **`job_scores`' version keys**
+landed (`d18ea54`), which was recommended next step 2 below and is now done. Before
+that: **13, 35 and D45** (`fa2d7a7`, `303f7b9`, `e11fabf`). Read this first, then
 [`DECISIONS.md`](DECISIONS.md) (why each choice was made) and
 [`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
 [`README.md`](README.md)'s status column is the ordered index.
@@ -69,8 +70,9 @@ still holds.
 
 ## State at handoff
 
-**Branch `webapp-service`, suite green at 837 tests** (task files say 263, the
-previous handoff 782; 837 is the floor now). The last code commit is `fa2d7a7`.
+**Branch `webapp-service`, suite green at 878 tests** (task files say 263, an earlier
+handoff 782, the last one 837; **878 is the floor now**). The last code commit is
+`d18ea54`.
 **The whole suite passes** — `python3 -m unittest discover -s backend/tests` from
 the repo root. Working tree is clean apart from untracked `scripts/`, which
 predates this run and is not ours.
@@ -106,6 +108,7 @@ Thirteen tasks committed, one experiment, plus the two conversational decisions:
 | — | D45 **fixed** — one durability cadence, 104 rows backfilled | `e11fabf` |
 | 35 | extraction input-sanity gate — **8 poisoned rows, not 3** | `303f7b9` |
 | 13 | cohort criteria profile — **DoD 122-123 unmet, not tuned** | `fa2d7a7` |
+| — | **`job_scores` version keys — inert by default, 0 rows re-scored** | `d18ea54` |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -260,6 +263,12 @@ job_matches 3,521 = pursuit 144 @(3,2) + tech 3,084 @(2,5) + frontend 293 @(2,1)
            anything broke. tech lost exactly 1 row to task 35, NOT to task 13.
 job_scores  1,293 = tech 1,110 + frontend 183; pursuit still has none and will not
            until daily_narrative_budget is raised above 0 -- read D16 first
+           NOW CARRIES facts_version / persona_sha / prompt_version /
+           criteria_version, and ALL FOUR ARE NULL ON ALL 1,293 ROWS. That is
+           deliberate: unversioned is a third state, never automatically stale.
+           `score.py --stale-report` reads 0 stale, 1,018 unversioned, and needs
+           no API key. The BILL IS 1,018 CALLS, NOT 1,293 -- 275 rows are closed
+           or never cleared MATCH_FLOOR, and no flag can reach them.
 company_ats  139 never_found (was 35) + 75 valid + 5 unvalidated + 3 dead
 profiles    pursuit active @criteria_version 2; tech and frontend inactive but intact
 ```
@@ -457,6 +466,36 @@ direction. **The first job of the next sourcing session is to measure this
 properly**, over a window with no backfill in it. Until then the honest statement
 is: tens per day against a gate of 200.
 
+**A CLEAN WINDOW CANNOT BE MINED BACKWARD, AND THAT IS NOW SETTLED** (measured
+2026-07-29 while doing other work; no tool was built, so this is a finding, not a
+deliverable). Rows by `first_seen` × platform: 7/24 → 11,000 (the initial load),
+7/25 → 72, 7/26 → 355, 7/27 → 90, 7/28 → 1,802 (NYC Open Data 1,030 + Workday 330
+one-time loads). Pursuit-relevant by day: **803 / 0 / 28 / 0 / 80**.
+
+The two days this file previously called "least contaminated" — 7/25 at 0 and 7/27
+at 28 — are not clean steady-state days. The platform breakdown says why: on both,
+the ATS step contributed almost nothing (7/25 is builtin-only). **They are days the
+pipeline mostly did not run**, so averaging them understates as badly as including
+7/24 overstates. There is also **no run-log table**, and `run-daily.py`'s
+`upsert-summary` line landed *after* the last scheduled run, so no history exists to
+reconstruct from — `first_seen` + `platform` is the entire available signal, and
+nothing records ingest provenance per row.
+
+**So the window has to be collected forward. The first honest night is 2026-07-29,
+which has now run** (`max(first_seen)` 2026-07-29T04:08:38, 148 postings closed).
+Both new sources are in `STEPS`, so from here their contribution is genuine
+incremental intake. Count complete nights from 7/29 and do not include it with any
+earlier day.
+
+**Settle the definition before measuring: "Pursuit-relevant" is ambiguous across
+three predicates that differ by an order of magnitude** — the relevance gate
+(`tier <= 2`, which is what `docs/pursuit-description-gate.md`'s 13.2/day used),
+`job_matches` above `MATCH_FLOOR` (144 rows), and the `job_facts` entry-level ∧
+`uses_ai_tools` intersection (55 of 859). GATE 2's wording does not say which, and
+the answer changes whether the gate is missed by 10x or 100x. Note also that all
+three prior per-day figures in this repo used **`posted_at_ts`**, not `first_seen`;
+a forward-collected intake measurement is a deliberate departure and must say so.
+
 **This does not invalidate the plan; it relocates the risk.** Phases 1 and 2 —
 the pipeline retarget — are essentially done and their premises held. What has not
 held is the assumption that the long tail is reachable by adding feeds. Four
@@ -494,21 +533,47 @@ is either blocked on it or cheaper after it.
    are unfitted by construction and `tools/calibrate-match.py` can sweep them for
    free the moment there is anything to fit against.
 
-2. **`job_scores` has no version key at all, and task 13 has now moved the
-   thing that would invalidate it.** No `prompt_version`, `persona_version` or
-   `criteria_version` (`schema.py:342-361`); re-scoring triggers only on an
-   anti-join for "no row exists" (`score.py:262-263`). This was deliberately
-   deferred out of the 13 session **because its invalidation path fires on
-   exactly the `criteria_version` bump 13 made** — landing both at once would
-   have made `tech`'s 1,110 narratives eligible for paid re-scoring.
+2. ~~**`job_scores` has no version key at all.**~~ **DONE, `d18ea54`.** Four
+   columns, three of them cache keys, and `persona_version` was built as a
+   **content digest (`persona_sha`) rather than an integer** — see `DECISIONS.md`
+   for why, and for why `criteria_version` is stored but deliberately excluded
+   from the staleness predicate.
 
-   `pursuit` has zero `job_scores` and `daily_narrative_budget = 0`, so nothing is
-   stale *today*. It bites the moment either changes. **`persona_version` does not
-   exist anywhere in the repo** and has to be invented — a column plus a bump
-   discipline, or a content hash of `persona_json`. Sequence it before the budget
-   is raised, and answer the re-scoring budget question explicitly.
+   **What a fresh session must not misread:** nothing is stale and nothing was
+   re-scored. All 1,293 rows are unversioned, which is a *third state*, not a
+   stale one. Re-scoring is opt-in and needs an explicit `--limit`.
+   `score.py --stale-report` prices it without a credential.
 
-3. **Fix `lib/text.strip_html()`, which task 35 gated but did not repair.** Its
+   **The re-scoring budget question is answered but not spent.** Whoever raises
+   `daily_narrative_budget` above 0, or reactivates `tech`, should run
+   `--stale-report` first — and note that `profiles.load_one` ignores `active`,
+   so `score.py --profile tech` can already reach those rows.
+
+3. **Fix `lib/text.strip_html()`, which task 35 gated but did not repair.**
+   **This is now the top unblocked implementation item**, since step 2 is done.
+   Four things were established about it on 2026-07-29 without touching it, so the
+   next session does not have to re-derive them:
+
+   - **A fix must be stdlib-only.** `requirements.txt` is `psycopg[binary]` alone,
+     deliberately; no bs4/lxml/html5lib/selectolax is installed or vendored. The
+     only precedent in-repo is `html.parser.HTMLParser`, used once, in
+     `tools/jsonld-probe.py`.
+   - **Three tests break BY DESIGN and need deliberate updating, not deletion.**
+     `tests/test_row_identity.py:161-168` pins a sha256 of stripper output;
+     `tests/test_extract.py:290-300` asserts the markup **is** present and its own
+     docstring says it is meant to fail when this lands; and
+     `tests/test_ats_descriptions.py:62-70` requires `strip_html` alone to still
+     leave `&nbsp;` on double-escaped greenhouse input.
+   - **It forces a re-hash.** `description_text` is in `HASH_FIELDS_ATS` and
+     `HASH_FIELDS_SHORT`, and `lib/upsert.py` skips rewriting a row whose hash
+     matches. `migrations/migrate_ats_descriptions.py` is the precedent — it
+     rebuilds `description_text` from stored `raw_json` through the real
+     normalizers.
+   - **The regression fixture already exists**: replay the
+     `ats-greenhouse-domsoup` cassette, which holds a poisoned posting and a clean
+     control and refuses to re-record if either crosses the threshold.
+
+   Its
    `<[^>]+>` ends a tag at the first `>`, and modern Tailwind class names contain
    one, so the tag remainder is emitted as prose. Task 35 rejects the result at
    extraction; it does not stop the bytes being stored. New contaminated rows will

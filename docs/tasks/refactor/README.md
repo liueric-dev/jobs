@@ -101,6 +101,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 |---|---|---|---|
 | 34 | [Documentation cleanup](34-documentation-cleanup.md) | archive, promote, regenerate — by document type | todo |
 | 35 | [Extraction input sanity](tranche_six/35-extraction-input-sanity.md) | reject browser-DOM markup before it becomes facts; 0 false positives in 13,282 | done |
+| — | `job_scores` version keys — no task file; [`HANDOFF.md`](HANDOFF.md) step 2 | `facts_version`/`persona_sha`/`prompt_version`/`criteria_version`, `select_shortlist` version-aware — **inert by default: 0 rows stale, 0 re-scored, and the bill is 1,018 calls not 1,293**. C4 of the master plan | done |
 
 ---
 
