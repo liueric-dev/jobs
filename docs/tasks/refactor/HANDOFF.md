@@ -8,6 +8,30 @@ that: **`job_scores`' version keys** (`d18ea54`), and **13, 35 and D45** (`fa2d7
 [`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
 [`README.md`](README.md)'s status column is the ordered index.
 
+## Orientation — there are three "READ THIS FIRST" sections, in this order
+
+That is two too many, and the file has earned each one. If you read nothing else:
+
+1. **Do the gate fix** (§ *the gate throws away half the cohort*). Unblocked, small,
+   free to re-measure, and the largest measured loss in the pipeline. It is step **0**
+   under "Recommended next steps" and it goes before task 29, because every posting the
+   gate rejects is one the labelling session will never be shown.
+2. **Do not re-tune task 13's weights** (§ *the ranking is a product now*). Its DoD is
+   unmet on purpose. Nothing measured since — including the mock corpus's 5-of-5 on
+   branding traps — licenses changing them. Only task 29 does.
+3. **Do not reactivate `tech` or raise `daily_narrative_budget` casually**
+   (§ *the cost lever hiding in the profiles table*). Either one restores a ~5,000-row
+   re-extraction bill or a ~1,018-call re-scoring bill. Run `score.py --stale-report`
+   first; it needs no API key.
+
+**The one sentence a fresh session most often gets wrong:** a completed task here is not
+a validated one. 13 is committed and unmet; the mock acceptance run is a *specification*
+test and does not reduce task 29 by one posting.
+
+**Verify before you trust — including this file.** It has been measurably wrong about
+its own line numbers, about which three tests a change would break, and about its own
+SQL. Cite `file:line`, then re-read the line.
+
 ## READ THIS FIRST: the ranking is a product now, and the DoD it did not meet
 
 **Task 13 landed (`fa2d7a7`). `pursuit` has real weights, `criteria_version` 2, 144
@@ -259,11 +283,12 @@ recorded at `schema.py:158`.
 
 ## Nothing is in flight
 
-**The tree is clean.** Every agent across all five sessions completed, was verified
+**The tree is clean.** Every agent across all six sessions completed, was verified
 against the code and the database, and was committed — six in the session that landed
 03–18, three in the session that landed 11, three in the session that landed 08/12/19,
 three in the session that landed 13/35/D45, two in the session that landed the
-`job_scores` version keys. Nothing is half-written and nothing is waiting on a reply.
+`job_scores` version keys, five in the session that landed the mock acceptance run and
+the `strip_html` fix. Nothing is half-written and nothing is waiting on a reply.
 Untracked `scripts/` predates this run and is not ours.
 
 `run-daily.py`'s `STEPS` is fully wired — `ingest/workday.py` and `ingest/nyc-open-data.py`
@@ -285,10 +310,15 @@ underneath it:
   act on it.** `job_scores` carries version keys, but the nightly step passes no
   `--rescore-*` flag and the default selection is the old existence-only anti-join.
   A persona edit or a prompt bump changes what `--stale-report` says and changes
-  nothing about what the pipeline spends.
+  nothing about what the pipeline spends;
+- **the bytes it stores are no longer contaminated at the source.** `lib/text.strip_html()`
+  is fixed, so the `unusable` counter above should now stay at 0 for greenhouse. It is
+  still the alarm and still guards the ~13,000 rows the old stripper wrote — its tests
+  were re-pointed, not retired, precisely so that a future reader does not find a gate
+  with no reachable trigger and remove it as dead code.
 
-**Start here:** `python3 -m unittest discover -s backend/tests` from the repo root should
-report **878, OK**. `backend/.env` is not exported by default — scripts that reach the
+**Start here:** `cd backend && python3 -m unittest discover -s tests -t .` should report
+**1030, OK**. `backend/.env` is not exported by default — scripts that reach the
 database need `cd backend && (set -a; . ./.env; set +a; python3 ...)`.
 
 **Then read this, because it is the one thing a fresh session will get wrong:** task 13
@@ -296,6 +326,39 @@ is committed and its Definition of done is *not* met. See the top of this file. 
 completed task here is not a validated one.
 
 ### The next session's likely first question, answered
+
+**"The mock corpus measured gate recall at 48.3%. Does that mean task 29 is done, or
+partly done?"** Neither. It measured task 29's *fourth stratum* on **constructed**
+postings, which is why it could be done at all without people. Nothing was written to
+`eval_labels`, no Axis B exists, and the corpus was built to contain the failure modes
+it then found — `HANDOFF.md:805-808`. Task 29's scope is unchanged. What did change is
+that one of its four gate rows has now fired early, and it is the one that says fix the
+gate before anything downstream.
+
+**"Can I re-tune the weights now that the branding traps came back 5 of 5 correct?"**
+No, and this is the most likely misreading in the file. Those five were *constructed* to
+be unambiguous traps. Task 13's four actual floor misses are real postings and are still
+unlabelled. The mock result is evidence the mechanism works when the trap is obvious; it
+is not evidence about the four. Everything under "Can I re-tune the weights?" below still
+holds.
+
+**"`docs/mock-acceptance.md` reports `role_archetype` at 57.4% and `remote_policy` at
+55.6%. Is extraction broken on those fields?"** Not established, and do not act on
+either number without reading the disagreements first. `remote_policy` is a likely
+**vocabulary mismatch**: `extract.REMOTE_POLICY` is
+`onsite/hybrid/remote_local/remote_anywhere/unknown` while the corpus's own field is
+`onsite/hybrid/remote`, so the key had to pick a side per posting. `role_archetype` is
+26 values inferred over a whole posting, and its key entries are the weakest evidence in
+the file — treat it as a floor. A rate that far below its neighbours, on fields this
+mechanical, is more likely a definition problem than a model problem.
+
+**"The mock report says `n/d = the key says the posting does not determine this field`
+for `tech_stack`, `comp_*`, `employment_type`, `visa_sponsorship` and
+`years_experience_max`. What did the key decide about them?"** Nothing — those fields are
+not in the key at all, and the label is wrong about them. Known cosmetic defect in
+`tools/mock-acceptance.py`'s renderer; **no number is affected** (they are excluded
+either way, and `POOLED` = 440 is exactly the nine keyed fields). Worth splitting the
+two cases if anyone touches that output.
 
 **"Why is `pursuit` only matching 144 postings when it used to match 863?"** Because the
 weights are real now. 863 was every posting scoring exactly `base = 50` against a floor
@@ -399,6 +462,28 @@ so the orchestrator wrote it first and handed both agents a stable file to read.
 removed the race task 11 had to solve by pasting values into a prompt, and it is
 cheaper than either — one small edit before the agents start.
 
+**A measurement's denominator needs an adversarial reader who cannot see how the
+numerator was built.** The mock-acceptance session gave two agents the same contract and
+no sight of each other's work: one wrote the answer key, the other wrote the loader that
+validates it. The loader **refused** the key — `location_is_nyc` is not a `job_facts`
+column (`match.py:281`), so the model never produces it and scoring it would have
+compared the loader's own mapping against the key's reading of the same twenty
+characters. Two of eleven "extraction accuracy" fields would have been a field agreeing
+with itself. **One reader reviewing both files would not have caught it**; the refusal
+came from the boundary, not from care. Design the boundary in on purpose. **D47.**
+
+**Re-verify a function after you change it, including when you were the one who
+changed it.** The orchestrator brute-force-verified `average_precision`'s tie handling
+against every permutation, then sent back a correction that altered its signature. A
+verified-then-modified function is unverified; the check was re-run and only then
+trusted.
+
+**Make a migration prove its own method before it writes.**
+`migrate_description_rehash.py` reconstructs `content_hash` and reports that it
+reproduces the *stored* hash on 10,405/10,405 untouched rows. A reconstruction method
+that could not reproduce existing hashes is caught before it touches anything, which is
+a stronger guarantee than a dry-run diff and costs one extra column in the report.
+
 **A green suite does not mean the brief was met.** The version-keys session's test
 agent delivered 37 tests, all passing, with one required test missing — the one
 asserting `run-daily.py`'s `STEPS` entry verbatim. The suite was green *without* it,
@@ -473,6 +558,31 @@ split — tunnel before 24, pipeline/app split after 32.
 ## Findings later tasks must not inherit
 
 Each of these is a documented claim that is **wrong about the code as it now stands**.
+
+- **`title_exclude` overrides the description-first gate, and nothing in task 10's
+  documentation says so.** `relevance.py:232-234` applies it to *both* the title and the
+  description path, so a posting whose description passes both required groups is still
+  rejected on a title term. Anyone reading `docs/pursuit-description-gate.md` as "the
+  gate now reads descriptions" will be wrong about 1 of every 15 good postings.
+- **`ENTRY_LEVEL` is a title vocabulary and the pursuit gate applies it to descriptions.**
+  Measured: it fails on 14 of 15 rejected good postings. The gate is conjunctive
+  (`migrate_pursuit_profile.py:216,229`), so this single group is what makes recall 48%.
+- **HANDOFF named the wrong three tests for the `strip_html` fix.** It predicted
+  `test_row_identity.py:161-168` would need its digest updated; the digest **did not
+  move**. The two that actually broke were task 35's *gate* tests, red because fixing
+  the stripper cleaned the fixture the gate is tested against. **Fixing a defect can
+  silently disarm the alarm built for it** — that generalises well beyond this case.
+- **`sklearn` is not installed and `tools/learned-ranker-probe.py` does not run on a
+  clean checkout.** `requirements.txt` is `psycopg[binary]` alone; the probe imports
+  `sklearn.metrics` at `:133`. Any figure quoted from it was produced in an environment
+  this repo does not describe. Stdlib `average_precision` / `precision_at_k` now live in
+  `evals/metrics.py:260+` and are verified against brute-force enumeration over every
+  tie-break permutation.
+- **`tools/mock-acceptance.py` mislabels fields absent from the answer key.** It prints
+  `n/d = the key says the posting does not determine this field` for `tech_stack`,
+  `comp_*`, `employment_type`, `visa_sponsorship` and `years_experience_max`, which the
+  key simply does not cover. Cosmetic — no number is affected, `POOLED` = 440 is exactly
+  the nine keyed fields — but it reads as a judgement that was never made.
 
 - **CLAUDE.md's `lib/` parity rule is stale.** It states `lib/` is vendored
   byte-identical with drift reported by `tools/lib-parity.sh`. That script does not
@@ -654,12 +764,36 @@ quality beats volume. That is a call for the repo owner, not for an implementer.
 
 ## Recommended next steps
 
-**Task 29 is now the whole critical path, and it is the one thing in this plan
-that cannot be done by an agent.** 13 landed, so the ordering is a product; what it
-is not is *validated*. 13's own DoD came in at 10 of 20 hand-picked target roles in
-the top 20, and the question that gap raises — whether those are weight errors or
-correct rejections — is an Axis B question with no substitute. Everything below it
-is either blocked on it or cheaper after it.
+**Task 29 is still the whole critical path and still the one thing in this plan that
+cannot be done by an agent.** But the order below changed: **the gate fix now goes
+first**, because it is unblocked, cheap, and the largest measured loss in the pipeline —
+and because every posting the gate rejects is one task 29's labellers will never be
+shown. Fixing it before the labelling session changes what the session can measure.
+
+0. **Fix the relevance gate. NEW, AND IT GOES BEFORE 29.** Measured 48.3% recall —
+   15 of 29 intended-good postings never enter (see the section at the top of this file,
+   and `docs/mock-acceptance.md`). Two independent changes, both small:
+
+   - **A description-phrased entry-level vocabulary.** The current `ENTRY_LEVEL` group
+     is title nouns (`associate`, `coordinator`, `assistant`, …) and the pursuit gate is
+     conjunctive, so on a description the AI half matches and the entry half does not
+     (`migrate_pursuit_profile.py:216,229`). Phrase it the way postings actually do:
+     `mock_022`'s *"No retail or e-commerce experience required; training provided"*
+     currently matches neither `\yno experience\y` nor `\ywill train\y`.
+   - **Review `title_exclude` against the cohort's target roles.** It applies to **both**
+     paths (`relevance.py:232-234`), so it silently overrides the description-first gate
+     task 10 built. `pursuit` still carries `customer success`, `executive assistant`,
+     `office manager`, `facilities`, `warehouse`, `driver` from the software-engineer
+     profile — several are exclusions on the target population itself.
+
+   **Re-measuring is free.** `python3 tools/mock-acceptance.py --dry-run` produces the
+   gate figure with **zero LLM calls**, in a scratch schema. Run it before and after.
+
+   **Two cautions.** `relevance.json`'s `_max_tier_note` and the entry under "Findings
+   later tasks must not inherit" both apply: `max_tier_to_score = 3` is an unconditional
+   pass, not a wider gate, and is not the fix. And widening the gate widens the
+   extraction queue — check the volume against `extract.py`'s drain before shipping it,
+   because the whole cost model of this pipeline is the size of that queue.
 
 1. **Task 29 — the labelling session.** 07's tooling is built and produced zero
    labels by design. The form is at `/v1/label` behind the existing Google SSO.
@@ -852,10 +986,13 @@ code and the database before its commit. Mechanics worth keeping:
 
 **Five of six agents in the first session, and three of three in task 11's, completed
 without sending a report at all.** They go idle silently. Do not wait for a summary; check
-the artifacts. That is the norm, not the exception. **Eleven of eleven across the run
-now**, both version-keys agents included — and one of them sent its idle notification
-*twice*, for work already verified and committed. Treat the notification as "go look",
-including the second time.
+the artifacts. That is the norm, not the exception. **Sixteen of sixteen across the run
+now**, all five mock-acceptance agents included — and two of them sent idle
+notifications *twice*, for work already verified and committed, while a sixth agent
+(a planning one) went idle twice and never reported at all, even when asked directly.
+Treat the notification as "go look", including the second time, and do not spend turns
+chasing a report that may not exist. **Budget for the artifacts being the only output
+you will get.**
 
 **Verification that actually caught things in task 11, in order of value.** Reading the
 diff caught the most; the suite caught the least. Worth copying:
