@@ -192,6 +192,17 @@ class TestStrata(unittest.TestCase):
             self.assertEqual(len(seen), overlap + n * (budget - overlap),
                              f"{n} labellers must tile the tail, not collide")
 
+    def test_a_gate_rejected_row_may_still_carry_facts(self):
+        # The stratum's comment used to promise these rows have no job_facts.
+        # They can: extraction is SHARED and its queue is the union over
+        # ACTIVE profiles, so anything an earlier active profile pulled in
+        # keeps its facts under a gate that now rejects it. 24 of the 50
+        # gate-rejected rows in pursuit-v1 are like this. Rejection is what
+        # defines the stratum; the facts are incidental.
+        row = {"job_id": "g", "tier": 3, "facts_version": 3,
+               "match_score": None}
+        self.assertEqual(labels.classify(row, 2), "gate_rejected")
+
     def test_a_labeller_with_no_labels_yet_ranks_zero_not_crashes(self):
         # They are still inside the overlap block, which everyone walks in the
         # same order, so the offset cannot matter yet -- but next_item() must

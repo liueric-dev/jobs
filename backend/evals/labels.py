@@ -403,10 +403,25 @@ def verify_schema(conn, privileges=None, sequences=None):
 #:                 pure (match.py:73), so confirm_scores() recomputes the exact
 #:                 number for these rows without an LLM call and without a
 #:                 write -- turning "probably below the floor" into the figure.
-#:   gate_rejected relevance tier > max_tier_to_score, so extract.py never
-#:                 sent it and there is no job_facts row either. These are the
-#:                 rows nothing downstream can see, and a human label on them
-#:                 is the only way RECALL is ever estimable.
+#:   gate_rejected relevance tier > max_tier_to_score for THIS PROFILE, so the
+#:                 profile's users can never see it. A human label on these is
+#:                 the only way RECALL is ever estimable.
+#:
+#:                 THIS USED TO SAY "and there is no job_facts row either".
+#:                 That is false and was false when written: 24 of the 50
+#:                 gate-rejected rows in `pursuit-v1` carry facts, because
+#:                 extraction is SHARED and its queue is the union over ACTIVE
+#:                 profiles (extract._eligible_sql), so anything `tech` and
+#:                 `frontend` pulled in before task 12 flipped the active set
+#:                 still has facts under a gate that now rejects it. The
+#:                 stratum is unaffected -- rejection is what defines it -- and
+#:                 those 24 are a small bonus, since Axis A on them can be read
+#:                 against an extraction the cohort gate never asked for.
+#:                 What DOES matter is checked and holds: 0 of the 50 carry a
+#:                 `pursuit` job_matches row, and corpus-wide 0 of the 144
+#:                 pursuit matches are tier > max_tier. The gate and the
+#:                 matcher agree; only the ordering of the two tests in
+#:                 classify() could ever make them appear not to.
 STRATA = ("surfaced", "below_floor", "gate_rejected")
 
 #: Default shape of a label set. Deliberately not equal thirds: `surfaced` is
