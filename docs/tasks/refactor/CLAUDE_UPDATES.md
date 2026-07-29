@@ -1288,3 +1288,93 @@ what was asked for.
 
 **All three went idle without reporting.** Nine of nine across four sessions now.
 Treat the idle notification as "go look".
+
+---
+
+## 2026-07-29 — `job_scores` version keys (HANDOFF step 2)
+
+**Not a numbered task.** It is recommended next step 2 in `HANDOFF.md`, deferred out
+of the task 13 session because its invalidation path fires on exactly the
+`criteria_version` bump 13 made. Base `d5897d8`, suite green at **837**.
+
+**What landed.** `job_scores` gained four nullable columns — `facts_version`,
+`persona_sha`, `prompt_version`, `criteria_version` — and `select_shortlist`'s
+anti-join became version-aware. `schema.SCORE_PROMPT_VERSION = 1`.
+`persona_sha()` moved from `evals/tasks/score.py` into `score.py`; the harness
+re-exports it. New `migrations/migrate_score_versions.py` and
+`tests/test_score_versions.py`.
+
+**Suite 837 → 875.** No existing test was deleted or reordered; two were extended
+and one 17-tuple fixture became 18 when `f.facts_version` joined the shortlist.
+
+### The measurement that should shape how this is read
+
+**Nothing is stale, and nothing was re-scored.** `--stale-report` reads **0 stale**
+on every profile and **1,018 unversioned** (tech 835 + frontend 183). The database
+snapshot before and after is byte-identical on the narrative content digest,
+`max(scored_at)` and the per-model tombstone census. `SELECT count(*) FROM job_scores
+WHERE <any version> IS NOT NULL` reads **0**.
+
+**The bill is 1,018 calls, not 1,293, and the difference is a real finding.**
+`select_shortlist` reaches a posting only through `job_matches` and only while
+`status = open`, so 275 rows are closed or never cleared `MATCH_FLOOR` and **no flag
+routed through that path can ever reach them**. Quoting the row count overstates the
+cost by 27%. The migration report prints both, labelled — the fix task 11 used for
+the 54-vs-55 ambiguity.
+
+**The 57 tombstones are a separate and much cheaper decision**, and 40 of them were
+written by `FAILED:glm-4.5-flash@api.z.ai`, which is not the production pin and was
+failing for a credential reason rather than anything about the posting.
+
+### Proposed amendment to `.claude/CLAUDE.md:28-31` — NOT APPLIED
+
+The instruction file names four columns being added: `persona_version`,
+`prompt_version`, `features_version`, `model_version`. Two are now wrong about the
+code:
+
+- **`persona_version` shipped as `persona_sha`**, a content digest rather than an
+  integer with a bump discipline. See `DECISIONS.md`.
+- **`model_version` was not added and should not be.** `job_scores.scoring_model`
+  already records it, and a model swap is an operator decision with a known price —
+  `scripts/backfill-scores.py` already deletes-by-model as the deliberate act.
+
+`features_version` remains unbuilt and correctly listed. **Not edited — it is the
+owner's instruction file, the same rule the stale `lib/` parity note is held to.
+Propose it in task 34.**
+
+### Two defects found on the way, both closed in the same change
+
+- **`--limit 0` spent 20 calls.** `limit = limit or budget` evaluates `0 or 20` → 20,
+  and `--limit 0` is exactly what someone types to mean "don't spend". `pursuit` was
+  safe only by the accident of `None or 0` being `0`.
+- **A nested `_comment` inside `persona.buckets` does not leak, it crashes** — and it
+  takes the whole batch. `build_prompt` does `(b or {}).get('description')`; a string
+  raises `AttributeError` into `score_one_job`'s blanket handler, so every job in the
+  batch returns `ERRORED`. That is D16 with a different key.
+
+### Corrections to claims in the plan and the code
+
+- `score.py`'s `run_for_profile` docstring said "the login path calls it directly".
+  **Nothing under `webapp/` imports the module**; `main()` is the only caller. The
+  cost model is documented and unbuilt. Docstring corrected, reasoning kept.
+- The exposure was framed as 1,293 rows and is 1,018 (above).
+- `strip_comments()` is not merely top-level-only for the persona — **the persona is
+  never passed through it at all** (`migrate_profiles.py:180`).
+
+### Mechanics
+
+Three agents, two rounds, all on disjoint files, **nothing committed by a subagent**.
+The orchestrator owned the two shared files — `schema.py` (both agents' input) and
+`run-daily.py` — which is the `STEPS` rule generalised, and it removed the race
+task 11 had to solve by pasting values into a prompt.
+
+**Both agents went idle without reporting. Eleven of eleven now.**
+
+Verification that earned its keep, in order of value: the **before/after database
+snapshot** (a count cannot see an overwrite; an md5 over the narrative columns can),
+running `--stale-report` with **both API keys unset** to prove the report cannot
+reach the code that spends, and **re-running the agent's own tool and reconciling
+every number against an independently-taken baseline**. One required test —
+`test_run_daily_score_step_passes_no_rescore_flag` — was missing from an otherwise
+complete 37-test file, and was caught by checking the list against the brief rather
+than by the suite, which was green without it.

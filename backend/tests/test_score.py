@@ -36,6 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import extract                                        # noqa: E402
 import llm                                            # noqa: E402
 import profiles                                       # noqa: E402
+import schema                                         # noqa: E402
 import score                                          # noqa: E402
 from evals import metrics, report, runner, tasks      # noqa: E402
 from evals.tasks import score as score_task           # noqa: E402
@@ -74,7 +75,23 @@ def _job(job_id="j1"):
             "role_archetype": "backend", "tech_stack": '["python"]',
             "remote_policy": "hybrid", "ai_involvement": "uses_ai_tools",
             "gap_friendly_language": False, "years_experience_min": 3,
-            "comp_min": None, "comp_max": None}
+            "comp_min": None, "comp_max": None,
+            "facts_version": schema.FACTS_VERSION}
+
+
+def _ctx(profile="tech", persona=None, model_label="m@h", **overrides):
+    """One run's ScoreContext. The writers take this instead of a bare
+    (profile, model_label) pair, so every test that writes a row also states
+    the versions the row is written under -- which is the point of the type.
+    """
+    persona = _persona() if persona is None else persona
+    fields = {"profile": profile, "persona": persona,
+              "model_label": model_label,
+              "persona_sha": score.persona_sha(persona),
+              "prompt_version": schema.SCORE_PROMPT_VERSION,
+              "criteria_version": 5}
+    fields.update(overrides)
+    return score.ScoreContext(**fields)
 
 
 class _FakeConn:
@@ -320,19 +337,36 @@ class TestWrites(unittest.TestCase):
         model response cannot be written even by mistake."""
         conn = _FakeConn()
         with self.assertRaises(KeyError):
-            score.update_job_score(conn, "j1", "tech", {"fit_score": 72},
-                                   "m@h")
+            score.update_job_score(conn, "j1", {"fit_score": 72}, _ctx(), 3)
         self.assertEqual(conn.statements, [])
 
     def test_update_job_score_writes_the_normalized_values(self):
         conn = _FakeConn()
         values = score.normalize(_response(primary_track="core_swe"))
-        score.update_job_score(conn, "j1", "tech", values, "m@h")
+        score.update_job_score(conn, "j1", values, _ctx(), 3)
         sql, params = conn.statements[0]
         self.assertIn("INSERT INTO", sql)
         self.assertEqual(params[0:4], ("j1", "tech", 72, "Core SWE"))
         self.assertEqual(json.loads(params[5]), ["Python", "PostgreSQL"])
         self.assertEqual(conn.commits, 1)
+
+    def test_the_version_columns_are_appended_never_interleaved(self):
+        """The four cache keys go on the END of the parameter tuple.
+
+        Not a style preference: the assertions above index params
+        positionally, and a column inserted in the middle would move
+        key_technologies under an assertion that still passes on the wrong
+        value. Everything a version column needs is at the tail."""
+        conn = _FakeConn()
+        ctx = _ctx()
+        score.update_job_score(conn, "j1", score.normalize(_response()),
+                               ctx, 2)
+        sql, params = conn.statements[0]
+        self.assertEqual(params[9:], ("m@h", 2, ctx.persona_sha,
+                                      schema.SCORE_PROMPT_VERSION, 5))
+        for column in ("facts_version", "persona_sha", "prompt_version",
+                       "criteria_version"):
+            self.assertIn(f"{column}=EXCLUDED.{column}", sql, msg=column)
 
     def test_tombstone_clears_the_narrative_columns(self):
         """score.py's docstring promises a tombstone leaves fit_score NULL.
@@ -341,13 +375,23 @@ class TestWrites(unittest.TestCase):
         scoring_model, so a re-tombstoned row kept a stale score under a
         'FAILED:' label -- three such rows exist in production."""
         conn = _FakeConn()
-        score.mark_score_failed(conn, "j1", "tech", "m@h")
+        ctx = _ctx()
+        score.mark_score_failed(conn, "j1", ctx, 2)
         sql, params = conn.statements[0]
         for column in ("fit_score", "primary_track", "gap_friendly_signal",
                        "key_technologies", "gap_bridging_angle",
                        "risk_factors"):
             self.assertIn(f"{column}=NULL", sql, msg=column)
         self.assertTrue(params[3].startswith(llm.FAILED_PREFIX))
+        # And the same argument one level up: a tombstone written over a
+        # scored row must overwrite the version columns too, or the row's
+        # provenance describes an earlier, different attempt -- the D43 shape
+        # this test already exists to prevent, one column family across.
+        self.assertEqual(params[4:], (2, ctx.persona_sha,
+                                      schema.SCORE_PROMPT_VERSION, 5))
+        for column in ("facts_version", "persona_sha", "prompt_version",
+                       "criteria_version"):
+            self.assertIn(f"{column}=EXCLUDED.{column}", sql, msg=column)
 
 
 # --------------------------------------------------------------------------
@@ -419,7 +463,7 @@ class TestPerJobIsolation(unittest.TestCase):
         del persona["buckets"]
         with mock.patch.object(llm, "call",
                                return_value=json.dumps(_response())):
-            outcome = score.score_one_job(_job(), persona, "pursuit", "m@h")
+            outcome = score.score_one_job(_job(), _ctx("pursuit", persona))
         self.assertEqual(outcome, score.SCORED)
 
     def test_an_unexpected_exception_costs_one_job_not_the_batch(self):
@@ -429,8 +473,8 @@ class TestPerJobIsolation(unittest.TestCase):
         jobs = [_job("j1"), _job("j2"), _job("j3")]
         with mock.patch.object(llm, "call",
                                return_value=json.dumps(_response())):
-            outcomes = [score.score_one_job(j, persona, "tech", "m@h")
-                        for j in jobs]
+            ctx = _ctx(persona=persona)
+            outcomes = [score.score_one_job(j, ctx) for j in jobs]
         self.assertEqual(outcomes, [score.ERRORED] * 3)
         self.assertEqual(self.stderr.getvalue().count("job-score ERROR"), 3)
 
@@ -439,13 +483,17 @@ class TestPerJobIsolation(unittest.TestCase):
         tombstoning would discard it permanently."""
         with mock.patch.object(llm, "call",
                                return_value=json.dumps(_response())):
-            score.score_one_job(_job(), _persona(strengths=5), "tech", "m@h")
+            score.score_one_job(_job(), _ctx(persona=_persona(strengths=5)))
         self.assertEqual([s for c in self.conns for s in c.statements], [])
 
     def test_run_for_profile_completes_despite_a_broken_persona(self):
+        # One row per column select_shortlist returns, in its order. The last
+        # is f.facts_version, added when job_scores got its cache keys -- the
+        # score has to record the version of the facts it actually read.
         rows = [tuple([f"j{i}", "Engineer", "Acme", "NYC", "greenhouse",
                        90, "[]", "A role.", "mid", 3, "backend", "[]",
-                       "hybrid", "uses_ai_tools", False, None, None])
+                       "hybrid", "uses_ai_tools", False, None, None,
+                       schema.FACTS_VERSION])
                 for i in range(4)]
         outer = _FakeConn(rows)
 
@@ -453,6 +501,7 @@ class TestPerJobIsolation(unittest.TestCase):
             profile = "tech"
             persona = _persona(strengths=5)
             daily_narrative_budget = 4
+            criteria_version = 5
 
         with mock.patch.object(llm, "call",
                                return_value=json.dumps(_response())):
@@ -463,21 +512,21 @@ class TestPerJobIsolation(unittest.TestCase):
     def test_transient_error_defers_and_writes_nothing(self):
         with mock.patch.object(llm, "call",
                                side_effect=llm.TransientError("429")):
-            outcome = score.score_one_job(_job(), _persona(), "tech", "m@h")
+            outcome = score.score_one_job(_job(), _ctx())
         self.assertEqual(outcome, score.DEFERRED)
         self.assertEqual([s for c in self.conns for s in c.statements], [])
 
     def test_an_unusable_answer_is_tombstoned(self):
         unusable = json.dumps(_response(fit_score=None, primary_track=None))
         with mock.patch.object(llm, "call", return_value=unusable):
-            outcome = score.score_one_job(_job(), _persona(), "tech", "m@h")
+            outcome = score.score_one_job(_job(), _ctx())
         self.assertEqual(outcome, score.REJECTED)
         sql, _ = self.conns[0].statements[0]
         self.assertIn("fit_score=NULL", sql)
 
     def test_the_connection_is_closed_on_every_path(self):
         with mock.patch.object(llm, "call", side_effect=RuntimeError("400")):
-            score.score_one_job(_job(), _persona(), "tech", "m@h")
+            score.score_one_job(_job(), _ctx())
         self.assertTrue(all(c.closed for c in self.conns))
 
 

@@ -167,7 +167,16 @@ STEPS = [
     # the last week, so a returning user finds them already written. Dormant
     # profiles cost nothing here -- their narratives are generated on login
     # instead, which is what keeps spend tracking engagement rather than
-    # registration.
+    # registration. (That login path is documented but not yet built -- nothing
+    # under webapp/ calls run_for_profile today.)
+    #
+    # IT PASSES NO --rescore-* FLAG, AND THAT IS THE DECISION, NOT AN OMISSION.
+    # job_scores now carries version columns, so a persona edit or a prompt
+    # bump can mark stored narratives stale. Acting on that costs LLM calls, so
+    # it never happens on a schedule: re-scoring is opt-in, needs an explicit
+    # --limit, and is something an operator runs having first read
+    # `score.py --stale-report`. This line is the single place the nightly
+    # spend is decided, which is why a test asserts it verbatim.
     ["score.py", "--active-within-days", "7"],
 ]
 

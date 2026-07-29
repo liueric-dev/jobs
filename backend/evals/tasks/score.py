@@ -24,19 +24,19 @@ WHAT THIS CAN MEASURE, AND WHAT IT CANNOT
 THE PERSONA IS THE FIXTURE CONTRACT
     build_prompt() reads exactly five persona keys -- background_summary,
     strengths[], honest_gaps[], buckets{} and scoring_instructions
-    (score.py:310-372) -- and nothing else about the user reaches any prompt
-    in this pipeline. Pin those five and the input is fully determined.
+    (score.PERSONA_PROMPT_KEYS) -- and nothing else about the user reaches
+    any prompt in this pipeline. Pin those five and the input is fully
+    determined.
 
     persona_sha() is that pin. A persona edit changes the prompt for every
-    record, so it invalidates a comparison exactly the way a model swap does,
-    and job_scores has no persona_version column to notice
-    (schema.py:328-343 -- no version column at all; see
-    docs/score-validation.md). Recording the digest beside a run is the only
-    thing standing between "the numbers moved" and an unanswerable question.
+    record, so it invalidates a comparison exactly the way a model swap does.
+    It started here, because the harness needed it first and job_scores had no
+    version column at all; it now lives in score.py beside build_prompt, which
+    defines its field set, and job_scores records it on every row
+    (schema.py's persona_sha column). This module re-exports it -- the
+    pipeline must not import from the eval harness, and the name is part of
+    this module's surface.
 """
-
-import hashlib
-import json
 
 import llm
 import score as score_stage
@@ -67,19 +67,11 @@ FIELD_KINDS = {
 PRIORITY_FIELDS = ("primary_track", "fit_score")
 
 
-def persona_sha(persona):
-    """Digest of the five keys build_prompt() reads. Nothing else.
-
-    Deliberately not a digest of the whole persona blob: `_comment`,
-    `display_name` and `profile` do not reach a prompt, and a digest that
-    changed when someone fixed a typo in a comment would train people to
-    ignore it.
-    """
-    material = {k: persona.get(k) for k in
-                ("background_summary", "strengths", "honest_gaps", "buckets",
-                 "scoring_instructions")}
-    blob = json.dumps(material, sort_keys=True, ensure_ascii=False)
-    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+#: Re-exported, not redefined. The digest is a cache key on every job_scores
+#: row now, so two implementations of it would be two answers to "is this
+#: narrative stale" -- and the one the pipeline uses cannot live here, because
+#: score.py must not import the eval harness.
+persona_sha = score_stage.persona_sha
 
 
 def _job_from_record(record):
@@ -91,7 +83,8 @@ def _job_from_record(record):
     (corpus.py:17-22).
     """
     job = corpus.job_fields(record)
-    job.pop("description_text", None)   # facts, not prose: score.py:29-35
+    # facts, not prose -- see score.py's THE PROMPT READS FACTS section.
+    job.pop("description_text", None)
     job.update(corpus.facts_fields(record) or {})
     return job
 
@@ -110,7 +103,7 @@ class ScoreTask:
         # Loaded from disk, not from the database: the harness runs with no
         # DATABASE_URL after a corpus snapshot (corpus.py:20-22), and
         # score.load_persona() exists precisely so a prompt can be measured
-        # without a profile row (score.py:222-232).
+        # without a profile row.
         self._persona = persona
 
     @property
@@ -129,7 +122,7 @@ class ScoreTask:
     def parse(self, raw_text):
         """Raw response -> (normalized dict or None, reason).
 
-        Mirrors _score_one_job()'s decision tree (score.py:657) without its
+        Mirrors _score_one_job()'s decision tree (score.py) without its
         database writes, so a fixture run classifies a response exactly as the
         pipeline would: unparseable JSON and a response with nothing usable in
         it both become a tombstone, and the reason distinguishes them.
@@ -145,8 +138,9 @@ class ScoreTask:
     def eligible(self, record):
         """Whether the pipeline would ever send this record.
 
-        select_shortlist() inner-joins job_facts (score.py:259), so a posting
-        that has never been extracted is one the score stage cannot see. It is
+        select_shortlist() inner-joins job_facts (score._SHORTLIST_FROM),
+        so a posting that has never been extracted is one the score stage
+        cannot see. It is
         reported as skipped rather than counted against the model, the same
         rule tasks/extract.py applies to a row with no description.
 

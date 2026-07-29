@@ -163,10 +163,22 @@ applied.
 a posting first seen five minutes ago and a profile created five minutes ago. Every
 nullable feature carries an `is_missing` indicator.
 
-**C4 — Versions.** Every derived row records every upstream version; a row is stale
-iff any differs. Already true for `job_matches`; `job_scores` needs
-`persona_version` and `prompt_version`, and `select_shortlist()`'s anti-join must
-become version-aware rather than existence-aware.
+**C4 — Versions. DONE 2026-07-29.** Every derived row records every upstream
+version; a row is stale iff any *recorded* version differs. True for `job_matches`,
+and now for `job_scores`: `facts_version`, `persona_sha`, `prompt_version` and
+`criteria_version`, with `select_shortlist()` version-aware rather than
+existence-aware.
+
+Three deviations from what this line asked for, each recorded in `DECISIONS.md`:
+`persona_version` is a **content digest, not an integer** with a bump discipline;
+`criteria_version` is stored but **deliberately excluded from the staleness
+predicate**, because criteria decide which jobs are asked about and never what is
+asked; and `model_version` was not added because `scoring_model` already is it.
+
+The clause "a row is stale iff any differs" needed one correction to be
+implementable: a row that records *nothing* is unknown rather than stale, and
+collapsing the two would have marked all 1,018 pre-existing rows stale — and
+payable — the instant the columns landed.
 
 **C5 — Explanations.** `match_reasons` survives any ranker change. This rules out
 gradient-boosted trees in favour of linear models, deliberately: `coefficient ×

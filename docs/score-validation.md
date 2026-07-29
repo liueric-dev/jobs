@@ -339,20 +339,32 @@ row as the measurement and the platform table as a hypothesis generator.
 
 ## 5. What is still missing, and it is not small
 
-**`job_scores` has no version column at all.** Not `prompt_version`, not
-`persona_version`, not `criteria_version`, not `model_version`
-(`backend/schema.py:328-343`). CLAUDE.md's "versions are cache keys" invariant
-is unenforceable here: re-scoring triggers only on an anti-join for "no row
-exists" (`backend/score.py`'s `select_shortlist`), so **a persona edit,
-a prompt edit or a model swap silently leaves every existing score in place
-and comparable to nothing.** The 1,294 rows in §1 were written by two
-different models (`deepseek-v4-flash` and, for 40 tombstones,
-`glm-4.5-flash`) and nothing records which persona text produced them.
+**~~`job_scores` has no version column at all.~~ FIXED 2026-07-29.** This
+section is kept rather than deleted because its diagnosis was right and the
+fix is shaped by it.
 
-This task does not add the column — it is a schema change another task owns.
-The mitigation in the meantime is `evals/tasks/score.py:persona_sha()`, a
-digest of the five persona keys that reach the prompt, which at least makes
-"did the input change?" answerable for a harness run.
+`job_scores` now carries four columns — `facts_version`, `persona_sha`,
+`prompt_version` and `criteria_version` — and `select_shortlist`'s anti-join
+is version-aware. Three of the four are cache keys; `criteria_version` is
+recorded for provenance only, because `build_prompt` and `_facts_block` never
+read `match_score` or `match_reasons`, so criteria changes *which* jobs are
+asked about and never *what* is asked. `model_version` was not added: the
+existing `scoring_model` already is it.
+
+`persona_sha()` moved from `evals/tasks/score.py` into `score.py` beside
+`build_prompt`, which defines its field set, and the harness re-exports it. It
+was kept as a **digest rather than an invented `persona_version` integer**: an
+explicit bump can be forgotten, and this repo has already caught the profile
+authoring path writing wrong values silently (`fa2d7a7`).
+
+**What the fix deliberately does NOT do is re-score anything.** The 1,293 rows
+described below are all unversioned, and an unversioned row is a *third state*
+— not stale, not fresh — reported in its own bucket and never selected
+automatically. Nothing here spends an LLM call until an operator passes
+`--rescore-stale` or `--rescore-unversioned` with an explicit `--limit`.
+`score.py --stale-report` prices it first and needs no credential to run:
+**1,018 calls, not 1,293**, because 275 rows are closed or never cleared
+`MATCH_FLOOR` and no flag routed through the shortlist can reach them.
 
 **`normalize()` was not validated against real *malformed* cached
 responses**, as `04:119-120` asks. There were none: every entry in

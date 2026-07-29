@@ -1085,3 +1085,104 @@ returned `not_found` because their careers pages are client-rendered, and all fo
 now carry a `never_found` row **beside** a valid token row. So **≥4 of 139 rows are
 provably wrong**, in the table itself rather than in a footnote. Backfilling 104
 rows did not make the column more correct; it made it complete.
+
+### SCORE-VERSIONS — `criteria_version` is stored and deliberately NOT a cache key
+
+`job_matches` keys its incremental rebuild on `(facts_version, criteria_version)`,
+so the symmetric-looking move was to do the same for `job_scores`. It would have
+been wrong, and it is the reason this work was held back out of the task 13 session.
+
+`select_shortlist` selects `m.match_score, m.match_reasons` (`score.py:456-457`),
+but `build_prompt` and `_facts_block` never read either — the prompt is five persona
+keys, three `jobs` fields and ten `job_facts` fields. **Criteria decide which jobs
+are asked about and in what order; they never change what is asked.** Making
+`criteria_version` a cache key would therefore have marked every stored narrative
+stale on task 13's bump — 1,018 reachable rows of paid re-scoring bought by a change
+that could not alter a single answer.
+
+It is stored anyway, because L2 analysis of `job_events` has to know which weight
+generation ordered the list a user saw, and that is unrecoverable after the fact.
+The hazard is real and named: a column that looks like a cache key and is not.
+**The mitigation is `test_a_criteria_bump_alone_does_not_make_a_score_stale`, not
+the comment beside it.**
+
+This is a deviation from a literal reading of CLAUDE.md's "a row is stale iff any
+recorded version differs from current", and it agrees with
+`MASTER-PLAN-pursuit.md`'s C4, which names only `persona_version` and
+`prompt_version`.
+
+### SCORE-VERSIONS — a persona DIGEST, not an invented `persona_version` integer
+
+CLAUDE.md names `persona_version`. It was built as `persona_sha` instead.
+
+The repo's own precedent argues the other way: `profiles.upsert(bump_criteria=False)`
+(`profiles.py:180-184`) makes bumping explicit because `upsert()` also writes
+`display_name`, `relevance_json`, `budget` and `active`, so bump-on-write would fire
+on cosmetic edits. **That premise is absent here.** `persona_sha()` already existed
+(`evals/tasks/score.py`), already digested exactly the five keys that reach a prompt,
+and already excluded `_comment` / `display_name` / `profile` — it is not
+bump-on-write, it is bump-on-change-of-what-the-model-actually-sees, which is what
+the manual flag exists to approximate by hand.
+
+Decisive against the integer: **a manual bump can be forgotten, and this run has
+already caught the profile authoring path writing wrong values silently** (task 13,
+`fa2d7a7`, where `migrate_profiles.py` would have nulled the cohort gate). A missed
+persona bump costs no money — it leaves a stale narrative that looks current, which
+`profiles.py:33-36` itself calls worse than either a rebuild or no change.
+
+Decisive against a whole-blob hash: `config/persona.json` carries `_comment` and
+`_profile_comment`, and the persona is **never** passed through `strip_comments()` at
+all — `migrate_profiles.py:180` hands `load_persona_file()` straight to `upsert` and
+strips only criteria. A blob digest would move on a typo fix in a comment.
+
+Honest cost, recorded: a digest is not orderable, so there is no oldest-first backlog
+burn-down the way `extract._eligible_sql` gets from `facts_version < N`. Acceptable
+because the shortlist is ordered by `match_score`, not by version. The function moved
+into `score.py` beside `build_prompt`, which defines its field set; the harness
+re-exports it, because the pipeline must not import the eval harness.
+
+### SCORE-VERSIONS — unversioned is a THIRD STATE, and `IS DISTINCT FROM` is the wrong operator
+
+The natural predicate is `s.persona_sha IS DISTINCT FROM %(current)s`. It would have
+marked **all 1,018 reachable pre-existing rows stale the instant the column landed**,
+because `IS DISTINCT FROM` treats NULL as "differs".
+
+CLAUDE.md says a row is stale iff any **recorded** version differs from current. A
+NULL is not a recorded version — the rule is silent on rows that record nothing, and
+the honest completion of it is a third state rather than a coerced second one. So the
+predicate is `IS NOT NULL AND <>`, and unversioned rows are counted in their own
+census bucket and reachable only through their own flag.
+
+The separation is not academic: today `--rescore-stale` selects **0** rows and
+`--rescore-unversioned` selects **835** on `tech`. Collapsing them makes those two
+numbers the same number.
+
+The same reasoning is why the migration backfills nothing. `facts_version` is the
+tempting one — `job_facts` has the column, so copying it across is one statement that
+runs — and it **destroys information**: task 12 re-extracted 859 rows *after* most
+scores were written, so copying today's value onto a v2-era narrative stamps it
+v3-current and permanently hides a genuinely stale row. A NULL that says "unknown"
+is recoverable; a confident wrong version is not.
+
+### SCORE-VERSIONS — invalidation is inert, and that is what makes over-sensitivity affordable
+
+No version change spends an LLM call. The default `select_shortlist` is
+byte-equivalent to the old existence-only anti-join, `run-daily.py`'s step is
+unchanged and passes no flag, and `--rescore-stale` / `--rescore-unversioned` each
+**require an explicit `--limit`** — `daily_narrative_budget` is a nightly warm-pass
+quantity, and reusing it as a backfill quantity is how an operator signs up for 51
+nights of re-scoring on `tech` without typing a number.
+
+That property is what pays for two otherwise-uncomfortable choices: an absolute
+prompt-version bump rule with no carve-out for whitespace, and a persona digest that
+notices edits a human would call cosmetic. **Over-sensitive invalidation costs
+nothing until someone opts in.** If re-scoring ever becomes automatic, both rules
+have to be renegotiated first — that dependency is recorded at
+`schema.SCORE_PROMPT_VERSION` rather than left to be rediscovered.
+
+Two spend traps were found and closed on the way. `limit = limit or budget`
+(`score.py`) meant **`--limit 0` evaluated to `0 or 20` → 20 and spent 20 calls** —
+and `--limit 0` is exactly what someone types to mean "don't spend"; `pursuit` was
+safe only by the accident of `None or 0` being 0. And `--stale-report` is handled
+*before* `main()`'s `llm.api_key()` check, so it runs on a machine with no credential
+— proved by running it that way, not by reading it.

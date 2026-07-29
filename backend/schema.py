@@ -198,6 +198,28 @@ EVENTS_TABLE = "job_events"
 #: anyone has about a posting that no longer exists.
 FACTS_VERSION = 3
 
+#: The narrative prompt's version, recorded on every job_scores row so a
+#: stored narrative knows which template produced it. score.build_prompt owns
+#: the template; this constant lives here for the same reason FACTS_VERSION
+#: does -- it is a column value, the migration and the staleness report both
+#: need it, and importing score.py drags in llm, relevance and a persona file.
+#:
+#: THE BUMP RULE IS ABSOLUTE: any change to the digest of build_prompt()'s
+#: output bumps this, whitespace included. tests/test_score_versions.py pins
+#: that digest, so editing the template fails the suite and the only fix is to
+#: bump here in the same diff. No carve-outs for "cosmetic" edits -- arguing
+#: about which changes really matter is how bumps get skipped.
+#:
+#: That absolutism is affordable ONLY because invalidation is inert: a stale
+#: row is never re-scored until an operator passes score.py --rescore-stale
+#: with an explicit --limit. Over-sensitivity costs nothing here. If re-scoring
+#: ever becomes automatic, this rule has to be renegotiated first.
+#:
+#: Starts at 1, not 2. Every row written before this column existed is NULL,
+#: and NULL is not "version 0" -- see the unversioned-is-not-stale note in
+#: score.py.
+SCORE_PROMPT_VERSION = 1
+
 #: match_score below this is not written to job_matches at all. Most jobs are
 #: irrelevant to most profiles, and at N profiles the full cross product is
 #: N x 11k rows of mostly noise. Storing only what could plausibly be shown
@@ -518,6 +540,53 @@ def ensure_schema(conn):
         ("extraction_passes", "INTEGER"),
         ("vote_unanimity", "REAL"),
         ("role_track", "TEXT"),
+    ])
+
+    # The narrative's cache keys. job_scores shipped with none, so re-scoring
+    # triggered only on an anti-join for "no row exists" (score.py) -- a
+    # violation of CLAUDE.md's "every derived row records the version of
+    # everything upstream" that nothing noticed because pursuit has no scores
+    # and tech/frontend are inactive.
+    #
+    # The narrative's inputs are exactly four: the persona, the facts block,
+    # the prompt template and the model. Three become columns here; the fourth
+    # already exists as scoring_model.
+    #
+    #   facts_version    -- the job_facts version the facts block was built
+    #     from. Compared against the JOINED row's version, never against
+    #     FACTS_VERSION: a score is stale when the facts IT READ have since
+    #     changed, not because extraction is behind. The latter is extract.py's
+    #     job and would mark all 5,029 v2 rows permanently stale for nothing.
+    #   persona_sha      -- score.persona_sha(), a digest of exactly the five
+    #     persona keys build_prompt reads. A digest rather than an integer
+    #     version because it cannot be forgotten, and a FIVE-KEY digest rather
+    #     than a whole-blob one because persona_json carries _comment
+    #     documentation that never reaches a prompt.
+    #   prompt_version   -- SCORE_PROMPT_VERSION above.
+    #   criteria_version -- RECORDED FOR PROVENANCE, DELIBERATELY NOT A CACHE
+    #     KEY. build_prompt and _facts_block never read match_score or
+    #     match_reasons, so criteria changes which jobs are asked about, never
+    #     what is asked. It is stored because L2 analysis of job_events must
+    #     know which weight generation ordered the list a user saw. The
+    #     exclusion is enforced by test, not by this comment.
+    #
+    # NULLABLE WITH NO DEFAULT, and nothing backfills them. A DEFAULT would
+    # fabricate a value for all 1,293 pre-existing rows. Nothing about them is
+    # recoverable as a fact: build_prompt changed mid-history (e1cdf7b) and the
+    # rows straddle it, persona_json is overwritten wholesale with no history,
+    # and copying today's f.facts_version onto a v2-era narrative would stamp
+    # it v3-current and permanently HIDE a genuinely stale row. An unversioned
+    # row is a third state -- reported separately, never automatically stale.
+    # See migrations/migrate_score_versions.py.
+    #
+    # jobs_app (below) is deliberately NOT extended with these. It is the app's
+    # read contract and these are pipeline provenance; ensure_app_view's DROP
+    # fallback makes adding a view column a one-way door.
+    dbconn.add_missing_columns(conn, SCORES_TABLE, [
+        ("facts_version", "INTEGER"),
+        ("persona_sha", "TEXT"),
+        ("prompt_version", "INTEGER"),
+        ("criteria_version", "INTEGER"),
     ])
 
     for name, col in (("idx_jobs_company", "company_token"),

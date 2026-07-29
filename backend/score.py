@@ -26,6 +26,62 @@ IT DOES NOT RANK. match_score DOES.
     an LLM call before it can be placed -- which is the property this split
     exists to remove. See the SCORING IS TWO TIERS note in schema.py.
 
+VERSIONS ARE CACHE KEYS, AND RE-SCORING IS OPT-IN
+    Every job_scores row records the four inputs that decided its narrative:
+    facts_version (the job_facts row the facts block was built from),
+    persona_sha (a digest of exactly the five persona keys build_prompt
+    reads), prompt_version (schema.SCORE_PROMPT_VERSION) and scoring_model,
+    which already existed. CLAUDE.md's rule -- a derived row records the
+    version of everything upstream, and is stale iff any RECORDED version
+    differs from current -- only now applies to this table: it shipped with
+    no cache keys at all, so re-scoring fired solely on "no row exists".
+
+    THREE OF THE FOUR ARE IN THE PREDICATE: facts_version, persona_sha and
+    prompt_version. criteria_version is recorded and deliberately excluded.
+    select_shortlist reads m.match_score and m.match_reasons, but
+    build_prompt and _facts_block never do, so criteria decides WHICH jobs
+    are asked about and never WHAT is asked; a weight edit that reorders the
+    shortlist does not change one word of any prompt. It is stored anyway
+    because L2 analysis of job_events has to know which weight generation
+    ordered the list a user actually saw. The exclusion is enforced by
+    tests/test_score_versions.py, not by this paragraph.
+
+    scoring_model is not in the predicate either, for a different reason: a
+    model swap is an operator decision with a known price, and
+    scripts/backfill-scores.py:144-152 already expresses it as a deliberate
+    delete-by-model. Putting it in the staleness predicate would turn
+    editing a JOB_SCORING_MODEL env var into a four-figure call count.
+
+    NO VERSION CHANGE EVER AUTOMATICALLY SPENDS A CALL, and everything above
+    is arranged to keep that true. A stale row is inert: it becomes eligible
+    only under --rescore-stale or --rescore-unversioned, each of which
+    requires an explicit --limit, and run-daily.py passes neither -- see the
+    comment on its score.py step, which is the one place the nightly spend is
+    decided. --stale-report answers "what would it cost" and is handled
+    before the credential check, so it runs on a machine with no API key.
+
+    UNVERSIONED IS A THIRD STATE, NOT STALE. The columns are nullable with no
+    DEFAULT and nothing backfills them, so every row written before they
+    existed is NULL on all three. The predicate uses `<>` behind an explicit
+    IS NOT NULL guard rather than IS DISTINCT FROM, precisely because IS
+    DISTINCT FROM treats NULL as "differs" and would have marked all 1,293
+    pre-existing rows stale the instant the column landed. NULL is not
+    version 0, it is "nobody recorded it" -- reported as its own census
+    bucket and reachable only through its own flag.
+
+    facts_version COMPARES TO THE JOINED ROW, NOT schema.FACTS_VERSION. A
+    narrative is stale when the facts IT READ have since changed. Comparing
+    against the global constant would instead mark a score stale because
+    EXTRACTION is behind, which is extract.py's backlog to burn down and
+    would make all 5,029 v2 rows permanently and pointlessly stale here.
+
+    KNOWN GAP, NAMED SO IT IS NOT MISREAD AS COVERED: title, company_name
+    and location_raw reach the prompt from the `jobs` table (_facts_block)
+    and are versioned by nothing at all. A posting re-titled in place
+    silently invalidates its narrative and no version column notices. Out of
+    scope -- there is no jobs-row version to compare against -- but it is a
+    real hole in "the prompt's inputs are exactly four".
+
 THE PROMPT READS FACTS, NOT THE POSTING
     Stage 2 already distilled each posting into structured facts plus a
     neutral two-sentence summary, so this sends those instead of the
@@ -161,6 +217,11 @@ CONFIG:
     SCORE_BATCH_SIZE         -- how many unscored jobs to score per run
                                 (default 30)
 
+RE-SCORING, WHICH COSTS MONEY AND SO IS NEVER AUTOMATIC:
+    python3 score.py --stale-report              # free: no call, no write
+    python3 score.py --rescore-stale --limit 50
+    python3 score.py --rescore-unversioned --limit 50
+
 SCHEDULE: not scheduled directly -- see run-daily.py, which runs
 this as the final step, after all ingestion sources.
 
@@ -175,11 +236,13 @@ import os
 import re
 import sys
 import json
+import hashlib
 import argparse
 import urllib.error
 import urllib.parse
 import concurrent.futures
 from collections import Counter
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import schema  # schema.py
@@ -231,47 +294,246 @@ def load_persona():
         return json.load(f)
 
 
-def select_shortlist(conn, limit, profile):
-    """The top-ranked postings this profile has not had a narrative written for.
+#: The persona keys build_prompt() actually reads. Nothing else about a user
+#: reaches any prompt in this pipeline, which is what makes a digest of these
+#: five a complete pin on the persona half of the input.
+PERSONA_PROMPT_KEYS = ("background_summary", "strengths", "honest_gaps",
+                       "buckets", "scoring_instructions")
+
+
+def persona_sha(persona):
+    """Digest of the five keys build_prompt() reads. Nothing else.
+
+    EDIT THIS AND build_prompt TOGETHER. build_prompt defines the field set;
+    PERSONA_PROMPT_KEYS only records it. A key the prompt starts reading and
+    this does not digest is a persona edit that changes every narrative and
+    marks nothing stale -- silently, which is this system's failure mode.
+
+    Deliberately not a digest of the whole persona blob: `_comment`,
+    `display_name` and `profile` do not reach a prompt, and a digest that
+    changed when someone fixed a typo in a comment would train people to
+    ignore it -- and, now that it is a cache key, would offer to re-score a
+    profile's whole shortlist over a comment.
+
+    Lives here rather than in evals/tasks/score.py, where it started, because
+    the pipeline must not import from the eval harness. The harness imports
+    the pipeline and re-exports this, which keeps the dependency pointing the
+    way it already pointed.
+    """
+    material = {k: persona.get(k) for k in PERSONA_PROMPT_KEYS}
+    blob = json.dumps(material, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class ScoreContext:
+    """Everything a narrative is written under, carried as one value.
+
+    Built once per profile in run_for_profile and threaded through
+    score_one_job to the writers, which take it INSTEAD of a bare
+    (profile, model_label) pair. That is the point: there is no longer a way
+    to write a job_scores row without also recording the versions it was
+    written under, in the same way update_job_score cannot be handed a raw
+    model response (D15). A provenance column that a caller may pass or
+    forget is a column that will be NULL on the row someone needs it for.
+
+    facts_version is NOT here. It is a property of the posting's job_facts
+    row, not of the run, and it differs per job -- see select_shortlist,
+    which returns it, and the writers, which take it separately.
+    """
+    profile: str
+    persona: dict
+    model_label: str
+    persona_sha: str
+    prompt_version: int
+    criteria_version: int
+
+
+def context_for(profile_obj, model_label=None):
+    """The ScoreContext for one profile. The only place one is constructed.
+
+    model_label defaults to the resolved endpoint, which needs no credential
+    -- so --stale-report can build a context on a machine with no API key.
+    """
+    if model_label is None:
+        host = urllib.parse.urlparse(llm.base_url()).hostname or llm.base_url()
+        model_label = f"{llm.model()}@{host}"
+    return ScoreContext(
+        profile=profile_obj.profile,
+        persona=profile_obj.persona,
+        model_label=model_label,
+        persona_sha=persona_sha(profile_obj.persona),
+        prompt_version=schema.SCORE_PROMPT_VERSION,
+        criteria_version=profile_obj.criteria_version,
+    )
+
+
+#: The staleness arms of select_shortlist's WHERE, shared with stale_census so
+#: the report and the selection can never disagree about what "stale" means.
+#:
+#: `<>` BEHIND AN IS NOT NULL GUARD, NOT `IS DISTINCT FROM`. The latter treats
+#: NULL as "differs", which would have marked all 1,293 rows written before
+#: these columns existed stale the instant the migration landed. CLAUDE.md
+#: says a row is stale iff any RECORDED version differs from current, and a
+#: NULL is not a recorded version -- unversioned is a third state with its own
+#: bucket and its own flag.
+#:
+#: f.facts_version is THE JOINED ROW, never schema.FACTS_VERSION: a score is
+#: stale when the facts it read have since changed, not because extraction is
+#: behind on some other posting.
+_STALE_FACTS = "(s.facts_version  IS NOT NULL AND s.facts_version  <> f.facts_version)"
+_STALE_PERSONA = "(s.persona_sha    IS NOT NULL AND s.persona_sha    <> %(persona_sha)s)"
+_STALE_PROMPT = "(s.prompt_version IS NOT NULL AND s.prompt_version <> %(prompt_version)s)"
+_STALE_ANY = f"({_STALE_FACTS} OR {_STALE_PERSONA} OR {_STALE_PROMPT})"
+
+#: A row that exists and records nothing. Never stale, by the rule above.
+_UNVERSIONED = ("(s.job_id IS NOT NULL AND s.persona_sha IS NULL "
+                "AND s.prompt_version IS NULL AND s.facts_version IS NULL)")
+
+#: A failed-scoring marker. coalesce because scoring_model is nullable and
+#: `NULL NOT LIKE ...` is NULL, not true -- a row with no model recorded would
+#: otherwise fall into no census bucket at all and the counts would stop
+#: summing to the population.
+_TOMBSTONE = "(coalesce(s.scoring_model, '') LIKE %(failed)s)"
+
+#: The population every version query runs over: this profile's ranked, open,
+#: extracted postings. The same FROM for selection and for the census, so the
+#: report cannot promise rows that selection would not return.
+_SHORTLIST_FROM = """
+        FROM {matches} m
+        JOIN {jobs} j ON j.id = m.job_id
+        JOIN {facts} f ON f.job_id = m.job_id
+        LEFT JOIN {scores} s ON s.job_id = m.job_id AND s.profile = %(profile)s
+        WHERE m.profile = %(profile)s
+          AND j.status = %(status)s
+"""
+
+
+def _shortlist_from():
+    return _SHORTLIST_FROM.format(
+        matches=schema.MATCHES_TABLE, jobs=schema.TABLE,
+        facts=schema.FACTS_TABLE, scores=schema.SCORES_TABLE)
+
+
+def select_shortlist(conn, limit, profile, *, versions=None,
+                     include_stale=False, include_unversioned=False):
+    """The top-ranked postings this profile needs a narrative written for.
 
     Ordered by match_score, which match.py already computed for free. That is
     the whole point: choosing what to spend a call on costs nothing, so the
     calls go to the jobs a person is actually about to see.
 
-    The anti-join is still (job_id, profile) -- a narrative written for one
-    persona says nothing about another, exactly as before. Tombstones live in
-    the same table, so a posting that could not be scored is not retried
-    nightly forever.
+    WITH BOTH FLAGS FALSE THIS IS EXACTLY THE OLD ANTI-JOIN -- "no row exists
+    for (job_id, profile)" and nothing else. A version column moving does not
+    select a single extra row, which is the property that keeps a persona edit
+    or a prompt bump from spending money nobody asked to spend. The LEFT JOIN
+    replaced a NOT EXISTS because the predicate needs to read the score row's
+    recorded versions; `s.job_id IS NULL` is the same anti-join written over
+    the join.
+
+    The keys are keyword-only so that no caller acquires staleness by
+    accident, and so tools/claude-bench.py:121's positional
+    select_shortlist(conn, n, profile) keeps meaning what it meant.
+
+    ORDERING: never-scored ahead of stale, then match_score, then newest.
+    Same argument select_unextracted_jobs makes (extract.py:590-600): a
+    backfill must not put tonight's postings behind a queue of re-scores, or
+    the only rows anyone is waiting on are the last served.
+
+    `versions` is a ScoreContext. It is required by either flag -- a
+    staleness predicate with nothing to compare against would silently select
+    nothing, or worse, everything.
 
     No relevance tier here any more. A row only reaches job_matches if it
     cleared the profile's own relevance gate in extract.py AND scored above
     MATCH_FLOOR, so the filtering has already happened twice by this point.
     """
+    if (include_stale or include_unversioned) and versions is None:
+        raise ValueError("select_shortlist needs a ScoreContext to compare "
+                         "against before it can select stale rows")
     rows = conn.execute(
         f"""
         SELECT j.id, j.title, j.company_name, j.location_raw, j.platform,
                m.match_score, m.match_reasons,
                f.summary, f.seniority_level, f.years_experience_min,
                f.role_archetype, f.tech_stack, f.remote_policy,
-               f.ai_involvement, f.gap_friendly_language, f.comp_min, f.comp_max
-        FROM {schema.MATCHES_TABLE} m
-        JOIN {schema.TABLE} j ON j.id = m.job_id
-        JOIN {schema.FACTS_TABLE} f ON f.job_id = m.job_id
-        WHERE m.profile = %(profile)s
-          AND j.status = %(status)s
-          AND NOT EXISTS (SELECT 1 FROM {schema.SCORES_TABLE} s
-                          WHERE s.job_id = m.job_id AND s.profile = %(profile)s)
-        ORDER BY m.match_score DESC, j.first_seen DESC
+               f.ai_involvement, f.gap_friendly_language, f.comp_min,
+               f.comp_max, f.facts_version
+        {_shortlist_from()}
+          AND (
+                s.job_id IS NULL
+             OR (%(include_stale)s AND {_STALE_ANY})
+             OR (%(include_unversioned)s AND {_UNVERSIONED})
+          )
+        ORDER BY (s.job_id IS NOT NULL), m.match_score DESC, j.first_seen DESC
         LIMIT %(limit)s
         """,
-        {"profile": profile, "status": schema.STATUS_OPEN, "limit": limit},
+        {"profile": profile, "status": schema.STATUS_OPEN, "limit": limit,
+         "include_stale": bool(include_stale),
+         "include_unversioned": bool(include_unversioned),
+         "persona_sha": versions.persona_sha if versions else None,
+         "prompt_version": versions.prompt_version if versions else None},
     ).fetchall()
     cols = ["id", "title", "company_name", "location_raw", "platform",
             "match_score", "match_reasons", "summary", "seniority_level",
             "years_experience_min", "role_archetype", "tech_stack",
             "remote_policy", "ai_involvement", "gap_friendly_language",
-            "comp_min", "comp_max"]
+            "comp_min", "comp_max", "facts_version"]
     return [dict(zip(cols, r)) for r in rows]
+
+
+#: The census buckets, in the order they are reported and in the order the
+#: FILTERs below claim rows. They are DISJOINT and they sum to the population:
+#: a row stale on two axes is counted once, under the first bucket that
+#: applies, so an operator adding the numbers up gets the population back
+#: rather than an estimate that pays for the same row twice.
+CENSUS_BUCKETS = ("never_scored", "unversioned", "stale_tombstone",
+                  "stale_facts", "stale_persona", "stale_prompt", "current")
+
+
+def stale_census(conn, profile, ctx):
+    """bucket -> count over this profile's shortlist population.
+
+    Pure SQL. No LLM call, no write, no credential -- this is the thing an
+    operator runs BEFORE deciding whether to spend anything, so it must be
+    runnable on a machine that could not spend anything if it tried.
+
+    stale_tombstone is broken out of the stale buckets because those rows are
+    cheap and disproportionately worth retrying: 40 of the 57 tombstones in
+    production were written by FAILED:glm-4.5-flash@api.z.ai, which is not the
+    production pin and was failing for a credential reason rather than
+    anything about the posting. A tombstone is evidence about the prompt that
+    was sent, so a version change makes it eligible again -- the same rule
+    extract.mark_extract_failed applies by storing at the current
+    facts_version. Retrying them is still behind the opt-in flag.
+
+    NOTE that today's tombstones are all unversioned, so they are counted
+    under `unversioned`; stale_tombstone only becomes non-zero for tombstones
+    written after these columns existed.
+    """
+    row = conn.execute(
+        f"""
+        SELECT
+          count(*) FILTER (WHERE s.job_id IS NULL),
+          count(*) FILTER (WHERE {_UNVERSIONED}),
+          count(*) FILTER (WHERE NOT {_UNVERSIONED} AND {_STALE_ANY}
+                             AND {_TOMBSTONE}),
+          count(*) FILTER (WHERE NOT {_UNVERSIONED} AND NOT {_TOMBSTONE}
+                             AND {_STALE_FACTS}),
+          count(*) FILTER (WHERE NOT {_UNVERSIONED} AND NOT {_TOMBSTONE}
+                             AND NOT {_STALE_FACTS} AND {_STALE_PERSONA}),
+          count(*) FILTER (WHERE NOT {_UNVERSIONED} AND NOT {_TOMBSTONE}
+                             AND NOT {_STALE_FACTS} AND NOT {_STALE_PERSONA}
+                             AND {_STALE_PROMPT}),
+          count(*) FILTER (WHERE s.job_id IS NOT NULL AND NOT {_UNVERSIONED}
+                             AND NOT {_STALE_ANY})
+        {_shortlist_from()}
+        """,
+        {"profile": profile, "status": schema.STATUS_OPEN,
+         "persona_sha": ctx.persona_sha, "prompt_version": ctx.prompt_version,
+         "failed": f"{llm.FAILED_PREFIX}%"},
+    ).fetchone()
+    return dict(zip(CENSUS_BUCKETS, row))
 
 
 def _facts_block(job):
@@ -331,10 +593,21 @@ def build_prompt(persona, job):
     section header inviting the model to fill a void would be worse than no
     section, so the whole block is omitted.
     """
+    # `_`-prefixed keys are documentation, not buckets. CLAUDE.md makes
+    # `_comment` load-bearing in every config JSON in this repo, so a persona
+    # whose buckets{} carries one is a persona someone followed the
+    # convention writing -- and its STRING value hits .get() below and raises
+    # AttributeError, which score_one_job's blanket handler turns into
+    # ERRORED for every job in the batch, because every job in a batch shares
+    # one persona. That is D16 with a different key. Non-dict values are
+    # tolerated the way None already was, for the same reason: one malformed
+    # bucket must not cost a profile its whole night.
     buckets = persona.get("buckets") or {}
     buckets_text = "\n".join(
-        f"- {name}: {(b or {}).get('description')} ({(b or {}).get('fit_signal')})"
-        for name, b in buckets.items()
+        f"- {name}: {b.get('description')} ({b.get('fit_signal')})"
+        for name, b in ((n, v if isinstance(v, dict) else {})
+                        for n, v in buckets.items()
+                        if not str(n).startswith("_"))
     )
     buckets_block = (f"\nPOSITIONING BUCKETS:\n{buckets_text}\n"
                      if buckets_text else "")
@@ -526,7 +799,7 @@ def normalize(result):
     }
 
 
-def update_job_score(conn, job_id, profile, values, model_label):
+def update_job_score(conn, job_id, values, ctx, facts_version):
     """Write one (job, profile) score. `values` is normalize()'s output.
 
     ON CONFLICT DO UPDATE rather than DO NOTHING: re-scoring an already-scored
@@ -536,14 +809,25 @@ def update_job_score(conn, job_id, profile, values, model_label):
     Takes normalized values, not the raw `result` dict. That is the fix for
     D15: there is now no path from a model response to this table that skips
     the coercion, because this function cannot see a raw response.
+
+    Takes a ScoreContext rather than (profile, model_label) for the same
+    structural reason: the profile, the model and the three version columns
+    arrive together or not at all, so there is no call shape that writes a
+    narrative without recording what produced it. facts_version is separate
+    because it belongs to the posting's job_facts row, not to the run.
+
+    THE PARAMETER ORDER IS PINNED. tests/test_score.py asserts params[0:4] and
+    params[5] positionally, so the four version columns are APPENDED after
+    scoring_model and nothing before them moves.
     """
     conn.execute(
         f"""
         INSERT INTO {schema.SCORES_TABLE}
             (job_id, profile, fit_score, primary_track, gap_friendly_signal,
              key_technologies, gap_bridging_angle, risk_factors,
-             scored_at, scoring_model)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             scored_at, scoring_model,
+             facts_version, persona_sha, prompt_version, criteria_version)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (job_id, profile) DO UPDATE SET
             fit_score=EXCLUDED.fit_score,
             primary_track=EXCLUDED.primary_track,
@@ -552,11 +836,15 @@ def update_job_score(conn, job_id, profile, values, model_label):
             gap_bridging_angle=EXCLUDED.gap_bridging_angle,
             risk_factors=EXCLUDED.risk_factors,
             scored_at=EXCLUDED.scored_at,
-            scoring_model=EXCLUDED.scoring_model
+            scoring_model=EXCLUDED.scoring_model,
+            facts_version=EXCLUDED.facts_version,
+            persona_sha=EXCLUDED.persona_sha,
+            prompt_version=EXCLUDED.prompt_version,
+            criteria_version=EXCLUDED.criteria_version
         """,
         (
             job_id,
-            profile,
+            ctx.profile,
             values["fit_score"],
             values["primary_track"],
             values["gap_friendly_signal"],
@@ -564,13 +852,17 @@ def update_job_score(conn, job_id, profile, values, model_label):
             values["gap_bridging_angle"],
             json.dumps(values["risk_factors"]),
             utc_now_str(),
-            model_label,
+            ctx.model_label,
+            facts_version,
+            ctx.persona_sha,
+            ctx.prompt_version,
+            ctx.criteria_version,
         ),
     )
     conn.commit()
 
 
-def mark_score_failed(conn, job_id, profile, model_label):
+def mark_score_failed(conn, job_id, ctx, facts_version):
     """Permanent marker for a failed/unparseable scoring attempt -- without
     this, a job that fails once gets retried (and fails) on every future
     run forever. Same lesson as ingest/hn-hiring.py's hn_seen_comments
@@ -587,17 +879,35 @@ def mark_score_failed(conn, job_id, profile, model_label):
     row whose score says one thing and whose provenance says another, and
     every reader that does not also select scoring_model believes the score.
     Overwriting with NULL loses a stale narrative; keeping it publishes one.
+
+    IT OVERWRITES ALL FOUR VERSION COLUMNS FOR THAT SAME REASON. A tombstone
+    written over a previously-scored row would otherwise inherit that row's
+    versions, and the result is exactly the D43 shape above one level up: a
+    row whose tombstone describes one attempt and whose provenance describes
+    a different, earlier one. The versions recorded here are the versions of
+    the attempt that failed, which is also what makes the tombstone eligible
+    again when the prompt or the persona moves -- a failed narrative is
+    evidence about the prompt that was sent, not about the posting.
     """
     conn.execute(
         f"""
-        INSERT INTO {schema.SCORES_TABLE} (job_id, profile, scored_at, scoring_model)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO {schema.SCORES_TABLE}
+            (job_id, profile, scored_at, scoring_model,
+             facts_version, persona_sha, prompt_version, criteria_version)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (job_id, profile) DO UPDATE SET
             scored_at=EXCLUDED.scored_at, scoring_model=EXCLUDED.scoring_model,
             fit_score=NULL, primary_track=NULL, gap_friendly_signal=NULL,
-            key_technologies=NULL, gap_bridging_angle=NULL, risk_factors=NULL
+            key_technologies=NULL, gap_bridging_angle=NULL, risk_factors=NULL,
+            facts_version=EXCLUDED.facts_version,
+            persona_sha=EXCLUDED.persona_sha,
+            prompt_version=EXCLUDED.prompt_version,
+            criteria_version=EXCLUDED.criteria_version
         """,
-        (job_id, profile, utc_now_str(), llm.failed_label(model_label)),
+        (job_id, ctx.profile, utc_now_str(),
+         llm.failed_label(ctx.model_label),
+         facts_version, ctx.persona_sha, ctx.prompt_version,
+         ctx.criteria_version),
     )
     conn.commit()
 
@@ -612,7 +922,7 @@ SCORED, REJECTED, DEFERRED, ERRORED = ("scored", "rejected", "deferred",
                                        "errored")
 
 
-def score_one_job(job, persona, profile, model_label):
+def score_one_job(job, ctx):
     """Runs inside a worker thread -- opens its own connection rather than
     sharing one across threads (psycopg connections aren't safe for
     concurrent use).
@@ -645,7 +955,7 @@ def score_one_job(job, persona, profile, model_label):
     trade the DEFERRED/REJECTED split exists to avoid for a 429.
     """
     try:
-        return _score_one_job(job, persona, profile, model_label)
+        return _score_one_job(job, ctx)
     except Exception as e:  # noqa: BLE001 -- deliberate: see above
         # Loud unconditionally, not behind DEBUG_PRINT_KEYS. Silence is this
         # system's failure mode and this is the branch that means a bug.
@@ -654,15 +964,21 @@ def score_one_job(job, persona, profile, model_label):
         return ERRORED
 
 
-def _score_one_job(job, persona, profile, model_label):
-    """The body score_one_job guards. Same contract, minus the isolation."""
+def _score_one_job(job, ctx):
+    """The body score_one_job guards. Same contract, minus the isolation.
+
+    facts_version comes off the shortlist row, so what gets recorded is the
+    version of the facts THIS prompt was built from -- not whatever
+    job_facts holds by the time the write lands.
+    """
     # search_path is per-connection, so a worker's fresh connection needs it
     # set again -- dbconn.connect(schema=...) does that for every connection
     # it hands out, which is what makes the threaded case correct by
     # construction instead of by remembering.
     conn = dbconn.connect(schema=schema.SCHEMA)
+    facts_version = job.get("facts_version")
     try:
-        prompt = build_prompt(persona, job)
+        prompt = build_prompt(ctx.persona, job)
         try:
             raw = llm.call(prompt)
         except llm.TransientError as e:
@@ -681,14 +997,14 @@ def _score_one_job(job, persona, profile, model_label):
         values = normalize(result) if result is not None else None
 
         if values is not None:
-            update_job_score(conn, job["id"], profile, values, model_label)
+            update_job_score(conn, job["id"], values, ctx, facts_version)
             if DEBUG_PRINT_KEYS:
                 print(f"[debug] {job.get('title')!r} @ {job.get('company_name')}: "
                       f"fit={values['fit_score']} track={values['primary_track']!r}",
                       file=sys.stderr)
             return SCORED
 
-        mark_score_failed(conn, job["id"], profile, model_label)
+        mark_score_failed(conn, job["id"], ctx, facts_version)
         if DEBUG_PRINT_KEYS:
             print(f"[debug] unparseable/invalid result for {job['id']} ({job.get('title')!r})",
                   file=sys.stderr)
@@ -697,33 +1013,41 @@ def _score_one_job(job, persona, profile, model_label):
         conn.close()
 
 
-def run_for_profile(conn, profile_obj, limit=None, model_label=None):
+def run_for_profile(conn, profile_obj, limit=None, model_label=None, *,
+                    include_stale=False, include_unversioned=False):
     """Write narratives for one profile's shortlist. Returns a Counter.
 
-    Importable rather than buried in main() because the login path calls it
+    Importable rather than buried in main() because a login path would call it
     directly: a user signing in is exactly the moment their top 20 should get
-    narratives, and it is the trigger that makes cost track engagement rather
-    than registration. main() is then just the nightly warm pass over the same
-    function.
+    narratives, and it is the trigger that would make cost track engagement
+    rather than registration. THAT PATH IS DOCUMENTED AND UNBUILT -- nothing
+    under webapp/ imports this module, and main() below is the only caller
+    today. The cost model is the reason to keep the function importable; the
+    claim that something already imports it was wrong.
 
     One profile at a time, deliberately. The persona is the bulk of the prompt
     and it caches as a prefix; interleaving profiles would evict it between
     every call.
+
+    THE RE-SCORE FLAGS DO NOT RAISE THE CAP. Stale rows compete for the same
+    `limit` slots as never-scored ones, behind them in the ORDER BY, so
+    passing one can never spend more than the operator asked for.
     """
-    limit = limit or profile_obj.daily_narrative_budget
-    jobs = select_shortlist(conn, limit, profile_obj.profile)
+    # `limit or budget` was wrong in the direction that costs money: --limit 0
+    # is what someone types to mean "spend nothing", and `0 or 20` is 20.
+    # (It was also right by accident for pursuit, whose budget is 0 -- but
+    # only for limit=None, which is not the case anyone was worried about.)
+    limit = profile_obj.daily_narrative_budget if limit is None else limit
+    ctx = context_for(profile_obj, model_label)
+    jobs = select_shortlist(conn, limit, profile_obj.profile, versions=ctx,
+                            include_stale=include_stale,
+                            include_unversioned=include_unversioned)
     if not jobs:
         return Counter()
 
-    if model_label is None:
-        host = urllib.parse.urlparse(llm.base_url()).hostname or llm.base_url()
-        model_label = f"{llm.model()}@{host}"
-
     with concurrent.futures.ThreadPoolExecutor(
             max_workers=SCORE_MAX_WORKERS) as pool:
-        results = list(pool.map(
-            lambda job: score_one_job(job, profile_obj.persona,
-                                      profile_obj.profile, model_label), jobs))
+        results = list(pool.map(lambda job: score_one_job(job, ctx), jobs))
     return Counter(results)
 
 
@@ -737,7 +1061,36 @@ def main():
     p.add_argument("--active-within-days", type=int, default=None,
                    help="warm pass: skip profiles with no job_events in this "
                         "window, so dormant accounts cost nothing")
+    p.add_argument("--stale-report", action="store_true",
+                   help="print the staleness census for every profile, paused "
+                        "ones included, and exit. Spends nothing: no LLM "
+                        "call, no write, no API key needed")
+    p.add_argument("--rescore-stale", action="store_true",
+                   help="also re-score rows whose recorded persona, prompt or "
+                        "facts version differs from current. Requires --limit")
+    p.add_argument("--rescore-unversioned", action="store_true",
+                   help="also re-score rows written before the version "
+                        "columns existed. Requires --limit")
     args = p.parse_args()
+
+    # BOTH RE-SCORE FLAGS REQUIRE AN EXPLICIT --limit, and argparse refuses
+    # rather than defaulting. daily_narrative_budget is a NIGHTLY WARM-PASS
+    # quantity; reusing it as a backfill quantity is how an operator signs up
+    # for 51 consecutive nights of re-scoring `tech` by typing one flag. The
+    # sizes are different too -- 0 stale and 835 unversioned on `tech` today
+    # -- which is why these are two flags and not one.
+    if (args.rescore_stale or args.rescore_unversioned) and args.limit is None:
+        p.error("--rescore-stale and --rescore-unversioned require an "
+                "explicit --limit: this spends one LLM call per row and the "
+                "backlog is larger than any nightly budget. Run "
+                "--stale-report first to see how many rows there are.")
+
+    # BEFORE the credential check, deliberately, and that placement is the
+    # proof rather than a comment: a report that cannot run without an API key
+    # is a report an operator cannot use to decide whether to spend one.
+    if args.stale_report:
+        _print_stale_report(args.profile)
+        return
 
     if not llm.api_key():
         print("job-score FAILED: JOB_SCORING_API_KEY (or GLM_API_KEY as a "
@@ -776,7 +1129,10 @@ def main():
     total = Counter()
     parts = []
     for prof in targets:
-        outcomes = run_for_profile(conn, prof, args.limit, model_label)
+        outcomes = run_for_profile(
+            conn, prof, args.limit, model_label,
+            include_stale=args.rescore_stale,
+            include_unversioned=args.rescore_unversioned)
         if not outcomes:
             continue
         total.update(outcomes)
@@ -792,8 +1148,15 @@ def main():
     if not parts:
         return  # every profile's shortlist was already written
     n = total[SCORED] + total[REJECTED] + total[DEFERRED] + total[ERRORED]
+    # The rescore flags are named in the summary line because a log that
+    # cannot tell a nightly warm pass from an operator's backfill cannot
+    # answer "why did last Tuesday cost that much".
+    rescoring = ",".join(f for f, on in (("stale", args.rescore_stale),
+                                         ("unversioned",
+                                          args.rescore_unversioned)) if on)
     print(f"job-score: " + "; ".join(parts)
-          + f", model={model_label}, workers={SCORE_MAX_WORKERS}")
+          + f", model={model_label}, workers={SCORE_MAX_WORKERS}"
+          + (f", rescore={rescoring}" if rescoring else ""))
     if total[ERRORED]:
         # Named separately from the rate-limit note below: an error is a bug
         # here, not a busy endpoint, and sending someone to SCORE_MAX_WORKERS
@@ -808,6 +1171,48 @@ def main():
               f"the endpoint is rate-limiting or down. Nothing was discarded; "
               f"lower SCORE_MAX_WORKERS (currently {SCORE_MAX_WORKERS}) if "
               f"this persists.")
+
+
+def _print_stale_report(profile=None):
+    """The census, per profile, and what each flag would cost to act on.
+
+    EVERY PROFILE, not just the active ones. `tech` and `frontend` are paused
+    and hold every score in the table; a report that skipped them would print
+    zeroes for the only rows that exist. A paused profile's backlog is
+    precisely what an operator wants to see before un-pausing it.
+
+    Counts are CALLS, never dollars. There is no committed per-call scoring
+    price anywhere in this repo, and a number invented for a report gets
+    quoted back as a fact -- see the measurement-discipline note in
+    CLAUDE.md.
+    """
+    conn = dbconn.connect_or_exit("job-score", schema=schema.SCHEMA)
+    schema.ensure_schema(conn)
+    try:
+        if profile:
+            names = [profile]
+        else:
+            names = [r[0] for r in conn.execute(
+                f"SELECT profile FROM {schema.PROFILES_TABLE} "
+                f"ORDER BY profile").fetchall()]
+        print(f"job-score staleness (prompt_version="
+              f"{schema.SCORE_PROMPT_VERSION}, no calls made):")
+        for name in names:
+            prof = profiles.load_one(conn, name)
+            if not prof:
+                print(f"  {name}: no such profile")
+                continue
+            census = stale_census(conn, name, context_for(prof))
+            stale = sum(census[b] for b in
+                        ("stale_tombstone", "stale_facts", "stale_persona",
+                         "stale_prompt"))
+            print(f"  {name}{'' if prof.active else ' (paused)'}: "
+                  + ", ".join(f"{census[b]} {b}" for b in CENSUS_BUCKETS))
+            print(f"      --rescore-stale would select {stale} row(s), "
+                  f"--rescore-unversioned {census['unversioned']}; "
+                  f"one LLM call each, capped by --limit")
+    finally:
+        conn.close()
 
 
 def _recently_active(conn, profile, days):
