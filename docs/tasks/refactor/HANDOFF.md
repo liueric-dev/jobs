@@ -207,15 +207,18 @@ recorded at `schema.py:158`.
 
 ## Nothing is in flight
 
-**The tree is clean.** Every agent across all four sessions completed, was verified
+**The tree is clean.** Every agent across all five sessions completed, was verified
 against the code and the database, and was committed — six in the session that landed
 03–18, three in the session that landed 11, three in the session that landed 08/12/19,
-three in the session that landed 13/35/D45. Nothing is half-written and nothing is
-waiting on a reply. Untracked `scripts/` predates this run and is not ours.
+three in the session that landed 13/35/D45, two in the session that landed the
+`job_scores` version keys. Nothing is half-written and nothing is waiting on a reply.
+Untracked `scripts/` predates this run and is not ours.
 
 `run-daily.py`'s `STEPS` is fully wired — `ingest/workday.py` and `ingest/nyc-open-data.py`
 were added by the orchestrator, and `ats.py` was already there. **No task since 12 has
-touched `STEPS`**, so the nightly run is unchanged in shape. Three things changed
+touched `STEPS`**, so the nightly run is unchanged in shape — and that is now asserted
+by test rather than left to habit (`test_score_versions.py`, two tests: the score entry
+verbatim, and no `--rescore-*` flag anywhere in the schedule). Four things changed
 underneath it:
 
 - the nightly `extract.py` step serves one profile with a much smaller queue (task 12);
@@ -225,10 +228,15 @@ underneath it:
   `tools/audit-description-markup.py` is the instrument;
 - `match.py` now writes a real ranking instead of 863 identical scores (task 13), and
   `score.py` still writes nothing at all because `pursuit`'s `daily_narrative_budget`
-  is 0.
+  is 0;
+- **`score.py` can now be told a stored narrative is out of date, and still will not
+  act on it.** `job_scores` carries version keys, but the nightly step passes no
+  `--rescore-*` flag and the default selection is the old existence-only anti-join.
+  A persona edit or a prompt bump changes what `--stale-report` says and changes
+  nothing about what the pipeline spends.
 
 **Start here:** `python3 -m unittest discover -s backend/tests` from the repo root should
-report **837, OK**. `backend/.env` is not exported by default — scripts that reach the
+report **878, OK**. `backend/.env` is not exported by default — scripts that reach the
 database need `cd backend && (set -a; . ./.env; set +a; python3 ...)`.
 
 **Then read this, because it is the one thing a fresh session will get wrong:** task 13
@@ -246,6 +254,20 @@ nothing to fit against until task 29 produces labels — no `job_events`, no L0.
 weights are unfitted guesses by construction and are *recorded as such* in
 `config/pursuit-criteria.json`'s `_comment` blocks. Changing them costs one
 `match.py --rebuild` and buys no information.
+
+**"`job_scores` has version columns and every one of them is NULL. Is that a bug or a
+missing backfill?"** Neither — it is the design, and it is the single thing most likely
+to be "fixed" into a four-figure LLM bill. An unversioned row is a **third state**:
+not stale, not fresh, unknown. Nothing recoverable exists to backfill (the prompt
+changed mid-history, `persona_json` is overwritten with no history, and copying today's
+`facts_version` across would stamp a v2-era narrative v3-current and permanently *hide*
+a genuinely stale row). Run `score.py --stale-report` — it needs no API key — before
+touching anything.
+
+**"I edited the persona / the prompt. What re-scores?"** Nothing, automatically, ever.
+`--rescore-stale` and `--rescore-unversioned` are separate flags and both require an
+explicit `--limit`. That inertness is what pays for the absolute prompt-version bump
+rule; if re-scoring is ever made automatic, that rule has to be renegotiated first.
 
 **"Where do the eval fixtures come from?"** `backend/evals/fixtures/pursuit-criteria-corpus.jsonl`
 (859 frozen `job_facts` rows) and `pursuit-criteria-goldens.json` (20 + 10 hand-picked
@@ -271,7 +293,14 @@ job_scores  1,293 = tech 1,110 + frontend 183; pursuit still has none and will n
            or never cleared MATCH_FLOOR, and no flag can reach them.
 company_ats  139 never_found (was 35) + 75 valid + 5 unvalidated + 3 dead
 profiles    pursuit active @criteria_version 2; tech and frontend inactive but intact
+jobs        13,655 total / 13,082 open as of 2026-07-29T04:10. THE NIGHTLY RAN
+           DURING THIS SESSION -- max(first_seen) 2026-07-29T04:08:38, 148 postings
+           closed. job_facts and job_matches are UNCHANGED by it, so the newest
+           intake is not yet extracted or ranked. Do not read that gap as damage.
 ```
+
+**`job_facts` and `job_matches` above are exactly the pre-session numbers**, which is
+the useful part: two agents and a nightly run moved nothing in the derived tables.
 
 **A cross-stream lesson worth keeping.** Three agents ran in parallel on strictly
 disjoint *files* and still interacted, because **the database is shared**. Task 35's
@@ -281,11 +310,38 @@ md5 changed for a reason that had nothing to do with 13. Both were caught only
 because a baseline was taken first. **File ownership does not isolate database
 state; take the baseline and attribute every delta before recording a conclusion.**
 
+**It happened again in the version-keys session, and the culprit was the pipeline
+itself.** A `tech` count moved 835 → 834 mid-session with two agents running on
+disjoint files. Neither did it: the **nightly `run-daily.py` timer fired at 04:08**
+and closed a greenhouse posting. The narrative content digest and `max(scored_at)`
+were byte-identical throughout, which is how the delta was isolated to a job closing
+rather than a re-score. **The other agent in the room is the cron job**, and a
+snapshot taken at the start is the only thing that can tell you so.
+
+**Take a content digest, not just counts.** `md5` over `string_agg` of the narrative
+columns ordered by `(profile, job_id)` is what proves *nothing was overwritten*. A
+row count cannot see an overwrite, and "the counts match" is exactly the reassuring
+sentence a silent re-score would produce.
+
 ## How this run works
 
 **One fresh subagent per task; the orchestrator verifies and commits.** Nothing is
 committed by a subagent. The orchestrator checks each Definition of done against the
 files, writes the decision-log entries, and commits with the task number.
+
+**The orchestrator should OWN the shared input, not just the shared output.** `STEPS`
+was already an orchestrator-only file because every ingest task wants to edit it. The
+version-keys session generalised it: `schema.py` was the input *both* agents needed,
+so the orchestrator wrote it first and handed both agents a stable file to read. That
+removed the race task 11 had to solve by pasting values into a prompt, and it is
+cheaper than either — one small edit before the agents start.
+
+**A green suite does not mean the brief was met.** The version-keys session's test
+agent delivered 37 tests, all passing, with one required test missing — the one
+asserting `run-daily.py`'s `STEPS` entry verbatim. The suite was green *without* it,
+because it is a test about a constant nobody had changed. It was caught by reading
+the agent's test list against the brief, not by running anything. **Check the
+deliverable list item by item; the suite only tells you the code you wrote works.**
 
 **Verify, do not trust the report.** This mattered repeatedly:
 
@@ -428,6 +484,27 @@ Each of these is a documented claim that is **wrong about the code as it now sta
 - **`strip_comments()` drops only TOP-LEVEL underscore keys.** Nested `_comment`
   documentation reaches the database. Both behaviours are now pinned by test, so
   "comments never reach the DB" is false as stated.
+- **`score.py`'s "the login path calls it directly" was false.** `run_for_profile`'s
+  docstring claimed a webapp login triggers narrative generation, which is where the
+  "cost tracks engagement, not registration" model comes from. **Nothing under
+  `webapp/` imports the module**; `main()` is the only caller. The cost model is
+  documented and unbuilt. Corrected in `d18ea54`, reasoning kept — but any plan
+  costed on "narratives are written at login" is costing a thing that does not exist.
+- **`strip_comments()` is not merely top-level-only for the persona — the persona
+  never passes through it at all.** `migrate_profiles.py` hands
+  `load_persona_file()` straight to `upsert` and strips only *criteria*. So
+  `config/persona.json`'s `_comment` and `_profile_comment` are in the database
+  today. This is why `persona_sha` digests five named keys rather than the blob.
+- **A nested `_comment` inside `persona.buckets` does not leak, it CRASHES, and it
+  takes the whole batch.** `build_prompt` does `(b or {}).get('description')`; a
+  string value raises `AttributeError` into `score_one_job`'s blanket handler, so
+  every job in the batch returns `ERRORED`. That is D16 with a different key.
+  Guarded in `d18ea54`. Documenting a persona the way every other config in this
+  repo is documented would have taken the nightly run down.
+- **A re-scoring bill quoted from `count(job_scores)` is 27% too high.**
+  `select_shortlist` reaches a posting only through `job_matches` and only while
+  `status = open`, so the payable number is **1,018, not 1,293** — and no flag
+  routed through that path can ever reach the other 275.
 - **Line numbers in this file drift.** `job_scores`' DDL is at `schema.py:342-361`,
   not the `328-343` recorded above; the re-scoring anti-join is `score.py:262-263`,
   not `242-244`. Both were ~15 lines out within one session. **Cite `file:line` and
@@ -685,7 +762,10 @@ code and the database before its commit. Mechanics worth keeping:
 
 **Five of six agents in the first session, and three of three in task 11's, completed
 without sending a report at all.** They go idle silently. Do not wait for a summary; check
-the artifacts. That is the norm, not the exception.
+the artifacts. That is the norm, not the exception. **Eleven of eleven across the run
+now**, both version-keys agents included — and one of them sent its idle notification
+*twice*, for work already verified and committed. Treat the notification as "go look",
+including the second time.
 
 **Verification that actually caught things in task 11, in order of value.** Reading the
 diff caught the most; the suite caught the least. Worth copying:
