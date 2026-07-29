@@ -283,10 +283,13 @@ def install_profiles(conn, *, pursuit_relevance=None, criteria=None,
     all three explicitly to profiles.upsert() is the form where a missing
     argument cannot be mistaken for an intention.
 
-    The CONTENTS are still the migrations': COHORT_RELEVANCE is imported from
-    migrate_pursuit_profile.py, and the weights and prose are the same two
+    The CONTENTS are the production files, all three of them: the gate from
+    config/pursuit-relevance.json, and the weights and prose from the same two
     files migrate_profiles.py reads. A hand-typed copy of the gate would be
-    measuring a gate the pipeline does not run.
+    measuring a gate the pipeline does not run. That invariant is asserted by
+    tests/test_pursuit_gate.py rather than left to this paragraph, because it
+    has already been load-bearing once: the gate used to be a dict literal
+    inside migrate_pursuit_profile.py and this function used to importlib it.
 
     criteria_version is 1 here against 2 in production (profiles.upsert
     inserts 1 and only bumps when asked, profiles.py:194-201). It is a cache
@@ -311,22 +314,23 @@ def install_profiles(conn, *, pursuit_relevance=None, criteria=None,
     return profiles.load_active(conn)
 
 
-def cohort_relevance():
-    """The `pursuit` gate, imported from the migration that owns it.
+def cohort_relevance(path=None):
+    """The `pursuit` gate, from the file that owns it.
 
-    spec_from_file_location because migrations/ is not a package and the
-    module's own name is not importable from tools/. Its import-time side
-    effects are a sys.path insert and three imports this file has already
-    done, so loading it costs nothing and touches no database.
+    Read like its siblings above, and that is the whole point: this used to
+    importlib migrations/migrate_pursuit_profile.py for a dict literal. When
+    the gate moved to config/pursuit-relevance.json (2026-07-29) this had to
+    move with it. Had it not, the harness would have kept compiling the old
+    literal while the pipeline ran the new file, and reported the gate
+    unchanged -- which reads as the fix having done nothing, rather than as
+    the instrument pointing at the wrong object.
+
+    NOT comment-stripped, matching the stored column: relevance.load() drops
+    the _-prefixed keys at read time (relevance.py:88-97).
     """
-    import importlib.util
-
-    path = os.path.join(_REPO_ROOT, "migrations", "migrate_pursuit_profile.py")
-    spec = importlib.util.spec_from_file_location("migrate_pursuit_profile",
-                                                  path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.COHORT_RELEVANCE
+    with open(path or os.path.join(_REPO_ROOT, "config",
+                                   "pursuit-relevance.json")) as f:
+        return json.load(f)
 
 
 def _strip_comments(cfg):

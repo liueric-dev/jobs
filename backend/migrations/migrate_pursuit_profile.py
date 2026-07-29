@@ -6,8 +6,9 @@ INACTIVE.
 WHAT THIS WRITES, AND WHAT IT DELIBERATELY DOES NOT
     relevance_json  REAL. The description-first, conjunctive cohort gate that
                     task 10 measured -- see docs/pursuit-description-gate.md
-                    for the numbers and the hand-check behind every list in
-                    COHORT_RELEVANCE below.
+                    for the numbers and the hand-check behind every list. The
+                    gate itself now lives in config/pursuit-relevance.json;
+                    COHORT_RELEVANCE below is loaded from it.
     persona_json    PLACEHOLDER, and labelled as one in its own text.
     criteria_json   PLACEHOLDER: base only, no archetypes, no flags, no tech
                     boosts.
@@ -70,12 +71,22 @@ TASK 13 HAS LANDED, WHICH CHANGES WHAT RE-RUNNING THIS COSTS
     past, and wanting it is almost always a sign that migrate_profiles.py is
     the script you actually want. To refresh only the gate, use:
 
-        python3 migrations/migrate_profiles.py --apply --bump \\
+        python3 migrations/migrate_profiles.py --apply \\
             --profile pursuit \\
             --persona-file config/pursuit-persona.json \\
-            --criteria-file config/pursuit-criteria.json
+            --criteria-file config/pursuit-criteria.json \\
+            --relevance-file config/pursuit-relevance.json
 
-    ...which preserves relevance_json, or pass it a --relevance-file.
+    All three file flags are load-bearing. criteria_json and persona_json are
+    overwritten WHOLESALE on every run (migrate_profiles.py:124-128), and
+    --persona-file defaults to config/persona.json -- the AUTHOR's tech
+    persona. Omitting them writes the wrong profile's prose into `pursuit`
+    while looking like a gate refresh. No --bump: relevance gates extraction,
+    not scoring inputs, so criteria_version must not move.
+
+    Since the gate moved to config/pursuit-relevance.json, that command is the
+    ONLY write path for it. This script is the historical owner and no longer
+    a working one.
 """
 
 import argparse
@@ -98,292 +109,44 @@ from lib import dbconn  # noqa: E402
 PROFILE = "pursuit"
 
 # ---------------------------------------------------------------------------
-# The gate. Every list below is measured; docs/pursuit-description-gate.md
-# records the method, the date, and the hand-check.
+# The gate. Every list is measured; docs/pursuit-description-gate.md records
+# the method, the date and the hand-check behind it.
+#
+# IT LIVES IN config/pursuit-relevance.json, NOT HERE. It was a literal in
+# this file until 2026-07-29, which made a migration script that REFUSES TO
+# RUN (see the refusal in main()) the source of truth for a gate three other
+# things read. Every sibling is already a file -- config/relevance.json,
+# config/pursuit-criteria.json, config/pursuit-persona.json -- and
+# migrate_profiles.py --relevance-file had nothing to point at.
+#
+# The move changed no behaviour, and that was checked rather than assumed:
+# the dict loaded from the file was equal to the stored profiles.relevance_json
+# key for key, and relevance.tier_sql compiled byte-identical SQL and params
+# from both.
+#
+# tools/mock-acceptance.py reads THE SAME FILE. It used to importlib this
+# module for the dict. If the gate ever moves again, move that with it -- the
+# harness would otherwise measure one gate while the pipeline runs another and
+# report "no change", which reads as the fix having done nothing.
 # ---------------------------------------------------------------------------
 
-#: AI-tool vocabulary. Task 05's regex (docs/pursuit-gate-volume.md:42) plus
-#: three terms, see _ai_vocab_note.
-AI_VOCAB = [
-    "chatgpt",
-    "claude",
-    "copilot",
-    "gemini",
-    "\\yllm\\y",
-    "large language model",
-    "prompt engineer",
-    "prompting",
-    "generative ai",
-    "\\ygen ai\\y",
-    "automation",
-    "workflow automation",
-    "zapier",
-    "\\yn8n\\y",
-    "make\\.com",
-    "ai tool",
-    "ai-powered",
-    "machine learning",
-    "\\yai\\y",
-    "ai-driven",
-    "ai-enabled",
-]
+GATE_FILE = os.path.join(_REPO_ROOT, "config", "pursuit-relevance.json")
 
-#: Entry-level signals. Task 05's list (docs/pursuit-gate-volume.md:48) plus
-#: the intern family, see _entry_level_note.
-ENTRY_LEVEL = [
-    "\\yentry.?level\\y",
-    "\\yjunior\\y",
-    "\\yassociate\\y",
-    "\\ycoordinator\\y",
-    "\\yassistant\\y",
-    "\\yspecialist\\y",
-    "\\yanalyst\\y",
-    "\\yno experience\\y",
-    "\\ywill train\\y",
-    "\\yapprentice\\y",
-    "\\yintern(ship)?s?\\y",
-]
 
-COHORT_RELEVANCE = {
-    "_comment":
-        "Relevance gate for the Pursuit AI-Native cohort: entry-level, "
-        "AI-adjacent, all industries, NYC. Lives on the profile rather than in "
-        "config/relevance.json because the shared file is the AUTHOR's "
-        "software-title gate and must keep working unchanged -- see that "
-        "file's own _comment. relevance.union_sql gates both in one pass, so "
-        "having two is free.",
+def load_gate(path=GATE_FILE):
+    """The cohort gate, from its file.
 
-    "_gate_shape_note":
-        "The gate is CONJUNCTIVE and that is the whole design: a row must "
-        "carry AI-tool vocabulary AND an entry-level signal, in the same "
-        "field. Task 05 hand-checked the vocabulary ALONE at 6.7% precision "
-        "over 2,975 rows -- 93% junk -- because every AI-adjacent employer "
-        "(Pinterest, Brex, Notion, Anthropic, OpenAI) ships an AI blurb in the "
-        "header of every requisition, so the vocabulary selects for the "
-        "COMPANY being AI-ish, not the ROLE. A single-list gate on it is not "
-        "worth extracting. The conjunction is expressed as the list-of-lists "
-        "shape relevance._include_groups understands: one term from each "
-        "group. Measured 2026-07-28: 876 rows eligible, hand-checked at 10.0% "
-        "strict / 23.3% generous, n=30. Better than 6.7%, still mostly noise.",
+    Deliberately NOT comment-stripped. relevance.load() drops the _-prefixed
+    keys at read time (relevance.py:88-97), so the documentation survives into
+    profiles.relevance_json, where the next person to read the gate will find
+    it. migrate_profiles.py:130-135 records why that asymmetry with criteria
+    is on purpose.
+    """
+    with open(path) as f:
+        return json.load(f)
 
-    "_regex_dialect":
-        "POSTGRES regexes (~*), not Python ones. Word boundary is \\y -- in "
-        "Postgres \\b means BACKSPACE, so a \\b pattern silently matches "
-        "nothing and quietly demotes everything it was meant to catch to tier "
-        "3. Positive control, measured 2026-07-28 against description_text: "
-        "\\yllm\\y -> 1,127 rows, \\bllm\\b -> 0 rows and no error. Also note "
-        "make\\.com: the dot MUST stay escaped. Unescaped, make.com matches "
-        "116 rows table-wide against 2, a 58x inflation, because it also "
-        "catches 'make a common...' and 'makes com...'. Run "
-        "tools/relevance-report.py --dead --profile pursuit after any edit.",
 
-    "_ai_vocab_note":
-        "Task 05's regex verbatim (docs/pursuit-gate-volume.md:42) plus "
-        "\\yai\\y, ai-driven and ai-enabled. NOT lifted unchanged despite what "
-        "the task file says: task 05's list has no bare \\yai\\y, so it misses "
-        "3 of the 9 genuine tier-3 rows it itself identified, and the two "
-        "hyphenated forms are how half the corpus writes it. The bare \\yai\\y "
-        "is the expensive one -- it matches 9,273 of 11,824 descriptions on "
-        "its own, and removing it takes the gate from 1,671 rows to 1,177 -- "
-        "but it is load-bearing for recall and the entry-level conjunct is "
-        "what makes it affordable. REJECTED: dropping 'automation', 'ai tool' "
-        "and 'ai-powered', which task 05 measured as the junk generators (62% "
-        "of its matches came from those three alone). Rejected because the "
-        "conjunction already removes most of what they pulled in, and because "
-        "'automation' is the single best word for the roles this cohort "
-        "actually wants -- an ops job that runs Zapier flows says 'automation' "
-        "and nothing else. REJECTED: adding 'agentic', 'rpa', 'no-code' and "
-        "'low-code' -- not measured, so not added; add them only with a count "
-        "beside them. KNOWN FALSE POSITIVES, kept anyway: 'gemini' matches "
-        "Gemini the crypto exchange (26 of 90 tier-3 matches in task 05, and "
-        "one landed in this task's own hand-check sample), and 'claude' "
-        "matches the given name. Both are cheap to lose downstream and "
-        "expensive to lose here.",
-
-    "_entry_level_note":
-        "Task 05's list (docs/pursuit-gate-volume.md:48) plus "
-        "\\yintern(ship)?s?\\y, which it lacks -- an omission that dropped "
-        "every internship and new-grad programme, and those are the most "
-        "reliably entry-level postings in the corpus (both genuine rows in "
-        "this task's hand-check are Databricks intern/new-grad requisitions). "
-        "REJECTED: bare \\yintern -- it matches 'internal', which appears in "
-        "most job descriptions. The trailing boundary is what makes the "
-        "pattern safe. KNOWN WEAKNESS: \\yassociate\\y also matches 'Associate "
-        "Director' and 'Associate General Counsel', and \\yanalyst\\y matches "
-        "'Senior Marketing Data Analyst'. title_exclude's seniority block "
-        "below is what catches those; the two lists are designed together.",
-
-    "title_include": [AI_VOCAB, ENTRY_LEVEL],
-
-    "_title_include_note":
-        "Both groups against the title, so 'AI Operations Coordinator' clears "
-        "the gate on its header alone. Worth only 7 rows beyond what "
-        "description_include already admits (measured 2026-07-28), because job "
-        "descriptions restate their own title 81% of the time -- but those 7 "
-        "are the best rows in the set: 'FT/PT Remote AI Prompt Engineering & "
-        "Evaluation - Will Train', 'Technical Specialist, Claude Code', 'AI "
-        "Specialist, Treasury Finance Operations'. Cheap insurance, and it is "
-        "also the only path for the 37 rows that have no description_text at "
-        "all.",
-
-    "description_include": [AI_VOCAB, ENTRY_LEVEL],
-
-    "_description_include_note":
-        "The reason this profile exists. The cohort's target roles say nothing "
-        "about AI in the header and everything in the body -- Harvey's 'User "
-        "Operations Specialist' asks for 'working fluency with AI tools (e.g. "
-        "ChatGPT, Claude, Gemini); you use them, not just know of them' and "
-        "sits at tier 3 under the shared config. relevance.tier_sql ORs this "
-        "against title_include (relevance.py:223-226), so a body match carries a "
-        "posting on its own. REJECTED: requiring the two signals in DIFFERENT "
-        "fields (AI anywhere in title-or-body AND entry-level anywhere in "
-        "title-or-body). It admits 132 more rows and a 30-row sample of that "
-        "delta was ~100% junk -- 'Senior Oracle Procurement Specialist', "
-        "'Associate General Counsel, Commercial', 'Global Filing Specialist, "
-        "Tax' -- because it pairs an entry-level word in the title with "
-        "company AI boilerplate in the body, which is precisely the failure "
-        "mode task 05 documented. Co-location in one field is a weak proxy for "
-        "'the AI vocabulary is about the work', but it is not no proxy.",
-
-    "title_exclude": [
-        "\\yaccount executive\\y",
-        "sales development",
-        "\\ysdr\\y",
-        "\\ybdr\\y",
-        "business development",
-        "\\yrecruiter\\y",
-        "\\yrecruiting\\y",
-        "talent acquisition",
-        "\\ypayroll\\y",
-        "\\ybenefits\\y",
-        "\\ycompensation\\y",
-        "\\ytax\\y",
-        "\\ycontroller\\y",
-        "\\yaccounting\\y",
-        "\\yauditor\\y",
-        "\\ycompliance officer\\y",
-        "\\yparalegal\\y",
-        "\\ycounsel\\y",
-        "\\yattorney\\y",
-        "\\ytherapist\\y",
-        "\\ynurse\\y",
-        "\\yclinician\\y",
-        "\\yphysician\\y",
-        "\\ycustomer success\\y",
-        "\\yexecutive assistant\\y",
-        "\\yoffice manager\\y",
-        "\\yfacilities\\y",
-        "\\ywarehouse\\y",
-        "\\ydriver\\y",
-        "chief .* officer",
-        "\\yvp,?\\y",
-        "vice president",
-        "\\ysenior\\y",
-        "\\ysr\\.?\\y",
-        "\\ystaff\\y",
-        "\\yprincipal\\y",
-        "\\ydirector\\y",
-        "\\yhead of\\y",
-    ],
-
-    "_title_exclude_note":
-        "config/relevance.json's list verbatim, plus a seniority block. The "
-        "shared list is copied rather than referenced because relevance.load "
-        "merges a profile's config over DISABLED, not over the file "
-        "(relevance.py:88-89) -- deliberately, so a profile's behaviour never "
-        "depends on a file it does not mention. The cost is that the two "
-        "drift; check them against each other when either moves. The seniority "
-        "block is NEW and is specific to this profile: the cohort is "
-        "explicitly entry-level, and task 05 measured 59.5% of the AI-vocab "
-        "population as senior/lead/director/VP-shaped. It removes 448 rows "
-        "(1,324 -> 876, measured 2026-07-28). REJECTED: \\ymanager\\y (would "
-        "remove 111 more, 876 -> 765) and \\ylead\\y (43 more, 876 -> 833). "
-        "Both are genuinely ambiguous -- 'Manager, Customer Experience "
-        "Specialist' is not entry-level but 'Lead Teacher' can be, and "
-        "config/relevance.json's own _title_exclude_note argues at length that "
-        "broad co-occurring words are the wrong thing to exclude. Three of the "
-        "30 hand-checked rows were Manager titles, which is n=3 and not a "
-        "reason to change a list. The numbers are recorded so task 13 can "
-        "decide with them rather than re-derive them.",
-
-    "company_exclude": [
-        "\\yremote zest\\y",
-        "\\yremote click\\y",
-        "\\yv?mysmartpros\\y",
-        "\\yvacancy global\\y",
-        "\\ybrighthush\\y",
-        "\\yjobgether\\y",
-    ],
-
-    "_company_exclude_note":
-        "config/relevance.json's list verbatim, and for the same reason: these "
-        "six are relist sites that Google Jobs reports AS the employer, so the "
-        "real employer is unknown. This is a provenance judgement, not a role "
-        "judgement, so it transfers to any profile unchanged. Their titles are "
-        "keyword-stuffed in exactly the way an include regex rewards -- 19 "
-        "reached match_score >= 90, one hit 99 against an LLM fit of 15 -- and "
-        "the description-first gate makes them MORE dangerous, not less, "
-        "because a stuffed body matches too. See that file's "
-        "_company_exclude_scope_note for the eleven aggregators deliberately "
-        "NOT listed here, and its _company_exclude_rejected_note for the "
-        "SerpApi `via` heuristic that was measured and rejected.",
-
-    "platform_exclude": [
-        "^builtin$",
-        "^weworkremotely$",
-        "^hn_whoishiring$",
-    ],
-
-    "_platform_exclude_note":
-        "The three tech-company sources. They stay configured for the author's "
-        "profiles -- Built In and Hacker News Who Is Hiring are good sources "
-        "of the software roles that gate wants -- and are dropped only here. "
-        "Task 05 measured them at 157 of 2,975 AI-vocabulary rows (5.3%), and "
-        "under this gate they contribute 116 of 1,664 before exclusion. "
-        "Anchored ^...$ rather than \\y-bounded because these are exact values "
-        "of the `platform` column, not words in prose. NOTE the value is "
-        "`builtin`, not `builtin-nyc` as the task files write it; the live set "
-        "is greenhouse, ashby, google_jobs, builtin, weworkremotely, "
-        "hn_whoishiring, lever. REJECTED: also dropping `lever` -- it has 9 "
-        "rows total and 0 reach this gate, so excluding it would be a "
-        "statement about a source nobody has measured yet.",
-
-    "description_exclude": [
-        "reputed company",
-    ],
-
-    "_description_exclude_note":
-        "config/relevance.json's list verbatim. Some relisters scrub the "
-        "employer's name out of the body and substitute a placeholder, leaving "
-        "text like 'reputed company is redefining IT operations for the modern "
-        "reputed company'. A posting whose employer has been deleted cannot be "
-        "applied to no matter how good the body looks. Keep this list tiny and "
-        "literal: it scans description_text, and under a description-first "
-        "gate a loose pattern here would bury thousands of legitimate rows "
-        "rather than the hundreds it could bury before.",
-
-    "location_columns": ["location_is_nyc", "location_is_remote"],
-
-    "_location_note":
-        "Any-of, and it decides tier 1 vs tier 2, not admission -- NULL "
-        "(source could not tell) reads as tier 2 so an undetectable location "
-        "never buries a good posting. The cohort is NYC, and 'remote' is kept "
-        "beside it because a remote posting is reachable from NYC. 444 of the "
-        "876 eligible rows (50.7%) are NYC-or-remote, measured 2026-07-28.",
-
-    "max_tier_to_score": 2,
-
-    "_max_tier_note":
-        "2, matching config/relevance.json, and for the reason recorded in its "
-        "_max_tier_exclusion_note and DECISIONS.md:300-330: tier 3 is where "
-        "the exclusion lists SEND things. relevance.py:266-278 folds "
-        "title_exclude, company_exclude, platform_exclude and "
-        "description_exclude into the same row_ok predicate that the includes "
-        "drive, and anything failing row_ok falls to tier 3 (relevance.py:297-299), "
-        "while union_sql admits on tier <= max_tier (relevance.py:331). So 3 "
-        "is an UNCONDITIONAL PASS -- it does not widen this gate, it removes "
-        "it, along with all four exclusion lists at once. Do not raise it.",
-}
+COHORT_RELEVANCE = load_gate()
 
 # ---------------------------------------------------------------------------
 # Stand-ins. TASK 13 HAS REPLACED BOTH, in config/pursuit-criteria.json and

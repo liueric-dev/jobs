@@ -54,6 +54,7 @@ import migrate_pursuit_profile  # noqa: E402
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PURSUIT_CRITERIA = os.path.join(_BACKEND, "config", "pursuit-criteria.json")
 PURSUIT_PERSONA = os.path.join(_BACKEND, "config", "pursuit-persona.json")
+PURSUIT_RELEVANCE = os.path.join(_BACKEND, "config", "pursuit-relevance.json")
 
 
 def stored(profile="pursuit", *, relevance=None, budget=0, active=True):
@@ -201,18 +202,46 @@ class TestPursuitPlaceholderGuard(unittest.TestCase):
 
 
 class TestCohortConfigFilesAreImportable(unittest.TestCase):
-    """The two files task 13 adds must survive the exact path a real run takes:
-    parse, strip, validate. Failing at save time naming the field is the whole
-    point of profiles.validate (profiles.py:123-136); these tests make sure the
-    cohort files reach it rather than dying earlier on a typo."""
+    """The three files the cohort profile is assembled from must survive the
+    exact path a real run takes: parse, strip, validate. Failing at save time
+    naming the field is the whole point of profiles.validate
+    (profiles.py:123-136); these tests make sure the cohort files reach it
+    rather than dying earlier on a typo.
+
+    Task 13 added the criteria and persona. The gate joined them on 2026-07-29,
+    having previously been a dict literal inside migrate_pursuit_profile.py --
+    a migration that refuses to run, and so the one config in this repo whose
+    source of truth could not be loaded by the script that writes it."""
 
     def setUp(self):
         with open(PURSUIT_CRITERIA) as f:
             self.criteria = migrate_profiles.strip_comments(json.load(f))
         self.persona = profiles.load_persona_file(PURSUIT_PERSONA)
+        with open(PURSUIT_RELEVANCE) as f:
+            self.relevance = json.load(f)
 
     def test_the_pair_validates(self):
         profiles.validate(self.persona, self.criteria)
+
+    def test_the_trio_validates(self):
+        """profiles.validate takes the gate as its third argument and compiles
+        it; a gate that cannot compile must not reach a row."""
+        profiles.validate(self.persona, self.criteria, self.relevance)
+
+    def test_the_migration_loads_the_same_gate_as_the_file(self):
+        """migrate_pursuit_profile.COHORT_RELEVANCE is now a read of this file,
+        not a literal. If someone re-inlines it, this is what notices."""
+        self.assertEqual(migrate_pursuit_profile.COHORT_RELEVANCE,
+                         self.relevance)
+
+    def test_the_gate_keeps_its_documentation_in_the_database(self):
+        """The opposite of the criteria rule two tests below, and deliberate.
+        relevance.load() strips _-prefixed keys at read time
+        (relevance.py:88-97), so migrate_profiles.py does NOT strip them on the
+        way in (:130-135) and the rationale for every list survives into
+        profiles.relevance_json. Asserting it here stops a future tidy-up from
+        making the two configs 'consistent' and deleting the record."""
+        self.assertTrue([k for k in self.relevance if k.startswith("_")])
 
     def test_the_persona_has_no_placeholders_left(self):
         """migrate_pursuit_profile.py:371-396 wrote four PLACEHOLDER strings to
