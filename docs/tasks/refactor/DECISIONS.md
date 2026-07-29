@@ -1194,7 +1194,7 @@ safe only by the accident of `None or 0` being 0. And `--stale-report` is handle
 **2026-07-29.** 55 synthetic postings arrived for "task 29". Task 29 is the human
 labelling session and `HANDOFF.md` calls it the one thing in the plan an agent cannot
 do. Writing synthetic values into `eval_labels` would reproduce `claude-bench.py:417`'s
-defect inside the tool built to detect it, and `tests/test_labels.py:423` already
+defect inside the tool built to detect it, and `tests/test_labels.py:433` already
 forbids it structurally.
 
 **Decided:** run the corpus through the real pipeline as an *acceptance* measurement,
@@ -1431,3 +1431,134 @@ row falls silently to tier 3. Not live — 0 of 14,049 rows have a NULL in eithe
 but a fixture built with NULLs reports every row rejected, and every "expected rejected"
 assertion then passes for the wrong reason. Pinned by a test rather than worked around,
 because the failure mode is a green suite.
+
+## D54 — the eval sampler resolves the gate per profile, and has no default that can be wrong
+
+**2026-07-29.** `pool_query()` and `pool()` (`labels.py:440`, `:498`) took a **profile**
+as the argument naming their population and defaulted `cfg` to `relevance.load()` — the
+shared `config/relevance.json`, which is the *repo author's software-engineer job-search
+gate*. The two are different gates, and `classify()` tests tier **before** it tests
+`match_score` (`labels.py:544-547`), so this was not a near miss. Measured over the live
+corpus for `pursuit`: **59 rows classified `surfaced` under the shared gate against 144
+under the profile's own** — 85 postings the pipeline is actively surfacing were being
+filed as `gate_rejected`, which is the one stratum whose entire value is being identified
+correctly (`labels.py:461-465`).
+
+**Decided:** resolve through `relevance.for_profile()` (`relevance.py:100-109`), the same
+helper `extract.py` and `score.py` already use — one implementation, per CLAUDE.md. `cfg`
+is now **required** on `pool_query()`; `pool()` resolves it from the profile row when the
+caller does not already hold one, and `cmd_label_sample` passes it explicitly because it
+loads the row for `criteria` anyway (`__main__.py:279-288`).
+
+**Rejected: passing the right `cfg` at the one call site and leaving the default in
+place.** There was exactly one caller, so this would have measured the same. A plausible
+fallback re-arms itself the first time someone adds a second caller, and the failure is
+silent by construction — a wrong gate returns rows, not an error.
+
+**Rejected: a second relevance implementation inside `labels.py`.** Named in
+`pool_query()`'s own docstring as the thing not to do; it would drift from the config and
+misclassify precisely the stratum the query exists to populate.
+
+**Worth recording:** this restores the point of `HANDOFF.md:956`'s own ordering
+constraint — "draw the sample **AFTER** the gate fix" — which bought nothing at all while
+the sampler was reading a different gate than the one that had been fixed.
+
+## D55 — the pool window is the whole table, and a starved stratum is a refusal
+
+**2026-07-29.** `--per-platform` defaulted to 400 newest-per-platform. Measured: that
+window held **29 of `pursuit`'s 144 surfaced postings** (greenhouse 6/65, ashby 13/52,
+google_jobs 9/26). `sample()` takes what a stratum has and moves on
+(`labels.py:636-642`), so the drawn set would have looked entirely healthy while quietly
+measuring a fifth of its own population — CLAUDE.md's "never select an eval corpus with
+`ORDER BY first_seen DESC`" firing on the tool built to escape that trap.
+
+`PARTITION BY platform` (`labels.py:486-487`) answers the *composition* complaint — the
+"~85% greenhouse/ashby" one — and does nothing whatever about the recency truncation
+underneath it. **They are two separate defects, and fixing one reads like fixing both.**
+
+**Decided:** the default window is the whole table (`__main__.py:543-546`); `jobs` is
+~14,000 rows and one SELECT over all of it is free. And under-fill is a **non-zero exit**:
+`cmd_label_sample` compares taken against want per stratum and returns 2, naming the
+shortfall (`__main__.py:306-346`). The comparison lives in the caller because `sample()`
+cannot distinguish a starved pool from a deliberately small draw.
+
+**Rejected: leaving the default and passing a large `--per-platform` at draw time.** The
+set drawn today would have been correct and the next person draws with the default.
+
+**Rejected: a warning rather than a refusal.** This repo's stated failure mode is
+silence, and a warning printed above a successful `wrote …` line is silence with extra
+steps.
+
+## D56 — labellers are spaced by rank, not by name, and the number came from a measurement not from the formula
+
+**2026-07-29.** `next_item()` served **every** labeller the identical order — `overlap
+DESC, position ASC` — so distinct coverage could never exceed what *one* labeller
+completed. The second term of `distinct = overlap + n_labellers × (budget − overlap)` was
+structurally zero: adding people bought redundancy only, and task 29's "≥100 postings
+from ≥5 labellers" was unreachable regardless of turnout (`labels.py:886-898`). The suite
+was green because nothing asserted coverage.
+
+**The first fix was wrong by 26 postings.** It rotated each labeller's tail by
+`sha256(labeller_id)` — stateless, stable, no new state, and defensible on every axis
+except the one that mattered. Verifying the coverage claim **against the drawn set rather
+than against the arithmetic** showed why: the formula assumes *disjoint* windows, and
+hashing does not give a partition, it gives the birthday problem. Over the real 190-row
+tail, ten labellers at twenty postings each:
+
+    hashed offsets      84 distinct postings   (misses the DoD)
+    rank-spaced        110 distinct postings   (the ideal, meets it)
+
+**Shipped:** `tail_offset(rank, tail_size)` (`labels.py:831-849`), spacing by `2**64/φ`
+(`labels.py:821-828`) — Fibonacci hashing's constant, used for its low-discrepancy
+property and **not** as a hash: successive multiples land maximally far apart, so k
+labellers tile the tail into k near-equal windows for any k without any labeller knowing
+k. `labeller_rank()` (`labels.py:852-883`) *derives* the rank from the order people started
+on the set rather than storing it. `labelled_at` is written at insert time, so nobody can
+acquire an earlier first label than someone already ranked and no rank moves once
+assigned — which is what keeps the walk resumable for a volunteer who closes the tab.
+
+**Rejected: storing an assigned index.** New state on a table that has to be right, and
+the derived version cannot drift from the thing it describes.
+
+**Rejected: Postgres `hashtext()`.** Stability across versions is undocumented, and it is
+not testable without a database, which this package's DoD forbids.
+
+**Rejected: `hash()`.** `PYTHONHASHSEED` randomises `str` hashing per process, so two
+workers would seat the same labeller differently.
+
+**The general lesson, and it is the reusable part: an idealised formula is not a
+measurement.** The plan's 110 and the shipped code's 84 differed by an assumption nobody
+had written down.
+
+## D57 — task 29's five strata were reconciled to three rather than built
+
+**2026-07-29.** The task file specified five buckets. Three of them are sub-slices of
+`surfaced`, which is one stratum with one quota (`labels.py:425`, `:433`), and two of
+those cannot be filled at all:
+
+- **The `fit_score` tie block is empty by construction.** `pool_query()` never joins
+  `job_scores` — it reads `jobs`, `job_facts` and `job_matches` only
+  (`labels.py:488-490`) — and `pursuit` has **0 rows** in that table regardless, its
+  `daily_narrative_budget` being 0 — a column on the `profiles` table (`profiles.py:75`),
+  not a persona key, and so read from the live database rather than from a config file.
+  Dropping the bucket costs zero postings.
+- **"ranks ~20–50, n=60" asks 60 postings of ~31 rank slots**, against the 144 rows
+  `pursuit` holds in `job_matches`.
+
+**Decided:** reconcile the task file to the three strata that exist, in a correction block
+at its head (`tranche_five/29-labelling-session.md:9-40`), rather than build machinery for
+buckets the corpus cannot supply. The DoD's *"all five strata represented"* is read as
+**all three**, which the drawn set meets.
+
+**Rejected: widening `pool_query()` to join `job_scores`.** It would put an LLM-derived
+number into the *selection* of the set built to validate that number, and CLAUDE.md is
+explicit that `fit_score` only annotates — it may not reach an ordering, and a sampling
+frame is an ordering.
+
+**Also decided by the repo owner: overlap 10 rather than 20.** Distinct coverage spends
+each labeller's twenty-minute budget on the shared block first, so a 20-row overlap
+against a 20-posting sitting yields 20 distinct postings no matter how many people turn
+up. At 10, ten labellers reach 110. **This knowingly breaks one DoD line — "20 postings
+overlapped" becomes 10** (`29-labelling-session.md:164`) — and 10 rows still gives 45
+annotator pairs per field. Recorded here rather than quietly satisfied: at the DoD's own
+five-labeller fallback, ≥100 distinct needs ~28 items each, not 20.

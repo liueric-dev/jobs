@@ -281,7 +281,7 @@ def cmd_label_sample(args):
         # is needed for criteria anyway and one load beats two. What must not
         # happen is falling back to the shared config/relevance.json: that is
         # a different gate from the one this profile is filtered by, and it
-        # misfiles rows the pipeline surfaces as gate-rejected. labels.py:425.
+        # misfiles rows the pipeline surfaces as gate-rejected. labels.py:440.
         prof = profiles.load_one(conn, profile)
         cfg = relevance.for_profile(prof)
         rows = labels.pool(conn, profile, per_platform=args.per_platform,
