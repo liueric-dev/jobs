@@ -478,6 +478,20 @@ figure to compare it against.
 (`extract.py:323`). A 27.7% NULL rate is the design working, not failing — but
 it is also the number to watch after the derivation is re-run.
 
+> **Note added 2026-07-30 — THIS 27.7% IS `239 / 863`, and a second unrelated 27.7%
+> existed for one day.** A measurement taken 2026-07-29 for the labelling form put
+> `role_track` NULL at **244 of 881** rows at `facts_version = 3`, which is *also* 27.7%
+> — a different denominator, a different run, and no relationship to this figure beyond
+> the rounding. **Two independent numbers that agree to one decimal place are exactly
+> what gets quoted as one confirming the other**, and this pair was one sentence away
+> from it.
+>
+> The coincidence is now broken: after the nightly run of 2026-07-30 the corpus rate is
+> **261 of 917 = 28.5%**. **The section above is not restated** — it is this run's record
+> and 239/863 is what it measured. Anyone comparing NULL rates across dates must match
+> the denominator first; see `docs/role-track-derivation.md`, § *A corpus statistic here
+> has a shelf life of one night*.
+
 ---
 
 ## The vote did not fire, and version 3 does not certify it

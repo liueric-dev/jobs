@@ -25,6 +25,26 @@ This is the change forced by the self-consistency finding in the
 | **human self-agreement** | 5-10 jobs labelled twice, a week apart | the ceiling. Without it, "80% agreement" has no scale |
 | **model vs human** | the actual question | only interpretable between the two above |
 
+> **Correction, 2026-07-30 — there are TWO ceilings and this row names the weaker one.**
+> The Pursuit pivot supplies ~10 labellers rather than one, which makes
+> **inter-annotator** agreement available: overlap a block of postings across everybody
+> and compare between people. `tranche_two/07-metrics-and-golden-set.md` originally
+> read that as *superseding* this row (the sentence is struck through there now, at
+> `:71-75`, under § *The labeller is not the author*). It does not — they are different quantities, and
+> `test_the_two_ceilings_are_different_quantities` exists to say so. Both are now
+> computed (`backend/evals/labels.py`: `inter_annotator()` at `:1345`,
+> `intra_annotator()` at `:1418`), over the **same** overlap block so they can be read
+> against each other.
+>
+> **This row's "a week apart" is now a constant in the code, not a suggestion:**
+> `labels.ROUND_TWO_DELAY_DAYS = 7` (`labels.py:1007`), and its comment cites this line
+> as its source. Shortening it does not buy a faster measurement, it buys a weaker one —
+> served an hour later, round 2 measures memory.
+>
+> **Which ceiling the labelling night actually collects is an open decision**, because
+> the inter-annotator one is free on an overlapped set and this one costs every
+> volunteer a second sitting. See `docs/tasks/refactor/LABELLING-NIGHT.md`.
+
 **Do this first, before any labelling:** re-run the self-consistency
 measurement at n=120 with `--repeat 3`. It is cheap, it needs no human time,
 and it decides whether the 76% figure is real or an artifact of 17 jobs. If it
@@ -107,6 +127,23 @@ corpus** so the two version independently. Records labeller and timestamp, and
 supports a second pass over already-labelled jobs for the self-agreement
 figure.
 
+> **Correction, 2026-07-30.** The last clause — *"supports a second pass over
+> already-labelled jobs"* — **was false from the day it was written until 2026-07-30**,
+> and it is worth recording as a false-claim-in-a-spec rather than quietly fixing,
+> because nothing was red. The CLI shape above was never built (task 07 built a web form
+> instead, `backend/webapp/label.py`, for the reason `tranche_two/07:51-54` gives), and
+> the form could not re-serve a posting: it never passed `round_no` to
+> `labels.record()`, and `next_item()`'s queue filter had no `round_no` predicate, so a
+> posting a labeller had answered was never shown to them again. `intra_annotator()` was
+> correct, tested, and **unreachable from production** — a tested function with no caller
+> reads exactly like a working feature.
+>
+> **It is true now**, by a different route than this line imagined: `?round=2` on
+> `/v1/label` serves the overlap block only, restricted to rows that labeller answered in
+> round 1 (`labels.next_item()`, `:1112-1145`), gated by `round_two_ready()` (`:1010`) on
+> `ROUND_TWO_DELAY_DAYS = 7`. **Also note what this line got right and 07 nearly lost:**
+> the self-agreement figure is a real requirement, and `:142` below still asks for it.
+
 **Label only `PRIORITY_FIELDS` first.** 30 jobs × 17 extract fields is a lot of
 human hours, and the five in `PRIORITY_FIELDS` are the ones `match.py` scores
 on — an error in `seniority_level` changes what a person is shown, an error in
@@ -139,7 +176,14 @@ existing rule: no cost or latency from replayed data.
   and the answer decides whether later figures are reported stratified
 - `python3 -m evals label` produces `golden-v1.jsonl`
 - `python3 -m evals run --golden` prints model-vs-human per field, with the
-  self-consistency floor and human self-agreement ceiling beside each number
+  self-consistency floor and human self-agreement ceiling beside each number —
+  **and this is enforced rather than remembered.** `labels.interpretable()` raises
+  `labels.Uninterpretable` for any field with a measured cell and no floor or no
+  ceiling cell, and `Interpretable` is the only thing `report.render_labels()` accepts
+  (`backend/evals/labels.py:1628`). There is no flag to pass. **Read "human
+  self-agreement ceiling" as EITHER ceiling** — `interpretable()` takes the
+  inter-annotator cell, which is the one that comes free; see the correction above and
+  `tranche_two/07-metrics-and-golden-set.md`, § *Both ceilings are collectable now*.
 - new tests in `tests/test_evals.py`, still no network and no database
 - if the n=120 self-consistency figure diverges from
   `backend/config/criteria.json`'s 95%, that is written up — do not silently re-tune

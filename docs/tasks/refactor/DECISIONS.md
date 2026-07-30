@@ -1562,3 +1562,250 @@ up. At 10, ten labellers reach 110. **This knowingly breaks one DoD line — "20
 overlapped" becomes 10** (`29-labelling-session.md:164`) — and 10 rows still gives 45
 annotator pairs per field. Recorded here rather than quietly satisfied: at the DoD's own
 five-labeller fallback, ≥100 distinct needs ~28 items each, not 20.
+
+## D58 — round 2 is the overlap block, and nothing else
+
+**2026-07-30.** The intra-annotator ceiling was **unreachable from production**, and had
+been since task 07 shipped. `webapp/label.py` never passed `round_no` to
+`labels.record()`, and `next_item()`'s queue filter had **no `round_no` predicate at
+all** — its docstring said *"the next job this labeller has not answered anything
+about"*, which is exactly what it did, so a posting a labeller had answered was never
+served to them again. `labels.intra_annotator()` was correct, tested, and had no
+reachable caller. **A tested function with no caller reads exactly like a working
+feature**, which is why this survived a task marked DONE and a handoff that listed the
+ceiling as collectable.
+
+**Decided:** round 2 re-serves the **overlap block only**, restricted to rows that
+labeller answered in round 1 and has not answered in round 2 — the exact inverse of
+round 1's predicate (`labels.py:1112-1145`).
+
+**Why the overlap block specifically.** It is the only part of the set more than one
+person sees, so it is already where the *inter*-annotator ceiling is measured. Re-serving
+those same rows means **both ceilings are computed over identical postings** and can be
+read against each other. Measured on two different subsets they would differ for two
+reasons at once — the quantity and the postings — and
+`test_the_two_ceilings_are_different_quantities` exists precisely because that
+distinction is the point. It is also 10 rows, which is what
+`docs/ingestion_tests/03-metrics-and-golden-set.md:25` asks for (*"5-10 jobs labelled
+twice"*), at ~10 minutes of a volunteer's time.
+
+**Rejected: a fresh 5-10 postings drawn for round 2.** Literally what `03:25` describes,
+and it forfeits the comparability above for nothing. It would also draw from the tail,
+where each labeller's window is their own, so the two ceilings would be measured on
+disjoint populations.
+
+**Rejected: rotating round 2's queue by labeller rank, as round 1 does.** Round 2 is ten
+rows and every labeller answers all of them, so there is no coverage to spread; rotating
+would only make two people's queues differ for no gain.
+
+**Rejected: enforcing the delay inside `next_item()`.** It is enforced by
+`round_two_ready()` instead, so a caller can explain a refusal. *"Come back Tuesday"* and
+*"you have finished"* are different states, and a queue function that returns None
+collapses them. Reversible; both functions are pure of each other.
+
+**Also decided:** `progress()`'s round-2 denominator is the overlap block, not the
+200-row set (`labels.py:903-925`). Showing a volunteer *"3 / 200"* on a queue that is ten
+rows long reads as an eight-hour evening and is the single most likely reason someone
+closes the tab. The queue and the denominator have to be the same population.
+
+## D59 — the seven-day delay is the measurement, not a politeness setting
+
+**2026-07-30.** `labels.ROUND_TWO_DELAY_DAYS = 7` (`labels.py:1007`), and it is recorded
+here because it looks exactly like a tunable and is not one.
+
+Round 2 exists to measure whether one person gives the same answer twice. **Served an
+hour later, it measures whether they REMEMBER their first answer** — a fact about human
+memory, not about the field's difficulty. It would come back near 100% and then be quoted
+as a ceiling, which is worse than not collecting it: a fabricated ceiling makes every
+model-vs-human figure beneath it look bad by comparison.
+
+**Decided:** seven days, taken from
+`docs/ingestion_tests/03-metrics-and-golden-set.md:25`'s *"5-10 jobs labelled twice, **a
+week apart**"*. The constant is that phrase in code and the docstring says so.
+
+**Rejected: shortening it to fit a single evening.** It does not buy a faster
+measurement, it buys a different and weaker one.
+
+**Rejected: showing an empty page when it is too soon.** `round_two_ready()` returns a
+**date** and the form names it (`_TOO_SOON` in `webapp/label.py`). A volunteer told *"not
+yet"* with no date either gives up or retries daily, and either way the operator hears
+nothing about it.
+
+**Not decided here, deliberately: whether to spend the second sitting at all.** It costs
+~10 minutes per volunteer, seven days later, for the *weaker* of the two ceilings. That is
+a judgement about people donating their time and it belongs to the repo owner on the
+night. Both paths are implemented; the round-2 link is simply not sent unless someone
+chooses to send it. See `LABELLING-NIGHT.md`.
+
+## D60 — `NO_TRACK_FITS` is a stored value, not a `validate()`-time fold
+
+**2026-07-30.** `extract.py:338` tells the model *"Use null if none of the listed tracks
+clearly describes the role. Do not force a value"* — so **the model's NULL on
+`role_track` is a substantive verdict**, unlike `role_archetype`, whose prompt says
+`"other"` *"is a real answer and is not the same as omitting the field"*. `ROLE_TRACK` has
+nine values and no `other`.
+
+The form's *"I can't tell from this posting"* is an **abstention**, and
+`labels.validate()` collapses `''` and `'unsure'` to None. **Without a distinct value,
+both would store NULL and `model_vs_human()` would score a considered verdict and a shrug
+as agreement.**
+
+**Decided:** `labels.NO_TRACK_FITS = "no_track_fits"` (`labels.py:184`), offered as a
+tenth choice on that one question and rendered *"none of these describes this role"*
+(`webapp/label.py:_CHOICE_LABELS`). **Storage keeps the two apart; the fold to the
+model's domain happens at comparison time only**, in `labels.as_model_domain()`
+(`:1492`), where `NO_TRACK_FITS` against a model NULL reads as **agreement** — both
+saying no listed track fits.
+
+**Rejected: folding it in `validate()`.** That writes None to `eval_labels` and makes
+"no track fits" indistinguishable from "I can't tell" **forever** — a one-way loss, in
+the one table this module exists to keep uncontaminated. It is the same conflation
+`AXIS_B_VALUES` already refuses for "no" versus abstention, one field over.
+
+**Rejected: growing `as_model_domain()` into a general normalisation layer.**
+`questions()` reads its vocabularies from `extract.py` precisely so no such layer is
+needed; a second place where values get rewritten is a second place they can drift. One
+field needs this and the function says so.
+
+**Why the fold loses nothing:** a human abstention never reaches a comparison —
+`consensus()` drops None values and `vs_each` skips them — so the only thing
+`NO_TRACK_FITS` can ever match is a model null. Reversible: storage is faithful, so a
+different comparison rule can be written later against the same rows.
+
+## D61 — `role_track` is on the form despite having NO task 06 self-consistency floor
+
+**2026-07-30.** This is the entry that most looks like an inconsistency, so it is
+recorded rather than left to be rediscovered. The other four axis-A fields are on the
+form because **task 06 measured them and found the model unstable**; a human label buys a
+ceiling to read that instability against. **`role_track` has no task 06 figure at all** —
+it postdates that measurement (task 11 added the column) and its nine-value vocabulary is
+explicitly provisional, derived pre-Phase-3 from a tech-heavy corpus
+(`docs/role-track-derivation.md`).
+
+**Decided: include it anyway.** Task 30 groups its precision figures **by** this
+vocabulary, so an unvalidated vocabulary would silently condition every per-track number
+that task produces. And the validation is only available now — **nobody can label a set
+after the labelling session is over.**
+
+**The argument that settles it is that the label buys most where the model is silent**,
+which inverts the usual reasoning. Measured **2026-07-30, after that morning's 04:09
+nightly run**, over `job_facts` at `facts_version = 3`: `role_track` is NULL on **261 of
+917 rows (28.5%)** — non-null 656 of 917 — and within `pursuit-v1` on **16 of 100
+`surfaced`, 16 of 50 `below_floor` and 50 of 50 `gate_rejected` — 82 of 200**. On those 82
+`model_vs_human()` is silent, and that is the interesting half: **if a human confidently
+assigns a track where the extractor abstained, the NULL rate is an EXTRACTION problem; if
+the human cannot either, the VOCABULARY is wrong.** Those are different fixes and no other
+instrument distinguishes them.
+
+**Superseded figures, correct when taken (2026-07-29, before the run): 244 of 881 = 27.7%
+corpus-wide, 83 of 200 in the set, 17 of 50 `below_floor`.** Recorded rather than replaced
+silently, because **the delta is a finding in its own right**: the nightly took v3 from 881
+to 917 rows and **one `below_floor` posting in the pinned set acquired a `role_track`
+overnight**. `pursuit-v1`'s membership is pinned by sorted `job_id` and its digest did not
+move — **but the facts underneath its rows are not pinned by anything.** Any figure
+computed from `job_facts` about this set carries the date it was taken; one quoted without
+a date is unverified. Third instance of *"the other agent in the room is the cron job"*
+(`HANDOFF.md`, § *nothing is in flight*), and the first of the three to move a *rate about
+a frozen sample* rather than a row count.
+
+**Also worth recording, because it is the shape of a false corroboration:** the superseded
+27.7% and the 27.7% at `docs/facts-v3-diff.md:468` are **different measurements** — 244 of
+881 against 239 of 863, different runs and different denominators — that happened to round
+alike. The current 28.5% breaks the coincidence.
+
+**Rejected: swapping it in for `role_archetype` to keep the form at five questions.**
+`role_archetype` is the field task 12 measured at 31.1% `other` (44.0% on first-time
+extractions), so it is the one with a *known* quality problem; dropping it would forfeit
+the label that diagnoses it.
+
+**Cost, recorded rather than hidden: the form is now six questions per posting, not
+five.** Every budget figure computed against five — including the "≥100 distinct needs
+~28 items each at 5 labellers" in D57 and `HANDOFF.md` — was computed for a shorter form.
+Re-check the arithmetic before the night. Reversible: removing a question is a one-line
+change to `AXIS_A_FIELDS`, and it costs nothing already collected.
+
+**And a drift this found:** `role_track` was **missing from `evals/tasks/extract.py`'s
+`FIELD_KINDS` entirely**. Task 11 added the column and never registered it — exactly the
+drift that file's own comment warns about. It was caught by an **existing** test the
+moment the field went on the form, which is the test earning its keep rather than a new
+one being needed.
+
+## D62 — an existing guard test was deliberately widened to admit `round_no`
+
+**2026-07-30.** `test_the_stratum_is_never_handed_to_the_renderer`
+(`backend/tests/test_labels.py:1036`) asserts `_render_form`'s parameter list **exactly**,
+as an allowlist, and the round-2 work had to add `round_no` to that signature. Changing a
+guard test to make a change pass is normally the thing not to do, so the reasoning is
+recorded here.
+
+**Decided:** widen the allowlist to `["job", "question_list", "label_set", "done",
+"total", "overlap", "round_no"]`, and write the *rule* the list encodes into the test
+body so the next reader does not have to infer it from the membership.
+
+**The rule is: nothing that tells the labeller what the PIPELINE thinks of this
+posting.** A stratum name is the pipeline's verdict in one word — `surfaced` tells a
+labeller the ranker already liked this posting, `gate_rejected` tells them it never made
+it in — and either one contaminates the judgement the form exists to collect. Against
+that rule:
+
+- **`overlap` is admissible.** It says only that other people also see this posting.
+- **`round_no` is admissible.** It says only that *this person* saw it before — and the
+  form must say so out loud, or a volunteer reads the repeat as a bug and "corrects" it to
+  whatever they said last time, which is the one answer that makes the measurement
+  worthless.
+- **`stratum` stays off**, and `next_item()` still returns it while the route still
+  declines to pass it on. `assertNotIn("stratum", _code_only(...))` is unchanged.
+
+**Rejected: relaxing the assertion to a `assertNotIn("stratum", args)` check alone.** The
+exact-list form is what makes an *addition* visible; a membership test would let a future
+`match_score` or `tier` argument through silently, and those carry verdicts too.
+
+## D63 — the paired bootstrap refuses to score a degenerate resample as 0.0
+
+**2026-07-30.** `bootstrap_delta()` was lifted into `backend/evals/metrics.py:705` from
+`tools/learned-ranker-probe.py`, and **rejecting one line of the original is the
+substantive reason it was moved rather than copied.**
+
+The probe's metric reads
+`average_precision_score(yy, s) if 0 < yy.sum() < len(yy) else 0.0`
+(`learned-ranker-probe.py:438`). A resample drawn with replacement can contain no
+positives, where average precision does not exist. Substituting 0.0 gives **both** sides
+of a degenerate draw 0.0, so its delta is exactly 0.0 — and every such draw is one more
+exact zero in the middle of the distribution the percentiles are read off. **The interval
+widens toward zero at the near end, manufacturing "not distinguishable" out of an
+arithmetic guard.**
+
+**At n in the hundreds this is rare. At the per-`role_track` n of about a dozen that task
+30 needs it is routine** — one positive in twelve rows makes (11/12)^12 ≈ 35% of draws
+degenerate. The function's docstring records the measured consequence: on twelve rows
+with one positive, a perfect ordering against its own reverse is **+0.917 [+0.823,
++0.917]** here and **+0.917 [+0.000, +0.917]** with the substitution — *"better"* against
+*"not distinguishable"* on the same data (400 draws, seed 11, pinned in
+`tests/test_metrics_ranking.py`). **The guard would be silently deciding the very
+comparison it was written to protect.**
+
+**Decided:** a degenerate resample is **skipped and counted**, never scored. Skipped
+draws land in `n_undefined`; `draws_used` is what the interval rests on and travels in
+the return value. Below `MIN_USABLE_FRACTION` of `draws`, `value` is None and no interval
+is reported — past that point the surviving draws are a minority subset selected by
+something correlated with the statistic, which is trap 4.1 of
+`backend/docs/HANDOFF-match-quality.md:147` in a third costume.
+
+**Worth recording precisely, because the guard is wrong twice and biasing once:**
+`yy.sum() == 0` is genuinely undefined and 0.0 is an invented value — that is the biasing
+case. `yy.sum() == len(yy)` is **not** undefined: every ordering of an all-positive set
+has average precision 1.0, and this module returns it, so there the substitution is
+merely a wrong value whose error cancels in the difference.
+
+**Also decided: `value` is the observed delta on the full paired sample, not the mean of
+the resamples.** The probe returns `np.mean(deltas)` (`:428`), which is the bootstrap's
+estimate of the mean and differs from the statistic on the actual sample by the bootstrap
+bias — a headline number no reader can recompute from the corpus. Here the resamples only
+ever set `(lo, hi)`.
+
+**Rejected: a tighter usable-draws floor than `MIN_USABLE_FRACTION`.** See that
+constant's own note for the 1/e bound. **Rejected: reproducing the probe's endpoints
+digit-for-digit** — `random.Random` and `numpy.random.default_rng` draw different index
+lists from the same seed, so the two agree only to resampling error, and nothing should
+be built on comparing their digits. The shared seed (11) is the same *discipline*, not the
+same stream.

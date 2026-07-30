@@ -1,6 +1,12 @@
 # 29 — Two-axis labelling session
 
-**Status:** todo. **Depends on:** 07, 12, 26. **Blocks:** 30, 31.
+**Status:** todo. **Depends on:** 07, 12, 26. **Blocks:** 30. ~~30, 31.~~
+**Corrected 2026-07-30: this task does not block 31.**
+`tranche_six/31-dismiss-demotion.md:3` reads *"**Depends on:** 27, 26. **Blocks:**
+nothing"* — it does not name 29 — and **31's body never mentions labels at all**
+(checked by grep for "label" over the whole file: zero hits). 31 turns a dismissal into
+a persistent signal from `job_events`; it needs the event schema (27) and profile
+creation (26), not human judgements. **30 is the only task file genuinely behind 29.**
 
 > **Correction, 2026-07-29.** This file was written from the plan. Task 07 has since
 > been built (`3a8b42c`) and the sample drawn, and five of its statements do not

@@ -322,4 +322,120 @@ another eight values — it is SOC.**
   and a self-agreement floor beside it, since `deepseek-v4-flash` agrees with itself only
   76% on `seniority_level`. Not done here; it belongs with task 12's re-extraction.
 - **The provisional vocabulary has not been validated against Builder preference.** It cannot
-  be until task 29 produces labels.
+  be until task 29 produces labels. **UPDATE 2026-07-30: it now will be.** `role_track` is
+  a question on the labelling form — see § *The validation this document asked for* below.
+
+---
+
+## The validation this document asked for — 2026-07-30
+
+**`role_track` is the sixth question on task 29's labelling form**, alongside
+`ai_involvement`, `seniority_level`, `role_archetype`, `remote_policy` (axis A) and
+`would_apply` (axis B). It is on the list for a **different reason from the other
+four**, and the difference is worth stating because it looks like an inconsistency.
+
+The other four are there because **task 06 measured them and found the model unstable**;
+a human label buys a ceiling to read that instability against. **`role_track` has no
+task 06 figure at all** — it postdates that measurement (task 11 added the column) and
+the nine-value vocabulary this document derives is explicitly provisional, drawn
+pre-Phase-3 from a tech-heavy corpus. It is on the form because **task 30 groups its
+precision figures BY this vocabulary**, so an unvalidated vocabulary would silently
+condition every per-track number that task produces — and because the validation is only
+available now. Nobody can label a set after the labelling session is over.
+
+### The rows where the label buys most are the rows where the model said nothing
+
+**Measured 2026-07-30, over `job_facts` at `facts_version = 3`, AFTER that morning's
+nightly run.** The date is not decoration — see § *A corpus statistic here has a shelf
+life of one night* below, which is the reason these figures are the second set taken.
+
+| population | `role_track` NULL | of | % |
+|---|---:|---:|---:|
+| all `job_facts` at v3 | **261** | 917 | **28.5%** |
+| `pursuit-v1` — `surfaced` | 16 | 100 | |
+| `pursuit-v1` — `below_floor` | 16 | 50 | |
+| `pursuit-v1` — `gate_rejected` | **50** | 50 | |
+| **`pursuit-v1` total** | **82** | **200** | |
+
+Non-null is **656 of 917**.
+
+> **Superseded, and correct when taken — measured 2026-07-29, before the run:** NULL on
+> **244 of 881 (27.7%)** corpus-wide, and **83 of 200** in the set, with **17 of 50**
+> `below_floor`. Kept rather than deleted because the delta is the point: **one
+> `below_floor` row acquired a `role_track` overnight**, which is the whole of the
+> difference inside the set, and 36 new `job_facts` rows at v3 moved the corpus
+> denominator 881 → 917.
+
+**This inverts the usual argument about where a label is worth collecting.** On those 82
+rows there is no model answer to agree or disagree with, so `model_vs_human()` is
+**silent on them** — and that is the interesting half:
+
+- **If a human confidently assigns a track where the extractor left NULL, the NULL rate
+  is an EXTRACTION problem.** The vocabulary contains the right answer and the extractor
+  is not reaching it — a prompt or a model issue, fixable without touching this
+  document's nine values.
+- **If the human cannot assign one either, the VOCABULARY is wrong.** The role genuinely
+  belongs to no listed track, which is this document's own hypothesis about its coverage
+  finally being tested rather than asserted.
+
+**Those are different fixes, and nothing else in the system distinguishes them.** A NULL
+rate on its own is compatible with both, which is why this number has been quotable for
+two tasks without being actionable.
+
+### A corpus statistic here has a shelf life of one night
+
+**Recorded 2026-07-30, because it moved a figure that was about to be written down as a
+bare fact.** The nightly `run-daily.py` fired at **04:09** — `max(first_seen)`
+2026-07-30T04:09:01, `max(extracted_at)` 2026-07-30T04:11:47 — ingesting 388 new postings
+and 36 new `job_facts` rows. `facts_version = 3` went **881 → 917** and `pursuit`'s
+`job_matches` **144 → 152**. The first set of figures above was taken before it; the
+second after; both were correct when taken.
+
+**The pinned set did not drift, and could not have.** `pursuit-v1` is pinned by sorted
+`job_id` and its `sha256` is still
+`afb2d58f5d369dfd03ad9237a8b16396cea31b838a67343f51aceecf70cd1763`;
+`eval_label_items` is still 200 rows and `eval_labels` still 0. **But the facts underneath
+those 200 rows changed** — one `below_floor` posting acquired a `role_track` overnight.
+**Membership is pinned; the extraction under it is not.**
+
+So: **any figure derived from `job_facts` about a pinned set must carry the date it was
+taken, and a figure quoted without one should be treated as unverified.** This is the same
+class as `HANDOFF.md`'s *"the other agent in the room is the cron job"* — that instance was
+a `tech` count moving 835 → 834 when the timer fired at 04:08 — and it now has a second
+instance, one night later and one minute earlier in the hour.
+
+**The near-miss worth knowing about.** The **corpus-wide** rate this document reported on
+2026-07-29 was **244 of 881 = 27.7%**, and `docs/facts-v3-diff.md:468` independently
+reports a `role_track` NULL rate of **27.7%** — from **239 of 863**, a different
+denominator and a different run. **Two unrelated measurements that round to the same
+number are exactly what gets quoted as one confirming the other.** The 2026-07-30 figure
+is 28.5%, which breaks the coincidence; if you find a bare "27.7%" anywhere, establish
+which population it is over before using it.
+
+### Why the form needed a tenth value to make that readable
+
+`extract.py:338` tells the model that null means *"no listed track clearly describes the
+role"* — a **verdict**, not an absence. `ROLE_TRACK` has nine values and no `other`,
+unlike `ARCHETYPE`. Meanwhile the form's *"I can't tell from this posting"* is an
+**abstention**, and `labels.validate()` collapses `''` and `'unsure'` to None.
+
+Without a distinct value, a human meaning *"no track fits"* and a human meaning *"I
+can't tell"* would both store NULL, and the comparison would score **a considered verdict
+and a shrug as agreement**. So the form carries `labels.NO_TRACK_FITS`
+(`backend/evals/labels.py:184`) as a tenth choice, rendered as *"none of these describes
+this role"*. **Storage keeps the two apart; the fold to the model's domain happens at
+comparison time only**, in `labels.as_model_domain()` (`:1492`), where `NO_TRACK_FITS`
+against a model NULL reads as agreement — both saying no listed track fits.
+
+**Read the two numbers together when the labels land.** The 50-of-50 NULL rate on
+`gate_rejected` is the row to be most careful with: 26 of those 50 postings have **no
+`job_facts` row at all**, so no axis-A field can be scored on them by any instrument.
+`gate_rejected` yields a recall bound, never a per-field agreement rate.
+
+### One thing this does not settle
+
+The vocabulary question this document flags at `:305-308` — whether a third and fourth
+distinct vertical after Phase 3 means SOC rather than eight more hand-maintained values —
+is **not** what task 29 answers. Task 29 asks whether the nine values fit the postings
+the cohort actually sees. Whether a hand-maintained list is the right *mechanism* at 26
+values is a separate decision and still open.
