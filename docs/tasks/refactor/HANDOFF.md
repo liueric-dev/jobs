@@ -342,6 +342,82 @@ survived two sessions inside the rule.
 of the same family as the four above: **correct, tested, and with no path to it from
 production.**
 
+### What the inter-annotator ceiling IS, and what it is responsible for
+
+Asked directly, and worth answering here because two different ceilings are discussed in
+this section and the difference decides what the night has to collect.
+
+**What it is: how often two different people give the same answer about the same posting,
+per field.** `labels.inter_annotator()` (`evals/labels.py:1404` as of 2026-07-30 — **find it
+by name**, this file's line numbers have moved three times in one session). Its own first
+line is the definition — *"THE CEILING: how often two different people give the same
+answer."*
+
+**What it is responsible for: making every other number in the report readable.** The
+docstring puts it better than a paraphrase can:
+
+> Without it, "the model agrees with humans 80% of the time" cannot be read: if humans
+> agree with each other 98% the model is bad, and if they agree 79% the model has already
+> saturated the task and no prompt change will help.
+
+So it is not a nice-to-have statistic beside the model score. **It is the scale the model
+score is denominated in**, and the same 80% means "fix the prompt" or "stop working on this"
+depending entirely on it.
+
+**And it is responsible for that structurally, not by convention.** It is one of the three
+fields of `labels.Interpretable` (`:1778`), whose `__post_init__` raises `Uninterpretable`
+if `floor`, `ceiling` or `measured` is missing or has no `n` (`:1808-1815`) — and
+`Interpretable` is *"the ONLY thing report.render_labels() accepts, so there is no code path
+anywhere that prints a model-vs-human number alone. Making the bad report unrepresentable
+rather than discouraged is the whole design; a `--force` flag would undo it and there
+deliberately is not one."* **A labelling night that produces no ceiling produces no
+report** — not a report with a caveat.
+
+The three quantities it sits between:
+
+| | quantity | source | what it bounds |
+|---|---|---|---|
+| floor | model self-consistency | `metrics.selfcheck` | below which disagreement is instability, not error |
+| **ceiling** | **two people, same posting** | **`inter_annotator()`** | **above which there is nothing left to resolve** |
+| measured | model vs the majority human answer | `model_vs_human()` | the question itself |
+
+**Where it is measured, and why the overlap block's stratification mattered.** Only the
+`overlap` rows are seen by more than one person, so the ceiling is computed on those and
+nothing else — **10 rows in `pursuit-v1`, stratified 5 `surfaced` / 3 `below_floor` /
+2 `gate_rejected`.** That stratification was defect 4 of the previous session: an
+unstratified block came back 6 of 10 `gate_rejected`, i.e. postings the pipeline threw away,
+on which agreement is near-unanimous **for free**. A ceiling measured on the easy cases is
+too high, and every model score read against it then looks worse than it is.
+
+**How to read the numbers it returns** (all `metrics.field_cell()`, so they mean exactly
+what they mean in the self-consistency table — that is what lets floor and ceiling be
+columns of one quantity rather than two statistics that merely look alike):
+
+- **`agree2`** — the two lowest-sorted labeller ids. Arbitrary but stable, one Bernoulli
+  trial per item, so it **carries a Wilson interval** and is the cell that goes in the table.
+- **`pairwise`** — the mean over all C(N,2) pairs. The **better point estimate**, and it
+  carries **no interval**, because pairs drawn from one item are not independent trials.
+- **`unanimous`** — everyone agreed.
+- **Abstentions are dropped and counted**, never folded in: a NULL is "I cannot tell from
+  this posting", and *"folding them in as a value would score two people who both gave up as
+  two people who concurred."*
+- `by_platform` sits **beside** the blended figure and never replaces it — the per-platform
+  cells are single-digit at any label count this session can realistically collect, which is
+  what `is_thin()` exists to make visible.
+
+**Versus the intra-annotator ceiling, which is the subject of the rest of this section:**
+intra is *one* person answering the same posting twice, a week apart. It is a **different
+quantity**, and a weaker one — `inter_annotator`'s docstring calls inter *"the better
+ceiling"* and keeps intra *"because attrition may leave it as the only one with any n"*.
+Inter comes free from overlapping a set; intra costs every volunteer a second sitting.
+`tests/test_labels.py`'s `test_the_two_ceilings_are_different_quantities` is the pin
+(`:465` today — cited by name for the reason above). `intra_annotator()` is at
+`evals/labels.py:1477`.
+
+**The practical consequence for the night: the inter-annotator ceiling is the one you
+cannot skip.** Ten Builders each answering the ten overlap rows produces it at no extra
+cost, and without it there is no report at all. The second sitting is optional.
+
 ### The intra-annotator ceiling could not be collected at all
 
 `labels.intra_annotator()` has existed and been tested since task 07. **Nothing could
@@ -485,6 +561,108 @@ the very comparison it was written to protect.**
    made inactive.** It is **not a working example of a cohort labeller** — every Builder
    needs `--profile pursuit`. Copying the existing row's shape adds people to a dead
    profile.
+
+#### What `FRONTEND_ORIGIN` should actually be set to
+
+**There is no single right value — it is "the origin a volunteer's browser is on", and that
+depends on who is labelling.** `FRONTEND_ORIGIN` is only ever used as the base of the
+post-login redirect (`config.py:105-106`, *"Where the OAuth callback sends the browser once
+a session exists"*), so it has to be an origin that serves `/v1/label`.
+
+**Case A — the owner testing alone, on the machine running the service:**
+
+```
+FRONTEND_ORIGIN=http://localhost:8421
+ALLOWED_ORIGINS=http://localhost:8421
+GOOGLE_REDIRECT_URI=http://localhost:8421/v1/auth/callback   # already this
+SESSION_COOKIE_SECURE=false                                  # already this
+```
+
+**Case B — ten Builders on their own devices, which is what task 29 actually is:**
+`localhost` is not reachable from anyone else's machine, so a public origin is required —
+the **tunnel half of task 33**, which HANDOFF already records as splittable and needed
+before 24. Then all four values change together:
+
+```
+FRONTEND_ORIGIN=https://<tunnel-host>
+ALLOWED_ORIGINS=https://<tunnel-host>
+GOOGLE_REDIRECT_URI=https://<tunnel-host>/v1/auth/callback
+SESSION_COOKIE_SECURE=true
+```
+
+**Four things must agree and three of them fail silently:**
+
+- `GOOGLE_REDIRECT_URI` must **also** be registered verbatim in the Google console.
+  A mismatch is the one failure in this group that *does* produce a visible error — Google
+  refuses with `redirect_uri_mismatch` before the user reaches this service.
+- `FRONTEND_ORIGIN` wrong → sign-in succeeds and the browser lands nowhere. Silent.
+- `ALLOWED_ORIGINS` wrong → the CORS allowlist rejects the origin. `config.py:108-110`
+  records the failure mode: *"a wildcard is incompatible with credentialed requests per the
+  CORS spec, and the browser's failure mode is to silently drop the session cookie rather
+  than say so."* Not load-bearing for `/v1/label` itself, which is server-rendered HTML with
+  no JavaScript, but it will be for task 32's frontend.
+- **`SESSION_COOKIE_SECURE` is the trap in the other direction.** It defaults to `True`
+  (`config.py:119`, *"so that the insecure setting has to be typed out on purpose"*) and is
+  currently `false`, which is correct for `http://localhost`. Serve over plain HTTP with it
+  `true` and the browser **discards the session cookie**: login appears to succeed and every
+  subsequent request is signed out. Set it `true` for Case B, keep it `false` for Case A, and
+  do not leave it `true` while testing on `localhost`.
+
+#### The `app_users` schema, and where the example data is
+
+**DDL: `backend/webapp/schema_web.py:107-117`** — nine columns, and this module owns them
+(`backend/webapp/` owns the service's tables; `backend/schema.py` owns the pipeline's).
+
+```sql
+CREATE TABLE IF NOT EXISTS app_users (
+    id            TEXT PRIMARY KEY,
+    email         TEXT NOT NULL UNIQUE,
+    google_sub    TEXT UNIQUE,
+    display_name  TEXT,
+    profile       TEXT NOT NULL,
+    is_admin      BOOLEAN NOT NULL DEFAULT FALSE,
+    active        BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at    TEXT NOT NULL,
+    last_login_at TEXT
+)
+```
+
+**Do not hand-write a row.** `manage_app_users.py add` is the path, and it supplies three
+things you would otherwise have to know:
+
+- **`id` is generated**: `f"u_{secrets.token_hex(6)}"` (`manage_app_users.py:88`), so
+  `u_` plus 12 hex characters.
+- **`google_sub` is NULL until their first successful login**, then bound. The row is
+  matched by email until then and **by `sub` afterwards** — which is why an email change is
+  harmless and a recycled address cannot inherit somebody's account. The CLI prints this
+  when it adds a user (`:105-107`).
+- **`profile` has deliberately NO foreign key** to `profiles(profile)`, matching
+  `job_scores.profile` and `job_matches.profile` (`schema_web.py:119-125`): a real FK would
+  make this service's DDL depend on a table it must not own. The CLI validates with
+  `profiles.load_one()` instead — *"the right place for it, since that function deliberately
+  returns paused profiles too"*, so it will happily seed a user against a profile nobody has
+  activated yet. **That is exactly how the one existing row ended up on the inactive `tech`.**
+
+**Example data — there is exactly one row, and it is a counter-example:**
+
+```
+email                profile   google_sub   active
+ericliu93@gmail.com  tech      (bound)      true
+```
+
+Read it for the *shape* and not for the values: `tech` is inactive, so this user sees
+nothing the cohort sees. What a Builder row must look like is the same shape with
+`profile = 'pursuit'`:
+
+```
+cd backend/webapp
+.venv/bin/python manage_app_users.py add --email them@gmail.com --profile pursuit
+.venv/bin/python manage_app_users.py list      # verify before sending any links
+```
+
+`list` (`:109-118`) is the check to run before the night — it reports email, profile,
+whether `google_sub` is bound, `created_at` and `last_login_at`, so it answers "did all ten
+rows land, and has anyone actually signed in yet" in one command.
 
 Both blockers named in § *what is blocked* still stand: the OAuth client id and secret are
 **empty strings** (`/v1/auth/login` → 503, `webapp/auth.py:235-239`), and ten Builders need

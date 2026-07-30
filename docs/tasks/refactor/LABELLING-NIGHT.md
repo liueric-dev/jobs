@@ -55,6 +55,29 @@ Set it to whatever origin volunteers actually reach the service on — if the ni
 through a tunnel or a tailnet name, that name, not `localhost`. Set `ALLOWED_ORIGINS`
 the same way while you are in the file.
 
+**Which case are you in?** `localhost` only works for someone sitting at the machine
+running the service. Ten Builders on their own phones and laptops cannot reach it, so a
+real night needs a public origin — the tunnel half of task 33. **All four values change
+together, and one of them is a trap in the opposite direction:**
+
+| | testing alone, same machine | ten Builders, own devices |
+|---|---|---|
+| `FRONTEND_ORIGIN` | `http://localhost:8421` | `https://<tunnel-host>` |
+| `ALLOWED_ORIGINS` | `http://localhost:8421` | `https://<tunnel-host>` |
+| `GOOGLE_REDIRECT_URI` | `http://localhost:8421/v1/auth/callback` | `https://<tunnel-host>/v1/auth/callback` |
+| `SESSION_COOKIE_SECURE` | **`false`** | **`true`** |
+
+**`SESSION_COOKIE_SECURE` fails the other way round.** It defaults to `true` on purpose
+("the insecure setting has to be typed out"), and `.env` currently sets it `false`, which
+is correct for `http://localhost`. Leave it `true` while serving plain HTTP and the
+**browser silently discards the session cookie** — sign-in looks successful and every
+page after it is signed out again. Over HTTPS, set it back to `true`.
+
+**`GOOGLE_REDIRECT_URI` must also be registered verbatim in the Google console.** This is
+the only one of the four that gives you a real error (`redirect_uri_mismatch`, from Google,
+before the request ever reaches this service) — which makes it the easiest of the four to
+debug and the only one you will not have to guess at.
+
 ### 3. One `app_users` row per Builder
 
 ```bash
@@ -70,6 +93,24 @@ cohort.
 
 The allowlist is the access control. A valid Google login for an address with no row is
 403 and creates nothing.
+
+**You do not need to know the schema to add people — but if you are inspecting rows,**
+it is nine columns at `backend/webapp/schema_web.py:107-117`: `id`, `email`, `google_sub`,
+`display_name`, `profile`, `is_admin`, `active`, `created_at`, `last_login_at`. Three
+things the CLI does for you and are worth knowing before you reach for SQL:
+
+- **`id` is generated** as `u_` plus 12 hex characters. Do not invent one.
+- **`google_sub` is NULL until that person's first successful login**, then bound
+  permanently. The row is matched by email before that and **by `sub` after** — so someone
+  changing their Gmail address later is harmless, and a recycled address cannot inherit an
+  old account.
+- **`profile` has no foreign key**, deliberately, so nothing stops you seeding a user
+  against a profile that is paused. That is exactly how the one existing row ended up on
+  the inactive `tech`. `add` validates the name exists; it does not check it is active.
+
+`manage_app_users.py list` is the pre-flight check: it shows profile, whether `google_sub`
+is bound yet, and `last_login_at`, which together answer "did all ten rows land, and has
+anyone actually got in".
 
 ### 4. The two-allowlist trap
 
