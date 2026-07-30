@@ -392,13 +392,54 @@ def cmd_label_status(args):
         print(f"{name}: n={n} created={created} sha256={sha[:16]}...")
     if not sets:
         print("no label sets yet -- run `evals label sample`")
-    per_labeller = {}
+    # SCOPE FIRST, THEN COUNT EVERYTHING FROM THE SAME ROWS. Scoping partway
+    # down printed a set-spanning label count on the same LINE as a set-scoped
+    # posting count, which is the "say which columns went into a digest" rule in
+    # a smaller costume: two numbers side by side must come from one population
+    # or they can only mislead.
+    # DISTINCT POSTINGS IS THE DEFINITION OF DONE'S NUMBER, AND UNTIL NOW
+    # NOTHING PRINTED IT. Task 29 asks for ">=100 labelled postings from >=5
+    # labellers"; the count above is LABELS, which is six per posting now that
+    # `role_track` is on the form, so it runs ~6x ahead of coverage. "120
+    # labels from 6 labellers" is twenty postings and reads like progress
+    # toward 100. This is the line an operator watches on the night, and the
+    # per-labeller distinct counts beside it are what say whether the shortfall
+    # is turnout or throughput -- two different remedies, and only one of them
+    # can be fixed by sending another email.
+    # PINNED TO ONE SET, because the threshold it is printed beside belongs to
+    # one. fetch() with no label_set returns every set's labels plus the
+    # NULL-label_set rows record() permits, so once a pursuit-v2 exists an
+    # unpinned numerator would climb past what ">=100" means and the line would
+    # read as met when it is not. Identical today (one set) -- which is exactly
+    # when it is cheap to pin.
+    counted = ([r for r in rows if r["label_set"] == args.label_set]
+               if getattr(args, "label_set", None) else rows)
+    if getattr(args, "label_set", None):
+        print(f"(counting {args.label_set} only)")
+    elif len({r["label_set"] for r in rows}) > 1:
+        print("WARNING: labels span several sets -- pass --label-set to pin "
+              "the distinct count to the one the threshold belongs to")
+    rows = counted
+    per_labeller, per_labeller_items = {}, {}
     for row in rows:
         per_labeller[row["labeller_id"]] = per_labeller.get(
             row["labeller_id"], 0) + 1
+        per_labeller_items.setdefault(row["labeller_id"], set()).add(
+            row["job_id"])
+    distinct = {row["job_id"] for row in rows}
     print(f"{len(rows)} label(s) from {len(per_labeller)} labeller(s)")
+    print(f"{len(distinct)} DISTINCT posting(s) labelled "
+          f"-- task 29's definition of done asks for >=100 from >=5 labellers")
+    rounds = sorted({row["round_no"] for row in rows})
+    if rounds and rounds != [1]:
+        # Round 2 re-answers postings already counted above, so it must never
+        # look like coverage. See labels.next_item()'s round-2 branch.
+        r2 = {row["job_id"] for row in rows if row["round_no"] != 1}
+        print(f"  of which {len(r2)} re-checked in a later round "
+              f"(intra-annotator; adds no coverage)")
     for who, k in sorted(per_labeller.items()):
-        print(f"  {who}: {k}")
+        print(f"  {who}: {k} label(s) on "
+              f"{len(per_labeller_items.get(who, ()))} posting(s)")
     return 0
 
 
@@ -554,6 +595,11 @@ def main(argv=None):
     le.set_defaults(func=cmd_label_export)
 
     lst = label_sub.add_parser("status", help="who has labelled what")
+    lst.add_argument("--label-set",
+                     help="pin the distinct-posting count to one set. Task "
+                          "29's '>=100 distinct' threshold belongs to a single "
+                          "set, so with more than one drawn an unpinned count "
+                          "reads as met before it is")
     lst.set_defaults(func=cmd_label_status)
 
     lr = label_sub.add_parser(
