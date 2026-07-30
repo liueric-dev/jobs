@@ -197,5 +197,84 @@ class TestTheRouteCannotWriteAModelsAnswer(unittest.TestCase):
             labels_mod.validate("A", "seniority_level", "definitely mid")
 
 
+class TestTheRoundTwoSurface(unittest.TestCase):
+    """The web half of the round-2 path, which had no test at all.
+
+    Every round-2 assertion in the repo was at the labels.py layer, so the
+    route -- the ?round=2 branch, the hidden field, the POST allowlist, the
+    round-preserving 303 and the two exhaustion messages -- was unasserted.
+    That is how the defect below shipped: the queue was right and the PAGE was
+    wrong, and no test looked at the page.
+    """
+
+    def test_the_hidden_round_travels_with_the_form(self):
+        # Without this the POST cannot know which round it is answering, and
+        # every answer lands as round 1 -- which is the original defect.
+        self.assertIn("name=round_no value='1'", _render())
+        second = label._render_form(_job(), labels_mod.questions(), "ls1",
+                                    0, 10, True, round_no=2).body.decode()
+        self.assertIn("name=round_no value='2'", second)
+
+    def test_the_second_look_says_so_and_says_not_from_memory(self):
+        second = label._render_form(_job(), labels_mod.questions(), "ls1",
+                                    0, 10, True, round_no=2).body.decode()
+        self.assertIn("second look", second)
+        self.assertIn("not from memory", second)
+        self.assertNotIn("not from memory", _render())
+
+    def test_the_round_allowlist_admits_only_one_and_two(self):
+        # A bogus round would write a THIRD round that no agreement function
+        # reads -- a label that cost a volunteer's attention and is invisible
+        # to every report. There is also no CHECK on the column, so this parse
+        # is where the invariant lives.
+        #
+        # THIS CALLS THE PARSER. An earlier version re-implemented the
+        # expression here, which passes whatever the route does and therefore
+        # asserted nothing -- the tautology this repo names elsewhere. That is
+        # why parse_round is module-level and public.
+        for raw, expect in (("2", 2), (" 2 ", 2), ("1", 1), ("3", 1), ("", 1),
+                            ("two", 1), ("2x", 1), ("02", 1), (None, 1)):
+            self.assertEqual(label.parse_round(raw), expect,
+                             f"{raw!r} must resolve to round {expect}")
+        # And both entry points use it, so the query string and the form body
+        # cannot disagree about what round means.
+        code = open(label.__file__, encoding="utf-8").read()
+        self.assertEqual(code.count("parse_round("), 3,
+                         "one definition, one GET caller, one POST caller")
+
+    def test_exhausted_for_now_is_not_all_done(self):
+        # THE DEFECT THIS PINS. round_two_ready() opens the round off the
+        # labeller's EARLIEST round-1 answer; next_item() admits rows one at a
+        # time as each reaches ROUND_TWO_DELAY_DAYS. Someone who answered the
+        # overlap block over two sittings therefore empties the queue with rows
+        # still maturing, and the page used to tell them "You have labelled all
+        # 10 postings in this set. Nothing else is needed from you." -- ending
+        # their part in the one measurement that has no second sitting.
+        more = label._MORE_LATER.format(done=1, waiting=10, days=7)
+        self.assertIn("1 of your 10", more)
+        self.assertIn("this is not the end of the second look", more)
+        # And the two messages must not be confusable.
+        done = label._ALL_DONE.format(total=10)
+        self.assertIn("Nothing else is needed from you", done)
+        self.assertNotIn("Nothing else is needed", more)
+
+    def test_the_two_reasons_a_round_two_queue_is_empty_are_different_pages(self):
+        # "You have no round-1 answers to re-check" and "come back when they
+        # mature" and "you are finished" are three states. A volunteer who
+        # cannot tell them apart either gives up or retries forever, and the
+        # operator hears about neither.
+        pages = {label._NO_ROUND_ONE, label._TOO_SOON, label._MORE_LATER,
+                 label._ALL_DONE}
+        self.assertEqual(len(pages), 4, "each state needs its own page")
+        self.assertIn("{when}", label._TOO_SOON)
+        self.assertIn("{waiting}", label._MORE_LATER)
+
+    def test_the_too_soon_page_names_a_date(self):
+        # Not "later". A refusal with no date is indistinguishable from a bug.
+        soon = label._TOO_SOON.format(n=10, when="2026-08-06")
+        self.assertIn("2026-08-06", soon)
+        self.assertIn("remember", soon)
+
+
 if __name__ == "__main__":
     unittest.main()

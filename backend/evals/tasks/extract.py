@@ -23,6 +23,16 @@ from .. import corpus
 FIELD_KINDS = {
     "seniority_level": "enum",
     "role_archetype": "enum",
+    # `role_track` was added to job_facts by task 11 and never registered
+    # here, which is exactly the drift the comment above warns about -- found
+    # by tests/test_labels.py's
+    # test_every_axis_a_field_is_a_field_metrics_can_score when the field went
+    # on the label form. `enum` is right for the same reason `role_archetype`
+    # is, with one wrinkle worth knowing: null is a MEANINGFUL answer on this
+    # field (extract.py:338 -- "null is the correct answer for a role that
+    # belongs to no listed track"), and compare() scores None == None as
+    # agreement, which is the reading labels.as_model_domain() depends on.
+    "role_track": "enum",
     "ai_involvement": "enum",
     "remote_policy": "enum",
     "employment_type": "enum",

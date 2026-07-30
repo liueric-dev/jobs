@@ -164,11 +164,41 @@ def _page(title, body):
         f"<body>{body}</body></html>")
 
 
-def _render_form(job, question_list, label_set, done, total, overlap):
+#: How one value renders, because "no track fits" as a bare slug sits next to
+#: "I can't tell from this posting" and the two are the exact pair this form
+#: must not let a volunteer conflate. See labels.NO_TRACK_FITS: one is a
+#: verdict about the vocabulary, the other is an abstention, and they are
+#: stored as different things precisely so they can be told apart later.
+_CHOICE_LABELS = {
+    "no_track_fits": "none of these describes this role",
+}
+
+
+def parse_round(raw):
+    """A submitted or queried round, as 1 or 2. Never anything else.
+
+    AN ALLOWLIST OF TWO, NOT int(). record()'s ON CONFLICT DO NOTHING means a
+    bogus round writes a THIRD round that no agreement function reads --
+    intra_annotator() compares rounds 1 and 2, and everything else is
+    round-1-scoped -- so it would cost a volunteer's attention and be invisible
+    to every report. `round_no` also has no CHECK on the column, so this
+    function is where the invariant lives.
+
+    Module-level and named without an underscore so it can be tested directly.
+    It was previously inline in submit_label(), and the test for it
+    re-implemented the expression instead of calling it -- which passes whatever
+    the route does, i.e. asserts nothing.
+    """
+    return 2 if (raw or "").strip() == "2" else 1
+
+
+def _render_form(job, question_list, label_set, done, total, overlap,
+                 round_no=1, blank=False):
     e = html.escape
     parts = [
         f"<div class=progress>{done} of {total} done"
-        + ("  &middot; shared posting" if overlap else "") + "</div>",
+        + ("  &middot; shared posting" if overlap else "")
+        + ("  &middot; second look" if round_no != 1 else "") + "</div>",
         f"<h1>{e(job.get('title') or '(no title)')}</h1>",
         # Escaped per field and joined afterwards, so the separator survives
         # as markup and nothing from the corpus ever can. Postings are
@@ -182,7 +212,23 @@ def _render_form(job, question_list, label_set, done, total, overlap):
         "<form method=post action='/v1/label'>",
         f"<input type=hidden name=job_id value='{e(job['id'])}'>",
         f"<input type=hidden name=label_set value='{e(label_set)}'>",
+        f"<input type=hidden name=round_no value='{int(round_no)}'>",
     ]
+    if blank:
+        parts.append(
+            "<p class=hint><strong>Nothing was saved.</strong> This is the same "
+            "posting again because no answer came through. Answer at least one "
+            "question &mdash; and if you cannot judge this posting at all, pick "
+            "<em>I can't tell from this posting</em> on each one, which is a "
+            "real answer and moves you on.</p>")
+    if round_no != 1:
+        # Say what is being asked, or a volunteer reads the repeat as a bug and
+        # "corrects" it to whatever they said last time -- which is the one
+        # answer that makes the measurement worthless.
+        parts.append(
+            "<p class=hint>You answered this posting before. Answer it again "
+            "from the posting, not from memory &mdash; if you now think "
+            "differently, say what you think now.</p>")
     for q in question_list:
         parts.append(f"<fieldset><legend>{e(q.prompt)}</legend>")
         if q.axis == labels_mod.AXIS_A:
@@ -197,7 +243,9 @@ def _render_form(job, question_list, label_set, done, total, overlap):
             parts.append(
                 f"<label class=opt for='{cid}'>"
                 f"<input type=radio id='{cid}' name='{e(name)}' "
-                f"value='{e(choice)}'> {e(choice.replace('_', ' '))}</label>")
+                f"value='{e(choice)}'> "
+                f"{e(_CHOICE_LABELS.get(choice, choice.replace('_', ' ')))}"
+                "</label>")
         # The abstention is an option on the form, always, and is checked by
         # default on nothing. A labeller with no way to say "I cannot tell"
         # guesses, and a guess recorded as a label is exactly the failure this
@@ -231,15 +279,64 @@ def label_form(request: Request):
                                     status_code=302)
         raise
 
+    round_no = parse_round(request.query_params.get("round"))
+    n_waiting = 0        # set below on round 2; read in the exhaustion branch
+
     with db() as conn:
         label_set = labels_mod.active_set(conn)
         if not label_set:
             return _page("Nothing to label", _NO_SET)
-        item = labels_mod.next_item(conn, label_set, user.id)
-        done, total = labels_mod.progress(conn, label_set, user.id)
+        if round_no == 2:
+            # The delay is the measurement, not politeness -- see
+            # labels.ROUND_TWO_DELAY_DAYS. Refusing with a DATE rather than
+            # with an empty page is the difference between "come back Tuesday"
+            # and "you are finished", which are the two states a volunteer
+            # would otherwise have to guess between.
+            ready, n_waiting, earliest = labels_mod.round_two_ready(
+                conn, label_set, user.id)
+            if not n_waiting:
+                return _page("Nothing to re-check", _NO_ROUND_ONE)
+            if not ready:
+                return _page("Not yet", _TOO_SOON.format(
+                    when=earliest[:10], n=n_waiting))
+        item = labels_mod.next_item(conn, label_set, user.id,
+                                    round_no=round_no)
+        done, total = labels_mod.progress(conn, label_set, user.id,
+                                          round_no=round_no)
         if item is None:
+            # "EXHAUSTED FOR NOW" IS NOT "ALL DONE", and on round 2 the two are
+            # easy to confuse into a data loss. round_two_ready() opens the
+            # round off the labeller's EARLIEST round-1 answer, while
+            # next_item() admits rows one at a time as each reaches seven days.
+            # A volunteer who answered the overlap block across two sittings
+            # therefore has rows that are ready and rows that are not, and
+            # telling them "nothing else is needed from you" ends their
+            # participation in the one measurement that has no second chance.
+            if round_no == 2 and done < n_waiting:
+                return _page("That is all for now", _MORE_LATER.format(
+                    done=done, waiting=n_waiting,
+                    days=labels_mod.ROUND_TWO_DELAY_DAYS))
+            if round_no == 2:
+                # Round 2 gets its OWN completion message and it speaks only
+                # about the second look. _ALL_DONE's total is the overlap block
+                # size, so a labeller who answered 6 of 10 in round 1 and
+                # re-checked all 6 would be told "all 10 ... nothing else is
+                # needed" while four are still outstanding in ROUND 1. Same
+                # split-sitting trigger as the bug this branch already fixes.
+                return _page("Second look complete",
+                             _ROUND_TWO_DONE.format(done=done))
             return _page("All done", _ALL_DONE.format(total=total))
         job = _job(conn, item["job_id"])
+        # Round 2 asks back only what this person actually answered, so a
+        # question left blank or abstained the first time is not re-presented.
+        # labels.round_one_answers() carries the reasoning; the short version is
+        # that a first answer given at round-2 time has nowhere correct to go
+        # and one of the two places it could go bypasses the seven-day delay.
+        questions = labels_mod.questions()
+        if round_no == 2:
+            answered = labels_mod.round_one_answers(
+                conn, label_set, item["job_id"], user.id)
+            questions = [q for q in questions if q.field in answered]
 
     if job is None:
         # The set names a job id the corpus no longer has. Not fatal and not
@@ -249,8 +346,9 @@ def label_form(request: Request):
                     label_set, item["job_id"])
         return _page("Posting unavailable", _MISSING_JOB)
 
-    return _render_form(job, labels_mod.questions(), label_set, done, total,
-                        item["overlap"])
+    return _render_form(job, questions, label_set, done, total,
+                        item["overlap"], round_no=round_no,
+                        blank=request.query_params.get("blank") == "1")
 
 
 @router.post("/v1/label")
@@ -272,6 +370,8 @@ async def submit_label(request: Request, user: User = Depends(require_user)):
     if not job_id or not label_set:
         raise HTTPException(status_code=400, detail="missing job_id or label_set")
 
+    round_no = parse_round(form.get("round_no"))
+
     with db() as conn:
         # The posting must be in the set. Without this, a hand-crafted POST
         # could put labels on arbitrary job ids and quietly widen the eval set
@@ -283,6 +383,37 @@ async def submit_label(request: Request, user: User = Depends(require_user)):
             raise HTTPException(status_code=404,
                                 detail="that posting is not in this label set")
 
+        # Round 2 has two more preconditions, and one query answers both.
+        # Queried here rather than trusted from the form for the same reason
+        # `profile` is taken from the session: the round is the difference
+        # between a first answer and a revision, and a revision of nothing is
+        # not a measurement.
+        round_one_fields = set()
+        if round_no == 2:
+            # (a) It must be an overlap row. next_item()'s round-2 branch only
+            # ever serves those, so a non-overlap round-2 row can only arrive
+            # from a hand-edited form -- and it would be folded into the
+            # intra-annotator ceiling with no delay behind it, which is the one
+            # figure that ceiling must not contain.
+            if not conn.execute(
+                    "SELECT 1 FROM eval_label_items "
+                    "WHERE label_set = %s AND job_id = %s AND overlap",
+                    (label_set, job_id)).fetchone():
+                raise HTTPException(
+                    status_code=400,
+                    detail="round 2 re-asks the shared postings only")
+            # (b) Which FIELDS may be re-asked: answered in round 1, not
+            # abstained, and matured. See labels.round_one_answers() for why
+            # each exclusion is there -- one of them is a delay bypass.
+            # Re-checked here and not only at render time, because the render
+            # bounds what a browser SHOWS and this bounds what gets STORED.
+            round_one_fields = labels_mod.round_one_answers(
+                conn, label_set, job_id, user.id)
+            if not round_one_fields:
+                raise HTTPException(
+                    status_code=400,
+                    detail="nothing on this posting is due for a second look")
+
         written = 0
         for q in labels_mod.questions():
             raw = form.get(f"{q.axis}:{q.field}")
@@ -291,6 +422,13 @@ async def submit_label(request: Request, user: User = Depends(require_user)):
                 # written: an unanswered question is missing data, and
                 # recording it as "I can't tell" would invent a judgement.
                 continue
+            # A round-2 submission may only touch fields that are due for one.
+            # The form did not render the others, so this rejects only a
+            # hand-crafted POST -- and it rejects it silently per field rather
+            # than 400ing the whole submission, because the fields that ARE due
+            # are legitimate answers and should not be lost to one bad field.
+            if round_no == 2 and q.field not in round_one_fields:
+                continue
             try:
                 # profile comes from the SESSION, never from the form. That is
                 # the same tenancy rule jobs.py:5 states, and here it is also
@@ -298,14 +436,31 @@ async def submit_label(request: Request, user: User = Depends(require_user)):
                 written += bool(labels_mod.record(
                     conn, axis=q.axis, job_id=job_id, field=q.field,
                     value=raw, labeller_id=user.id, label_set=label_set,
+                    round_no=round_no,
                     profile=user.profile if q.axis == labels_mod.AXIS_B
                             else None))
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc))
         conn.commit()
 
-    log.info("%d label(s) from %s on %s", written, user.id, job_id)
-    return RedirectResponse("/v1/label", status_code=303)
+    log.info("%d label(s) from %s on %s (round %d)",
+             written, user.id, job_id, round_no)
+    # The round has to survive the redirect, or a round-2 answer sends the
+    # labeller back to a round-1 queue that is already exhausted and the page
+    # says "All done" halfway through their second look.
+    #
+    # AND A SUBMIT THAT WROTE NOTHING HAS TO SAY SO. next_item() serves the next
+    # posting this labeller has no row for, so a fully-blank submit re-serves
+    # the SAME posting -- correctly, since nothing was recorded, but on screen
+    # it is indistinguishable from a broken page, and a volunteer who thinks the
+    # form is stuck stops. The intended exit from a posting nobody can judge is
+    # "I can't tell" on every question, which writes rows and advances; this
+    # says that instead of leaving them to infer it. Six questions make a blank
+    # submit likelier than five did.
+    query = "?round=2" if round_no == 2 else ""
+    if not written:
+        query += ("&" if query else "?") + "blank=1"
+    return RedirectResponse("/v1/label" + query, status_code=303)
 
 
 @router.get("/v1/label/progress")
@@ -331,3 +486,39 @@ _MISSING_JOB = (
     "<h1>That posting is unavailable</h1><p>It was in the set but is no longer "
     "in the corpus. This has been logged; please tell whoever sent you the "
     "link.</p>")
+
+#: Round 2 only. The rows mature one at a time, so an empty queue here usually
+#: means "come back", not "finished" -- and saying the wrong one of those costs
+#: the intra-annotator sample, which cannot be recollected. Names the count so a
+#: volunteer can see there is more, without promising a date this page cannot
+#: compute (the next row's is a function of when THEY answered it).
+_MORE_LATER = (
+    "<h1>That is all for now &mdash; thank you</h1><p>You have re-checked "
+    "{done} of your {waiting} shared postings. The rest become available as "
+    "each one reaches {days} days since you first answered it, so there is "
+    "more to do here later &mdash; this is not the end of the second look.</p>"
+    "<p>Come back to this link in a few days.</p>")
+
+#: Round 2's own completion message. Deliberately says nothing about the set:
+#: finishing the second look is not finishing round 1, and _ALL_DONE's
+#: "nothing else is needed from you" would be false for anyone who still has
+#: round-1 postings outstanding.
+_ROUND_TWO_DONE = (
+    "<h1>Second look complete &mdash; thank you</h1><p>You have re-checked all "
+    "{done} of your shared postings. That is everything the second look needs."
+    "</p><p>If you had postings left in the main list, they are still at "
+    "<a href='/v1/label'>the main link</a>.</p>")
+
+_NO_ROUND_ONE = (
+    "<h1>Nothing to re-check</h1><p>The second look re-asks about the shared "
+    "postings you have already answered, and you have not answered any of "
+    "them yet. Start at <a href='/v1/label'>the main list</a>.</p>")
+
+#: Names the DATE, not "later". A volunteer told "not yet" with no date either
+#: gives up or retries daily; either way the operator hears nothing about it.
+_TOO_SOON = (
+    "<h1>Not yet &mdash; and that is on purpose</h1><p>The second look asks "
+    "you the same {n} postings again to measure how much one person's answers "
+    "vary. Asked too soon it measures what you <em>remember</em> saying "
+    "instead, which is not a useful number.</p>"
+    "<p>Come back on or after <strong>{when}</strong>.</p>")

@@ -105,8 +105,37 @@ from . import metrics
 #: match.py actually scores on. An error in `seniority_level` changes what a
 #: person is shown; an error in `comp_currency` does not. metrics scores only
 #: what is labelled, so this list can grow later without rework.
+#:
+#: `role_track` IS ON THIS LIST FOR A DIFFERENT REASON FROM THE OTHER FOUR, and
+#: the difference matters enough to state. The other four are here because task
+#: 06 measured them and found the model unstable; a human label buys a ceiling
+#: to read that instability against. `role_track` HAS NO TASK 06 FIGURE AT ALL
+#: -- it postdates that measurement (task 11 added it) and its nine-value
+#: vocabulary is explicitly provisional, derived pre-Phase-3 from a tech-heavy
+#: corpus. See docs/role-track-derivation.md.
+#:
+#: It is here because task 30 groups its precision figures BY this vocabulary,
+#: so an unvalidated vocabulary would silently condition every per-track number
+#: that task produces. And the validation is only available now: nobody can
+#: label a set after the labelling session is over.
+#:
+#: THE ROWS WHERE IT BUYS THE MOST ARE THE ROWS WHERE model_vs_human IS
+#: SILENT, which inverts the usual argument. Measured 2026-07-29 over
+#: job_facts at facts_version 3: `role_track` is NULL on 244 of 881 rows
+#: (27.7%), and within the pursuit-v1 label set it is NULL on 16 of 100
+#: `surfaced`, 17 of 50 `below_floor` and 50 of 50 `gate_rejected` -- 83 of
+#: 200. On those 83 there is no model answer to agree or disagree with. That is
+#: the interesting half: if a human confidently assigns a track where the
+#: extractor abstained, the NULL rate is an EXTRACTION problem; if the human
+#: cannot either, the VOCABULARY is wrong. Those are different fixes and no
+#: other instrument distinguishes them.
+#:
+#: Rejected: swapping it in for `role_archetype` to keep the form at five
+#: questions. `role_archetype` is the field task 12 measured at 31.1% `other`
+#: (44.0% on first-time extractions), so it is the one with a known quality
+#: problem and dropping it would forfeit the label that diagnoses it.
 AXIS_A_FIELDS = ("ai_involvement", "seniority_level", "role_archetype",
-                 "remote_policy")
+                 "remote_policy", "role_track")
 
 #: Fields in tasks/extract.py PRIORITY_FIELDS that are NOT on the form, with
 #: the measurement that took them off it. `03-metrics-and-golden-set.md:116`
@@ -131,6 +160,28 @@ KNOWN_UNSTABLE = {
     "tech_stack": "70.4% exact self-agreement (task 06, n=115) -- set-valued, "
                   "and the disagreement is mostly granularity",
 }
+
+#: `role_track`'s answer for "none of these tracks describes this role".
+#:
+#: IT IS A VALUE, NOT AN ABSTENTION, AND THAT DISTINCTION IS THE WHOLE POINT.
+#: extract.py's own prompt (`extract.py:338`) tells the model: "Use null if none
+#: of the listed tracks clearly describes the role. Do not force a value -- null
+#: is the correct answer for a role that belongs to no listed track, and is more
+#: useful than a wrong one." So the model's NULL on this field is a SUBSTANTIVE
+#: ANSWER. ROLE_TRACK has nine values and no `other`, unlike ARCHETYPE, whose
+#: prompt says "'other' is a real answer and is not the same as omitting the
+#: field".
+#:
+#: validate() below turns '' and 'unsure' into None -- an abstention, "I can't
+#: tell from this posting". Without this constant a human meaning "no track
+#: fits" would store the same None, and model_vs_human would then be comparing
+#: a considered verdict against a shrug and scoring them as agreement. That is
+#: the same conflation the AXIS_B_FIELD note below refuses for "no" versus "I
+#: cannot tell", one field over.
+#:
+#: Compared against a model NULL this value means AGREEMENT: both say no listed
+#: track fits. See model_vs_human().
+NO_TRACK_FITS = "no_track_fits"
 
 #: Axis B is one question with two answers. Not a 1-5 scale: "would you apply"
 #: is the decision the product actually asks a Builder to make, and a scale
@@ -174,6 +225,10 @@ def questions():
         "seniority_level": extract_stage.SENIORITY,
         "role_archetype": extract_stage.ARCHETYPE,
         "remote_policy": extract_stage.REMOTE_POLICY,
+        # ROLE_TRACK plus one. The pipeline expresses "no track fits" as null,
+        # which a form cannot offer as a radio button distinguishable from the
+        # abstention every question already carries -- see NO_TRACK_FITS.
+        "role_track": tuple(extract_stage.ROLE_TRACK) + (NO_TRACK_FITS,),
     }
     prompts = {
         "ai_involvement": "How much AI is in this job, as the posting "
@@ -182,6 +237,7 @@ def questions():
                            "for?",
         "role_archetype": "What kind of role is this?",
         "remote_policy": "Where does the posting say the work happens?",
+        "role_track": "Which broad role family does this posting belong to?",
     }
     out = [Question(axis=AXIS_A, field=f, prompt=prompts[f],
                     choices=tuple(vocab[f]))
@@ -844,15 +900,28 @@ def fetch(conn, *, axis=None, label_set=None):
     return [dict(zip(_FETCH_COLUMNS, r)) for r in rows]
 
 
-def progress(conn, label_set, labeller_id):
-    """(done, total) for one labeller on one set, for the form's footer."""
-    total = conn.execute(
-        "SELECT COUNT(*) FROM eval_label_items WHERE label_set = %s",
-        (label_set,)).fetchone()[0]
+def progress(conn, label_set, labeller_id, *, round_no=1):
+    """(done, total) for one labeller on one set, for the form's footer.
+
+    ROUND 2's DENOMINATOR IS THE OVERLAP BLOCK, NOT THE SET. Counting round-2
+    progress against all 200 items would show a volunteer "3 / 200" on a queue
+    that is ten rows long, which reads as an eight-hour evening and is the
+    single most likely reason someone closes the tab. The queue and the
+    denominator have to be the same population -- see next_item().
+    """
+    if round_no != 1:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM eval_label_items "
+            "WHERE label_set = %s AND overlap",
+            (label_set,)).fetchone()[0]
+    else:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM eval_label_items WHERE label_set = %s",
+            (label_set,)).fetchone()[0]
     done = conn.execute(
         "SELECT COUNT(DISTINCT job_id) FROM eval_labels "
-        "WHERE label_set = %s AND labeller_id = %s",
-        (label_set, labeller_id)).fetchone()[0]
+        "WHERE label_set = %s AND labeller_id = %s AND round_no = %s",
+        (label_set, labeller_id, int(round_no))).fetchone()[0]
     return done, total
 
 
@@ -921,10 +990,169 @@ def labeller_rank(conn, label_set, labeller_id):
     return row[0] if row else 0
 
 
-def next_item(conn, label_set, labeller_id):
+#: How long a labeller must wait before the same posting is served again for
+#: round 2. Days.
+#:
+#: THIS CONSTANT IS THE MEASUREMENT, NOT A POLITENESS SETTING. Round 2 exists
+#: to measure intra-annotator agreement -- whether one person gives the same
+#: answer twice. Served an hour later, that measures whether they REMEMBER
+#: their first answer, which is a fact about human memory and not about the
+#: field's difficulty, and it would come back near 100% and be quoted as a
+#: ceiling. docs/ingestion_tests/03-metrics-and-golden-set.md:25 specifies the
+#: quantity as "5-10 jobs labelled twice, A WEEK APART" and the delay is that
+#: phrase, in code.
+#:
+#: Seven days, from that line, not tuned. Shortening it does not buy a faster
+#: measurement, it buys a different and weaker one.
+ROUND_TWO_DELAY_DAYS = 7
+
+
+def round_two_ready(conn, label_set, labeller_id, *, now=None,
+                    delay_days=ROUND_TWO_DELAY_DAYS):
+    """(ready, n_waiting, earliest) -- may this labeller start round 2 yet?
+
+    Separate from next_item() so a caller can explain a refusal rather than
+    show an empty page. "Come back on Tuesday" and "you have finished" are
+    different states and the form has to be able to tell them apart.
+
+    `n_waiting` counts postings that will EVENTUALLY be re-askable, so it
+    deliberately carries no maturity bound -- that is what lets a caller
+    distinguish "not yet" from "finished". It must, however, carry the same
+    `value IS NOT NULL` filter as next_item() and round_one_answers(): a
+    posting that can never be served must not be counted as outstanding, or the
+    caller's "come back later" page never retires. See the SQL comment.
+    """
+    from lib.timeparse import utc_now_str
+
+    row = conn.execute(
+        """
+        SELECT COUNT(DISTINCT l.job_id), MIN(l.labelled_at)
+        FROM eval_labels l
+        JOIN eval_label_items i
+          ON i.label_set = l.label_set AND i.job_id = l.job_id
+        WHERE l.label_set = %s AND l.labeller_id = %s
+          AND l.round_no = 1 AND i.overlap
+          -- value IS NOT NULL, matching next_item() and round_one_answers().
+          -- Without it a posting a labeller ABSTAINED on across every question
+          -- counts toward n_waiting while being permanently unservable (the
+          -- queue needs a non-NULL round-1 row), so the caller's
+          -- `done < n_waiting` test never comes true and the "come back later"
+          -- page becomes PERMANENT -- the original round-2 exhaustion defect
+          -- inverted. Plausible on a thin gate_rejected posting, and 2 of the
+          -- 10 overlap rows in pursuit-v1 are gate_rejected.
+          AND l.value IS NOT NULL
+        """,
+        (label_set, labeller_id)).fetchone()
+    n, earliest = (row or (0, None))
+    if not n or earliest is None:
+        return False, 0, None
+
+    # MIN, matching the per-row gate in next_item(): the date this reports is
+    # when the FIRST row becomes re-askable, which is when the queue stops
+    # being empty. Reporting the last row's date would tell a volunteer to come
+    # back later than they need to.
+    import datetime as _dt
+    when = (_dt.datetime.fromisoformat(str(earliest)[:19])
+            + _dt.timedelta(days=delay_days)).strftime("%Y-%m-%dT%H:%M:%S")
+    ready = str(now or utc_now_str())[:19] >= when
+    return ready, n, when
+
+
+def round_one_answers(conn, label_set, job_id, labeller_id, *, now=None,
+                      delay_days=ROUND_TWO_DELAY_DAYS):
+    """Fields this labeller answered about this posting in round 1, and MAY be
+    re-asked in round 2. A set of field names.
+
+    ROUND 2 RE-ASKS WHAT WAS ANSWERED, NOTHING ELSE, AND THAT IS WHAT KEEPS THE
+    DELAY HONEST. Three exclusions, each of which was a defect before it was a
+    filter:
+
+    NEVER ANSWERED. next_item()'s round-2 branch matches on the POSTING, not
+    the field, so round 2 would otherwise re-render every question including
+    ones left blank the first time. An answer to one of those is a first
+    answer, not a revision, and it has nowhere correct to go: filed as round 2
+    it is an orphan no agreement function reads (intra_annotator needs two
+    rounds to compare; consensus, inter_annotator and model_vs_human are all
+    round-1-scoped), and filed as round 1 it becomes a fresh round-1 row that
+    a round-2 row can then partner MINUTES LATER -- bypassing
+    ROUND_TWO_DELAY_DAYS entirely, because the posting's eligibility is judged
+    on its OTHER fields' timestamps and intra_annotator() never reads
+    `labelled_at` at all. Both were live; this is why neither is.
+
+    ABSTAINED. An abstention writes a row with a NULL value, so it is
+    "answered" to SQL. But intra_annotator drops a NULL side and then drops the
+    pair for having one round, which is the same silent loss. It is also the
+    module's stated position one function down: an abstention "is not one that
+    can agree or disagree with anything". "I could not tell, then I could" is a
+    real thing a person may experience and it is NOT self-agreement; if it is
+    ever wanted, it is a different measurement and needs its own name.
+
+    TOO FRESH. Per field, not per posting. The delay is the measurement (see
+    ROUND_TWO_DELAY_DAYS) and it has to be enforced where the pair is made,
+    not only where the queue is served -- any route that writes a close pair
+    lands it in the ceiling unmarked, because nothing downstream checks.
+    """
+    cutoff = _round_two_cutoff(now, delay_days)
+    return {r[0] for r in conn.execute(
+        "SELECT field FROM eval_labels WHERE label_set = %s AND job_id = %s "
+        "AND labeller_id = %s AND round_no = 1 AND value IS NOT NULL "
+        "AND labelled_at <= %s",
+        (label_set, job_id, labeller_id, cutoff)).fetchall()}
+
+
+def _round_two_cutoff(now=None, delay_days=ROUND_TWO_DELAY_DAYS):
+    """The latest round-1 timestamp still too fresh to re-ask. A string.
+
+    String comparison throughout, because `labelled_at` is TEXT holding
+    lib.timeparse.utc_now_str()'s "%Y-%m-%dT%H:%M:%S" -- a fixed-width ISO
+    form, so lexical and chronological order are the same thing. The same
+    property webapp/jobs.py's impression-dedup cutoff relies on. Do not
+    "improve" this into a timestamptz cast: the column is not one, and the cast
+    would run per row.
+    """
+    import datetime as _dt
+
+    from lib.timeparse import utc_now_str
+
+    base = str(now or utc_now_str())[:19]
+    return (_dt.datetime.fromisoformat(base)
+            - _dt.timedelta(days=delay_days)).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def next_item(conn, label_set, labeller_id, *, round_no=1, now=None,
+              delay_days=ROUND_TWO_DELAY_DAYS):
     """The next job this labeller has not answered anything about, or None.
 
-    THE DEFECT THIS FIXES. This used to order every labeller's queue
+    ROUND 2 IS A DIFFERENT QUEUE AND IT IS THE OVERLAP BLOCK, NOTHING ELSE.
+    Round 1's predicate is "not answered yet"; round 2's is its inverse,
+    "answered in round 1 and not yet in round 2", restricted to `overlap` rows.
+
+    Why the overlap block specifically, rather than a fresh 5-10:
+
+      It is the only part of the set more than one person sees, so it is
+      already where the INTER-annotator ceiling is measured (see sample(), and
+      the stratification note there). Re-serving those same rows means both
+      ceilings are computed over IDENTICAL POSTINGS and can therefore be read
+      against each other. Measured on two different subsets they would differ
+      for two reasons at once -- the quantity and the postings -- and
+      test_the_two_ceilings_are_different_quantities exists precisely because
+      that distinction is the point.
+
+      It is also 10 rows, which is what
+      docs/ingestion_tests/03-metrics-and-golden-set.md:25 asks for ("5-10
+      jobs labelled twice"), at ~10 minutes of a volunteer's time.
+
+    THE DELAY IS PART OF THE QUEUE, see ROUND_TWO_DELAY_DAYS. This function
+    does not enforce it -- round_two_ready() does, so that a caller can say
+    WHEN rather than showing an empty page -- but a round-2 queue served
+    immediately measures memory and not agreement, and any caller that skips
+    that check is producing a number it should not print.
+
+    Round 1's behaviour is unchanged, deliberately down to the SQL: the
+    rank-spacing below is what buys 110 distinct postings instead of 84 and
+    must not be perturbed by adding a second mode. See tail_offset().
+
+    THE DEFECT THIS FIXES (round 1). This used to order every labeller's queue
     `overlap DESC, position ASC` -- identically for everyone. Ten volunteers
     labelling twenty postings each therefore answered THE SAME twenty, so
 
@@ -939,6 +1167,49 @@ def next_item(conn, label_set, labeller_id):
     plan -- see sample(). After those the tail is rotated by the labeller's
     rank, evenly spaced; see tail_offset() for why rank and not name.
     """
+    if round_no != 1:
+        # The inverse predicate, over the overlap block only. Ordered by
+        # `position` and NOT rotated: round 2 is ten rows and every labeller
+        # answers all of them, so there is no coverage to spread and rotating
+        # would only make two people's queues differ for no gain.
+        #
+        # THE DELAY IS ENFORCED PER ROW, NOT PER LABELLER, and that is a real
+        # distinction rather than a refinement. Gating on the labeller's
+        # earliest round-1 answer would serve a row answered yesterday as soon
+        # as their oldest row matured -- measuring memory on that row, which is
+        # the one thing ROUND_TWO_DELAY_DAYS exists to prevent. Gating on their
+        # LATEST would be sound but blocks nine mature rows behind one fresh
+        # one, for up to a month. Per row is the only version that is both
+        # correct and not self-defeating; in practice the overlap block is
+        # answered in one sitting and all ten mature together anyway.
+        row = conn.execute(
+            """
+            SELECT i.job_id, i.stratum, i.overlap, i.position
+            FROM eval_label_items i
+            WHERE i.label_set = %(label_set)s AND i.overlap
+              AND EXISTS (SELECT 1 FROM eval_labels l
+                           WHERE l.job_id = i.job_id
+                             AND l.label_set = %(label_set)s
+                             AND l.labeller_id = %(labeller)s
+                             AND l.round_no = 1
+                             AND l.value IS NOT NULL
+                             AND l.labelled_at <= %(cutoff)s)
+              AND NOT EXISTS (SELECT 1 FROM eval_labels l
+                               WHERE l.job_id = i.job_id
+                                 AND l.label_set = %(label_set)s
+                                 AND l.labeller_id = %(labeller)s
+                                 AND l.round_no = %(round)s)
+            ORDER BY i.position ASC
+            LIMIT 1
+            """,
+            {"label_set": label_set, "labeller": labeller_id,
+             "round": int(round_no),
+             "cutoff": _round_two_cutoff(now, delay_days)}).fetchone()
+        if row is None:
+            return None
+        return {"job_id": row[0], "stratum": row[1], "overlap": row[2],
+                "position": row[3]}
+
     tail_size = conn.execute(
         "SELECT COUNT(*) FROM eval_label_items "
         "WHERE label_set = %s AND NOT overlap",
@@ -1277,6 +1548,36 @@ def consensus(rows, *, axis=AXIS_A, round_no=1):
     return agreed, tied
 
 
+def as_model_domain(field, human_value):
+    """A human answer projected onto the vocabulary the model answers in.
+
+    ONE FIELD NEEDS THIS AND THE REASON IS NO_TRACK_FITS. `role_track` has no
+    `other` member; extract.py:338 tells the model to answer null when no
+    listed track fits, so the model's null on that field is a verdict. A form
+    cannot offer null as a radio button distinguishable from the abstention
+    every question already carries, so the human says NO_TRACK_FITS instead.
+
+    THE TWO REPRESENTATIONS MUST STAY SEPARATE IN STORAGE AND FOLD TOGETHER AT
+    COMPARISON, WHICH IS WHY THIS IS A FUNCTION AND NOT A validate() RULE.
+    Folding in validate() would write None to eval_labels, making "no track
+    fits" indistinguishable from "I can't tell from this posting" forever --
+    and those are the two statements this module works hardest to keep apart
+    (see NO_TRACK_FITS, and AXIS_B_VALUES' note on "no" versus abstention).
+    Folding here loses nothing: a human abstention never reaches a comparison,
+    because consensus() drops None values and vs_each skips them, so the only
+    thing NO_TRACK_FITS can match is a model null -- which is agreement, and is
+    the intended reading.
+
+    Every other field passes through untouched. Do not grow this into a general
+    normalisation layer: questions() reads its vocabularies from extract.py
+    precisely so that no such layer is needed, and a second place where values
+    get rewritten is a second place they can drift.
+    """
+    if field == "role_track" and human_value == NO_TRACK_FITS:
+        return None
+    return human_value
+
+
 def model_vs_human(rows, model_values, field_kinds, *, axis=AXIS_A,
                    round_no=1, platforms=None):
     """THE QUESTION -- and on its own it answers nothing. See interpretable().
@@ -1299,6 +1600,62 @@ def model_vs_human(rows, model_values, field_kinds, *, axis=AXIS_A,
     Only axis A is meaningful here. There is no model prediction of "would you
     apply" and there must not be one -- CLAUDE.md: LLMs explain, never rank.
 
+    AN ABSENT FIELD IS NOT A NULL ANSWER, AND `.get()` CANNOT TELL THEM APART.
+    This used to build every pair with `normalized.get(field)`, which collapses
+    two different situations into the same `None`:
+
+      the key is MISSING       the model produced no answer for this field.
+                               Nothing to agree or disagree with.
+      the key is PRESENT, null  on `role_track` that is a VERDICT. extract.py's
+                               own prompt (extract.py:338) says: "Use null if
+                               none of the listed tracks clearly describes the
+                               role. Do not force a value -- null is the
+                               correct answer for a role that belongs to no
+                               listed track, and is more useful than a wrong
+                               one."
+
+    So the first was scored as though the model had answered "no track fits",
+    and as_model_domain() makes the collision exact rather than approximate: it
+    folds a human NO_TRACK_FITS to None for comparison, so silence and a
+    considered verdict scored as AGREEMENT. That is the same conflation
+    NO_TRACK_FITS exists to prevent, reintroduced one layer down -- comparing a
+    verdict against a shrug, except here the shrug is the model's.
+
+    Membership is tested instead. A present null is compared, because on
+    `role_track` it is an answer; a missing key is excluded and COUNTED, in
+    `no_model_field`. Silence is this system's failure mode (CLAUDE.md) and a
+    field driven to 0% by a corpus's shape is exactly the kind of number that
+    gets quoted as a model finding.
+
+    THE CORPUS THIS IS NOT MEASURABLE AGAINST, AND WHY IT STAYS THAT WAY.
+    Measured 2026-07-30: `evals/fixtures/pursuit-criteria-corpus.jsonl` holds
+    859 frozen rows, each a flat dict with no nested `facts` block, and NONE of
+    them carries a `role_track` key -- 0 of 859, against 859 of 859 for the
+    other four AXIS_A_FIELDS. `role_track` was added to the form after that
+    corpus was frozen (task 11 added the column; see AXIS_A_FIELDS' note). So
+    every human `role_track` answer except `no_track_fits` would have scored as
+    a disagreement with a model that never spoke, driving that field's
+    `vs_consensus` toward 0% for a reason with nothing to do with the model.
+
+    THE FIXTURE IS NOT THE THING TO FIX. Writing `role_track` values into it
+    would be inventing model answers in an eval corpus -- a fabricated ground
+    truth, which is the one thing this whole module exists to keep out of the
+    measurement -- and it would do so in a file with no generator script:
+    docs/tasks/refactor/HANDOFF.md:1043-1047 records that it and
+    pursuit-criteria-goldens.json "were produced ad hoc and re-pinned by hand
+    once already". That goldens file pins scores and ranks for 30 of these
+    job_ids and tests/test_match.py asserts them (its PURSUIT_CORPUS_FILE,
+    test_match.py:414), so the rows are load-bearing for a second measurement
+    as well. Note it is NOT covered by tests/test_evals.py:454's sha256 pin,
+    which lists corpus-v1 and corpus-v2 only -- so an edit here would be
+    QUIETER than an edit to those, not louder, which makes the temptation worse
+    rather than better.
+
+    The honest report is that the field is not measurable against this corpus,
+    which is what the counter says. Re-extracting it at a facts_version that
+    carries `role_track` is separate, deliberate follow-up work, and whoever
+    does it writes the generator that does not exist yet.
+
     ONLY `vs_consensus` IS BROKEN OUT BY PLATFORM. It is the column that sits
     in the three-quantity table, so it is the one 29:106 is asking about, and
     it is one Bernoulli trial per item so its per-platform cells carry a
@@ -1319,12 +1676,19 @@ def model_vs_human(rows, model_values, field_kinds, *, axis=AXIS_A,
     index = platform_index(rows, platforms)
     per_field_consensus, per_field_each, per_platform = {}, {}, {}
     missing = set()
+    no_field, no_field_each = {}, {}
     for (job_id, field), human in sorted(agreed.items()):
         normalized = model_values.get(job_id)
         if normalized is None:
             missing.add(job_id)
             continue
-        pair = (normalized.get(field), human)
+        # MEMBERSHIP, NOT .get(). See the docstring: on `role_track` a present
+        # null is a verdict and an absent key is silence, and .get() returns
+        # None for both.
+        if field not in normalized:
+            no_field[field] = no_field.get(field, 0) + 1
+            continue
+        pair = (normalized[field], as_model_domain(field, human))
         per_field_consensus.setdefault(field, []).append(pair)
         per_platform.setdefault(field, {}).setdefault(
             index.get(str(job_id)) or UNKNOWN_PLATFORM, []).append(pair)
@@ -1338,8 +1702,18 @@ def model_vs_human(rows, model_values, field_kinds, *, axis=AXIS_A,
         for row in group:
             if row["round_no"] != round_no or row["value"] is None:
                 continue
+            # The abstention test comes FIRST and this one second, so a
+            # labeller who could not tell is booked once, to the human, and
+            # does not also count as a model gap. Inside the row loop rather
+            # than hoisted out of it because `vs_each`'s denominator is
+            # comparisons, not items -- five labellers on an unanswered field
+            # are five lost comparisons.
+            if field not in normalized:
+                no_field_each[field] = no_field_each.get(field, 0) + 1
+                continue
             per_field_each.setdefault(field, []).append(
-                (normalized.get(field), row["value"]))
+                (normalized[field],
+                 as_model_domain(field, row["value"])))
 
     def _cell(pairs, kind):
         n = len(pairs)
@@ -1364,6 +1738,25 @@ def model_vs_human(rows, model_values, field_kinds, *, axis=AXIS_A,
             make=lambda kind, pairs: _cell(pairs, kind)),
         "no_consensus": len(tied),
         "no_model_output": sorted(missing),
+        # THREE EXCLUSIONS, THREE KEYS. `no_consensus` is a human
+        # disagreement, `no_model_output` is a whole record the model never
+        # produced, and these two are one FIELD it never produced. Different
+        # faults with different fixes; see the docstring.
+        #
+        # Counts keyed by field, not ids, following this module's own
+        # `abstained` and `single_labeller_items` blocks (inter_annotator()).
+        # `no_model_output` keeps ids because a wholly absent record is a
+        # specific row to go and look up; a field absent from a corpus is
+        # absent from all of it, and the useful quantity is the n it cost.
+        #
+        # TWO OF THEM, BECAUSE THE TWO COLUMNS HAVE DIFFERENT DENOMINATORS.
+        # `vs_consensus` counts items and `vs_each` counts comparisons, so one
+        # shared counter would be a number belonging to neither -- the same
+        # rule _stratum_block() states as "two denominators, two keys, never
+        # one". `no_model_field` is the one that conditions the column in the
+        # three-quantity table.
+        "no_model_field": no_field,
+        "no_model_field_each": no_field_each,
     }
 
 
@@ -1431,8 +1824,19 @@ def _remedy(name):
                  "and pass it as --selfcheck.",
         "ceiling": "The eval set needs overlap rows labelled by at least two "
                    "people -- `evals label sample --overlap N`, then task 29.",
-        "measured": "No human labels for this field yet. The tables ship "
-                    "empty on purpose; task 29 fills them.",
+        # TWO CAUSES, AND THEY POINT AT OPPOSITE ENDS. A field can have no
+        # measured cell because nobody has labelled it, or because the model
+        # output being compared against does not carry the field at all --
+        # `role_track` against pursuit-criteria-corpus.jsonl, where it is
+        # absent from 859 of 859 rows. Naming only the first sends a reader to
+        # look for volunteers when the labels are already in the table; the
+        # count that distinguishes them is model_vs_human()'s
+        # `no_model_field`.
+        "measured": "Either no human labels for this field yet -- the tables "
+                    "ship empty on purpose and task 29 fills them -- or the "
+                    "model output carries no such field, in which case "
+                    "model_vs_human()'s `no_model_field` counts how many "
+                    "comparisons that cost.",
     }[name]
 
 
@@ -1465,3 +1869,484 @@ def interpretable(*, floor, ceiling, measured, fields=None):
                                "clean": blob.get("clean") or {},
                                "messy": blob.get("messy") or {}}))
     return out
+
+
+# --------------------------------------------------------------------------
+# Axis B against the ordering the product actually ships
+#
+# WHAT THIS SECTION IS. Nothing above joins a human "would you apply" to the
+# number that decides what a Builder sees. Every function up to here measures
+# labels against labels, or a model against labels; `match_score` does not
+# appear. That join is the entire evidence base for two decisions:
+#
+#   task 30's experiment (30-within-track-ordering.md:32) -- "bucket the
+#   labelled postings by `match_score`" and ask whether a posting at 88 beats
+#   one at 81 in Builder judgement more often than chance. Its whole claim
+#   ladder rests on the answer.
+#
+#   any re-tuning of task 13's criteria weights, which currently have no
+#   human evidence under them at all.
+#
+# IT IS PURE, FOR THE REASON confirm_scores() IS. score_job() is pure
+# (match.py:73-84) so a below_floor score can be recomputed with no database
+# and no LLM call; these functions take rows and return dicts for the same
+# reason -- the figures that decide an ordering must be reproducible from a
+# fixture on a laptop with no credentials, and unit-testable against synthetic
+# labels before a single real one exists.
+#
+# AND IT MUST NOT BECOME A SWEEP. A `--json` dump of `ordering()`'s figures is
+# exactly what a weight sweep would read, and pointing a sweep at this set
+# would be fitting weights to L0 -- CLAUDE.md: "Never evaluate on the layer you
+# trained on", and L0 is the layer with no other copy. The set is 200 postings
+# and one labelling night; spent as a training signal it is gone, and every
+# later precision figure quoted from it is a training-set figure. Read the
+# figures, decide, and re-measure on a set drawn afterwards.
+# --------------------------------------------------------------------------
+
+#: Which column of a label-set row carries the score, per stratum. ONE PLACE
+#: KNOWS THIS, and it is here rather than at each call site because the two
+#: columns are the same quantity under two names and a caller that reached for
+#: the wrong one would still produce a number.
+#:
+#: THEY ARE ON THE SAME SCALE, and that is an argument rather than an
+#: assumption. `match_score` is what match.py stored (match.py:386, `if score
+#: >= schema.MATCH_FLOOR`); `computed_score` is what confirm_scores() got back
+#: from `match.score_job()` for the rows match.py stored nothing for. Same
+#: function, same criteria, no I/O in between -- so `surfaced` 40-92 and
+#: `below_floor` 0-34 are two windows on one 0-100 construction, which is what
+#: makes ranking across the pair meaningful at all.
+#:
+#: NEVER `fit_score`, on either stratum. CLAUDE.md: "`match_score` orders the
+#: list. `fit_score` only annotates it", and "LLMs explain, never rank".
+#: `fit_score` is an LLM's output, so ranking by it would put an LLM call
+#: between a user and an ordering -- and worse for a measurement, it is
+#: CLAUDE.md's L1, the layer tools/learned-ranker-probe.py already fits
+#: against. Scoring an L0 label against an L1 ordering would be evaluating on
+#: the layer that was trained, one indirection out.
+SCORE_COLUMN = {"surfaced": "match_score", "below_floor": "computed_score"}
+
+#: The strata that can be ranked at all, in reporting order.
+#:
+#: `gate_rejected` IS DELIBERATELY ABSENT AND ITS ABSENCE IS ENFORCED, not
+#: documented -- see _scored_strata(). Those 50 postings have neither column
+#: (checked: 0 of 50 carry `match_score` and 0 of 50 carry `computed_score` in
+#: labelset-pursuit-v1.jsonl), because the profile's gate rejected them before
+#: match.py ever saw them. They have no position in any ordering, on any scale.
+SCORED_STRATA = ("surfaced", "below_floor")
+
+
+def _scored_strata(strata, caller):
+    """Validate a `strata` argument, refusing `gate_rejected` by name.
+
+    REFUSED, NOT FILTERED, and that is the whole point of this function
+    existing instead of a set intersection. Silently dropping the stratum would
+    let a caller ask for a precision figure "over the whole set" and get one
+    computed over three quarters of it, labelled as if it were the whole -- a
+    stratum measured against the wrong population, which is the defect
+    backend/docs/HANDOFF-match-quality.md:147 (trap 4.1) is about and the one
+    that has already cost this project a rewritten conclusion.
+
+    The module's own precedent is model_vs_human(), which raises for axis B
+    (labels.py:1554) rather than returning an empty block: when the question
+    cannot be asked, say so at the call, not in a footnote.
+    """
+    out = tuple(strata)
+    for stratum in out:
+        if stratum == "gate_rejected":
+            raise ValueError(
+                f"{caller}: `gate_rejected` has no score to rank by. Neither "
+                "match_score nor computed_score exists on those rows, because "
+                "the profile's relevance gate rejected them before match.py "
+                "ran, so they hold no position on any scale. They are also "
+                "unreachable by that profile's users, so a `yes` on one is "
+                "not a precision miss: nothing was ranked wrongly. Use "
+                "recall_bound(), which reports them as k of N with an "
+                "interval and never as a rate.")
+        if stratum not in SCORE_COLUMN:
+            raise ValueError(
+                f"{caller}: {stratum!r} is not a stratum with a score column; "
+                f"known: {sorted(SCORE_COLUMN)}")
+    return out
+
+
+def score_index(set_rows, scores=None, *, strata=SCORED_STRATA):
+    """job_id -> the score that orders it, from the label-set rows themselves.
+
+    The same shape and the same convention as platform_index()
+    (labels.py:1269), including "an explicit map wins": save_set() writes both
+    score columns into the set file (labels.py:770-772), so the normal case
+    needs no second argument and no database read at all, and `scores` is for
+    a caller holding fresher numbers -- a re-run of match.py, or a swept weight
+    table -- who is being specific on purpose.
+
+    NO DATABASE READ IS NEEDED AND THAT IS NOT AN OPTIMISATION. A score read
+    live would be the score as of report time, and match.py re-ranks nightly.
+    The stratum a row was sampled into is a property of the pipeline AT
+    SAMPLING TIME -- the reason `stratum` is stored on eval_label_items rather
+    than recomputed (see ensure_schema()) -- and a figure that pairs a
+    sampling-time stratum with a report-time score is measuring two different
+    days at once.
+
+    Which column to read comes from SCORE_COLUMN, never from the caller. Rows
+    in a stratum outside `strata` are skipped, which is how a caller reports
+    the two strata separately; `gate_rejected` is refused rather than skipped,
+    see _scored_strata().
+    """
+    strata = _scored_strata(strata, "score_index")
+    index = {}
+    for row in set_rows:
+        stratum = row.get("stratum")
+        if stratum not in strata:
+            continue
+        value = row.get(SCORE_COLUMN[stratum])
+        if value is not None:
+            index.setdefault(str(row["job_id"]), value)
+    for job_id, value in (scores or {}).items():
+        if value is not None:
+            index[str(job_id)] = value
+    return index
+
+
+def _positive(value):
+    """Axis B's answer as the positive class. `yes` is 1, `no` is 0.
+
+    Raises on anything else rather than treating it as a negative. validate()
+    already confines the column to AXIS_B_VALUES and None, and consensus()
+    drops the Nones, so an unexpected value here means a row reached
+    `eval_labels` without going through record() -- and quietly scoring it 0
+    would move it into the negative class, making the ranker look worse or
+    better with no trace of why.
+    """
+    if value not in AXIS_B_VALUES:
+        raise ValueError(
+            f"{value!r} is not one of {list(AXIS_B_VALUES)} for "
+            f"{AXIS_B_FIELD}; every label must come through validate()")
+    return 1 if value == "yes" else 0
+
+
+def _axis_b_by_job(rows, profile, round_no):
+    """job_id -> the axis-B values recorded for THIS profile at THIS round.
+
+    Including the Nones, deliberately: this is the recount that tells an item
+    every labeller abstained on apart from an item nobody opened, and
+    consensus() cannot answer that -- see ordering().
+    """
+    per_job = {}
+    for row in rows:
+        if row.get("axis") != AXIS_B or row.get("field") != AXIS_B_FIELD:
+            continue
+        if row.get("profile") != profile or row.get("round_no") != round_no:
+            continue
+        per_job.setdefault(str(row["job_id"]), []).append(row["value"])
+    return per_job
+
+
+def _consensus_by_job(rows, profile, round_no):
+    """(agreed, tied) from consensus(), narrowed to one profile, keyed by job.
+
+    THE NARROWING IS DONE ON THE KEY, NOT BY PRE-FILTERING THE ROWS, and the
+    difference is the point. _item_key() (labels.py:1329) puts the profile in
+    every axis-B key, so another profile's answer about the same posting is
+    already a DIFFERENT ITEM to consensus() -- it cannot be pooled in, and it
+    cannot silently become a disagreement either. Pre-filtering would get the
+    same `agreed` and lose that: a tie among `tech` labellers would vanish
+    instead of being attributed to `tech`, and `match_score` is keyed
+    (job_id, profile), so there is a separate figure for it to belong to.
+    """
+    agreed, tied = consensus(rows, axis=AXIS_B, round_no=round_no)
+    mine = {str(k[0]): v for k, v in agreed.items()
+            if len(k) == 3 and k[1] == AXIS_B_FIELD and k[2] == profile}
+    mine_tied = {str(k[0]) for k in tied
+                 if len(k) == 3 and k[1] == AXIS_B_FIELD and k[2] == profile}
+    return mine, mine_tied
+
+
+def _split_members(members, agreed, tied, per_job):
+    """(pairs of (job_id, y), counts) for one stratum's set members.
+
+    THREE EXCLUSIONS, NOT ONE, AND consensus() CONFLATES TWO OF THEM. That is a
+    real defect in the function above rather than a subtlety of this one: an
+    item every labeller abstained on reaches `if not counts: continue`
+    (labels.py:1481) and disappears from BOTH of consensus()'s return values,
+    landing in exactly the same silence as an item nobody ever opened. The
+    module's stated rule is that an abstention is a value and is never folded
+    away, and those two are different findings -- "five Builders read this
+    posting and none could tell" is evidence about the POSTING, "nobody reached
+    it" is evidence about the NIGHT.
+
+    So this recounts from the rows and reports them apart:
+
+        no_consensus    labellers disagreed with no majority -- consensus()
+                        does surface these, in `tied`
+        all_abstained   axis-B rows exist for the item at this round and every
+                        one of them is NULL
+        unlabelled      no axis-B row for this item, this profile, this round
+
+    consensus()'s RETURN SHAPE IS NOT CHANGED. model_vs_human() and
+    interpretable() are built on the two-value tuple and __main__ passes it
+    around; widening it to carry a third bucket would be a change to every
+    caller for the benefit of one. The recount is three lines here.
+
+    THE ASYMMETRY WITH AXIS A IS DELIBERATE AND WORTH KNOWING.
+    inter_annotator() DOES count abstentions (its `abstained` block,
+    labels.py:1394) because axis A asks five questions per posting and a NULL
+    on one of them is a fact about that FIELD -- "the posting does not say"
+    about one of five things. Axis B asks one question, so an
+    abstention there is a fact about the whole item, which is why it has to be
+    counted per item here rather than per field there. Same rule, two shapes,
+    because the two axes have different arity.
+    """
+    pairs, counts = [], {"no_consensus": 0, "all_abstained": 0,
+                         "unlabelled": 0}
+    for job_id in members:
+        if job_id in agreed:
+            pairs.append((job_id, _positive(agreed[job_id])))
+        elif job_id in tied:
+            counts["no_consensus"] += 1
+        elif per_job.get(job_id):
+            counts["all_abstained"] += 1
+        else:
+            counts["unlabelled"] += 1
+    return pairs, counts
+
+
+def _members(set_rows, stratum):
+    """This stratum's job ids, deduplicated, in sorted order.
+
+    Sorted because CLAUDE.md pins an eval set by sorted `job_id` and this is
+    the same set; dict.fromkeys because a set file should not contain a job
+    twice (eval_label_items' primary key forbids it) and if one does, counting
+    it twice would move a denominator.
+    """
+    return sorted(dict.fromkeys(
+        str(r["job_id"]) for r in set_rows if r.get("stratum") == stratum))
+
+
+def _stratum_block(stratum, members, pairs, counts, index, k):
+    """One stratum's figures. Never merged with another stratum's.
+
+    THE COMPOSITION TRAVELS WITH THE FIGURE, in the same dict, because average
+    precision's chance level IS the positive rate (metrics.py:396-399) and this
+    set is stratified 100/50/50 BY DESIGN -- its prevalence is not the corpus's
+    and cannot be read as one. A bare AP of 0.55 here is either strong or
+    nothing at all depending on `positive_rate`, and the two must not be
+    printable apart. `positive_rate` is what tools/mock-acceptance.py:686 calls
+    `baseline`, in ranking_quality() (mock-acceptance.py:628), whose block this
+    mirrors so the two are diffable.
+
+    TWO DENOMINATORS, TWO KEYS, NEVER ONE.
+
+        label_coverage   labelled / set members. How much of the night landed.
+        coverage         Ranked.coverage(), scored / labelled. How often the
+                         RANKER produced a number.
+
+    Collapsing them would book a labelling shortfall as a pipeline failure,
+    which is wrong in the flattering direction -- see ordering().
+
+    TIES ARE NOT BROKEN. `average_precision` is metrics' default
+    ties="expected", the mean over every tie-break and the only one of the
+    three that is a property of the ranker rather than of the sort
+    (metrics.TIE_MODES, metrics.py:282-300). `ap_optimistic` and
+    `ap_pessimistic` bound what a real sort could have produced and `ties`
+    carries metrics.tie_histogram() so a reader can see whether the point
+    estimate is describing the ranking or the tie structure. `precision_at_k`
+    averages ties the same way, which is why a fractional numerator and a
+    value like 0.75 over 2 slots are correct rather than rounding errors
+    (metrics.py:450-454). Nothing here breaks a tie by `job_id` or `position`:
+    top_k_overlap() does, and its docstring (metrics.py:221-225) says why that
+    is tolerable only there -- it needs a deterministic answer to compare TWO
+    ORDERINGS of the same rows, and it is reported beside Spearman's rho rather
+    than instead of it precisely because the break is arbitrary. Against a
+    LABEL there is no second ordering and no rho beside it: the break would
+    silently decide which postings the figure was computed over, and the figure
+    would be the only number on the page.
+    """
+    scores = [index.get(job_id) for job_id, _y in pairs]
+    ys = [y for _job_id, y in pairs]
+    ap = metrics.average_precision(scores, ys)
+    at_k = metrics.precision_at_k(scores, ys, k=k)
+    return {
+        "stratum": stratum,
+        "score_column": SCORE_COLUMN[stratum],
+        # Composition of the population, before any figure.
+        "members": len(members),
+        "labelled": len(pairs),
+        "label_coverage": f"{len(pairs)}/{len(members)}",
+        "no_consensus": counts["no_consensus"],
+        "all_abstained": counts["all_abstained"],
+        "unlabelled": counts["unlabelled"],
+        # The ranker's own coverage, a separate denominator.
+        "n": ap.n,
+        "coverage": ap.coverage(),
+        "complete": ap.complete,
+        "n_unscored": ap.n_dropped,
+        "n_unscored_positive": ap.n_dropped_positive,
+        # The figures.
+        "n_positive": ap.n_positive,
+        "positive_rate": (ap.n_positive / ap.n) if ap.n else None,
+        "average_precision": ap.value,
+        "ap_optimistic": metrics.average_precision(
+            scores, ys, ties="optimistic").value,
+        "ap_pessimistic": metrics.average_precision(
+            scores, ys, ties="pessimistic").value,
+        # `k` and `k_requested` both, and the key name embeds neither, for the
+        # reason mock-acceptance.py:695-697 gives: min(k, n) makes the two
+        # differ on a small stratum and a key that renamed itself with k would
+        # make two artifacts un-diffable.
+        "k": at_k.k,
+        "k_requested": k,
+        "precision_at_k": at_k.value,
+        "ties": metrics.tie_histogram(scores),
+    }
+
+
+def recall_bound(rows, set_rows, *, profile, round_no=1):
+    """k of N gate-rejected postings a Builder said yes to. NOT A RATE.
+
+    THE ONE STATEMENT THIS STRATUM CAN MAKE. `gate_rejected` rows were rejected
+    by the profile's relevance gate before match.py ran, so they carry no
+    `match_score` and no `computed_score` (0 of 50 in labelset-pursuit-v1) and
+    hold no position in any ordering. Nothing about them can enter a precision
+    figure, because precision asks "of what was shown, how much was good" and
+    these were never shown -- the profile's users cannot reach them. A `yes`
+    here is not a posting ranked too high; it is a posting the gate threw away,
+    which is a RECALL fact and the only reason this stratum was sampled (see
+    STRATA).
+
+    Mixing them into a precision denominator would be a fresh instance of the
+    defect this project has already paid for -- a stratum measured against the
+    wrong population, trap 4.1 in backend/docs/HANDOFF-match-quality.md:147.
+    Note that CLAUDE.md cites these traps as docs/MEASUREMENT-TRAPS.md, which
+    does not exist; they are still section 4 of that handoff.
+
+    RETURNED AS A COUNT AND AN INTERVAL, WITH NO `rate` KEY. metrics.wilson()
+    over k of n bounds the proportion, so 2 of 50 reads "[0.6%, 8.5%] of what
+    the gate discards, a Builder would have applied to" -- a bound on what is
+    being missed. There is deliberately no `rate` and no `average_precision`
+    key for a report to reach for by mistake, and `statement` renders the
+    sentence once so no caller has to decide how to phrase it (the same reason
+    Ranked.coverage() is a string, metrics.py:349-355).
+
+    `n` IS THE NUMBER WITH A CONSENSUS ANSWER, NOT THE STRATUM SIZE. Those are
+    the same 50 when the night finishes the stratum, and when it does not, the
+    interval has to be over the postings someone actually answered about --
+    `members` and `label_coverage` carry the shortfall beside it rather than
+    hiding it in the denominator. The three exclusions are broken out here for
+    the same reason as in the ranked strata, see _split_members().
+    """
+    members = _members(set_rows, "gate_rejected")
+    agreed, tied = _consensus_by_job(rows, profile, round_no)
+    per_job = _axis_b_by_job(rows, profile, round_no)
+    pairs, counts = _split_members(members, agreed, tied, per_job)
+
+    n = len(pairs)
+    k = sum(y for _job_id, y in pairs)
+    lo, hi = metrics.wilson(k, n)
+    return {
+        "stratum": "gate_rejected",
+        "quantity": "recall_bound",
+        "k": k,
+        "n": n,
+        "members": len(members),
+        "label_coverage": f"{n}/{len(members)}",
+        "ci": (lo, hi),
+        "no_consensus": counts["no_consensus"],
+        "all_abstained": counts["all_abstained"],
+        "unlabelled": counts["unlabelled"],
+        "statement": (
+            f"{k} of {n} gate-rejected postings a Builder said yes to "
+            f"[{lo:.1%}-{hi:.1%}] -- a bound on what the gate discards, "
+            f"never a precision rate"),
+    }
+
+
+def ordering(rows, set_rows, *, profile, strata=SCORED_STRATA, scores=None,
+             round_no=1, k=metrics.TOP_K):
+    """Does `match_score` put the postings a Builder would apply to first?
+
+    THE ADAPTER between axis B and the number that orders the product. `rows`
+    are label rows in fetch()'s shape; `set_rows` are the label set's own rows
+    in save_set()'s shape, which already carry `stratum` and both score columns
+    -- so this needs no database, no LLM and no credentials, and is testable
+    against synthetic labels before a real one exists. Same discipline as
+    score_job() being pure (match.py:73-84).
+
+    `profile` IS REQUIRED AND HAS NO DEFAULT. `match_score` is keyed
+    (job_id, profile) -- CLAUDE.md's flat-cost property -- and _item_key()
+    (labels.py:1329) puts the profile in every axis-B key for the same reason.
+    A default would silently pool two personas' answers about one posting
+    against one score, which is not a disagreement and not a second trial; it
+    is two different questions. inter_annotator() already refuses to pool them
+    (see test_axis_b_agreement_is_keyed_by_profile_not_pooled_across_them) and
+    so does this.
+
+    EVERY FIGURE IS PER STRATUM AND THE TWO ARE NEVER AVERAGED. `surfaced` is
+    a 100-row draw from what the pipeline shows and `below_floor` a 50-row draw
+    from what it hides; the set is stratified 100/50/50 by design, so neither
+    prevalence is the corpus's and their mean is a figure about no population
+    at all. `strata` chooses which are reported and `gate_rejected` is REFUSED
+    rather than filtered (_scored_strata()); it appears instead under
+    `recall_bound`, as a count with an interval, always computed and never
+    folded into a precision denominator.
+
+    UNLABELLED ITEMS ARE NOT FED IN AS score=None. `Ranked.n_dropped` means the
+    RANKER produced no number (metrics.py:331, and the argument at
+    metrics.py:306-321), and every drop there is read as a pipeline failure
+    that flatters the ranker. Booking a labelling shortfall into it would
+    inherit that reading while being false: the score exists, the label does
+    not. So `pairs` contains only items with a consensus answer, and label
+    coverage is its own number beside `Ranked.coverage()` -- two denominators,
+    two keys, never one. A None reaching `n_unscored` therefore means what it
+    says: a set member somebody labelled that the ranker could not score.
+
+    HUMAN TIES ARE NOT BROKEN EITHER. consensus() refuses to invent a majority
+    out of a disagreement (labels.py:1466-1471) and the count is surfaced under
+    `no_consensus`, the same key name model_vs_human() uses (labels.py:1608),
+    so the two tables' columns line up. Score ties are not broken either; see
+    _stratum_block().
+
+    `labelled_not_in_set` IS NOT A DIAGNOSTIC. It counts axis-B answers for
+    this profile about postings the set does not contain -- a label from an
+    older set, or a set file that is not the one the labels were collected
+    against. Silence is this system's failure mode (CLAUDE.md), and a digest
+    mismatch is exactly the case where every figure above is computed over the
+    wrong 200 rows; compare digest(set_rows) against eval_label_sets.
+
+    WHAT NOT TO DO WITH THE RESULT: see this section's header comment. A
+    `--json` dump of these figures is what a weight sweep would read, and
+    sweeping on this set is training on L0.
+    """
+    strata = _scored_strata(strata, "ordering")
+    index = score_index(set_rows, scores, strata=strata)
+    agreed, tied = _consensus_by_job(rows, profile, round_no)
+    per_job = _axis_b_by_job(rows, profile, round_no)
+
+    blocks, totals = {}, {"no_consensus": 0, "all_abstained": 0,
+                          "unlabelled": 0}
+    reported = set()
+    for stratum in strata:
+        members = _members(set_rows, stratum)
+        pairs, counts = _split_members(members, agreed, tied, per_job)
+        reported.update(members)
+        for name in totals:
+            totals[name] += counts[name]
+        blocks[stratum] = _stratum_block(stratum, members, pairs, counts,
+                                         index, k)
+
+    in_set = {str(r["job_id"]) for r in set_rows}
+    return {
+        "axis": AXIS_B,
+        "field": AXIS_B_FIELD,
+        "profile": profile,
+        "round": round_no,
+        "strata": blocks,
+        # Always computed, never merged into `strata`.
+        "recall_bound": recall_bound(rows, set_rows, profile=profile,
+                                     round_no=round_no),
+        # Summed over the REPORTED strata only -- `recall_bound` carries its
+        # own three, over a population these figures say nothing about.
+        "no_consensus": totals["no_consensus"],
+        "all_abstained": totals["all_abstained"],
+        "unlabelled": totals["unlabelled"],
+        "labelled_not_in_set": len(set(agreed) - in_set),
+    }

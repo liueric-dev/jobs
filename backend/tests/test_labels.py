@@ -23,6 +23,7 @@ THE DATABASE TESTS ARE REAL, AND THAT IS DELIBERATE
 import ast
 import json
 import os
+import re
 import sys
 import unittest
 
@@ -120,6 +121,54 @@ class TestQuestions(unittest.TestCase):
     def test_axis_b_has_no_middle_option(self):
         would = [q for q in labels.questions() if q.axis == labels.AXIS_B][0]
         self.assertEqual(would.choices, ("yes", "no"))
+
+    def test_role_tracks_vocabulary_is_the_pipelines_own_plus_one(self):
+        import extract as extract_stage
+        track = [q for q in labels.questions() if q.field == "role_track"][0]
+        self.assertEqual(track.choices,
+                         tuple(extract_stage.ROLE_TRACK) + (labels.NO_TRACK_FITS,))
+        # The nine must be byte-identical to extract.py's, in its order. A copy
+        # here would score formatting rather than the answer -- questions()'
+        # docstring is the argument.
+        self.assertEqual(track.choices[:-1], tuple(extract_stage.ROLE_TRACK))
+
+    def test_no_track_fits_is_a_value_and_not_an_abstention(self):
+        # THE DISTINCTION THIS PINS. extract.py:338 tells the model that null
+        # means "no listed track describes this role" -- a verdict. The form's
+        # "I can't tell from this posting" is an abstention. Both would be
+        # stored as NULL without NO_TRACK_FITS, and model_vs_human would then
+        # score a considered verdict and a shrug as the same answer.
+        self.assertEqual(
+            labels.validate("A", "role_track", labels.NO_TRACK_FITS),
+            labels.NO_TRACK_FITS)
+        for raw in (None, "", "unsure"):
+            self.assertIsNone(labels.validate("A", "role_track", raw))
+
+    def test_no_track_fits_reads_as_agreement_against_a_model_null(self):
+        # The fold happens at comparison, never in storage -- see
+        # as_model_domain(). Folding in validate() would make the two
+        # indistinguishable in eval_labels forever.
+        self.assertIsNone(
+            labels.as_model_domain("role_track", labels.NO_TRACK_FITS))
+        self.assertEqual(metrics.exact("enum", None, None), True)
+        # Every other field is untouched, including a value that happens to
+        # look similar.
+        self.assertEqual(
+            labels.as_model_domain("role_archetype", "other"), "other")
+        self.assertEqual(
+            labels.as_model_domain("role_track", "software_engineering"),
+            "software_engineering")
+
+    def test_role_track_is_on_the_form_without_a_self_consistency_floor(self):
+        # Recorded rather than quietly true. The other four axis-A fields are
+        # on the form because task 06 measured them unstable; role_track has no
+        # task 06 figure at all -- it postdates that run -- and is here because
+        # task 30 groups its precision figures by this vocabulary. If a
+        # selfcheck ever does measure it, this test is the place that says the
+        # justification changed.
+        self.assertIn("role_track", labels.AXIS_A_FIELDS)
+        self.assertNotIn("role_track", labels.KNOWN_UNSTABLE)
+        self.assertEqual(KINDS["role_track"], "enum")
 
 
 # --------------------------------------------------------------------------
@@ -948,7 +997,16 @@ class TestTheLabellerIsBlindToTheModelsAnswer(unittest.TestCase):
     #: this exercise that outlives the cohort (29:29).
     FORBIDDEN = ("fit_score", "match_score", "job_scores", "job_matches",
                  "job_facts", "SCORES_TABLE", "MATCHES_TABLE", "FACTS_TABLE",
-                 "jobs_app")
+                 "jobs_app",
+                 # `jobs` itself carries a machine verdict on question 2 of the
+                 # form: `seniority_guess` is text.guess_seniority(title),
+                 # written at ingest by four ingest modules, and the form asks
+                 # "What seniority does the posting actually ask for?". It is
+                 # not a "score" by name, so nothing else here excludes it, and
+                 # `_DETAIL_COLUMNS` only bounds _job() -- a SECOND query
+                 # against `jobs` could reach it. Named because the tables
+                 # assertion below allows `jobs` and therefore cannot.
+                 "seniority_guess")
 
     def test_the_form_reads_six_columns_of_jobs_and_none_is_a_score(self):
         # label.py:78. _job() (label.py:112-128) selects exactly these and
@@ -980,10 +1038,48 @@ class TestTheLabellerIsBlindToTheModelsAnswer(unittest.TestCase):
         code = _code_only(self.PATH)
         self.assertIn("FROM jobs WHERE id = %s", code)
         self.assertIn("FROM eval_label_items", code)
-        self.assertEqual(code.count("FROM"), 2,
-                         "two queries: the posting, and its membership of the "
-                         "eval set. A third is a change to what a labeller "
-                         "can be shown.")
+        # AMENDED 2026-07-30: this counted FROM clauses and expected 2. The
+        # count was a PROXY for the real rule -- "the route reaches no table
+        # that could show a labeller more" -- and the proxy broke when round 2
+        # added two WRITE-SIDE preconditions: is this an overlap row, and which
+        # fields did this person answer in round 1. Neither renders anything;
+        # both gate what may be stored. So assert the rule instead of the
+        # proxy, which is stricter in the direction that matters: FORBIDDEN is
+        # checked against the whole module by the two tests above, and here we
+        # pin the exact set of tables named.
+        # WHAT THIS TRADE COSTS, STATED SO IT IS NOT DISCOVERED LATER. The
+        # count fired on ANY new query; the set fires only on a new TABLE. So a
+        # second query against a table already listed here no longer trips it.
+        # Taken deliberately: a count that must be bumped by hand on every edit
+        # teaches the next person to bump it without reading it, which is a
+        # worse guard than one that fires only on the risky class. The risky
+        # class is a new data source, and FORBIDDEN (checked against the whole
+        # module by the two tests above) is what actually bounds it.
+        # A JOIN adds no FROM token, so it would reach a table without ever
+        # entering `found` -- scanned separately rather than claimed by the
+        # consistency check below, which cannot see it. (The previous message
+        # here said the check caught JOINs. It does not, and neither did the
+        # FROM-count it replaced.)
+        found = re.findall(r"FROM\s+(\w+)", code) + \
+            re.findall(r"JOIN\s+(\w+)", code)
+        self.assertEqual(len(found),
+                         code.count("FROM") + code.count("JOIN"),
+                         "every FROM and JOIN must yield a bare table name -- a "
+                         "subquery or an interpolated table name yields none "
+                         "and would slip past the set assertion below, so fail "
+                         "loudly instead")
+        # `eval_labels` is deliberately NOT here. The round-2 path needs to know
+        # which fields this labeller already answered, and that query lives in
+        # labels.round_one_answers() -- the module that owns the table -- rather
+        # than as a second copy in the route. Same ownership rule labels.py's
+        # TABLES comment states, and the reason it gives: three tables' DDL once
+        # lived in two places and had drifted six ways by the time anyone
+        # measured.
+        self.assertEqual(set(found), {"jobs", "eval_label_items"},
+                         "the route may read the corpus row it renders and the "
+                         "eval set it belongs to. A third table is a change to "
+                         "what a labeller can be shown -- and anything about "
+                         "labels themselves belongs in labels.py.")
 
     def test_the_stratum_is_never_handed_to_the_renderer(self):
         # A stratum name is the pipeline's verdict in one word: "surfaced"
@@ -998,8 +1094,16 @@ class TestTheLabellerIsBlindToTheModelsAnswer(unittest.TestCase):
         self.assertEqual(len(renderer), 1)
         args = [a.arg for a in renderer[0].args.args]
         self.assertNotIn("stratum", args)
+        # `round_no` was added when the round-2 path landed and IS admissible
+        # on this list, which is worth stating because the list is otherwise an
+        # allowlist and a future reader will wonder. The rule the list encodes
+        # is "nothing that tells the labeller what the PIPELINE thinks of this
+        # posting". `overlap` says only that other people also see it;
+        # `round_no` says only that this person saw it before; `blank` says only
+        # that their last submit recorded nothing. None of the three carries a
+        # verdict. `stratum` does, which is why it stays off.
         self.assertEqual(args, ["job", "question_list", "label_set", "done",
-                                "total", "overlap"])
+                                "total", "overlap", "round_no", "blank"])
         self.assertNotIn("stratum", _code_only(self.PATH))
 
 
@@ -1279,6 +1383,237 @@ class TestSchemaAgainstPostgres(unittest.TestCase):
             self.conn.commit()
         self.assertEqual(sorted(seen), [f"m{i:02d}" for i in range(9)])
 
+    def _overlap_set(self, n_overlap=3, n_tail=5):
+        for i in range(n_overlap + n_tail):
+            self.conn.execute(
+                "INSERT INTO eval_label_items (label_set, job_id, stratum, "
+                "platform, overlap, position) VALUES ('s',%s,'surfaced',"
+                "'greenhouse',%s,%s)",
+                (f"r{i:02d}", i < n_overlap, i))
+        self.conn.commit()
+
+    #: Round-1 answers in these tests are dated well in the past by default, so
+    #: that a test about the round-2 QUEUE is not also a test of
+    #: ROUND_TWO_DELAY_DAYS. The tests that are about the delay pass `at` and
+    #: `now` explicitly. Left at the default they would all be too fresh to
+    #: re-ask, which is the delay working and would read as the queue broken.
+    OLD = "2026-01-01T09:00:00"
+
+    def _answer(self, job_id, who, *, round_no=1, value="none", at=OLD):
+        labels.record(self.conn, axis="A", job_id=job_id,
+                      field="ai_involvement", value=value, labeller_id=who,
+                      label_set="s", round_no=round_no, now=at)
+        self.conn.commit()
+
+    def test_round_two_was_unreachable_and_that_is_what_this_pins(self):
+        # THE DEFECT THIS PINS. next_item()'s round-1 predicate is "this
+        # labeller has answered nothing about this job", with no round_no in
+        # it, and webapp/label.py never passed round_no to record(). So
+        # record()'s round_no parameter, both partial unique indexes and
+        # intra_annotator() were all correct and jointly unreachable: no route
+        # through the built surface could produce a round-2 row, and
+        # docs/ingestion_tests/03-metrics-and-golden-set.md:25's "5-10 jobs
+        # labelled twice, a week apart" was uncollectable at any turnout.
+        self._overlap_set()
+        self._answer("r00", "alice")
+        # Round 1 will not serve it again -- that part was never wrong.
+        served = []
+        while (item := labels.next_item(self.conn, "s", "alice")) is not None:
+            served.append(item["job_id"])
+            self._answer(item["job_id"], "alice")
+        self.assertNotIn("r00", served)
+        # Round 2 does, and only because it asks a different question.
+        self.assertEqual(
+            labels.next_item(self.conn, "s", "alice", round_no=2)["job_id"],
+            "r00")
+
+    def test_round_two_serves_only_overlap_rows_already_answered(self):
+        self._overlap_set()
+        # One overlap row and one tail row answered in round 1.
+        self._answer("r01", "alice")
+        self._answer("r05", "alice")
+        seen = []
+        while (item := labels.next_item(self.conn, "s", "alice",
+                                        round_no=2)) is not None:
+            seen.append(item["job_id"])
+            self._answer(item["job_id"], "alice", round_no=2)
+        # r05 is answered but is not an overlap row; r00 and r02 are overlap
+        # rows but were never answered in round 1. Neither belongs in a
+        # self-agreement measurement.
+        self.assertEqual(seen, ["r01"])
+
+    def test_round_two_does_not_serve_the_same_row_twice(self):
+        self._overlap_set()
+        self._answer("r00", "alice")
+        self._answer("r00", "alice", round_no=2, value="uses_ai_tools")
+        self.assertIsNone(
+            labels.next_item(self.conn, "s", "alice", round_no=2))
+
+    def test_both_rounds_survive_and_intra_annotator_can_read_them(self):
+        # The point of the whole path: a figure that has never been computable
+        # from data. A disagreeing pair must come back as disagreement, not be
+        # collapsed by ON CONFLICT.
+        self._overlap_set()
+        self._answer("r00", "alice", value="none")
+        self._answer("r00", "alice", round_no=2, value="uses_ai_tools")
+        self._answer("r01", "alice", value="none")
+        self._answer("r01", "alice", round_no=2, value="none")
+        rows = labels.fetch(self.conn, axis="A")
+        self.assertEqual(
+            sorted((r["job_id"], r["round_no"], r["value"]) for r in rows),
+            [("r00", 1, "none"), ("r00", 2, "uses_ai_tools"),
+             ("r01", 1, "none"), ("r01", 2, "none")])
+        intra = labels.intra_annotator(rows, {"ai_involvement": "enum"})
+        cell = intra["fields"]["ai_involvement"]
+        # Two postings answered twice by one person; one pair agrees. It is a
+        # metrics.field_cell(), so the count is `agree2_k` and it means the
+        # same thing here as in the inter-annotator column -- one Bernoulli
+        # trial per item. That is what makes the two ceilings comparable, and
+        # comparing them is the reason round 2 exists.
+        self.assertEqual(cell["n"], 2)
+        self.assertEqual(cell["agree2_k"], 1)
+        self.assertEqual(cell["agree2"], 0.5)
+
+    def test_the_round_two_gate_names_a_date_rather_than_refusing_blankly(self):
+        # ROUND_TWO_DELAY_DAYS is the measurement, not politeness: served an
+        # hour later this measures memory. The refusal has to carry the date,
+        # because "not yet" with no date is indistinguishable from "broken".
+        self._overlap_set()
+        self._answer("r00", "alice", at="2026-07-01T09:00:00")
+        ready, n, when = labels.round_two_ready(
+            self.conn, "s", "alice", now="2026-07-03T09:00:00")
+        self.assertFalse(ready)
+        self.assertEqual(n, 1)
+        self.assertEqual(when[:10], "2026-07-08")
+        ready, n, when = labels.round_two_ready(
+            self.conn, "s", "alice", now="2026-07-09T09:00:00")
+        self.assertTrue(ready)
+
+    def test_the_delay_is_per_row_not_per_labeller(self):
+        # The defect this pins. Gating on the labeller's EARLIEST round-1
+        # answer would serve a row answered yesterday the moment their oldest
+        # row matured -- re-asking a fresh posting, which measures memory and
+        # is the one thing the delay exists to stop. Gating on their LATEST
+        # would be sound and would block nine mature rows behind one fresh one.
+        self._overlap_set(n_overlap=2)
+        self._answer("r00", "alice", at="2026-07-01T09:00:00")   # old
+        self._answer("r01", "alice", at="2026-07-20T09:00:00")   # fresh
+        served = []
+        while True:
+            item = labels.next_item(self.conn, "s", "alice", round_no=2,
+                                    now="2026-07-21T09:00:00")
+            if item is None:
+                break
+            served.append(item["job_id"])
+            self._answer(item["job_id"], "alice", round_no=2)
+        self.assertEqual(served, ["r00"],
+                         "only the matured row may be re-asked")
+        # And the fresh one becomes available on its own schedule.
+        self.assertEqual(
+            labels.next_item(self.conn, "s", "alice", round_no=2,
+                             now="2026-07-28T09:00:00")["job_id"], "r01")
+
+    def test_round_two_re_asks_only_what_was_actually_answered(self):
+        # THE BYPASS THIS PINS. An earlier fix re-filed a field blank in round 1
+        # as a round-1 answer when it arrived at round-2 time. That created a
+        # FRESH round-1 row which a round-2 row could then partner minutes
+        # later: the posting stayed eligible on its OTHER fields' timestamps,
+        # and intra_annotator() never reads labelled_at, so the close pair
+        # landed in the ceiling unmarked. Round 2 now re-asks only fields that
+        # were answered, not abstained, and matured.
+        self._overlap_set(n_overlap=1)
+        self._answer("r00", "alice", value="none")               # answered
+        labels.record(self.conn, axis="A", job_id="r00",
+                      field="seniority_level", value=None,
+                      labeller_id="alice", label_set="s", now=self.OLD)
+        self.conn.commit()                                        # abstained
+        # role_track was never answered at all.
+        due = labels.round_one_answers(self.conn, "s", "r00", "alice")
+        self.assertEqual(due, {"ai_involvement"},
+                         "an abstention and a blank are both excluded")
+
+    def test_a_round_one_answer_too_fresh_to_re_ask_is_excluded_per_field(self):
+        # Per field, not per posting -- the whole point. A posting can be
+        # eligible on one field and not another.
+        self._overlap_set(n_overlap=1)
+        self._answer("r00", "alice", value="none", at="2026-07-01T09:00:00")
+        labels.record(self.conn, axis="A", job_id="r00",
+                      field="seniority_level", value="mid",
+                      labeller_id="alice", label_set="s",
+                      now="2026-07-20T09:00:00")
+        self.conn.commit()
+        due = labels.round_one_answers(self.conn, "s", "r00", "alice",
+                                       now="2026-07-21T09:00:00")
+        self.assertEqual(due, {"ai_involvement"},
+                         "the fresh field is not due even though the posting "
+                         "is")
+
+    def test_a_posting_answered_only_by_abstention_is_not_re_served(self):
+        # Otherwise round 2 serves a posting with nothing due on it, and the
+        # POST has to reject the whole submission.
+        self._overlap_set(n_overlap=1)
+        labels.record(self.conn, axis="A", job_id="r00",
+                      field="ai_involvement", value=None,
+                      labeller_id="alice", label_set="s", now=self.OLD)
+        self.conn.commit()
+        self.assertIsNone(
+            labels.next_item(self.conn, "s", "alice", round_no=2))
+
+    def test_an_abstain_only_posting_is_not_counted_as_still_waiting(self):
+        # THE PERMANENT "COME BACK LATER" THIS PINS. n_waiting once counted any
+        # posting with round-1 rows, while next_item() requires a NON-NULL one.
+        # So a posting a labeller abstained on across every question counted as
+        # outstanding and could never be served: the caller's
+        # `done < n_waiting` test stayed true forever and the "there is more to
+        # do here later" page never retired. The original exhaustion defect
+        # inverted -- told to come back to a queue that will never fill.
+        self._overlap_set(n_overlap=2)
+        self._answer("r00", "alice", value="none")              # real answer
+        labels.record(self.conn, axis="A", job_id="r01",
+                      field="ai_involvement", value=None,
+                      labeller_id="alice", label_set="s", now=self.OLD)
+        self.conn.commit()                                       # abstain only
+        ready, n_waiting, when = labels.round_two_ready(self.conn, "s", "alice")
+        self.assertTrue(ready)
+        self.assertEqual(n_waiting, 1,
+                         "the abstain-only posting is not re-askable, so it is "
+                         "not outstanding either")
+        # And the queue agrees, which is the invariant the two must share.
+        served = []
+        while (item := labels.next_item(self.conn, "s", "alice",
+                                        round_no=2)) is not None:
+            served.append(item["job_id"])
+            self._answer(item["job_id"], "alice", round_no=2)
+        self.assertEqual(served, ["r00"])
+        done, _total = labels.progress(self.conn, "s", "alice", round_no=2)
+        self.assertEqual(done, n_waiting,
+                         "done must be able to reach n_waiting, or the caller "
+                         "can never say 'finished'")
+
+    def test_a_labeller_with_no_round_one_is_a_different_state_from_too_soon(self):
+        self._overlap_set()
+        ready, n, when = labels.round_two_ready(self.conn, "s", "nobody")
+        self.assertFalse(ready)
+        self.assertEqual(n, 0)
+        self.assertIsNone(when)
+
+    def test_round_two_progress_counts_against_the_overlap_block(self):
+        # Not against the set. "3 of 200" on a ten-row queue reads as an
+        # eight-hour evening, which is how a volunteer closes the tab.
+        self._overlap_set(n_overlap=3, n_tail=5)
+        self._answer("r00", "alice")
+        self.assertEqual(labels.progress(self.conn, "s", "alice"), (1, 8))
+        self._answer("r00", "alice", round_no=2)
+        self.assertEqual(
+            labels.progress(self.conn, "s", "alice", round_no=2), (1, 3))
+
+    def test_round_one_progress_is_not_inflated_by_round_two_answers(self):
+        self._overlap_set()
+        self._answer("r00", "alice")
+        self._answer("r00", "alice", round_no=2)
+        # One posting done in round 1, not two.
+        self.assertEqual(labels.progress(self.conn, "s", "alice")[0], 1)
+
     def test_fetch_carries_the_platform_the_breakout_needs(self):
         # 29:106 needs a per-platform split and eval_labels has no platform
         # column -- deliberately, because the platform is a property of the
@@ -1342,6 +1677,603 @@ class TestSchemaAgainstPostgres(unittest.TestCase):
             sequences={})
         self.assertEqual(len(problems), 1)
         self.assertIn("missing", problems[0])
+
+
+class TestAnAbsentFieldIsNotANullAnswer(unittest.TestCase):
+    """`normalized.get(field)` cannot tell silence from a verdict.
+
+    On `role_track` a present null is the model saying "no listed track
+    describes this role" -- extract.py:338: "Use null if none of the listed
+    tracks clearly describes the role. Do not force a value." An absent key is
+    the model never having been asked. `.get()` returns None for both, and
+    as_model_domain() folds a human NO_TRACK_FITS to None for comparison, so
+    under `.get()` the two scored as AGREEMENT.
+    """
+
+    def _labels(self, job_ids, value=labels.NO_TRACK_FITS):
+        return [_label(j, "role_track", value, "alice") for j in job_ids]
+
+    def test_a_missing_field_is_excluded_and_counted_not_scored(self):
+        rows = self._labels(["j1", "j2"])
+        # The model record exists -- it is not `no_model_output` -- and simply
+        # has no role_track key, which is the shape of every row in
+        # pursuit-criteria-corpus.jsonl.
+        model = {"j1": {"seniority_level": "mid"},
+                 "j2": {"seniority_level": "mid"}}
+        out = labels.model_vs_human(rows, model, KINDS)
+        self.assertNotIn("role_track", out["vs_consensus"])
+        self.assertEqual(out["no_model_field"]["role_track"], 2)
+        # Not booked as a missing record: the record is right there.
+        self.assertEqual(out["no_model_output"], [])
+        # And it is not in the per-platform breakout either, which would carry
+        # the same false disagreement into a thinner cell.
+        self.assertNotIn("role_track", out["by_platform"]["fields"])
+
+    def test_a_present_null_is_compared_and_agrees_with_no_track_fits(self):
+        rows = self._labels(["j1"])
+        model = {"j1": {"role_track": None}}
+        out = labels.model_vs_human(rows, model, KINDS)
+        cell = out["vs_consensus"]["role_track"]
+        self.assertEqual((cell["n"], cell["k"], cell["rate"]), (1, 1, 1.0))
+        # Both sides say no listed track fits. That is agreement, and it is
+        # the reading as_model_domain() exists to produce.
+        self.assertEqual(out["no_model_field"], {})
+
+    def test_the_two_cases_differ_and_a_get_would_collapse_them(self):
+        # THE ASSERTION THAT FAILS UNDER `.get()`. Same human answer, same
+        # field, two model records that differ only in whether the key is
+        # there. Under `.get()` both are None on the model side and both score
+        # as agreement, so every number below would have been identical.
+        rows = self._labels(["j1", "j2"])
+        absent = labels.model_vs_human(
+            rows, {"j1": {}, "j2": {}}, KINDS)
+        present = labels.model_vs_human(
+            rows, {"j1": {"role_track": None}, "j2": {"role_track": None}},
+            KINDS)
+        self.assertNotIn("role_track", absent["vs_consensus"])
+        self.assertEqual(absent["no_model_field"]["role_track"], 2)
+        self.assertEqual(present["vs_consensus"]["role_track"]["n"], 2)
+        self.assertEqual(present["vs_consensus"]["role_track"]["rate"], 1.0)
+        self.assertEqual(present["no_model_field"], {})
+
+    def test_a_real_answer_against_a_missing_field_is_not_a_disagreement(self):
+        # The direction that drove the field toward 0%: a human who confidently
+        # named a track, against a corpus with no such key. Excluded, not
+        # scored 0.
+        rows = self._labels(["j1"], value="data_analytics")
+        out = labels.model_vs_human(rows, {"j1": {}}, KINDS)
+        self.assertNotIn("role_track", out["vs_consensus"])
+        self.assertEqual(out["no_model_field"]["role_track"], 1)
+
+    def test_a_wholly_absent_record_is_still_no_model_output(self):
+        # Unchanged behaviour, and a different quantity: `no_model_output` is
+        # the record that is not there at all, `no_model_field` is one field of
+        # a record that is.
+        rows = self._labels(["j1", "j2"])
+        out = labels.model_vs_human(rows, {"j1": {"role_track": None}}, KINDS)
+        self.assertEqual(out["no_model_output"], ["j2"])
+        self.assertEqual(out["no_model_field"], {})
+        self.assertEqual(out["vs_consensus"]["role_track"]["n"], 1)
+
+    def test_the_two_columns_count_the_loss_in_their_own_denominators(self):
+        # `vs_consensus` counts items and `vs_each` counts comparisons, so one
+        # shared counter would belong to neither. Three labellers agreeing on
+        # one item is one lost item and three lost comparisons.
+        rows = [_label("j1", "role_track", "data_analytics", who)
+                for who in ("alice", "bob", "carol")]
+        out = labels.model_vs_human(rows, {"j1": {}}, KINDS)
+        self.assertEqual(out["no_model_field"]["role_track"], 1)
+        self.assertEqual(out["no_model_field_each"]["role_track"], 3)
+        self.assertNotIn("role_track", out["vs_each"])
+
+    def test_an_abstaining_labeller_is_not_also_counted_as_a_model_gap(self):
+        # An abstention is already excluded for a human reason. Booking it
+        # twice would inflate the model-gap count with rows the model was never
+        # asked about.
+        rows = [_label("j1", "role_track", None, "alice"),
+                _label("j1", "role_track", "data_analytics", "bob")]
+        out = labels.model_vs_human(rows, {"j1": {}}, KINDS)
+        self.assertEqual(out["no_model_field_each"]["role_track"], 1)
+
+    def test_the_other_four_fields_are_unaffected_by_the_membership_test(self):
+        # They are present on all 859 rows of the frozen corpus, so nothing
+        # about them changes -- including a genuine disagreement still scoring
+        # as one.
+        rows = [_label("j1", "seniority_level", "mid", "alice"),
+                _label("j2", "seniority_level", "senior", "alice")]
+        out = labels.model_vs_human(
+            rows, {"j1": {"seniority_level": "mid"},
+                   "j2": {"seniority_level": "mid"}}, KINDS)
+        cell = out["vs_consensus"]["seniority_level"]
+        self.assertEqual((cell["n"], cell["k"]), (2, 1))
+        self.assertEqual(out["no_model_field"], {})
+
+
+class TestTheFrozenCorpusCannotMeasureRoleTrack(unittest.TestCase):
+    """The corpus is not the thing to fix, and the report has to say so.
+
+    Writing `role_track` values into it would be inventing model answers in an
+    eval corpus, in a file with no generator script (HANDOFF.md:1043-1047) whose
+    rows also carry tests/test_match.py's pinned scores and ranks. It is not
+    covered by tests/test_evals.py:454's sha256 pin either, so such an edit
+    would be quiet rather than loud. Re-extracting it at a facts_version that
+    carries the field is separate, deliberate work.
+    """
+
+    CORPUS = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "evals", "fixtures",
+        "pursuit-criteria-corpus.jsonl")
+
+    def setUp(self):
+        from evals import corpus
+        self.records = corpus.load(self.CORPUS)
+
+    def test_role_track_is_absent_from_every_row_and_the_rest_are_present(self):
+        self.assertEqual(len(self.records), 859)
+        self.assertEqual(
+            sum(1 for r in self.records if "role_track" in r), 0)
+        for field in ("ai_involvement", "seniority_level", "role_archetype",
+                      "remote_policy"):
+            self.assertEqual(
+                sum(1 for r in self.records if field in r), 859, field)
+        # Flat dicts, no nested `facts` block -- which is why membership on the
+        # record itself is the right test.
+        self.assertEqual(sum(1 for r in self.records if "facts" in r), 0)
+
+    def test_the_report_counts_the_shortfall_rather_than_scoring_it_zero(self):
+        # One human label per corpus row, on the one field the corpus cannot
+        # answer. Under `.get()` this produced a `role_track` cell with n=20
+        # and a rate near 0; now it produces no cell and a count of 20.
+        sample = [r["job_id"] for r in self.records[:20]]
+        rows = [_label(j, "role_track", "data_analytics", "alice")
+                for j in sample]
+        model = {r["job_id"]: r for r in self.records}
+        out = labels.model_vs_human(rows, model, KINDS)
+        self.assertNotIn("role_track", out["vs_consensus"])
+        self.assertEqual(out["no_model_field"]["role_track"], 20)
+        self.assertEqual(out["no_model_output"], [])
+        # So the three-quantity gate refuses the field, and the refusal names
+        # the model-output cause rather than sending the reader after
+        # volunteers who have already labelled it.
+        with self.assertRaises(labels.Uninterpretable) as caught:
+            labels.interpretable(
+                floor={"role_track": {"overall": {"n": 5, "agree2": 1.0}}},
+                ceiling={"role_track": {"n": 5, "agree2": 1.0}},
+                measured=out["vs_consensus"], fields=["role_track"])
+        self.assertIn("no_model_field", str(caught.exception))
+
+
+# --------------------------------------------------------------------------
+# Axis B against the ordering the product ships -- labels.ordering()
+# --------------------------------------------------------------------------
+
+def _item(job_id, stratum, *, match_score=None, computed_score=None,
+          platform=None, position=0, overlap=False, tier=None):
+    """One row of a label SET, in save_set()'s shape (labels.py:770-772).
+
+    Distinct from _label() above, which makes a row of eval_labels. The two
+    inputs to ordering() are different things and conflating them in a fixture
+    factory would hide which of the two a figure came from: the set says what
+    the population is and what score orders it, the labels say what a person
+    said about it.
+    """
+    return {"job_id": job_id, "stratum": stratum, "platform": platform,
+            "position": position, "overlap": overlap, "tier": tier,
+            "match_score": match_score, "computed_score": computed_score}
+
+
+def _b(job_id, value, who, *, profile="pursuit", round_no=1):
+    """One axis-B answer. Carries a profile, because axis B always does."""
+    return _label(job_id, labels.AXIS_B_FIELD, value, who,
+                  axis=labels.AXIS_B, profile=profile, round_no=round_no)
+
+
+#: The pinned set's identity. CLAUDE.md pins an eval set by sorted `job_id`,
+#: and every figure ordering() produces is a figure ABOUT THIS SET -- so a
+#: regenerated file would change the population under numbers already written
+#: down. The same device tests/test_evals.py:454 puts on the frozen corpora.
+PURSUIT_V1_SHA = ("afb2d58f5d369dfd03ad9237a8b16396"
+                  "cea31b838a67343f51aceecf70cd1763")
+
+PURSUIT_V1 = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "evals", "fixtures",
+    "labelset-pursuit-v1.jsonl")
+
+
+class TestAxisBAgainstTheOrdering(unittest.TestCase):
+    """Does `match_score` put the postings a Builder would apply to first?
+
+    NO DATABASE AND NO REAL LABEL ANYWHERE IN HERE. `eval_labels` ships empty
+    and stays empty until task 29's labelling night; the whole point of
+    building this adapter first is that it must be trustworthy BEFORE the
+    labels exist, and it is only trustworthy if it can be falsified on
+    synthetic rows. Every fixture below is a _label()/_item() dict.
+    """
+
+    def test_a_perfect_ordering_scores_one(self):
+        set_rows = [_item("j1", "surfaced", match_score=90),
+                    _item("j2", "surfaced", match_score=80),
+                    _item("j3", "surfaced", match_score=70),
+                    _item("j4", "surfaced", match_score=60)]
+        rows = [_b("j1", "yes", "alice"), _b("j2", "yes", "alice"),
+                _b("j3", "no", "alice"), _b("j4", "no", "alice")]
+        block = labels.ordering(rows, set_rows,
+                                profile="pursuit", k=2)["strata"]["surfaced"]
+        self.assertEqual(block["average_precision"], 1.0)
+        self.assertEqual(block["precision_at_k"], 1.0)
+        self.assertEqual(block["k"], 2)
+        # AP's chance level IS the positive rate (metrics.py:396-399), so 1.0
+        # against 0.5 is signal and 1.0 against 1.0 would be nothing at all.
+        # The two are in the same dict so a report cannot print one alone.
+        self.assertEqual(block["n_positive"], 2)
+        self.assertEqual(block["positive_rate"], 0.5)
+
+    def test_ordering_has_no_default_profile(self):
+        # A default would silently pool two personas' answers about one posting
+        # against one match_score, which is keyed (job_id, profile).
+        with self.assertRaises(TypeError):
+            labels.ordering([], [])
+
+    def test_the_positive_class_is_the_consensus_and_a_tie_is_excluded(self):
+        set_rows = [_item("j1", "surfaced", match_score=90),
+                    _item("j2", "surfaced", match_score=80)]
+        rows = [_b("j1", "yes", "alice"), _b("j1", "no", "bob"),
+                _b("j2", "yes", "alice"), _b("j2", "yes", "bob"),
+                _b("j2", "no", "carol")]
+        out = labels.ordering(rows, set_rows, profile="pursuit")
+        block = out["strata"]["surfaced"]
+        self.assertEqual(block["labelled"], 1)
+        self.assertEqual(block["label_coverage"], "1/2")
+        self.assertEqual(block["n_positive"], 1)
+        # consensus() refuses to invent a majority out of a disagreement, and
+        # the count surfaces under the key name model_vs_human() already uses
+        # (labels.py:1608) so the two tables' columns line up.
+        self.assertEqual(block["no_consensus"], 1)
+        self.assertEqual(out["no_consensus"], 1)
+        # A human tie is not a missing score. Those are different failures.
+        self.assertEqual(block["n_unscored"], 0)
+
+    def test_an_all_abstain_item_is_counted_apart_from_an_unlabelled_one(self):
+        # consensus() drops both into the same silence at labels.py:1481, which
+        # is a real defect: "five Builders read this and none could tell" is
+        # evidence about the POSTING, "nobody reached it" is evidence about the
+        # NIGHT, and the module's own rule is that an abstention is a value and
+        # is never folded away.
+        set_rows = [_item("j1", "surfaced", match_score=90),
+                    _item("j2", "surfaced", match_score=80),
+                    _item("j3", "surfaced", match_score=70)]
+        rows = [_b("j1", None, "alice"), _b("j1", None, "bob"),
+                _b("j3", "yes", "alice")]
+        out = labels.ordering(rows, set_rows, profile="pursuit")
+        block = out["strata"]["surfaced"]
+        self.assertEqual(block["all_abstained"], 1)
+        self.assertEqual(block["unlabelled"], 1)
+        self.assertEqual((out["all_abstained"], out["unlabelled"]), (1, 1))
+        self.assertEqual(block["labelled"], 1)
+        # And the function it is built on genuinely cannot tell them apart --
+        # j1 is in neither return value, exactly like the row nobody opened.
+        agreed, tied = labels.consensus(rows, axis=labels.AXIS_B)
+        self.assertNotIn(("j1", labels.AXIS_B_FIELD, "pursuit"), agreed)
+        self.assertEqual(tied, [])
+
+    def test_an_unlabelled_member_is_not_a_score_drop(self):
+        # Ranked.n_dropped means the RANKER produced no number (metrics.py:331)
+        # and every drop there flatters the ranker. Booking a labelling
+        # shortfall into it would be wrong in the flattering direction.
+        set_rows = [_item("j1", "surfaced", match_score=90),
+                    _item("j2", "surfaced", match_score=80)]
+        block = labels.ordering([_b("j1", "yes", "alice")], set_rows,
+                                profile="pursuit")["strata"]["surfaced"]
+        self.assertEqual(block["n_unscored"], 0)
+        self.assertTrue(block["complete"])
+        # Two denominators, two keys, never one.
+        self.assertEqual(block["coverage"], "1/1")        # the ranker's
+        self.assertEqual(block["label_coverage"], "1/2")  # the night's
+        self.assertEqual(block["unlabelled"], 1)
+
+    def test_a_member_the_ranker_could_not_score_is_a_drop(self):
+        # The other direction, and the reason the two numbers cannot be one:
+        # here the label exists and the SCORE does not, which is what
+        # n_unscored is for and is a pipeline finding rather than a turnout one.
+        set_rows = [_item("j1", "surfaced", match_score=90),
+                    _item("j2", "surfaced", match_score=None)]
+        block = labels.ordering(
+            [_b("j1", "yes", "alice"), _b("j2", "yes", "bob")], set_rows,
+            profile="pursuit")["strata"]["surfaced"]
+        self.assertEqual(block["n_unscored"], 1)
+        self.assertEqual(block["n_unscored_positive"], 1)
+        self.assertFalse(block["complete"])
+        self.assertEqual(block["coverage"], "1/2")
+        self.assertEqual(block["label_coverage"], "2/2")
+        self.assertEqual(block["unlabelled"], 0)
+
+    def test_score_ties_are_averaged_and_permuting_cannot_move_the_answer(self):
+        # metrics.TIE_MODES: `expected` is the mean over every tie-break and is
+        # the only one of the three that is a property of the RANKER rather
+        # than of the sort. One positive somewhere inside a block of three
+        # equal scores is the case where it matters.
+        set_rows = [_item("j1", "surfaced", match_score=90),
+                    _item("j2", "surfaced", match_score=90),
+                    _item("j3", "surfaced", match_score=90),
+                    _item("j4", "surfaced", match_score=50)]
+        rows = [_b("j1", "yes", "alice"), _b("j2", "no", "alice"),
+                _b("j3", "no", "alice"), _b("j4", "no", "alice")]
+        block = labels.ordering(rows, set_rows,
+                                profile="pursuit")["strata"]["surfaced"]
+        self.assertAlmostEqual(block["average_precision"], 1 / 3 + 1 / 6 + 1 / 9)
+        # The bounds are what a real sort could have produced; the point
+        # estimate sits strictly between them, so the gap is visible.
+        self.assertEqual(block["ap_optimistic"], 1.0)
+        self.assertAlmostEqual(block["ap_pessimistic"], 1 / 3)
+        self.assertEqual(block["ties"]["largest"], 3)
+        self.assertAlmostEqual(block["ties"]["p_tie"], 0.5)
+        # Permuting either input cannot move it. A job_id or position
+        # tie-break would make both of these differ.
+        for permuted in (list(reversed(rows)),
+                         [rows[2], rows[0], rows[3], rows[1]]):
+            other = labels.ordering(permuted, list(reversed(set_rows)),
+                                    profile="pursuit")["strata"]["surfaced"]
+            self.assertEqual(other["average_precision"],
+                             block["average_precision"])
+            self.assertEqual(other["precision_at_k"], block["precision_at_k"])
+
+    def test_another_profile_s_answer_is_never_pooled_in(self):
+        # match_score is keyed (job_id, profile) -- the property that makes
+        # cost flat in users -- and _item_key() (labels.py:1329) puts the
+        # profile in every axis-B key for the same reason. `tech` here answers
+        # the exact inverse of `pursuit`; pooled, every item would be a tie and
+        # there would be nothing left to rank.
+        set_rows = [_item("j1", "surfaced", match_score=90),
+                    _item("j2", "surfaced", match_score=50)]
+        rows = [_b("j1", "no", "alice", profile="tech"),
+                _b("j2", "yes", "alice", profile="tech"),
+                _b("j1", "yes", "alice", profile="pursuit"),
+                _b("j2", "no", "alice", profile="pursuit")]
+        mine = labels.ordering(rows, set_rows,
+                               profile="pursuit")["strata"]["surfaced"]
+        theirs = labels.ordering(rows, set_rows,
+                                 profile="tech")["strata"]["surfaced"]
+        self.assertEqual(mine["labelled"], 2)
+        self.assertEqual(mine["no_consensus"], 0)
+        self.assertEqual(mine["average_precision"], 1.0)
+        # Counted separately, against the same two scores, and not lost.
+        self.assertEqual(theirs["labelled"], 2)
+        self.assertEqual(theirs["average_precision"], 0.5)
+
+    def test_a_round_two_answer_does_not_enter_a_round_one_figure(self):
+        # Round 2 is the intra-annotator measurement -- the same postings a
+        # week later (ROUND_TWO_DELAY_DAYS). Folding it in would count one
+        # person twice and silently double the evidence under the figure.
+        set_rows = [_item("j1", "surfaced", match_score=90),
+                    _item("j2", "surfaced", match_score=50)]
+        rows = [_b("j1", "no", "alice"), _b("j2", "yes", "alice"),
+                _b("j1", "yes", "alice", round_no=2),
+                _b("j2", "no", "alice", round_no=2)]
+        one = labels.ordering(rows, set_rows, profile="pursuit")
+        two = labels.ordering(rows, set_rows, profile="pursuit", round_no=2)
+        self.assertEqual(one["strata"]["surfaced"]["average_precision"], 0.5)
+        self.assertEqual(two["strata"]["surfaced"]["average_precision"], 1.0)
+        # Two answers each, not four: neither figure borrowed the other's.
+        self.assertEqual(one["strata"]["surfaced"]["labelled"], 2)
+        self.assertEqual(two["strata"]["surfaced"]["labelled"], 2)
+        # Which round a figure is over travels with it, so two dumps of these
+        # blocks cannot be read as one.
+        self.assertEqual((one["round"], two["round"]), (1, 2))
+
+    def test_gate_rejected_is_refused_by_name_not_filtered_out(self):
+        # Filtering would let a caller ask for "the whole set" and receive a
+        # figure over three quarters of it -- a stratum measured against the
+        # wrong population, trap 4.1 again.
+        set_rows = [_item("g1", "gate_rejected"),
+                    _item("j1", "surfaced", match_score=90)]
+        with self.assertRaises(ValueError) as caught:
+            labels.ordering([], set_rows, profile="pursuit",
+                            strata=("surfaced", "gate_rejected"))
+        message = str(caught.exception)
+        self.assertIn("gate_rejected", message)
+        self.assertIn("recall_bound", message)
+        with self.assertRaises(ValueError):
+            labels.score_index(set_rows, strata=("gate_rejected",))
+        # An unknown stratum is refused too, rather than yielding an empty
+        # block that reads as "nobody said yes".
+        with self.assertRaises(ValueError):
+            labels.ordering([], set_rows, profile="pursuit",
+                            strata=("surfaced", "nonsense"))
+
+    def test_below_floor_reads_computed_score_and_surfaced_match_score(self):
+        # confirm_scores() recomputed `computed_score` with match.score_job(),
+        # which is pure (match.py:73-84), so the two columns are one 0-100
+        # construction under two names. Each row here carries a decoy in the
+        # other column that would inverse the ordering if it were read.
+        set_rows = [_item("j1", "surfaced", match_score=90, computed_score=1),
+                    _item("j2", "surfaced", match_score=50, computed_score=99),
+                    _item("j3", "below_floor", computed_score=30,
+                          match_score=1),
+                    _item("j4", "below_floor", computed_score=10,
+                          match_score=99)]
+        rows = [_b("j1", "yes", "alice"), _b("j2", "no", "alice"),
+                _b("j3", "yes", "alice"), _b("j4", "no", "alice")]
+        out = labels.ordering(rows, set_rows, profile="pursuit")
+        self.assertEqual(out["strata"]["surfaced"]["score_column"],
+                         "match_score")
+        self.assertEqual(out["strata"]["below_floor"]["score_column"],
+                         "computed_score")
+        self.assertEqual(out["strata"]["surfaced"]["average_precision"], 1.0)
+        self.assertEqual(out["strata"]["below_floor"]["average_precision"], 1.0)
+        self.assertEqual(labels.score_index(set_rows),
+                         {"j1": 90, "j2": 50, "j3": 30, "j4": 10})
+
+    def test_an_explicit_score_map_wins_over_the_set_file(self):
+        # platform_index()'s convention (labels.py:1269): a caller passing a
+        # map is being specific on purpose -- a re-run of match.py, or a swept
+        # weight table -- and must not be silently overridden by the file.
+        set_rows = [_item("j1", "surfaced", match_score=90)]
+        self.assertEqual(labels.score_index(set_rows, {"j1": 42}), {"j1": 42})
+        # A None in the map is not an override to "unscored": absence of a
+        # fresher number is not a claim that there is no number.
+        self.assertEqual(labels.score_index(set_rows, {"j1": None}), {"j1": 90})
+
+    def test_no_score_column_is_fit_score(self):
+        # CLAUDE.md: `match_score` orders the list, `fit_score` only annotates
+        # it, and LLMs explain, never rank. fit_score is also L1 -- the layer
+        # tools/learned-ranker-probe.py already fits against -- so scoring an
+        # L0 label against it would be evaluating on the trained layer.
+        self.assertNotIn("fit_score", labels.SCORE_COLUMN.values())
+        self.assertEqual(set(labels.SCORE_COLUMN), set(labels.SCORED_STRATA))
+        self.assertNotIn("gate_rejected", labels.SCORED_STRATA)
+        # Every scoreable stratum is a real stratum, and one is missing from
+        # SCORED_STRATA on purpose.
+        self.assertTrue(set(labels.SCORED_STRATA) < set(labels.STRATA))
+
+    def test_the_two_strata_are_reported_apart_and_never_averaged(self):
+        # The set is stratified 100/50/50 BY DESIGN, so neither prevalence is
+        # the corpus's and their mean is a figure about no population at all.
+        set_rows = [_item("j1", "surfaced", match_score=90),
+                    _item("j2", "below_floor", computed_score=30)]
+        rows = [_b("j1", "yes", "alice"), _b("j2", "yes", "alice")]
+        out = labels.ordering(rows, set_rows, profile="pursuit")
+        self.assertEqual(sorted(out["strata"]), ["below_floor", "surfaced"])
+        for key in ("average_precision", "precision_at_k", "positive_rate",
+                    "n_positive"):
+            self.assertNotIn(key, out)
+
+    def test_an_off_vocabulary_answer_is_refused_not_scored_as_a_no(self):
+        # validate() confines the column to AXIS_B_VALUES, so a stray value
+        # means a row reached eval_labels without going through record().
+        # Scoring it 0 would move it into the negative class with no trace.
+        set_rows = [_item("j1", "surfaced", match_score=90)]
+        with self.assertRaises(ValueError):
+            labels.ordering([_b("j1", "maybe", "alice")], set_rows,
+                            profile="pursuit")
+
+    def test_a_label_about_a_posting_outside_the_set_is_counted(self):
+        # Silence is this system's failure mode. Labels collected against a
+        # different set is the case where every figure is over the wrong rows.
+        set_rows = [_item("j1", "surfaced", match_score=90)]
+        out = labels.ordering(
+            [_b("j1", "yes", "alice"), _b("stranger", "yes", "alice")],
+            set_rows, profile="pursuit")
+        self.assertEqual(out["labelled_not_in_set"], 1)
+        self.assertEqual(out["strata"]["surfaced"]["labelled"], 1)
+
+
+class TestTheRecallBound(unittest.TestCase):
+    """The one statement `gate_rejected` can make, and it is not a rate."""
+
+    def test_it_is_a_count_with_an_interval_and_not_a_rate(self):
+        set_rows = [_item(f"g{i}", "gate_rejected") for i in range(1, 5)]
+        rows = [_b("g1", "yes", "alice"), _b("g2", "no", "alice"),
+                _b("g3", "no", "alice"), _b("g4", "no", "alice")]
+        block = labels.recall_bound(rows, set_rows, profile="pursuit")
+        self.assertEqual((block["k"], block["n"], block["members"]), (1, 4, 4))
+        lo, hi = block["ci"]
+        self.assertLess(lo, 0.25)
+        self.assertGreater(hi, 0.25)
+        # There is deliberately no key a report could print as precision.
+        for forbidden in ("rate", "average_precision", "precision_at_k",
+                          "positive_rate", "score_column"):
+            self.assertNotIn(forbidden, block)
+        self.assertIn("never a precision rate", block["statement"])
+
+    def test_it_is_computed_always_and_merged_into_nothing(self):
+        # A `yes` on a gate-rejected posting is not a precision miss: the
+        # profile's users can never see it, so nothing was ranked wrongly.
+        set_rows = [_item("g1", "gate_rejected"),
+                    _item("j1", "surfaced", match_score=90)]
+        rows = [_b("g1", "yes", "alice"), _b("j1", "no", "alice")]
+        out = labels.ordering(rows, set_rows, profile="pursuit")
+        self.assertEqual(out["recall_bound"]["k"], 1)
+        self.assertNotIn("gate_rejected", out["strata"])
+        # The surfaced figure is over its own 1 member, not over 2.
+        self.assertEqual(out["strata"]["surfaced"]["members"], 1)
+        self.assertEqual(out["strata"]["surfaced"]["n_positive"], 0)
+        # ... and the gate-rejected yes did not become a surfaced positive.
+        self.assertEqual(out["strata"]["surfaced"]["labelled"], 1)
+
+    def test_its_denominator_is_what_was_answered_not_the_stratum_size(self):
+        # The two are the same 50 when the night finishes the stratum. When it
+        # does not, the shortfall belongs beside the interval, not inside it.
+        set_rows = [_item(f"g{i}", "gate_rejected") for i in range(1, 5)]
+        rows = [_b("g1", "yes", "alice"), _b("g2", None, "alice")]
+        block = labels.recall_bound(rows, set_rows, profile="pursuit")
+        self.assertEqual((block["k"], block["n"]), (1, 1))
+        self.assertEqual(block["label_coverage"], "1/4")
+        self.assertEqual(block["all_abstained"], 1)
+        self.assertEqual(block["unlabelled"], 2)
+
+    def test_another_profile_s_yes_is_not_this_profile_s_recall_miss(self):
+        # A posting `tech` would apply to says nothing about what `pursuit`'s
+        # gate is discarding from `pursuit`'s users.
+        set_rows = [_item("g1", "gate_rejected")]
+        rows = [_b("g1", "yes", "alice", profile="tech")]
+        block = labels.recall_bound(rows, set_rows, profile="pursuit")
+        self.assertEqual((block["k"], block["n"], block["unlabelled"]),
+                         (0, 0, 1))
+
+
+class TestThePinnedSetCarriesItsOwnScoreAxis(unittest.TestCase):
+    """No database read is needed to join axis B to match_score.
+
+    The set file records both score columns (save_set(), labels.py:770-772), so
+    the join is a pure function over a fixture. That is what lets the adapter be
+    built and tested before the labelling night, and it is also the only way the
+    figure is reproducible: match.py re-ranks nightly, so a score read live
+    would pair a sampling-time stratum with a report-time number.
+    """
+
+    def setUp(self):
+        self.set_rows = labels.load_set(PURSUIT_V1)
+
+    def test_the_set_is_pinned_by_its_sorted_job_ids(self):
+        self.assertEqual(len(self.set_rows), 200)
+        self.assertEqual(labels.digest(self.set_rows), PURSUIT_V1_SHA)
+
+    def test_every_scoreable_row_has_its_own_column_and_no_other(self):
+        by_stratum = {}
+        for row in self.set_rows:
+            by_stratum.setdefault(row["stratum"], []).append(row)
+        self.assertEqual(
+            {s: len(rs) for s, rs in sorted(by_stratum.items())},
+            {"below_floor": 50, "gate_rejected": 50, "surfaced": 100})
+        for stratum, column in labels.SCORE_COLUMN.items():
+            rows = by_stratum[stratum]
+            self.assertTrue(all(r[column] is not None for r in rows), stratum)
+            other = ("computed_score" if column == "match_score"
+                     else "match_score")
+            self.assertTrue(all(r[other] is None for r in rows), stratum)
+        # And gate_rejected has neither, on any scale, which is why it is
+        # refused rather than filtered.
+        for row in by_stratum["gate_rejected"]:
+            self.assertIsNone(row["match_score"])
+            self.assertIsNone(row["computed_score"])
+
+    def test_score_index_covers_both_scoreable_strata_and_nothing_else(self):
+        index = labels.score_index(self.set_rows)
+        self.assertEqual(len(index), 150)
+        gate = {str(r["job_id"]) for r in self.set_rows
+                if r["stratum"] == "gate_rejected"}
+        self.assertEqual(gate & set(index), set())
+        # The two windows on one construction: 40-92 above the floor
+        # (schema.MATCH_FLOOR is 40) and 0-34 below it.
+        surfaced = [index[str(r["job_id"])] for r in self.set_rows
+                    if r["stratum"] == "surfaced"]
+        below = [index[str(r["job_id"])] for r in self.set_rows
+                 if r["stratum"] == "below_floor"]
+        self.assertEqual((min(surfaced), max(surfaced)), (40, 92))
+        self.assertEqual((min(below), max(below)), (0, 34))
+
+    def test_the_whole_join_runs_with_no_label_and_reports_zero_coverage(self):
+        # The state on the morning of the labelling night: the adapter must
+        # already run, and it must say the set is unlabelled rather than
+        # producing a figure over nothing.
+        out = labels.ordering([], self.set_rows, profile="pursuit")
+        self.assertEqual(out["unlabelled"], 150)
+        self.assertEqual(out["all_abstained"], 0)
+        self.assertEqual(out["recall_bound"]["unlabelled"], 50)
+        for stratum, block in out["strata"].items():
+            self.assertIsNone(block["average_precision"], stratum)
+            self.assertEqual(block["labelled"], 0, stratum)
+            self.assertEqual(block["n_unscored"], 0, stratum)
 
 
 if __name__ == "__main__":
