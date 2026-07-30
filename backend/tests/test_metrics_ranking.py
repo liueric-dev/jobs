@@ -20,6 +20,14 @@ would report whatever `sorted()` happened to do with the input order, so the
 tie cases below assert two things: the hand-computed expectation, and that
 permuting the input cannot move the answer.
 
+THE PAIRING IN `bootstrap_delta` IS THE WHOLE FUNCTION, SO IT GETS A TEST THAT
+FAILS IF IT IS LOST. Two orderings that differ by a monotone rescaling are the
+same ordering, so a paired bootstrap must report a delta of exactly zero with a
+zero-width interval. An independent bootstrap on the same two inputs reports
+[-0.48, +0.47] instead -- that comparison is asserted directly below, with the
+unpaired version written out in the test, because "it is paired" is otherwise a
+claim about code nobody re-reads.
+
 THE TWO WAYS tools/mock-acceptance.py COULD INVENT AN ACCURACY FIGURE
 
   1. Writing to `public`. The driver runs extract.py and score.py IN-PROCESS
@@ -37,7 +45,9 @@ THE TWO WAYS tools/mock-acceptance.py COULD INVENT AN ACCURACY FIGURE
      not enter it as a failure.
 """
 
+import math
 import os
+import random
 import sys
 import unittest
 
@@ -378,6 +388,570 @@ class PrecisionAtKTest(unittest.TestCase):
         r = metrics.precision_at_k([], [], k=20)
         self.assertIsNone(r.value)
         self.assertEqual((r.n, r.k), (0, 0))
+
+
+#: A twelve-row corpus with the positives spread through it, so average
+#: precision genuinely moves from resample to resample -- an interval on a
+#: corpus whose statistic barely varies would pass the pairing test below for
+#: the wrong reason.
+_A = [100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45]
+_Y = [1, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1]
+
+#: The SAME ordering as _A, expressed on a different scale. 3x + 7 is monotone,
+#: so every ranking statistic in this module is identical on the two, and a
+#: paired bootstrap must say so exactly.
+_A_RESCALED = [3 * x + 7 for x in _A]
+
+#: Draws for these tests. 400, not metrics.BOOTSTRAP_DRAWS, because the suite
+#: runs on every commit and the endpoints asserted below are far enough from
+#: their thresholds that a fifth of the draws resolves them.
+_DRAWS = 400
+
+
+def _unpaired_delta(scores_a, scores_b, labels, draws=_DRAWS,
+                    seed=metrics.BOOTSTRAP_SEED):
+    """What bootstrap_delta would be if it resampled the two sides separately.
+
+    Written out here rather than exposed as an option on the real function:
+    this is the wrong answer, and the only reason it exists is to be compared
+    against the right one. Same percentile rule (metrics._percentile) and same
+    draw count, so the two interval WIDTHS are comparable.
+    """
+    rng = random.Random(seed)
+    n = len(labels)
+    deltas = []
+    for _ in range(draws):
+        ia = [rng.randrange(n) for _ in range(n)]
+        ib = [rng.randrange(n) for _ in range(n)]
+        va = metrics.average_precision([scores_a[i] for i in ia],
+                                       [labels[i] for i in ia]).value
+        vb = metrics.average_precision([scores_b[i] for i in ib],
+                                       [labels[i] for i in ib]).value
+        if va is not None and vb is not None:
+            deltas.append(va - vb)
+    deltas.sort()
+    return metrics._percentile(deltas, 0.025), metrics._percentile(deltas,
+                                                                   0.975)
+
+
+class PairedBootstrapTest(unittest.TestCase):
+    """The property that distinguishes this from two separate intervals.
+
+    Lifted from tools/learned-ranker-probe.py:410, where it was reachable only
+    through an sklearn probe fitted on job_scores.fit_score -- CLAUDE.md's L1
+    layer. Task 30 needs the same statistic over human labels (L0), which is
+    why it now lives in evals/metrics.py.
+    """
+
+    def test_a_monotone_rescaling_of_the_same_ranking_gives_exactly_zero(self):
+        """3x + 7 is the same ordering, so the delta is 0 on EVERY resample.
+
+        Not "close to zero": the same index list scores both sides, the two
+        statistics are equal on it, and the difference is exactly 0.0, so both
+        percentiles are 0.0 too. This is the assertion that fails the instant
+        the pairing is lost.
+        """
+        d = metrics.bootstrap_delta(_A, _A_RESCALED, _Y, draws=_DRAWS)
+        self.assertEqual(d.value, 0.0)
+        self.assertEqual((d.lo, d.hi), (0.0, 0.0))
+        self.assertEqual(d.verdict(), "not distinguishable")
+
+    def test_an_unpaired_bootstrap_would_manufacture_a_spread_here(self):
+        """The same two inputs, resampled independently: [-0.48, +0.47].
+
+        A width of ~0.95 average precision on two rankings that are the same
+        ranking. That is the number the paired version exists to not print,
+        and the pair of assertions is the reason the docstring's claim about
+        overlapping intervals is not just a claim.
+        """
+        paired = metrics.bootstrap_delta(_A, _A_RESCALED, _Y, draws=_DRAWS)
+        lo, hi = _unpaired_delta(_A, _A_RESCALED, _Y)
+        self.assertEqual(paired.hi - paired.lo, 0.0)
+        self.assertGreater(hi - lo, 0.5)
+
+    def test_both_rankings_are_scored_on_the_identical_resample(self):
+        """The pairing asserted on the rows the metric actually receives.
+
+        _A's values are distinct and _A_RESCALED is 3x + 7 of them, so the two
+        score lists a draw produces are equal under that map if and only if
+        the two calls got the same index list in the same order. Checking the
+        delta alone could not tell "same rows" from "different rows that
+        happened to score alike".
+        """
+        seen = []
+
+        def recording(scores, labels):
+            seen.append(list(scores))
+            return metrics.average_precision(scores, labels)
+
+        metrics.bootstrap_delta(_A, _A_RESCALED, _Y, recording, draws=5)
+        self.assertEqual(len(seen), 12)          # 1 observed + 5 draws, x2
+        for i in range(0, len(seen), 2):
+            self.assertEqual([3 * x + 7 for x in seen[i]], seen[i + 1])
+
+    def test_identical_rankings_give_a_delta_of_exactly_zero(self):
+        """The degenerate case of the same property, and the one a reader is
+        most likely to try first: the same list on both sides."""
+        d = metrics.bootstrap_delta(_A, list(_A), _Y, draws=_DRAWS)
+        self.assertEqual((d.value, d.lo, d.hi), (0.0, 0.0, 0.0))
+        self.assertEqual(d.n_undefined, 0)
+
+    def test_a_clearly_better_ranking_is_called_better(self):
+        """The control. Without it every assertion above would pass on an
+        implementation that returns zero unconditionally.
+
+        A perfect ordering against its own reverse, on 60 rows with 15
+        positives: +0.855 [+0.769, +0.913].
+        """
+        n = 60
+        a = [n - i for i in range(n)]
+        y = [1 if i < 15 else 0 for i in range(n)]
+        d = metrics.bootstrap_delta(a, list(reversed(a)), y, draws=_DRAWS)
+        self.assertGreater(d.value, 0.8)
+        self.assertGreater(d.lo, 0.0)
+        self.assertEqual(d.verdict(), "better")
+        self.assertEqual(
+            metrics.bootstrap_delta(list(reversed(a)), a, y,
+                                    draws=_DRAWS).verdict(), "worse")
+
+    def test_the_verdict_needs_the_interval_to_exclude_zero_not_just_a_sign(self):
+        """tools/learned-ranker-probe.py:585-586's rule, which is the whole
+        reason the interval is in the return value.
+
+        Twelve rows and a reversed ordering give a point estimate of +0.100 --
+        a number that would read as a win -- inside [-0.42, +0.65]."""
+        d = metrics.bootstrap_delta(_A, list(reversed(_A)), _Y, draws=_DRAWS)
+        self.assertGreater(d.value, 0.0)
+        self.assertLess(d.lo, 0.0)
+        self.assertEqual(d.verdict(), "not distinguishable")
+
+
+class BootstrapReproducibilityTest(unittest.TestCase):
+
+    def test_the_same_seed_gives_the_same_interval_twice(self):
+        """The claim the docstring makes about a quoted figure. random.Random
+        is seeded per call, so this holds across processes too."""
+        args = (_A, list(reversed(_A)), _Y)
+        first = metrics.bootstrap_delta(*args, draws=_DRAWS)
+        second = metrics.bootstrap_delta(*args, draws=_DRAWS)
+        self.assertEqual(first, second)
+        self.assertEqual(first.seed, metrics.BOOTSTRAP_SEED)
+
+    def test_a_different_seed_moves_the_endpoints_but_not_the_estimate(self):
+        """Why the seed is worth changing once: the point estimate is the
+        observed statistic and cannot move, while the endpoints can -- so a
+        verdict that flips between seeds was never a verdict."""
+        args = (_A, list(reversed(_A)), _Y)
+        first = metrics.bootstrap_delta(*args, draws=_DRAWS, seed=11)
+        other = metrics.bootstrap_delta(*args, draws=_DRAWS, seed=12)
+        self.assertEqual(first.value, other.value)
+        self.assertNotEqual((first.lo, first.hi), (other.lo, other.hi))
+        self.assertEqual(other.seed, 12)
+
+    def test_the_point_estimate_is_the_observed_delta_not_the_resample_mean(self):
+        """tools/learned-ranker-probe.py:428 reports np.mean(deltas), which no
+        reader can recompute from the corpus. This reports the statistic on the
+        full sample, so it is reproducible with two calls to
+        average_precision and no RNG at all."""
+        d = metrics.bootstrap_delta(_A, list(reversed(_A)), _Y, draws=_DRAWS)
+        a = metrics.average_precision(_A, _Y).value
+        b = metrics.average_precision(list(reversed(_A)), _Y).value
+        self.assertAlmostEqual(d.value, a - b)
+
+    def test_the_reported_draws_is_the_number_actually_performed(self):
+        d = metrics.bootstrap_delta(_A, _A_RESCALED, _Y, draws=37)
+        self.assertEqual(d.draws, 37)
+
+
+class BootstrapDeltaShapeTest(unittest.TestCase):
+    """A delta must not be printable without its interval. Ranked's argument.
+
+    Ranked (evals/metrics.py) makes the drop counts unavoidable by being a
+    5-tuple where callers expected two; Delta does the same to the three-tuple
+    tools/learned-ranker-probe.py:428-430 returns, and additionally renders the
+    interval from __str__ so the natural f-string carries it.
+    """
+
+    def test_unpacking_the_probes_three_tuple_now_raises(self):
+        """`delta, lo, hi = bootstrap_delta(...)` was the old shape and is
+        exactly the call that would discard the level, the n and the drop
+        counts."""
+        with self.assertRaises(ValueError):
+            _d, _lo, _hi = metrics.bootstrap_delta(_A, _A_RESCALED, _Y,
+                                                   draws=10)
+
+    def test_formatting_the_delta_carries_the_interval(self):
+        """f"{d}" is what a report writes, so that is what must be safe."""
+        d = metrics.bootstrap_delta(_A, list(reversed(_A)), _Y, draws=_DRAWS)
+        text = f"{d}"
+        self.assertEqual(text, d.interval())
+        self.assertIn("[", text)
+        self.assertIn(f"{d.lo:+.3f}", text)
+        self.assertIn(f"{d.hi:+.3f}", text)
+
+    def test_an_undefined_delta_says_so_rather_than_formatting_none(self):
+        """The empty and all-negative cases still have to print, and
+        "undefined" is readable where "+None [+None, +None]" would be a
+        TypeError in the middle of a report."""
+        self.assertEqual(metrics.bootstrap_delta([], [], []).interval(),
+                         "undefined")
+        self.assertEqual(metrics.bootstrap_delta([], [], []).verdict(),
+                         "undefined")
+
+    def test_the_level_travels_with_the_interval(self):
+        """"[+0.01, +0.09]" means different things at 95% and at 50%."""
+        args = (_A, list(reversed(_A)), _Y)
+        wide = metrics.bootstrap_delta(*args, draws=_DRAWS)
+        narrow = metrics.bootstrap_delta(*args, draws=_DRAWS, level=0.5)
+        self.assertEqual(wide.level, metrics.CI_LEVEL)
+        self.assertEqual(narrow.level, 0.5)
+        self.assertLess(narrow.hi - narrow.lo, wide.hi - wide.lo)
+
+    def test_precision_at_k_can_be_the_metric(self):
+        """CLAUDE.md's objective, as opposed to its measurement. k has to be
+        bound by the caller because the metric is called as f(scores, labels).
+        """
+        n = 60
+        a = [n - i for i in range(n)]
+        y = [1 if i < 15 else 0 for i in range(n)]
+        d = metrics.bootstrap_delta(
+            a, list(reversed(a)), y,
+            lambda s, yy: metrics.precision_at_k(s, yy, k=20),
+            draws=_DRAWS)
+        self.assertGreater(d.value, 0.0)
+        self.assertEqual(d.verdict(), "better")
+
+
+def _else_zero_delta(scores_a, scores_b, labels, draws=_DRAWS,
+                     seed=metrics.BOOTSTRAP_SEED):
+    """The rejected variant: score a degenerate resample 0.0, not skip it.
+
+    tools/learned-ranker-probe.py:438's `... if 0 < yy.sum() < len(yy) else
+    0.0`, transplanted onto this module's average_precision so the ONLY
+    difference from bootstrap_delta is the substitution. Same seed, same draw
+    count, same percentile rule, so the two intervals below differ for exactly
+    one reason.
+    """
+    rng = random.Random(seed)
+    n = len(labels)
+    deltas = []
+
+    def ap(scores, labs):
+        value = metrics.average_precision(scores, labs).value
+        return 0.0 if value is None else value
+
+    for _ in range(draws):
+        idx = [rng.randrange(n) for _ in range(n)]
+        labs = [labels[i] for i in idx]
+        deltas.append(ap([scores_a[i] for i in idx], labs)
+                      - ap([scores_b[i] for i in idx], labs))
+    deltas.sort()
+    return metrics._percentile(deltas, 0.025), metrics._percentile(deltas,
+                                                                   0.975)
+
+
+class DegenerateResampleTest(unittest.TestCase):
+    """A resample with no positives is skipped and counted, never scored 0.0.
+
+    tools/learned-ranker-probe.py:438 substitutes 0.0 for the average precision
+    of a resample with no positives. Both arms get 0.0, so that draw's DELTA is
+    exactly 0.0, and enough of them drag the near end of the interval onto zero
+    -- "not distinguishable" produced by an arithmetic guard rather than by the
+    data. Rare at n in the hundreds; routine at the per-`role_track` n of about
+    a dozen task 30 needs, where one positive in twelve rows makes (11/12)^12 =
+    35% of draws degenerate.
+
+    Note which half of that guard is at fault. `yy.sum() == 0` is genuinely
+    undefined, so 0.0 is invented -- that is the biasing case, and it is what
+    these tests pin. `yy.sum() == len(yy)` is NOT undefined: every ordering of
+    an all-positive set has average precision 1.0, so the substitution is a
+    wrong value whose error cancels in the difference (1.0 - 1.0 and 0.0 - 0.0
+    are both 0.0). The guard is wrong twice and biasing once, and the second
+    test below is the one that shows the cancelling half.
+    """
+
+    #: Twelve rows, one positive: the cell size task 30 will use, and 35% of
+    #: draws contain no positive at all.
+    SPARSE_N = 12
+
+    def sparse(self):
+        """A perfect ordering, its reverse, and one positive in twelve."""
+        a = [self.SPARSE_N - i for i in range(self.SPARSE_N)]
+        y = [1] + [0] * (self.SPARSE_N - 1)
+        return a, list(reversed(a)), y
+
+    def test_degenerate_draws_are_counted_and_do_not_pull_the_delta_to_zero(self):
+        """The test that would have caught the original.
+
+        Twelve rows, one positive, a perfect ordering against its reverse.
+        Roughly a third of the draws contain no positive, so `draws_used` is
+        well below `draws` -- and the interval still sits entirely above zero,
+        because the draws that had nothing to compare were skipped rather than
+        recorded as a tie.
+        """
+        a, b, y = self.sparse()
+        d = metrics.bootstrap_delta(a, b, y, draws=_DRAWS)
+        self.assertLess(d.draws_used, d.draws)
+        self.assertGreater(d.n_undefined, _DRAWS // 5)
+        self.assertAlmostEqual(d.value, 11 / 12)
+        self.assertGreater(d.lo, 0.5)
+        self.assertEqual(d.verdict(), "better")
+
+    def test_the_rejected_else_zero_would_call_this_not_distinguishable(self):
+        """Same corpus, same seed, same draws: the substitution puts the near
+        end of the interval exactly on zero and flips the verdict.
+
+        +0.917 [+0.823, +0.917] against +0.917 [+0.000, +0.917]. The point
+        estimate is untouched -- this is not a difference in the statistic, it
+        is a difference in what the interval is computed over -- which is why
+        `value` alone could never have revealed it.
+        """
+        a, b, y = self.sparse()
+        d = metrics.bootstrap_delta(a, b, y, draws=_DRAWS)
+        lo, hi = _else_zero_delta(a, b, y)
+        self.assertEqual(lo, 0.0)
+        self.assertGreater(d.lo, lo)
+        self.assertAlmostEqual(hi, d.hi)          # the far end is unaffected
+
+    def test_draws_used_is_draws_minus_the_undefined_count(self):
+        """A property, not an eleventh field, so it cannot disagree with the
+        two counts it is derived from."""
+        a, b, y = self.sparse()
+        d = metrics.bootstrap_delta(a, b, y, draws=_DRAWS)
+        self.assertEqual(d.draws_used, d.draws - d.n_undefined)
+        clean = metrics.bootstrap_delta(_A, _A_RESCALED, _Y, draws=50)
+        self.assertEqual(clean.draws_used, 50)
+
+    def test_three_rows_do_not_distinguish_the_two_and_the_reason_is_arithmetic(self):
+        """Why the obvious tiny construction is NOT the test for this.
+
+        At n=3 with one positive, a draw of three copies of that positive has
+        probability (1/3)^3 = 3.7%, which is more than the 2.5% the lower
+        percentile sits at -- and an all-positive draw has a delta of exactly
+        0.0 LEGITIMATELY, since every ordering of an all-positive set scores
+        1.0. So the 2.5th percentile is 0.0 with or without the substitution,
+        and a test written here would have passed on the buggy version.
+        """
+        a, b, y = [9, 8, 7], [7, 8, 9], [1, 0, 0]
+        d = metrics.bootstrap_delta(a, b, y, draws=_DRAWS)
+        lo, _hi = _else_zero_delta(a, b, y)
+        self.assertEqual(d.lo, 0.0)
+        self.assertEqual(lo, 0.0)
+        self.assertAlmostEqual(
+            metrics.average_precision([9, 8, 7], [1, 1, 1]).value, 1.0)
+
+    def tie_refusing(self):
+        """A caller-supplied metric with an undefined case of its own.
+
+        Not hypothetical: metrics.spearman returns None when either column is
+        constant, and top_k_overlap returns None with no comparable rows, so a
+        metric with a precondition the resample can violate is the normal
+        shape. This one refuses a resample containing duplicated rows -- which
+        is almost every resample, since drawing 8 of 8 rows all distinct has
+        probability 8!/8^8 = 0.2%.
+        """
+        def metric(scores, labels):
+            if len(set(scores)) < len(scores):
+                return None
+            return metrics.average_precision(scores, labels)
+        return metric
+
+    def eight_rows(self):
+        n = 8
+        a = [n - i for i in range(n)]
+        return a, list(reversed(a)), [1] + [0] * (n - 1)
+
+    def test_a_metric_undefined_on_most_draws_reports_nothing(self):
+        """The MIN_USABLE_FRACTION floor, reached the only way it can be.
+
+        No corpus with a positive in it can reach the floor through empty
+        draws: ((n - p) / n)^n is bounded above by 1/e = 0.368 for every n and
+        p >= 1, which is the point of the test below. So the floor exists for a
+        caller-supplied metric with undefined cases of its own -- and an
+        interval computed from 1 usable draw out of 400 is exactly what it is
+        there to refuse to print.
+        """
+        a, b, y = self.eight_rows()
+        d = metrics.bootstrap_delta(a, b, y, self.tie_refusing(), draws=_DRAWS)
+        self.assertLess(d.draws_used, metrics.MIN_USABLE_FRACTION * d.draws)
+        self.assertIsNone(d.value)
+        self.assertIsNone(d.lo)
+        self.assertEqual(d.verdict(), "undefined")
+
+    def test_refusing_still_reports_the_counts_that_explain_the_refusal(self):
+        """"Too sparse to bootstrap" is a finding, so n, draws and draws_used
+        survive the refusal, and the rendered string names the reason rather
+        than printing a blank that could equally mean "no labels here"."""
+        a, b, y = self.eight_rows()
+        d = metrics.bootstrap_delta(a, b, y, self.tie_refusing(), draws=_DRAWS)
+        self.assertEqual((d.n, d.draws), (len(y), _DRAWS))
+        self.assertIn(f"{d.draws_used}/{d.draws}", d.interval())
+        self.assertIn("usable", d.interval())
+
+    def test_the_metric_being_undefined_on_the_sample_is_a_different_outcome(self):
+        """`draws` is 0 when the statistic does not exist on the corpus itself,
+        against `draws_used` < `draws` when it existed and the draws ate it.
+        Both give value None, and a report that cannot tell them apart cannot
+        say whether to label more postings or to stop asking."""
+        a, b, y = self.eight_rows()
+        no_positives = metrics.bootstrap_delta(a, b, [0] * len(y),
+                                               draws=_DRAWS)
+        ate_the_draws = metrics.bootstrap_delta(a, b, y, self.tie_refusing(),
+                                                draws=_DRAWS)
+        self.assertEqual(no_positives.draws, 0)
+        self.assertEqual(ate_the_draws.draws, _DRAWS)
+        self.assertIsNone(no_positives.value)
+        self.assertIsNone(ate_the_draws.value)
+
+    def test_the_floor_is_not_reachable_by_empty_draws_alone(self):
+        """The bound the constant's comment claims, checked rather than
+        asserted in prose: ((n-1)/n)^n rises to 1/e and never reaches 0.5, so a
+        one-positive corpus always keeps more than half its draws."""
+        for n in (2, 3, 5, 12, 100):
+            with self.subTest(n=n):
+                self.assertLess(((n - 1) / n) ** n, 1 / math.e)
+                self.assertLess(((n - 1) / n) ** n,
+                                1 - metrics.MIN_USABLE_FRACTION)
+
+
+class PercentileTest(unittest.TestCase):
+    """The interval is a percentile one, and the percentile is hand-checked.
+
+    Deliberately not numpy: evals/metrics.py's "NOT sklearn" comment gives the
+    reason -- neither numpy nor sklearn is in requirements.txt, so the probe
+    this was lifted from does not run on a clean checkout. That makes
+    _percentile new arithmetic with no incumbent to agree with, so the
+    hand-computed values below are the whole of its correctness.
+    """
+
+    #: Five elements, so (len - 1) * q lands between indices for most q and the
+    #: interpolation is actually exercised.
+    V = [0.0, 0.1, 0.2, 0.3, 0.4]
+
+    def test_the_endpoints_are_the_extremes(self):
+        self.assertAlmostEqual(metrics._percentile(self.V, 0.0), 0.0)
+        self.assertAlmostEqual(metrics._percentile(self.V, 1.0), 0.4)
+
+    def test_a_percentile_landing_on_an_index_is_that_element(self):
+        """(5 - 1) * 0.25 = 1.0 exactly, so this is V[1] and no interpolation
+        happens."""
+        self.assertAlmostEqual(metrics._percentile(self.V, 0.25), 0.1)
+        self.assertAlmostEqual(metrics._percentile(self.V, 0.5), 0.2)
+
+    def test_a_percentile_between_two_indices_interpolates_linearly(self):
+        """(5 - 1) * 0.3 = 1.2, so V[1] + (V[2] - V[1]) * 0.2 = 0.12.
+        Hand-computed; this is numpy.percentile's default `linear` method,
+        which is what tools/learned-ranker-probe.py:429-430 used."""
+        self.assertAlmostEqual(metrics._percentile(self.V, 0.3), 0.12)
+        self.assertAlmostEqual(metrics._percentile(self.V, 0.975), 0.39)
+
+    def test_the_two_five_percent_tail_of_five_elements_is_one_percent_in(self):
+        """(5 - 1) * 0.025 = 0.1, so V[0] + (V[1] - V[0]) * 0.1 = 0.01 -- NOT
+        V[0]. Truncating to int(q * n) would give 0.0 here, which is the
+        shortcut the docstring rejects."""
+        self.assertAlmostEqual(metrics._percentile(self.V, 0.025), 0.01)
+        self.assertNotAlmostEqual(metrics._percentile(self.V, 0.025), 0.0)
+
+    def test_a_single_element_is_its_own_every_percentile(self):
+        self.assertAlmostEqual(metrics._percentile([7.5], 0.025), 7.5)
+        self.assertAlmostEqual(metrics._percentile([7.5], 0.975), 7.5)
+
+    def test_an_empty_vector_is_none_rather_than_an_index_error(self):
+        self.assertIsNone(metrics._percentile([], 0.5))
+
+
+class BootstrapEdgeCaseTest(unittest.TestCase):
+    """None where the statistic does not exist; never a zero, never a raise.
+
+    average_precision's convention (evals/metrics.py): 0.0 would read in a
+    report as "the two rankings are equally good", which is a different claim
+    from "there was nothing here to compare".
+    """
+
+    def test_an_empty_corpus_returns_none_rather_than_raising(self):
+        d = metrics.bootstrap_delta([], [], [])
+        self.assertIsNone(d.value)
+        self.assertIsNone(d.lo)
+        self.assertEqual((d.n, d.n_dropped, d.draws), (0, 0, 0))
+
+    def test_no_resampling_is_attempted_on_an_empty_corpus(self):
+        """`draws` is 0, not 2000, so a report cannot say it bootstrapped
+        something it never touched."""
+        self.assertEqual(metrics.bootstrap_delta([], [], []).draws, 0)
+
+    def test_a_corpus_with_no_positives_returns_none_rather_than_zero(self):
+        """Undefined on the sample itself, so resampling it would put an
+        interval around a number that does not exist. n survives, because
+        "there were 12 rows and none of them were positive" is the finding."""
+        d = metrics.bootstrap_delta(_A, list(reversed(_A)), [0] * len(_A))
+        self.assertIsNone(d.value)
+        self.assertEqual(d.n, len(_A))
+        self.assertEqual(d.draws, 0)
+
+    def test_a_single_row_does_not_raise_and_reports_its_n_of_one(self):
+        """Every resample of one row is that row, so the interval collapses to
+        a point. That is the resampling saying there is no variability to
+        estimate -- NOT that the difference is certain -- and `n` is the field
+        that makes it obvious which of the two a reader is looking at."""
+        d = metrics.bootstrap_delta([5], [7], [1], draws=_DRAWS)
+        self.assertEqual((d.value, d.lo, d.hi), (0.0, 0.0, 0.0))
+        self.assertEqual(d.n, 1)
+
+    def test_a_single_negative_row_is_undefined_rather_than_zero(self):
+        """n=1 with a negative label: average precision does not exist on it,
+        and the pair of tests keeps the two n=1 outcomes apart."""
+        d = metrics.bootstrap_delta([5], [7], [0], draws=_DRAWS)
+        self.assertIsNone(d.value)
+        self.assertEqual(d.n, 1)
+
+    def test_undefined_resamples_are_counted_rather_than_scored_as_zero(self):
+        """tools/learned-ranker-probe.py:438 returns 0.0 when a resample has no
+        positives, which injects exact zeros into the delta distribution and
+        narrows both percentiles for a reason unrelated to the rankings.
+
+        Four rows with one positive: (3/4)^4 = 32% of draws contain no
+        positive at all, so the count is large and visible."""
+        d = metrics.bootstrap_delta([9, 8, 7, 6], [6, 7, 8, 9], [1, 0, 0, 0],
+                                    draws=300)
+        self.assertIsNotNone(d.value)
+        self.assertGreater(d.n_undefined, 0)
+        self.assertLess(d.n_undefined, d.draws)
+
+    def test_a_row_unscorable_on_either_side_is_dropped_and_counted(self):
+        """Keeping it would score the two rankings over different row sets,
+        which is the pairing gone. Ranked's warning applies to both sides at
+        once, so the count and the positives among it come back in the
+        Delta."""
+        d = metrics.bootstrap_delta([9, None, 7, 6], [9, 8, None, 6],
+                                    [1, 1, 0, 0], draws=50)
+        self.assertEqual(d.n, 2)
+        self.assertEqual(d.n_dropped, 2)
+        self.assertEqual(d.n_dropped_positive, 1)
+        self.assertFalse(d.complete)
+
+    def test_a_corpus_scorable_on_both_sides_is_complete(self):
+        """The control for the drop counts."""
+        d = metrics.bootstrap_delta(_A, _A_RESCALED, _Y, draws=50)
+        self.assertTrue(d.complete)
+        self.assertEqual((d.n_dropped, d.n_dropped_positive), (0, 0))
+
+    def test_a_length_mismatch_raises(self):
+        """A caller bug, not an outcome of the data: zip() would silently
+        truncate to the shortest and report a delta over a prefix."""
+        with self.assertRaises(ValueError):
+            metrics.bootstrap_delta([1, 2, 3], [1, 2], [1, 0, 0])
+        with self.assertRaises(ValueError):
+            metrics.bootstrap_delta([1, 2], [1, 2], [1, 0, 0])
+
+    def test_an_unusable_draws_or_level_raises(self):
+        """Same argument as average_precision's unknown tie mode: a typo must
+        not silently produce a number under a protocol nobody ran."""
+        with self.assertRaises(ValueError):
+            metrics.bootstrap_delta(_A, _A_RESCALED, _Y, draws=0)
+        for level in (0.0, 1.0, 95, -0.5):
+            with self.subTest(level=level):
+                with self.assertRaises(ValueError):
+                    metrics.bootstrap_delta(_A, _A_RESCALED, _Y, level=level)
 
 
 class ContainmentTest(unittest.TestCase):
