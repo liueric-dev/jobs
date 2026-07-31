@@ -14,15 +14,41 @@ context. Verify anything here before acting on it — the instrument is named in
 | labellers | **ONE** (`u_090b0ad12e99`), round 1 only |
 | `overlap` block | **all ten answered** — positions 0–30 contiguous |
 | `evals label report` | **exits 2, correctly.** Zero of task 29's three quantities exist |
-| suites | main **1171**, webapp **93** |
+| suites | main **1178**, webapp **93** (main was 1171 until the `prefix_assumed()` fix, 2026-07-31) |
 
-**THE CRITICAL PATH IS ONE PERSON FOR ABOUT SIXTEEN MINUTES.** Not more labelling. Every
-field in the report is refused for want of a *second* `labeller_id` on the same item, and
-the owner has already answered all ten `overlap` rows — so a second labeller's ten rows are
-the **last** input `labels.inter_annotator()` needs, and the report prints the moment they
-land. The tenth row from a second person is worth more than the hundredth from the first.
+### THE NEXT SESSION IS CLEANUP, BUGFIXES AND DOCUMENTATION — decided 2026-07-31
+
+**It is not the labelling session, and it is not the product/API phase.** Phases 1–3 are
+built and measured: 20 of 35 tasks are done or deliberately dropped. Before tasks 24–28 /
+31 / 32 open a new surface, the run pays down what it has accumulated. **Task 34 is the
+next session's task**, and its file did not exist until this decision — `README.md` linked
+to `34-documentation-cleanup.md` and nothing was there. That broken link is itself a
+specimen of the debt the session is for.
+
+**Read [`34-documentation-cleanup.md`](34-documentation-cleanup.md) first.** It carries the
+verified backlog, in priority order, with the evidence for each item. **Everything in it
+was re-checked against the code on 2026-07-31** rather than inherited from a document —
+because the single clearest lesson of the previous session is that this run's follow-ups go
+stale silently: one had been marked *"still owed"* in two files for three days after it
+landed, and re-checking it turned up a number nobody had (79 postings, not 88).
+
+**TWO TRACKS, AND ONLY ONE OF THEM IS THE SESSION'S.**
+
+| | who | state |
+|---|---|---|
+| cleanup / bugfix / docs (**34**) | **the next session** | the whole of its job |
+| a second labeller, ten `overlap` rows (**29**) | **the owner** — no agent can do it | open, unchanged, ~16 min |
+
+**The labelling ask has not gone away and nothing below supersedes it.** Every field of
+`evals label report` is still refused for want of a *second* `labeller_id` on the same
+item; the owner has already answered all ten `overlap` rows, so a second person's ten are
+the **last** input `labels.inter_annotator()` needs and the report prints the moment they
+land. The tenth row from a second person is still worth more than the hundredth from the
+first, and **29 still gates 30, 13's weights and 12's next bump.** It is simply not
+something a session can do, which is why it is no longer the entry point.
 
 ```bash
+# The owner's track, when a second person is available:
 cd backend/webapp
 .venv/bin/python manage_app_users.py add --email <real address> --profile pursuit \
                                          --prior-domain <see § task 29 is UNBLOCKED>
@@ -30,14 +56,34 @@ cd backend/webapp
 .venv/bin/uvicorn app:app --port 8421            # then http://localhost:8421/v1/label
 ```
 
-**A trap that is live right now: `app_users` contains a placeholder.**
-`them@gmail.com`, profile `pursuit`, `prior_domain=healthcare`, `sessions=0`, created
+~~**A trap that is live right now: `app_users` contains a placeholder.**~~
+**CLOSED 2026-07-31 — `them@gmail.com` is disabled and `list` now flags it `DISABLED`.**
+It was profile `pursuit`, `prior_domain=healthcare`, `sessions=0`, created
 2026-07-31T05:26:09 — the literal example address from `LABELLING-NIGHT.md` § 3, added by
-following that command verbatim. **It is not a person and it will never sign in**, but
-`list` shows two `pursuit` rows and reads as though a second labeller exists. There is no
-`remove` and no rename in `manage_app_users.py` — only `disable`. Disable it or add the
-real address beside it, but do not read it as turnout. *(This is the same failure task 16
-recorded — "reported success over a literal placeholder" — one run later.)*
+following that command verbatim. It was never a person and never signed in, but `list`
+showed two `pursuit` rows and read as though a second labeller existed. There is no
+`remove` and no rename in `manage_app_users.py` — only `disable` (`cmd_disable` at `:252`
+→ `_set_active` at `:238`, *"UPDATE app_users SET active = %s WHERE email = %s"*), so the
+row **stays visible as the record of the mistake** and stops counting as turnout.
+*(This was the same failure task 16 recorded — "reported success over a literal
+placeholder" — one run later.)*
+
+**Read `list` as: one active `pursuit` labeller, and it is the owner.**
+
+**AND THE OWNER'S OWN `prior_domain` IS NULL — `domain=-` in `list`, verified 2026-07-31.**
+That is not an oversight to correct casually, because **the vocabulary cannot express their
+answer.** `schema_web.PRIOR_DOMAINS` (`:116-120`) is `healthcare, education, retail,
+hospitality, logistics, administration, trades, military, other, none`, and the flag's own
+help calls it *"industry they are changing career FROM … 'none' means genuinely
+early-career, which is NOT the same as omitting it"* (`manage_app_users.py:322-324`). The
+one labeller is a **working software engineer**, who is changing career from nothing and is
+not early-career: `none` would be false and `other` says nothing. **So the confound this
+column was added to decompose — § *THE RECALL QUESTION IS EARNED*, caveat 2, *"whether
+these are pipeline recall misses or one person's own history"* — cannot be decomposed by
+this column even at n=2.** Recorded, not fixed: widening `PRIOR_DOMAINS` moves a CHECK
+constraint generated from it (`schema_web.py:122-129`) and is a decision, not a tidy-up.
+It is the same shape as the `revenue_commercial` finding — a vocabulary derived from an
+assumed population, failing on the member nobody looked at.
 
 **What the second sitting's 26 extra postings did and did not buy.** They bought three
 diagnostics and a better instrument; they bought **nothing** toward the Definition of done,
@@ -57,6 +103,28 @@ exits 2 by design; there is no `--force` and none may be added); do not redraw `
 (`redraw_refusal()` refuses, and the window closed with the first label); do not bump
 `FACTS_VERSION` to apply `revenue_commercial` without reading **D64** first — it would
 overwrite the model answers the existing labels were formed beside, mid-collection.
+
+**AND FIVE MORE THAT APPLY SPECIFICALLY TO A CLEANUP SESSION**, because the failure mode of
+a documentation pass is different from the failure mode of an implementation pass — it
+destroys the record rather than the code, and nothing goes red:
+
+1. **Mark, do not delete.** Every superseded claim in this run is struck and kept, because
+   a reader working from the old text has to be able to see what they had. A cleanup
+   session that tidies by deleting removes the only evidence that a number was ever wrong.
+   *(A check written this session — "expect `grep 'still owed'` to return zero" — was
+   itself wrong for this reason: the correct outcome was one hit, struck.)*
+2. **Do not sweep stale line numbers wholesale.** § *Verify before you trust* forbids it
+   explicitly: rewriting them all is how a doc acquires numbers nobody checked. Symbol
+   names plus `grep -n` are the durable citation.
+3. **Do not edit `.claude/CLAUDE.md` without the owner's sign-off.** It is the owner's
+   instruction file and it governs every future agent. **34's job is to propose the diff**
+   — including the "263 tests" line, which is now nine times too small — not to apply it.
+4. **Do not "fix" `job_scores`' NULL version columns**, and do not re-record the
+   `workday-cxs` cassette without reading `record_workday_cxs()`'s refusal guard first.
+   Both look like tidy-ups and both destroy evidence.
+5. **A stale claim is a finding, not just a chore.** Re-checking the one that had been
+   false for three days is what produced the 79-vs-88 correction. **Report what the
+   re-check turns up, not merely that you fixed it.**
 
 ---
 
@@ -99,6 +167,21 @@ planning session that measured it; the **mock acceptance run and the `strip_html
 **`job_scores`' version keys** (`d18ea54`); and **13, 35 and D45** (`fa2d7a7`, `303f7b9`,
 `e11fabf`). Read this first, then [`DECISIONS.md`](DECISIONS.md) (why each choice was
 made) and [`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
+
+> **`CLAUDE_UPDATES.md` IS CURRENT AGAIN AS OF 2026-07-31, AND IT HAD SILENTLY STOPPED
+> BEING SO.** Its last entry was the 2026-07-29 gate session; `grep -c "2026-07-30\|
+> 2026-07-31"` returned **0**. Four sessions were missing — the 2026-07-29 sampler
+> session as well as the three this file describes at length — against this run's own
+> stated convention (§ *how this run works*) that the four documents move in the same turn
+> as every commit. **Nothing was red, because a document that stops being written looks
+> exactly like a document with nothing to say.** Backfilled from `git log` and
+> `DECISIONS.md` rather than from this file's prose, deliberately: this file is a rolling
+> summary that has been measurably wrong about itself, and copying it forward is how a
+> claim becomes a citation. **The suite figures in those four entries were derived
+> statically** — `pytest` is installed in no interpreter in this checkout — by counting
+> `^\s*def test_` per tree, a method that is exact here (zero `parametrize` decorators) and
+> that reproduced twelve figures the commit messages state independently, with no
+> disagreements.
 [`README.md`](README.md)'s status column is the ordered index.
 
 ~~**If you are a fresh session, the whole of your job is task 29 and its first two commands
@@ -328,7 +411,14 @@ query is four lines and this file has now gone stale on eight numbers it quoted.
 This is a measurement of the **six**-question form, not a factor applied to a five-question
 one. Full working: `tranche_five/29-labelling-session.md` § *Findings, 2026-07-31*, E.
 
-## READ THIS FIRST: task 29 is UNBLOCKED, and the next session labels
+## READ THIS FIRST: task 29 is UNBLOCKED ~~, and the next session labels~~
+
+> **THE HEADING'S SECOND HALF IS SUPERSEDED, 2026-07-31.** Task 29 is still unblocked and
+> everything in this section still holds — but **the next session is 34, not 29** (§ *THE
+> NEXT SESSION IS CLEANUP*). What is left of 29 is a second person's twenty minutes, which
+> is the owner's to arrange and not a session's to execute. Read this section for how the
+> labelling surface works and what a solo sitting can and cannot produce; do not read it as
+> this session's assignment.
 
 **Done 2026-07-30. Nothing is committed — the working tree carries all of it.** Suite
 1160 → **1166** (main) and 61 → **75** (webapp). For the first time in this run **there is
@@ -413,6 +503,31 @@ same ten `overlap` rows at `/v1/label?round=2`, no sooner than
 `labels.ROUND_TWO_DELAY_DAYS = 7` days after the round-1 answers. It is the **weaker**
 quantity and `interpretable()` was deliberately **not** changed to accept it as the
 ceiling; it renders as a footnote.
+
+> **ASKED AND SETTLED 2026-07-31: shortening the delay was proposed, examined, and NOT
+> done.** Recorded here so the next session does not re-open it. **The reason is not D59 —
+> it is that the change buys nothing.** `_three_quantity_report()` passes
+> `ceiling=inter["fields"]` into `interpretable()` (`evals/__main__.py:485-487`) and hands
+> `intra` to `report.render_labels()` on a separate argument, where it prints as a footnote
+> (`report.py:489-496`). **So round 2 cannot satisfy the report at any delay**, and
+> shortening it would not have unblocked one field. Round 1 ran
+> `2026-07-31T02:56:05`–`05:25:27` UTC and the gate is per row, so the second pass matures
+> **2026-08-07** on its own.
+>
+> **The second finding is the one worth keeping.** Had it been shortened, the resulting
+> number would have arrived **unmarked**: `intra_annotator()` (`labels.py:1584`) groups by
+> `(job_id, field)` then by round and **never reads `labelled_at`**, `Interpretable` never
+> sees a timestamp, and `report.py:489-496` prints the footnote unconditionally. **The
+> queue is the only guard there is.** `round_one_answers()`' docstring already says this
+> at `labels.py:1194-1199` — *"a round-2 row can then partner MINUTES LATER … because
+> intra_annotator() never reads `labelled_at` at all"* — and it is worth reading as a
+> general rule: a guard that lives only in the write path cannot defend a number that is
+> computed in the read path.
+>
+> The four functions do take `delay_days=` (`round_two_ready`, `round_one_answers`,
+> `_round_two_cutoff`, `next_item`), and `webapp/label.py` passes it at none of its four
+> call sites — so an operator override is ~6 lines through `webapp/config.py` if it is ever
+> genuinely wanted. It is not wanted for the report.
 
 ### Which axis carries the profile, and why a solo Axis B is NOT a proxy
 
@@ -3274,16 +3389,63 @@ one `STEPS` already has — shared files get a single owner, named in advance.
   precision rate, which the pinned fixture confirms independently: it carries `match_score`
   on 100/100 surfaced and `computed_score` on 50/50 below_floor and **neither column on any
   of the 50 gate_rejected**.
-- **`backend/evals/record_cassettes.py` owes a `workday-cxs` recipe** — a full multi-page
-  walk against `msk.wd108` (88 postings, ~5 requests) plus one detail document. That would
-  turn task 18's `total`-only-on-first-page finding from a *constructed* fixture into a
-  recorded one. Not done because `backend/evals/` was owned by another agent; the exact
-  recipe is specified in `docs/ingest/workday.md`.
-- **Task 09's `workday_fixtures.prefix_assumed()` models the wrong failure shape.** It
-  models a wrong data centre as HTTP 404 with an HTML body; the real recorded probe in
-  `ats-validation.json` shows `nvidia.wd1` answering **HTTP 422 with a JSON `errorCode`**.
-  The consequence is identical — both permanent, neither retried, both surface — so it was
-  recorded rather than silently edited.
+- ~~**`backend/evals/record_cassettes.py` owes a `workday-cxs` recipe**~~ — **IT DOES NOT,
+  AND HAS NOT SINCE 2026-07-28. This entry was stale for three days and nobody checked.**
+  `record_workday_cxs()` is at `record_cassettes.py:501`, `WORKDAY_CXS = ("msk", "wd108",
+  "MSKCC_Careers_Primary")` at `:498`, and the recording is committed at
+  `backend/evals/fixtures/cassettes/workday-cxs.json` with seven tests on it in
+  `backend/tests/test_workday_cxs_cassette.py`. **This is the failure mode this file warns
+  about, committed by this file**: a follow-up that decayed into a quotation because
+  re-checking it needed one `ls`. *(The identical claim in `docs/ingest/workday.md` was
+  struck in the same session.)*
+
+  **And the re-check paid for itself**, which is the argument for doing it: the recipe
+  delivered *half* of what this entry promised. The board was at **79 postings when
+  recorded, not 88** — four pages, not ~5 — answering `total` 79, 0, 0, 0, so
+  **`total`-on-the-first-page-only is now recorded rather than constructed**, guarded by a
+  refusal-to-record in `record_workday_cxs()` if the tenant ever stops behaving that way.
+  **The wrap — offsets past the end returning page one — is still constructed and
+  deliberately so**, because provoking it means issuing a request past the end of a
+  stranger's board that `collect_postings` never issues (the `fresh == 0` guard at
+  `ingest/workday.py:490`). So `total_only_on_first_page()` is no longer the only evidence
+  for failure 5, but it is still the only evidence for the wrap.
+- ~~**Task 09's `workday_fixtures.prefix_assumed()` models the wrong failure shape.**~~
+  **FIXED 2026-07-31, and the status code was the smaller of the two errors.** It modelled
+  a wrong data centre as HTTP 404 with an HTML body; the recorded `nvidia.wd1` probe in
+  `ats-validation.json` answers **422 with a JSON `errorCode` body**. It now encodes the
+  recorded shape, transcribed into `WRONG_DC_STATUS`/`_REASON`/`_CONTENT_TYPE`/`_BODY` so
+  the fixture still builds with no cassette on disk, with
+  `TestTheRecordedRefusalIsWhatTheFixtureEncodes` diffing each constant against the bytes
+  so drift fails loudly. Suite 1171 → **1178**.
+
+  **The mechanism was wrong too, and that is the reusable part.** The old docstring argued
+  the loss went through a `JSONDecodeError` on the HTML — *"which every ingest script in
+  this repo catches"*. **No decode ever happens.** `lib/http.py:76-77` (*"raise # permanent
+  -- surface immediately"*) re-raises before `ingest/workday.py:371`'s
+  `json.loads(http.get_text(` is reached — `json.loads` sits *outside* `get_text`, so it is
+  reached only if `get_text` returns, which it never does on a ≥400 whatever the body is.
+  **The sharpest form of it: the stated mechanism could not have occurred under the
+  fixture's OWN 404/HTML bytes either**, because the replayer raises at
+  `evals/cassettes.py:448` before the body is touched. So this was never a fixture that
+  drifted from reality — it described a route that had never existed, and it passed its
+  tests for a year because the tests asserted the conclusion. **A fixture is a claim about
+  a mechanism, not only about a status code, and a green test on the conclusion does not
+  check the claim.** **No 404 case was
+  kept**: no Workday host in any cassette here has answered 404, and 404 and 422 take a
+  byte-identical path (permanent at `lib/http.py:76`, both absent from `BLOCKED_STATUSES`
+  at `ingest/workday.py:237`) to the same `Shortfall` — so a second interaction would
+  encode an unobserved status to buy no coverage.
+- **NEW 2026-07-31, small and unowned: `record_workday_cxs()`'s own docstring is now stale
+  against the cassette it recorded.** `record_cassettes.py:510` says *"msk is 88 postings:
+  five pages, the last one short"* and the note built at `:546` says *"five pages ending in
+  a short one"*; the committed recording holds **four** pages over a **79**-posting board
+  (`total` 79, 0, 0, 0 — verified by reading the JSON). The board moved between task 16's
+  validation and the 2026-07-28 recording, which is ordinary and is why nothing reconciles
+  against a stored count. **Left unfixed on purpose:** it is a two-string edit but it is a
+  judgement about whether to restate the docstring or re-record against today's board, and
+  nobody owned that file this session. Do not "fix" it by re-recording without reading
+  `record_workday_cxs()`'s refusal guard first — the guard is what protects failure 5's
+  evidence.
 - **Accepted, and worth knowing it was a deviation:** task 18 kept `_collect_naively`
   against the letter of `18-ingest-workday-cxs.md:121`. It is a stand-in for the *defect*,
   not for the ingest loop, and it is the only thing that can show a constructed fixture

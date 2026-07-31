@@ -242,7 +242,7 @@ last three. Fixtures written from a specification test the specification.
 |---|---|---|---|---|
 | 1 | `limit` > 20 | empty `jobPostings`, HTTP 200, no error — byte-identical to "no more results" | `_check_page_limit`, called from `list_body`, so every request path passes through it | `workday_fixtures.limit_over_20()` |
 | 2 | a throttled page read as the end | walk stops early, exit 0; one published account lost 1,960 of NVIDIA's 2,000 | `lib/http.py:75-81` retries 429/5xx, then `collect_postings` reconciles against `total` and raises `Shortfall` | `throttled_page()` |
-| 3 | wrong data-centre prefix | 404 (or **422** — see below), reads as one unreachable tenant among fifty | `dc` is read from `company_ats`; there is no `wd`-literal in the module and a test greps for one | `prefix_assumed()` |
+| 3 | wrong data-centre prefix | **HTTP 422** with a JSON error body (recorded); reads as one unreachable tenant among fifty | `dc` is read from `company_ats`; there is no `wd`-literal in the module and a test greps for one | `prefix_assumed()` |
 | 4 | the 10,000-result cap | walk ends at 10,000 looking finished, `total` says more | reconciliation detects; `facet_slices()` + merge fixes, or `ResultCapUnsliceable` is raised | `result_cap()` |
 | 5 | **`total` on the first page only, and offsets past the end wrap** | a *complete* walk reconciles against 0 and is reported as a shortfall; a loop waiting for an empty page never terminates | first `total` is latched permanently; a page adding no new `externalPath` ends the walk | `total_only_on_first_page()` |
 | 6 | **`locationsText` is not always a location** | a hospital system's whole board dropped upstream, run reports `4/4 tenants ok` | `location_flags()` answers *unknown* for anything not recognisably a place | live only — see [Field mapping](#field-mapping) |
@@ -279,16 +279,51 @@ contributes no new `externalPath`, and additionally when a page is shorter than
 `limit`; the reconciliation still runs afterwards, so a short page that was in fact a
 truncated one raises rather than passing.
 
-### Failure 3's real status code is 422, not 404
+### Failure 3's real status code is 422, not 404 — **fixed 2026-07-31**
 
-`prefix_assumed()` models a wrong data centre as a 404 with an HTML body. The recorded
-live probe (`ats-validation.json`, `nvidia.wd1`) shows Workday answering **HTTP 422**
-with a JSON `{"errorCode":"HTTP_422", …}` body. The consequence is identical — both are
-permanent for `lib/http.py:76`, so neither is retried and both surface — and the
-fixture's point (a wrong prefix is one more failed tenant in a fifty-tenant loop)
-stands. Recorded here rather than silently corrected in the fixture, because the
-fixture is task 09's and its own docstring is explicit that it encodes the documented
-shape rather than the observed one.
+~~`prefix_assumed()` models a wrong data centre as a 404 with an HTML body.~~ It now
+models the recorded 422. What this section said before the fix, kept because it is
+half of what was wrong:
+
+> The recorded live probe (`ats-validation.json`, `nvidia.wd1`) shows Workday
+> answering **HTTP 422** with a JSON `{"errorCode":"HTTP_422", …}` body. The
+> consequence is identical — both are permanent for `lib/http.py:76`, so neither is
+> retried and both surface — and the fixture's point (a wrong prefix is one more failed
+> tenant in a fifty-tenant loop) stands. Recorded here rather than silently corrected in
+> the fixture, because the fixture is task 09's and its own docstring is explicit that
+> it encodes the documented shape rather than the observed one.
+
+**The status code was the smaller error.** The old docstring also named the wrong
+*mechanism*: it said the HTML body would be json-decoded into a `JSONDecodeError`,
+"which every ingest script in this repo catches". No decode ever happens. Traced:
+
+- `evals/cassettes.py:448` — `if interaction.status >= 400:` — raises `_ReplayHTTPError`
+  at the urlopen seam, as live urllib does for any 4xx. The body is still unread.
+- `lib/http.py:76-77` — `if e.code != 429 and not (500 <= e.code < 600): raise
+  # permanent -- surface immediately`. 422 is neither, so it surfaces on attempt one.
+- `ingest/workday.py:371` — `return json.loads(http.get_text(` — `json.loads` is never
+  reached. **The body is never decoded**, so no `JSONDecodeError` is reachable here for
+  *any* ≥400 response, HTML or JSON. The recorded body happens to parse cleanly anyway.
+- `ingest/workday.py:406` against `:237` (`BLOCKED_STATUSES = (401, 403, 406, 429,
+  451)`) — 422 is absent, so `:409` raises `Shortfall`, not `TenantBlocked`.
+- `ingest/workday.py:998` isolates it as `status='shortfall'`; `:1184` counts it and
+  `:1194` exits 1.
+
+So under the real loop a wrong prefix is **loud**. The silence is a property of the
+naive shape only — catch `HTTPError`, `break`, zero postings and `total=None`, which is
+`ingest/workday.py:872`'s "indistinguishable from a tenant with no open roles". The
+fixture's conclusion always held; only its stated route did not.
+
+**No 404 case was kept.** `ingest/workday.py:101` and `:872` both say "404 or 422", but
+no Workday host in any cassette in this repo has answered 404 — the four other recorded
+404s in `ats-validation.json` are the greenhouse, icims, recruitee and workable
+no-such-tenant probes. A 404 interaction would also discriminate nothing: both statuses
+are permanent at `lib/http.py:76` and both absent from `BLOCKED_STATUSES`, so they take
+a byte-identical path to the same `Shortfall`. The 422 constants are *transcribed* from
+the recording rather than lifted at call time, so the fixture still builds with no
+cassette on disk; `TestTheRecordedRefusalIsWhatTheFixtureEncodes` in
+`backend/tests/test_workday_fixtures.py` diffs each constant against the bytes, so drift
+fails loudly.
 
 ### Exit codes and what is loud
 
@@ -550,11 +585,42 @@ documented shape, and it does; see the endpoint section.
 task file's four in `FIXTURES`. The provenance difference is the point: four are a
 specification of documented traps, the fifth is an observation of an undocumented one.
 
-**A recording recipe is still owed.** `backend/evals/record_cassettes.py` should gain a
-`workday-cxs` entry that records a full multi-page walk against `msk.wd108` (88
-postings, the smallest live tenant, ~5 requests) plus one detail document. That would
-turn failure 5 from a constructed fixture into a recorded one. It was not added here
-because `backend/evals/` was owned by another agent for the duration of this task.
+~~**A recording recipe is still owed.**~~ **Delivered — verified 2026-07-31.** The
+claim above stood for three days after it stopped being true; it is struck rather than
+deleted so a reader working from the old text can see what changed.
+
+`record_workday_cxs()` exists at `backend/evals/record_cassettes.py:501`, with
+`WORKDAY_CXS = ("msk", "wd108", "MSKCC_Careers_Primary")` at `:498` — all three
+coordinates, because `18-ingest-workday-cxs.md:54` forbids guessing the data centre.
+The recording is committed at `backend/evals/fixtures/cassettes/workday-cxs.json`
+(recorded `2026-07-28T18:48:09Z`) and is asserted on by
+`backend/tests/test_workday_cxs_cassette.py`, seven tests.
+
+**It delivered half of what the claim promised, and the half it delivered is the one
+that mattered.** The recording holds **four** list pages, not the ~5 predicted: the
+board was at **79** postings when recorded, not the 88 the claim quotes — three full
+pages and a short one of 19. Boards move, which is why nothing here reconciles against
+a stored count.
+
+- **`total`-on-the-first-page-only is now RECORDED.** The four pages answer
+  `total` 79, 0, 0, 0. That is failure 5's first half in live bytes, and
+  `record_workday_cxs()` guards it: it refuses to record unless
+  `totals[0] and not any(totals[1:])`, so a tenant that quietly starts reporting `total`
+  on every page cannot silently retire the evidence for the latch at
+  `ingest/workday.py:463-475` (`if total is None:` … `total = payload.get("total")` —
+  "First page wins, permanently").
+- **The wrap is still constructed, deliberately.** Offsets past the end returning page
+  one again — failure 5's *second* half — is not in the recording, and
+  `workday_fixtures.total_only_on_first_page()` remains the only fixture for it. The
+  recipe's own docstring gives the reason: provoking it means issuing one request past
+  the end of a stranger's board purely to record a pathology, and `collect_postings`
+  never issues that request (the `fresh == 0` guard at `ingest/workday.py:490` stops the
+  walk first). Recording a request the pipeline does not make is the one thing
+  `record_cassettes.py`'s own docstring forbids.
+
+So `total_only_on_first_page()` is no longer the only evidence for failure 5, but it is
+still the only evidence for the wrap, and it stays in `FIXTURES_FOUND_LIVE` for that
+reason.
 
 ---
 

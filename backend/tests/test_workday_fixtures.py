@@ -267,28 +267,69 @@ class TestFailure2AThrottledPageIsNotTheEnd(unittest.TestCase):
 
 class TestFailure3TheDataCentrePrefixVaries(unittest.TestCase):
 
-    def test_the_assumed_prefix_404s_while_the_stored_one_works(self):
+    def test_the_assumed_prefix_422s_while_the_stored_one_works(self):
+        """The recorded status, and the fact that it raises before the body is
+        looked at. `_post` json-decodes its response, and that decode is never
+        reached on the wrong prefix -- HTTPError comes out of urlopen itself
+        (cassettes.py:448, "if interaction.status >= 400:")."""
         with cassettes.replay(cassette=wf.prefix_assumed()):
             with self.assertRaises(urllib.error.HTTPError) as caught:
                 _post(0, dc=wf.WRONG_DC)
             good = _post(0, dc=wf.DC)
-        self.assertEqual(caught.exception.code, 404)
+        self.assertEqual(caught.exception.code, wf.WRONG_DC_STATUS)
+        self.assertEqual(caught.exception.code, 422)
         self.assertEqual(len(good["jobPostings"]), wf.PAGE_LIMIT)
 
+    def test_the_error_body_is_valid_json_and_that_changes_nothing(self):
+        """The correction this fixture encodes. The old fixture modelled a 404
+        with an HTML body and argued the loss went through a JSONDecodeError.
+        The real body PARSES -- so no decode error was ever available -- and it
+        is not decoded anyway, because lib/http.py:77 ("raise  # permanent --
+        surface immediately") re-raises before ingest/workday.py:371 reaches
+        its `json.loads`."""
+        refusal = wf.prefix_assumed().interactions[0]
+        self.assertEqual(refusal.status, 422)
+        self.assertIn("application/json", refusal.headers["Content-Type"])
+        parsed = json.loads(refusal.body)
+        self.assertEqual(parsed["errorCode"], "HTTP_422")
+        self.assertEqual(parsed["httpStatus"], 422)
+
+    def test_the_fixture_encodes_no_unobserved_status(self):
+        """One refusal, and it is the one that was recorded. workday.py:872
+        says "404 or 422", but no Workday host in any cassette here has
+        answered 404, and both statuses take an identical path -- permanent at
+        lib/http.py:76, absent from BLOCKED_STATUSES -- to the same
+        Shortfall."""
+        failures = [i for i in wf.prefix_assumed().interactions
+                    if i.status >= 400]
+        self.assertEqual([i.status for i in failures], [422])
+        self.assertIn("RECORDED", wf.prefix_assumed().source)
+
     def test_a_wrong_prefix_reads_as_one_more_unreachable_tenant(self):
-        """Why this counts as silent, in the naive shape."""
+        """Why this counts as silent, in the naive shape -- and it is the
+        STATUS that does it, not the body. `_collect_naively` breaks on
+        HTTPError, so the tenant yields zero postings and a `total` of None:
+        ingest/workday.py:872's "indistinguishable from a tenant with no open
+        roles"."""
         with cassettes.replay(cassette=wf.prefix_assumed()):
             collected, total = _collect_naively(dc=wf.WRONG_DC)
         self.assertEqual(collected, [])
         self.assertIsNone(total, "nothing was ever learned about this tenant")
 
-    def test_the_ingest_loop_raises_on_the_wrong_prefix(self):
-        """Loud, not one quiet line in a fifty-line noise floor. The tenant is
-        still isolated -- ingest_tenant catches it -- but it is REPORTED, and
-        `status='failed'` is what the summary counts."""
+    def test_the_ingest_loop_raises_a_shortfall_on_the_wrong_prefix(self):
+        """Loud, not one quiet line in a fifty-line noise floor. 422 is absent
+        from BLOCKED_STATUSES (workday.py:237), so workday.py:409 raises
+        Shortfall rather than TenantBlocked. The tenant is still isolated --
+        ingest_tenant catches it at :998 -- but it is REPORTED, and
+        `status='shortfall'` is what the summary counts at :1184."""
         with cassettes.no_sleep(), cassettes.replay(cassette=wf.prefix_assumed()):
-            with self.assertRaises(workday.Shortfall):
+            with self.assertRaises(workday.Shortfall) as caught:
                 _collect(dc=wf.WRONG_DC)
+        self.assertIn("422", str(caught.exception))
+        self.assertNotIn(wf.WRONG_DC_STATUS, workday.BLOCKED_STATUSES,
+                         "if 422 is ever added to BLOCKED_STATUSES this "
+                         "becomes a TenantBlocked, and a wrong prefix would "
+                         "read as a refusal rather than as lost pages")
 
     def test_the_prefix_is_read_and_never_defaulted(self):
         """There is no wd-anything literal in the ingest module: the data
@@ -534,6 +575,55 @@ class TestTheRecordingContradictsTheTaskFile(unittest.TestCase):
                                          wf.RECORDED_SITE, max_pages=1,
                                          **NO_DELAY)
         self.assertIn("20 of 2000", str(caught.exception))
+
+
+@unittest.skipUnless(cassettes.available(wf.RECORDED_CASSETTE),
+                     f"cassette {wf.RECORDED_CASSETTE} not recorded")
+class TestTheRecordedRefusalIsWhatTheFixtureEncodes(unittest.TestCase):
+    """`prefix_assumed()` transcribes its refusal instead of lifting it.
+
+    Transcribing keeps the fixture buildable with nothing on disk, which the
+    four `FIXTURES` entries need. This class is the price of that: it diffs
+    every transcribed constant against the bytes in `ats-validation.json`, so
+    a recording that changes fails here rather than leaving the fixture
+    quietly claiming a shape the endpoint stopped having.
+    """
+
+    def _recorded_refusal(self):
+        source = cassettes.Cassette.load(wf.RECORDED_CASSETTE)
+        wrong = f"{wf.RECORDED_TENANT}.{wf.WRONG_DC}.myworkdayjobs.com"
+        found = [i for i in source.interactions
+                 if wrong in i.url and i.method == "POST"]
+        self.assertEqual(len(found), 1,
+                         f"{wf.RECORDED_CASSETTE} should hold exactly one POST "
+                         f"to {wrong} -- the wrong-data-centre probe that "
+                         f"WRONG_DC_* is transcribed from")
+        return found[0]
+
+    def test_the_transcribed_status_and_reason_are_the_recorded_ones(self):
+        refusal = self._recorded_refusal()
+        self.assertEqual(refusal.status, wf.WRONG_DC_STATUS)
+        self.assertEqual(refusal.reason, wf.WRONG_DC_REASON)
+
+    def test_the_transcribed_content_type_is_the_recorded_one(self):
+        """Recorded as JSON, not the HTML the old fixture asserted."""
+        self.assertEqual(self._recorded_refusal().headers["Content-Type"],
+                         wf.WRONG_DC_CONTENT_TYPE)
+
+    def test_the_transcribed_body_is_the_recorded_one(self):
+        self.assertEqual(json.loads(self._recorded_refusal().body),
+                         wf.WRONG_DC_BODY)
+
+    def test_the_probe_that_was_refused_is_the_documented_request(self):
+        """Same body as the good page, so the 422 is about the HOST and not
+        about what was asked for -- which is the whole claim of failure 3."""
+        self.assertEqual(self._recorded_refusal().request_body_sha256,
+                         wf.recorded_list_page().interactions[0]
+                         .request_body_sha256)
+
+    def test_the_wrong_prefix_was_wrong_for_the_recorded_tenant(self):
+        """nvidia's stored dc is wd5; the refusal came from wd1."""
+        self.assertNotEqual(wf.RECORDED_DC, wf.WRONG_DC)
 
 
 class TestTheFixturesMatchTheDocumentedShape(unittest.TestCase):

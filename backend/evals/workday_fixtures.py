@@ -121,9 +121,10 @@ def _post(offset, payload, *, dc=DC, limit=PAGE_LIMIT, facets=None,
         reason=reason)
 
 
-def _cassette(name, note, interactions):
-    return Cassette(name=name, source=f"{TENANT}.{DC}.myworkdayjobs.com "
-                                      f"(CONSTRUCTED, not recorded)",
+def _cassette(name, note, interactions, source=None):
+    return Cassette(name=name,
+                    source=source or f"{TENANT}.{DC}.myworkdayjobs.com "
+                                     f"(CONSTRUCTED, not recorded)",
                     note=note, recorded_at=None,
                     recorded_by="evals/workday_fixtures.py (task 09)",
                     interactions=interactions)
@@ -193,25 +194,91 @@ def throttled_page():
 # 3. The data-centre prefix varies
 # ---------------------------------------------------------------------------
 
+#: The wrong-data-centre refusal, transcribed from the ONE recording of it in
+#: this repo: the POST to `nvidia.wd1` in
+#: `evals/fixtures/cassettes/ats-validation.json`. wd1 is the wrong prefix for
+#: nvidia -- its stored one is wd5, the tenant `recorded_list_page()` lifts.
+#:
+#: Transcribed rather than lifted at call time so `prefix_assumed()` still
+#: builds with no cassette on disk, which the four FIXTURES entries need and
+#: `recorded_list_page()` deliberately does not. The drift risk that buys is
+#: paid for by a test: TestTheRecordedRefusalIsWhatTheFixtureEncodes diffs
+#: every constant below against the recording, under the usual
+#: `cassettes.available()` skip.
+WRONG_DC_STATUS = 422
+WRONG_DC_REASON = "Unprocessable Entity"
+WRONG_DC_CONTENT_TYPE = "application/json;charset=ISO-8859-1"
+WRONG_DC_BODY = {"errorCode": "HTTP_422", "errorCaseId": "38B497MS4CIBJB",
+                 "httpStatus": 422, "locale": "en-US,en;q=0.9",
+                 "message": "", "messageParams": {}}
+
+
 def prefix_assumed():
-    """wd1 (assumed) -> 404 HTML; wd5 (stored) -> the real list.
+    """wd1 (assumed) -> HTTP 422 with a JSON error body; wd5 (stored) -> the list.
 
     18-ingest-workday-cxs.md:54: read `wd{N}` from `company_ats`, "never
-    assume, never default". The fixture makes the cost concrete: the wrong
-    host answers with an HTML error page, so a caller that json-decodes it
-    gets a JSONDecodeError, which every ingest script in this repo catches
-    and counts as one unreachable source among fifty -- indistinguishable
-    from a tenant that is genuinely down, and therefore silent at the only
-    scale that matters.
+    assume, never default".
+
+    THE MECHANISM, TRACED RATHER THAN ASSUMED. The status is what does the
+    damage; the body is never looked at. In order:
+
+      * `evals/cassettes.py:448` -- "if interaction.status >= 400:" -- raises
+        `_ReplayHTTPError` at the urlopen seam, which is what live urllib does
+        for a 4xx too. Nothing has read the body yet.
+      * `lib/http.py:76-77` -- "if e.code != 429 and not (500 <= e.code <
+        600): raise  # permanent -- surface immediately". 422 is neither, so
+        it surfaces on the first attempt with no retries.
+      * `ingest/workday.py:371` -- "return json.loads(http.get_text(" --
+        `json.loads` is never reached, because `get_text` raised. THE BODY IS
+        NEVER DECODED, so its parseability is moot and no `JSONDecodeError`
+        is possible here for ANY >=400 response, whatever it carries.
+      * `ingest/workday.py:406` -- "if e.code in BLOCKED_STATUSES" -- and
+        `:237` is "BLOCKED_STATUSES = (401, 403, 406, 429, 451)". 422 is not
+        in it, so `:409` raises `Shortfall`.
+      * `ingest/workday.py:998` -- "except Shortfall as e:" -- sets
+        `out.status = "shortfall"` and returns; the tenant is isolated, then
+        counted at `:1184` and `sys.exit(1)` at `:1194`.
+
+    So under the REAL loop a wrong prefix is loud. The silence this fixture
+    exists to demonstrate lives in the naive shape, and is a property of the
+    status alone: catch `HTTPError`, `break`, and the tenant yields zero
+    postings and a `total` of None -- indistinguishable from a tenant with no
+    open roles, which is exactly what `ingest/workday.py:872` says ("404 or
+    422 -- indistinguishable from a tenant with no open roles").
+
+    WHAT THIS CORRECTS. It previously modelled the refusal as a 404 with an
+    HTML body, and rested the argument on a caller json-decoding that HTML
+    into a `JSONDecodeError`. Both halves were wrong: the recorded status is
+    422, and the decode step is unreachable behind the raise at
+    `lib/http.py:77` regardless of status or content type.
+
+    NO 404 CASE IS KEPT, DELIBERATELY. `ingest/workday.py:101` and `:872` both
+    say "404 or 422", but no Workday host in any cassette here has ever
+    answered 404 -- the other recorded 404s in `ats-validation.json` are the
+    greenhouse, icims, recruitee and workable no-such-tenant probes. A second
+    interaction would also discriminate nothing: 404 and 422 are both
+    permanent at `lib/http.py:76` and both absent from `BLOCKED_STATUSES`, so
+    they take a byte-identical path to the same `Shortfall`. Encoding an
+    unobserved status beside a recorded one would spend this module's
+    provenance convention (`FIXTURES` vs `FIXTURES_FOUND_LIVE`, and the
+    "CONSTRUCTED, not recorded" source strings) to buy no coverage.
     """
     return _cassette(
         "workday-wrong-dc-prefix",
-        f"{WRONG_DC} (a default) 404s with an HTML body; {DC} (the value "
-        f"stored by task 16) returns the list. A wrong prefix is one more "
-        f"failed tenant in a fifty-tenant loop, not an alert.",
-        [_post(0, {}, dc=WRONG_DC, status=404, reason="Not Found",
-               headers={"Content-Type": "text/html"}),
-         _post(0, page(0))])
+        f"{WRONG_DC} (a default) answers HTTP {WRONG_DC_STATUS} "
+        f"{WRONG_DC_REASON} with a JSON error body, as nvidia.wd1 really did; "
+        f"{DC} (the value stored by task 16) returns the list. The body is "
+        f"never decoded -- the status raises at lib/http.py:77 first -- so a "
+        f"wrong prefix is one more failed tenant in a fifty-tenant loop, not "
+        f"an alert, unless the loop reconciles.",
+        [_post(0, WRONG_DC_BODY, dc=WRONG_DC, status=WRONG_DC_STATUS,
+               reason=WRONG_DC_REASON,
+               headers={"Content-Type": WRONG_DC_CONTENT_TYPE}),
+         _post(0, page(0))],
+        source=f"{TENANT}.{{{WRONG_DC},{DC}}}.myworkdayjobs.com (MIXED: the "
+               f"{WRONG_DC_STATUS} is RECORDED -- transcribed from the "
+               f"nvidia.wd1 probe in ats-validation.json; the {DC} list page "
+               f"is CONSTRUCTED, not recorded)")
 
 
 # ---------------------------------------------------------------------------
