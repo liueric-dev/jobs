@@ -1,5 +1,65 @@
 # Handoff — the `docs/tasks/refactor/` run
 
+## START HERE — a fresh session's sixty seconds, 2026-07-31
+
+*This file has eight "READ THIS FIRST" sections, which is seven too many and is a defect it
+has been recording about itself for a week. This block is the fix: everything below is
+context. Verify anything here before acting on it — the instrument is named in each case.*
+
+**State, verified 2026-07-31 by `python3 backend/tools/label-findings.py`:**
+
+| | |
+|---|---|
+| labels | **186 rows over 31 of `pursuit-v1`'s 200 postings** |
+| labellers | **ONE** (`u_090b0ad12e99`), round 1 only |
+| `overlap` block | **all ten answered** — positions 0–30 contiguous |
+| `evals label report` | **exits 2, correctly.** Zero of task 29's three quantities exist |
+| suites | main **1171**, webapp **93** |
+
+**THE CRITICAL PATH IS ONE PERSON FOR ABOUT SIXTEEN MINUTES.** Not more labelling. Every
+field in the report is refused for want of a *second* `labeller_id` on the same item, and
+the owner has already answered all ten `overlap` rows — so a second labeller's ten rows are
+the **last** input `labels.inter_annotator()` needs, and the report prints the moment they
+land. The tenth row from a second person is worth more than the hundredth from the first.
+
+```bash
+cd backend/webapp
+.venv/bin/python manage_app_users.py add --email <real address> --profile pursuit \
+                                         --prior-domain <see § task 29 is UNBLOCKED>
+.venv/bin/python manage_app_users.py list        # verify BEFORE sending any link
+.venv/bin/uvicorn app:app --port 8421            # then http://localhost:8421/v1/label
+```
+
+**A trap that is live right now: `app_users` contains a placeholder.**
+`them@gmail.com`, profile `pursuit`, `prior_domain=healthcare`, `sessions=0`, created
+2026-07-31T05:26:09 — the literal example address from `LABELLING-NIGHT.md` § 3, added by
+following that command verbatim. **It is not a person and it will never sign in**, but
+`list` shows two `pursuit` rows and reads as though a second labeller exists. There is no
+`remove` and no rename in `manage_app_users.py` — only `disable`. Disable it or add the
+real address beside it, but do not read it as turnout. *(This is the same failure task 16
+recorded — "reported success over a literal placeholder" — one run later.)*
+
+**What the second sitting's 26 extra postings did and did not buy.** They bought three
+diagnostics and a better instrument; they bought **nothing** toward the Definition of done,
+because that is gated on a second person rather than on volume — which this file predicted
+in writing and is the clearest confirmation of that prediction available:
+
+| | before (5 postings) | after (31) |
+|---|---|---|
+| per-posting rate | 154 s, n=4 | **93 s median, n=29** — and the n=4 sample sat entirely inside a warm-up curve |
+| the recall question | unearned | **earned** — 3 non-surfaced postings the labeller would apply to |
+| the vocabulary gap | n=1 anecdote, "commercial/sales" | **13 postings**, and a corpus re-derivation that inverted its own instrument |
+| floor / ceiling / measured | none | **still none** |
+
+**Three things a fresh session must not do**, each guarded by something other than this
+paragraph: do not compute model-vs-human agreement and write it down (`evals label report`
+exits 2 by design; there is no `--force` and none may be added); do not redraw `pursuit-v1`
+(`redraw_refusal()` refuses, and the window closed with the first label); do not bump
+`FACTS_VERSION` to apply `revenue_commercial` without reading **D64** first — it would
+overwrite the model answers the existing labels were formed beside, mid-collection.
+
+---
+
 Written 2026-07-28, and rolling — last updated after **the sitting ran on to 31 postings,
 the stopwatch reading was overturned by the re-check this file asked for, and the recall
 question was earned.**
