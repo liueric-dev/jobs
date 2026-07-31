@@ -11,11 +11,11 @@ has landed.
 
 | | Task | Lands | |
 |---|---|---|---|
-| 01 | [Service skeleton](01-service-skeleton.md) | a running FastAPI app with config, DB helper, CORS and `/v1/health` | done |
-| 02 | [Auth schema and role](02-auth-schema-and-role.md) | `app_users` / `app_sessions` / `oauth_logins`, the `jobs_web` role, the admin CLI | done |
-| 03 | [Google SSO](03-google-sso.md) | the OAuth redirect flow, session cookies, `require_user` | done |
-| 04 | [Read endpoints](04-read-endpoints.md) | `GET /v1/jobs`, `GET /v1/jobs/{id}`, `POST /v1/events` | done |
-| 05 | [Tests and docs](05-tests-and-docs.md) | unit tests, service README, doc updates | done |
+| 01 | [Service skeleton](job_ingest/01-service-skeleton.md) | a running FastAPI app with config, DB helper, CORS and `/v1/health` | done |
+| 02 | [Auth schema and role](job_ingest/02-auth-schema-and-role.md) | `app_users` / `app_sessions` / `oauth_logins`, the `jobs_web` role, the admin CLI | done |
+| 03 | [Google SSO](job_ingest/03-google-sso.md) | the OAuth redirect flow, session cookies, `require_user` | done |
+| 04 | [Read endpoints](job_ingest/04-read-endpoints.md) | `GET /v1/jobs`, `GET /v1/jobs/{id}`, `POST /v1/events` | done |
+| 05 | [Tests and docs](job_ingest/05-tests-and-docs.md) | unit tests, service README, doc updates | done |
 
 All five landed 2026-07-26 in `backend/webapp/`. The one step no automated
 check can cover is the live Google login — the Cloud Console client has to be

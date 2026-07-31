@@ -40,7 +40,7 @@ government feeds with unusual field shapes, Workday tenants with varying schemas
 JSON-LD of wildly varying completeness.
 
 This is the same failure mode named in
-[`ADDENDUM-google-jobs-providers.md`](../../../ADDENDUM-google-jobs-providers.md) §5
+[`ADDENDUM-google-jobs-providers.md`](../ADDENDUM-google-jobs-providers.md) §5
 for SERP providers — an exhausted key returns zero rows, not an exception. Silence is
 the house failure mode of this pipeline, and the alerting fix in task 04 depends on
 this data being available to alert on.

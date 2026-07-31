@@ -10,7 +10,7 @@ e1cdf7b`. `git log -1 e1cdf7b` reads *"Score validation, score.normalize(),
 D15/D16/D43/D44 (tranche_two/08)"*. The stale `todo` made this task look like a live
 dependency of 30.
 
-**This task is [`docs/ingestion_tests/04-score-validation.md`](../../ingestion_tests/04-score-validation.md).**
+**This task is [`docs/ingestion_tests/04-score-validation.md`](../../../ingestion_tests/04-score-validation.md).**
 It needs almost no amendment. This file records the two places the pivot touches it.
 
 ## What carries over unchanged

@@ -6,10 +6,27 @@ only by convention — this is the run paying down its debt before opening a new
 Phases 1–3 are built and measured: 20 of 35 tasks done or deliberately dropped. This task
 is the pause before 24–28.
 
-> **This file did not exist until 2026-07-31.** `README.md` linked to it from the day the
+> ~~**This file did not exist until 2026-07-31.** `README.md` linked to it from the day the
 > plan was written and nothing was there. That is not an anecdote — **it is specimen #1 of
 > what this task is for**, and it is why every item below carries the evidence that it is
-> real rather than a citation of a document that claims it is.
+> real rather than a citation of a document that claims it is.~~
+>
+> **WRONG, AND CORRECTED 2026-07-31 BY THE SESSION THAT EXECUTED THIS TASK. The file
+> existed.** `docs/tasks/refactor/tranche_six/34-documentation-cleanup.md` has been tracked
+> since `28f1d0e`, carrying a full by-document-type dispositions table. What was broken was
+> `README.md:102`'s **link** — it omitted the `tranche_six/` prefix, which is *the identical
+> defect §A1's own table records for the six `tranche_one/` links three rows above it.*
+>
+> **So it is still specimen #1, but of something sharper than "a doc was missing."** A
+> broken link was read as a missing file; nobody ran the six-line resolver §A1 asks for; and
+> the remedy created a **second** task 34 at the un-prefixed path, which then silently went
+> on asserting the *"`docs/ingest/*.md` are generated, never hand-edit"* claim that §A2
+> exists to kill. **The tool that would have prevented this is the one this task was already
+> committing to write.** It is now written — `backend/tools/audit-doc-links.py` — and it
+> reports *"wrong prefix"* rather than *"no such file"* precisely so this cannot recur.
+>
+> The two files are merged below (§D) and the orphan is a pointer. The false premise is
+> struck rather than deleted, per rule 1: a reader who acted on it needs to see it.
 
 ## The rule this task runs under
 
@@ -24,7 +41,12 @@ Four rules, from `HANDOFF.md` § *THE NEXT SESSION IS CLEANUP*:
 1. **Mark, do not delete.** Struck-and-kept is this run's convention. Tidying by deletion
    removes the only evidence a number was ever wrong.
 2. **Do not sweep stale line numbers wholesale** — `HANDOFF.md` forbids it by name.
-3. **Do not edit `.claude/CLAUDE.md`.** Propose the diff here; the owner applies it.
+3. ~~**Do not edit `.claude/CLAUDE.md`.** Propose the diff here; the owner applies it.~~
+   **SUPERSEDED 2026-07-31 — the owner reviewed the proposed diff and directed that it be
+   applied.** The rule was right in general and wrong for this file's specific contents:
+   three of the paths it cites do not exist, so every session between the proposal and the
+   review would have gone on following instructions that cannot be followed. What was
+   applied and what was left alone is recorded in §C.
 4. **Do not "fix"** `job_scores`' NULL version columns, and do not re-record the
    `workday-cxs` cassette without reading `record_workday_cxs()`'s refusal guard.
 
@@ -32,7 +54,30 @@ Four rules, from `HANDOFF.md` § *THE NEXT SESSION IS CLEANUP*:
 
 ## A. Documentation — confirmed, verified 2026-07-31
 
-### A1. Sixteen broken relative links, ten of them in the ordered index
+### A1. ~~Sixteen~~ **Nineteen** broken relative links — DONE, and the count was wrong twice
+
+> **CLOSED 2026-07-31. All nineteen fixed; `backend/tools/audit-doc-links.py` reports zero.**
+> The re-check found the count wrong in **both** directions, which is why the number is
+> worth reporting rather than just the fix:
+>
+> - **Sixteen was a pre-fix count.** By the time anyone re-ran it, fourteen remained — the
+>   two missing were the `34-documentation-cleanup.md` links this file's own table marks
+>   *"fixed by this file existing"*. 14 + 2 = 16 reconciles exactly.
+> - **But the scope was too narrow, and that hid five more.** §A1 audited only
+>   `docs/tasks/refactor/`. Run across all of `docs/`, there were **five further links of
+>   the identical class** — `docs/tasks/README.md:14-18`, every one of the five `job_ingest/`
+>   task links, all missing the same kind of directory prefix. **An audit scoped to the
+>   directory you already suspect confirms what you knew.** The committed script defaults to
+>   all of `docs/` for this reason.
+> - **The table below is also wrong about the fix**, and a sweep would have propagated it.
+>   It groups `tranche_four/22-…` and `tranche_one/03-…` with the `README.md` rows as *"same
+>   depth error"*. They are not the same fix: from `docs/tasks/refactor/` the correct target
+>   is a **bare filename**, from `docs/tasks/refactor/tranche_*/` it is **`../`**. Blanket
+>   "strip one `../`" fixes two of them and leaves three broken.
+>
+> **Thirteen more index rows named a file and linked to nothing at all** — tasks 15, 20, 21,
+> 23–28 and 30–33. Not broken links, so no resolver would ever have caught them; the same
+> defect one step earlier. All thirteen now link.
 
 Verified by resolving every non-HTTP `.md` link under `docs/tasks/refactor/` against the
 filesystem. **The index that `HANDOFF.md` calls "the ordered index" has ten.**
@@ -47,6 +92,12 @@ filesystem. **The index that `HANDOFF.md` calls "the ordered index" has ten.**
 
 **Size:** minutes. **Agent-safe.** Re-run the audit after fixing; the script is six lines of
 `os.path.normpath` and belongs in the commit.
+
+**It is in the commit — `backend/tools/audit-doc-links.py`.** It walks all of `docs/` by
+default, prints `file:line`, the broken target and the unique correct target where one
+exists, and exits non-zero. It deliberately **refuses to guess** when a basename matches
+zero or several files, because guessing at a missing target is what produced the duplicate
+task 34.
 
 ### A2. Ten of fourteen `docs/ingest/*.md` claim a generator that does not exist
 
@@ -123,6 +174,64 @@ gets destroyed. **Size:** minutes.
 ## B. Bugs and repo hygiene
 
 *Being verified — see the survey. Do not act on any item here that does not carry evidence.*
+
+---
+
+## D. Document dispositions — merged from `tranche_six/34-documentation-cleanup.md`
+
+**This section is the content of the orphaned duplicate**, moved here 2026-07-31 rather
+than left in a file nothing links to. It is the *plan-time* half of task 34 — written before
+the run started, organised by document type — and §§A/B are the *verified* half. Neither
+supersedes the other; the duplicate was invisible, not wrong.
+
+**The rule it establishes, and it is the reusable part:** dispositions go **by document
+type, not by schedule**. Generated reference is regenerated at phase boundaries and never
+hand-edited. Hand-written rationale is written at decision time, because the reasoning
+cannot be reconstructed later — `relevance.json`'s *"Rejected alternative: flag rows where
+SerpApi's `via` field matches company_name. It catches 160 rows but false-positives on every
+company posting to its own careers site"* is information that existed for about an hour.
+For hand-written docs the practice is **staleness markers, not continuous rewriting**: one
+line at the top the moment a doc becomes wrong, proper fix at a phase boundary. *Three
+half-updated docs are worse than one honestly-stale doc, because you cannot tell which is
+current.*
+
+> **§A2 invalidates the first half of that rule as applied to `docs/ingest/`.** The
+> "generated reference" category was asserted, never built — there is no generator. The
+> category survives as a *principle*; `docs/ingest/` is not a member of it. See §A2 and §C.
+
+| document | lines | disposition |
+|---|---|---|
+| `docs/scoring.md` | 784 | **Keep as current-state reference.** Header noting it describes the pre-Pursuit system; regenerate its measured figures after task 12 |
+| `backend/docs/SCORING.md` | 516 | **Archive.** Superseded by `docs/scoring.md`; two hand-written scoring docs is drift. Its cost table is retained in the archive because task 04 supersedes rather than deletes it |
+| `backend/docs/HANDOFF-match-quality.md` | 350 | **Split.** §4 (the seven measurement traps) is domain-independent — promote to `docs/MEASUREMENT-TRAPS.md`. The rest is persona-bound findings → `docs/archive/` |
+| `backend/docs/HANDOFF-multimachine-google-jobs.md` | 349 | Review against task 24 — some may now be operator documentation rather than a handoff |
+| `docs/ingest/*.md` | 4,600 | ~~Regenerate at each phase boundary.~~ **See §A2 — there is no generator.** Delete the three for retired sources; add nine for the new ones |
+| `docs/tasks/job_ingest/` | 726 | **Never rewrite.** Append-only historical record; all five accurately marked done |
+| `docs/ingestion_tests/` | 700 | Tasks 03–05 became 07–09 here. Update its README to point at the new tree and record that 05 moved earlier and why |
+| `backend/api/README.md` | 237 | Task 24 corrects the "never deployed / expected to be deprecated" line. Verify it did |
+| `docs/tasks/README.md` | 68 | Same deprecation note; same correction |
+| `backend/docs/DEVELOPER.md` | 263 | **Regenerate at the end.** Its opening gap — "the pipeline scores every job it ingests and delivers none of them" — is closed by task 32 |
+| `README.md`, `backend/README.md` | 621 | **Regenerate at the end.** Operational reference; stale operational docs actively mislead |
+| `backend/evals/README.md`, `backend/webapp/README.md` | 425 | Update in place as their subsystems change |
+
+**Create:** `docs/archive/` with a README explaining that everything inside was measured
+against the author's software-engineer persona and does not transfer, and one line per file
+recording what it measured, when, and what superseded it. `docs/MEASUREMENT-TRAPS.md`,
+promoted from the handoff — *"the most durable thing in the repo and currently buried in a
+document about a persona that is no longer the target."* `docs/ingest/DEFECTS.md`, the
+register from task 02, kept current as entries close.
+
+**Figures to correct, not delete** — superseded rather than wrong, and the superseded
+version is evidence about how the system was tuned: `SCORING.md`'s cost table (right model,
+wrong denomination, task 04); `compare-extract.py`'s 95%/90% self-agreement cited in
+`criteria.json:_hard_exclude_comment`; `HANDOFF-match-quality.md`'s 12.7/20, **relabelled
+explicitly as imitation fidelity against a non-target persona**; and
+`docs/ingestion_tests/README.md`'s n=17 figures.
+
+**Keep the `_comment` convention.** Every new config file gets `_comment` fields in the
+existing style, recording where numbers came from and what was rejected. *"This is the
+single most valuable documentation practice in the repo. It should survive the refactor
+unchanged."*
 
 ---
 

@@ -4,9 +4,9 @@ Work breakdown for retargeting the pipeline from one software engineer's job
 search to the Pursuit AI-Native cohort — ~30 Builders, entry-level, AI-adjacent
 roles, all industries, NYC.
 
-The full reasoning is in [`MASTER-PLAN-pursuit.md`](../../../MASTER-PLAN-pursuit.md),
-[`SOURCING-STRATEGY.md`](../../../SOURCING-STRATEGY.md) and
-[`ADDENDUM-google-jobs-providers.md`](../../../ADDENDUM-google-jobs-providers.md).
+The full reasoning is in [`MASTER-PLAN-pursuit.md`](MASTER-PLAN-pursuit.md),
+[`SOURCING-STRATEGY.md`](SOURCING-STRATEGY.md) and
+[`ADDENDUM-google-jobs-providers.md`](ADDENDUM-google-jobs-providers.md).
 This file is the ordered index.
 
 It absorbs the outstanding work from
@@ -20,12 +20,12 @@ Nothing downstream is trustworthy until these land. None of them are large.
 
 | | Task | Lands | |
 |---|---|---|---|
-| 01 | [Pin the production model](01-pin-production-model.md) | one answer to "what runs in production", enforced in code | done |
-| 02 | [Triage the ingest audit defects](02-triage-audit-defects.md) | [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md) — 42 defects enumerated, classified, scheduled | done |
-| 03 | [Stop discarding upsert errors](03-fix-silent-upsert-errors.md) | `UpsertResult.errors` read in every ingest path — all 8 sites | done |
-| 04 | [Quota and wall-clock baseline](04-quota-baseline.md) | `cost-test.py` measuring requests and seconds, not dollars — **the binding constraint is `EXTRACT_BATCH_SIZE=40`, not quota** | done |
-| 05 | [Corpus volume under a widened gate](05-widened-gate-volume.md) | a number: how many rows a Pursuit gate would admit — **N = 43/day**, [`docs/pursuit-gate-volume.md`](../../pursuit-gate-volume.md) | done |
-| 06 | [Re-run self-consistency at n=120](06-self-consistency-n120.md) | whether the 76% figure is real — **no; and the gate says STOP**, `ai_involvement` 77.8% on hn_whoishiring | done |
+| 01 | [Pin the production model](tranche_one/01-pin-production-model.md) | one answer to "what runs in production", enforced in code | done |
+| 02 | [Triage the ingest audit defects](tranche_one/02-triage-audit-defects.md) | [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md) — 42 defects enumerated, classified, scheduled | done |
+| 03 | [Stop discarding upsert errors](tranche_one/03-fix-silent-upsert-errors.md) | `UpsertResult.errors` read in every ingest path — all 8 sites | done |
+| 04 | [Quota and wall-clock baseline](tranche_one/04-quota-baseline.md) | `cost-test.py` measuring requests and seconds, not dollars — **the binding constraint is `EXTRACT_BATCH_SIZE=40`, not quota** | done |
+| 05 | [Corpus volume under a widened gate](tranche_one/05-widened-gate-volume.md) | a number: how many rows a Pursuit gate would admit — **N = 43/day**, [`docs/pursuit-gate-volume.md`](../../pursuit-gate-volume.md) | done |
+| 06 | [Re-run self-consistency at n=120](tranche_one/06-self-consistency-n120.md) | whether the 76% figure is real — **no; and the gate says STOP**, `ai_involvement` 77.8% on hn_whoishiring | done |
 | — | Extraction policy — the two conversational decisions (`943d899`) | `config/extraction-policy.json`, `extract.vote_facts()`, `drain_loop()` — **selective majority-of-3 at +4.2% of calls, and the 40/day ceiling lifted**. No task file; see [`HANDOFF.md`](HANDOFF.md) | done |
 
 ## Phase 1 — Finish the evals harness
@@ -50,30 +50,30 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | | Task | Lands | est. relevant/day |
 |---|---|---|---|
 | 14 | [NYC Open Data ingest](tranche_three/14-ingest-nyc-open-data.md) | `kpav-sd4t` via SODA; `post_until` closure — **done; measured ~1.8/day, not 20–60**, [`docs/ingest/nyc-open-data.md`](../../ingest/nyc-open-data.md) | ~~20–60~~ **1.8** |
-| 15 | USAJobs and Adzuna ingest | two free APIs | 35–95 |
+| 15 | [USAJobs and Adzuna ingest](tranche_three/15-ingest-usajobs-adzuna.md) | two free APIs | 35–95 |
 | 16 | [ATS token discovery](tranche_three/16-ats-token-discovery.md) | seed list bootstrap, regex probe, `company_ats` table — **7 validated non-tech NYC tokens, 1,513 open jobs**; done |
 | 17 | [Retarget `ats.py`](tranche_three/17-retarget-ats-ingest.md) | roster from `company_ats`; **six vendors** (3 new); closure conditional on reconciliation — done, [`docs/ingest/ats.md`](../../ingest/ats.md) | 50–150 |
 | 18 | [Workday CXS ingest](tranche_three/18-ingest-workday-cxs.md) | `/wday/cxs/` + **upstream relevance gating** — done; 1,366 reachable/night from 4 tenants at 11% detail cost. **Yield deliberately not reported until task 13**, [`docs/ingest/workday.md`](../../ingest/workday.md) | re-measure |
 | 19 | [JSON-LD parser](tranche_three/19-jsonld-parser.md) | measured before building — **2 of 55 employers publish `JobPosting`, 1 of 35 in the target population. DROPPED**, [`docs/jsonld-coverage.md`](../../jsonld-coverage.md) | ~~30–60~~ **≤1.1–2.3 (ceiling)** |
-| 20 | iCIMS via Firecrawl | reserved 1,000 credits/month | 20–40 |
-| 21 | Nonprofit boards | Idealist and peers — **premise broken: it was "cheap because task 19's parser does most of the work", and 19 is dropped. Re-scope or measure first** | 10–25, unverified |
+| 20 | [iCIMS via Firecrawl](tranche_three/20-ingest-icims-firecrawl.md) | reserved 1,000 credits/month | 20–40 |
+| 21 | [Nonprofit boards](tranche_three/21-ingest-nonprofit-boards.md) | Idealist and peers — **premise broken: it was "cheap because task 19's parser does most of the work", and 19 is dropped. Re-scope or measure first** | 10–25, unverified |
 
 ## Phase 4 — Google Jobs
 
 | | Task | Lands | |
 |---|---|---|---|
 | 22 | [JobSpy spike](tranche_four/22-jobspy-spike.md) | does self-hosted work from the home IP — **no: dropped**, [`docs/jobspy-spike.md`](../../jobspy-spike.md) | done |
-| 23 | SERP abstraction | `serp/` package, provider adapters, quota ledger, router, cache — **descoped**: 2 adapters not 8, no JobSpy, no router step 2 | todo |
-| 24 | Revive the contributor API | `backend/api/` deployed; Builder key onboarding | todo |
-| 25 | Search queries | query as a first-class object, caching, cohort signal | todo |
+| 23 | [SERP abstraction](tranche_four/23-serp-abstraction.md) | `serp/` package, provider adapters, quota ledger, router, cache — **descoped**: 2 adapters not 8, no JobSpy, no router step 2 | todo |
+| 24 | [Revive the contributor API](tranche_four/24-revive-contributor-api.md) | `backend/api/` deployed; Builder key onboarding | todo |
+| 25 | [Search queries](tranche_four/25-search-queries.md) | query as a first-class object, caching, cohort signal | todo |
 
 ## Phase 5 — Multi-tenancy and events
 
 | | Task | Lands | |
 |---|---|---|---|
-| 26 | Profile creation API | the gap `migrate_profiles.py` fills by hand | todo |
-| 27 | Event schema | `rank`, `request_id`, `dwell_ms`, `reason`, `visibility`, derived `skip` | todo |
-| 28 | Anonymous cohort aggregation | "4 Builders saved this" without attribution | todo |
+| 26 | [Profile creation API](tranche_five/26-profile-creation.md) | the gap `migrate_profiles.py` fills by hand | todo |
+| 27 | [Event schema](tranche_five/27-event-schema.md) | `rank`, `request_id`, `dwell_ms`, `reason`, `visibility`, derived `skip` | todo |
+| 28 | [Anonymous cohort aggregation](tranche_five/28-cohort-aggregation.md) | "4 Builders saved this" without attribution | todo |
 
 ## Phase 6 — Ground truth
 
@@ -85,15 +85,15 @@ Nothing downstream is trustworthy until these land. None of them are large.
 
 | | Task | Lands | |
 |---|---|---|---|
-| 30 | Within-track ordering | buckets not scores; `gap_bridging_angle` promoted | todo |
-| 31 | Dismiss demotion | persistent, and specific to the reason given | todo |
+| 30 | [Within-track ordering](tranche_six/30-within-track-ordering.md) | buckets not scores; `gap_bridging_angle` promoted | todo |
+| 31 | [Dismiss demotion](tranche_six/31-dismiss-demotion.md) | persistent, and specific to the reason given | todo |
 
 ## Phase 8 — Delivery
 
 | | Task | Lands | |
 |---|---|---|---|
-| 32 | Frontend | against the endpoints that already exist | todo |
-| 33 | Deployment | Cloudflare Tunnel; pipeline split from app | todo |
+| 32 | [Frontend](tranche_six/32-frontend.md) | against the endpoints that already exist | todo |
+| 33 | [Deployment](tranche_six/33-deployment.md) | Cloudflare Tunnel; pipeline split from app | todo |
 
 ## Cross-cutting
 

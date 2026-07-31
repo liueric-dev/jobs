@@ -70,7 +70,7 @@ first night proves nothing.
 ## If it works
 
 Note the consequence for the plan's shape: the entire provider table in
-[`ADDENDUM-google-jobs-providers.md`](../../../ADDENDUM-google-jobs-providers.md) §2
+[`ADDENDUM-google-jobs-providers.md`](../ADDENDUM-google-jobs-providers.md) §2
 becomes backup capacity rather than the primary path, and task 23's router gets a
 much simpler default. The contributor API (task 24) stays regardless — it is the
 community feature, not just a quota source.
