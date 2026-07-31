@@ -35,9 +35,15 @@ pipeline-owned tables (`backend/api/README.md`, "Database privileges" — three
 sections of that README exist to defend this boundary, and it was tightened as
 recently as the move off the shared superuser). A logged-in-user API needs
 `SELECT` across all of those, so putting it there would mean relaxing the one
-property that README is about. `backend/api/` is also expected to be
-deprecated, so `backend/webapp/` imports nothing from it — only `../schema.py`
-and `../lib/`.
+property that README is about. ~~`backend/api/` is also expected to be deprecated~~, so `backend/webapp/` imports
+nothing from it — only `../schema.py` and `../lib/`.
+
+> **The deprecation half is reversed by task 24**, which revives `backend/api/` rather
+> than retiring it (marked 2026-07-31). **The import boundary is not reversed and is
+> the load-bearing part**: the two services hold different Postgres roles — `jobs_api`
+> is granted nothing on the pipeline tables, `jobs_web` needs SELECT across them — so
+> `webapp/` importing from `api/` would relax the property this section exists to
+> defend, whatever happens to the deprecation plan.
 
 **Server-side OAuth, opaque session cookie.** The backend owns the whole
 redirect flow and hands the browser an `HttpOnly` cookie whose `sha256` is what

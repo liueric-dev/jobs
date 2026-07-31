@@ -2,7 +2,15 @@
 
 **Status:** todo. **Depends on:** 23, 33 (tunnel). **Blocks:** 25.
 
-Deploy `backend/api/`. It is written, tested and has never run.
+Deploy `backend/api/`. It is written, ~~tested~~ and has never run.
+
+> **CORRECTED 2026-07-31 (task 34): there are ZERO tests for `backend/api/`.**
+> No file in `backend/tests/` imports `api/app.py` or `api/query_claims.py`; the two
+> that mention the directory test `lib/`, not the service. "Never run" is right and is
+> confirmed by `backend/api/README.md`. **"Tested" was not**, and the difference matters
+> for this task's shape: deploying code with no tests is a bigger job than deploying
+> tested code, and three defects (D08, D09, D41) are dispositioned *fix before deploy*
+> against it with nothing to catch a regression in the fix.
 
 ## Reversing a decision
 
@@ -99,8 +107,12 @@ through to a synchronous provider when a result is needed now.
 
 ## Documentation
 
-`backend/api/README.md:32` and `docs/tasks/README.md` both say this is expected to be
-deprecated. Both are now wrong. Correct them as part of this task rather than leaving
+~~`backend/api/README.md:32` and `docs/tasks/README.md` both say this is expected to be
+deprecated.~~ **Half right, corrected 2026-07-31: `backend/api/README.md` does not
+contain the word "deprecat" anywhere.** Its `:32` says the service has *never been
+deployed*, which is a different claim and is still true. The deprecation sentence is in
+`docs/tasks/README.md` only. That one is now marked; this task still owns un-marking it
+when the service actually deploys. Both are now wrong. Correct them as part of this task rather than leaving
 it to task 34 — a doc that actively contradicts a running service is worse than a
 stale one.
 

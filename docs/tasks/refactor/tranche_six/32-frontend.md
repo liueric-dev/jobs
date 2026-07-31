@@ -11,7 +11,18 @@ Already landed: Google SSO, session cookies, `require_user`, `GET /v1/jobs`,
 tasks done, and `backend/webapp/README.md` carries the one manual step no automated
 check covers — the live Google login round trip.
 
-So this is a client against a working API, not a full-stack build.
+~~So this is a client against a working API, not a full-stack build.~~
+
+> **THIS IS THE STALEST SENTENCE IN THE TRANCHE, corrected 2026-07-31 (task 34).**
+> The API is working; it is not the API this task's own surface table needs. Today
+> `GET /v1/jobs` returns a **flat list with no `rank`, no `bucket`, no `tracks[]`
+> grouping and no `request_id`** — and it returns raw `match_score`/`fit_score`, which
+> `API-CONTRACT-v1.md` explicitly forbids. Every surface in the table below needs
+> backend work that does not exist: Today-grouped-by-track needs task 30, the cohort
+> save signal needs 27 **and** 28, Search needs 25's `search_queries` table, and
+> Onboarding needs 26's `builder_profiles`. **Read the dependency line, not this
+> sentence.** The auth, session and read plumbing genuinely is done and genuinely is
+> reusable; the response shape is the work.
 
 ## Non-negotiable: emit `rank` and `request_id`
 

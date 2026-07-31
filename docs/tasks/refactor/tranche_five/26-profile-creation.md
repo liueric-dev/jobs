@@ -21,6 +21,18 @@ keys on a `profile` TEXT and `webapp/jobs.py` serves a profile's list, so some l
 exists or is assumed. Read it before designing on top of it; if there is no explicit
 mapping, that is the first thing this task adds.
 
+> **ANSWERED 2026-07-31 (task 34), so this task does not start by re-deriving it.**
+> There is deliberately **no foreign key**. `app_users.profile` is bare `TEXT NOT NULL`,
+> and `webapp/schema_web.py` says so in a comment beside the column: the profile is
+> validated by `manage_app_users.py` calling `profiles.load_one()` instead. So the
+> linkage is **CLI-enforced, not database-enforced** — which is exactly the gap this
+> task exists to close, and it is a design to replace rather than an unknown to discover.
+>
+> **Also already landed for an unrelated reason: `app_users.prior_domain`**, with its
+> CHECK constraint and a migration. That is one of this task's onboarding fields already
+> in the schema. Note `HANDOFF.md` records that its vocabulary already fails on the one
+> real user — do not treat the column as settled just because it exists.
+
 ## Inheritance, not authoring
 
 Per the master plan: **one cohort profile.** A Builder does not get their own

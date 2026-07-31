@@ -41,6 +41,28 @@ job_events (
 )
 ```
 
+> **VERIFIED 2026-07-31 (task 34): this task is 100% greenfield, and that is the cheapest
+> position it could be in.** All six new columns are absent from `backend/schema.py`'s
+> `job_events` DDL, and the table has **exactly one writer** — the `INSERT` in
+> `webapp/jobs.py`'s `record_events`. One writer means the `NOT NULL` columns can be added
+> without a compatibility window. Readers are `score.py`'s `_recently_active` (which only
+> counts rows) and `webapp/jobs.py`'s state join; neither reads a column this task adds.
+>
+> **The one real conflict, which must be resolved before the DDL is written.**
+> `request_id TEXT NOT NULL` above is incompatible with this task's own *"Do not backfill
+> anything"* rule and with `.claude/CLAUDE.md`'s *"Do not backfill `rank` … a guessed rank
+> is worse than a missing one."* Existing rows have no `request_id` and by rule never will,
+> so `NOT NULL` cannot be added without either a sentinel — which is a guessed value
+> wearing a different name — or a partial constraint.
+>
+> **Recommendation: add both `request_id` and `visibility` as nullable, and enforce
+> `NOT NULL` in the writer rather than the schema**, exactly as the task already
+> specifies for the API (*"reject a batch missing `request_id`/`rank` → 400"*). NULL then
+> means "written before instrumentation existed", which is true and legible, and the
+> analysis exclusion the task already requires for `rank` covers `request_id` for free
+> with no second rule. `visibility` gets a `DEFAULT 'private'` because the safe value is
+> knowable for old rows, which is not true of the other two.
+
 ### `request_id` and `rank`
 
 Issued server-side when the list is rendered, returned with it, and echoed back on

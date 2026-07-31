@@ -11,6 +11,47 @@ parallel. Build the client against a mock of this; fill in the backend behind it
 
 ---
 
+## THE DIFF THIS FILE ASKS FOR — done 2026-07-31, task 34
+
+*"Diff this against what they return today before implementing"* was the right
+instruction and nobody had followed it. Here is the diff. **Nothing was built against
+this contract** — `frontend/` contains one `.gitkeep`, and the mock fixtures § *Mocking*
+describes were never created.
+
+**Three of six endpoints exist, by path only.** `GET /v1/searches`, `POST /v1/searches`
+and `POST /v1/onboarding` have no route and no backing table (`search_queries`,
+`builder_profiles` exist nowhere).
+
+**Two divergences are contract *breaks*, not gaps — a conformant client fails today:**
+
+| | contract | shipped | where |
+|---|---|---|---|
+| event name for an application | `apply` | **`applied`** | `webapp/jobs.py`, `EVENT_NAMES` |
+| raw scores | *"**No 0–100 score appears anywhere.** `bucket` carries the claim."* | **`match_score` and `fit_score` in every row**, and `min_score` is a public query parameter | `webapp/jobs.py`, `LIST_COLUMNS` |
+
+A client sending the contract's `apply` gets a **400**. Whoever implements 27/32 must
+pick one; this is an undecided divergence between a frozen contract and shipped code,
+and it has been sitting in both for three days.
+
+**Everything the contract adds is absent, and all of it is task 27's:** `request_id`,
+`rank`, `bucket`, the `tracks[]` grouping, `posting_age_days`, `cohort_signal`,
+`visibility`, `dwell_ms`, `reason`, the derived `skip`, the `{"error": {...}}` envelope
+and the `Accept: application/vnd.jobs.v1+json` header. `comp{}`, `why{}`, `state{}` and
+`facts{}` exist as **flat** columns rather than nested objects; `apply_url` is `job_url`;
+`description_html` is `description_text`, which is a different thing; `closes_at` has no
+column anywhere.
+
+**Implemented and undocumented here:** eight query parameters (`limit`, `cursor`, `q`,
+`remote`, `nyc`, `min_score`, `since`, `exclude_dismissed`), the `seen` state, `unsave`,
+24-hour impression dedup, the `{recorded, deduped, skipped}` response, the `profile`
+echo, `GET /v1/me`, `POST /v1/auth/logout` and the whole `/v1/label*` surface.
+
+**Read this file as the specification for tasks 26–28 and 32 — not as a description of
+the API.** The accurate description of what `/v1/jobs` returns today is
+`docs/tasks/job_ingest/04-read-endpoints.md`, which is append-only and verified correct.
+
+---
+
 ## `GET /v1/jobs`
 
 The daily list. Grouped by track, bucketed, freshness-ordered within bucket.
