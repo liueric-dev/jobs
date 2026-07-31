@@ -109,11 +109,9 @@ import sys
 import re
 import json
 import html as html_module
-import hashlib
 import time
 import urllib.request
 import urllib.error
-from datetime import datetime, timedelta, timezone
 
 
 # ingest/ and tools/ sit one level below the pipeline modules they import
@@ -123,7 +121,7 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema  # noqa: E402  (schema.py)
-from lib import dbconn, http, ids, state, text  # noqa: E402
+from lib import dbconn, http, state, text  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
 from lib.upsert import UpsertErrorRate, upsert_checked  # noqa: E402
 

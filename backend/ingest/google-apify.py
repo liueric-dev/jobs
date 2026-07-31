@@ -177,6 +177,13 @@ def run_actor_query(query, location):
     )
     run_id = start["data"]["id"]
 
+    # D17. `run` must be bound before the loop, because the loop body is what
+    # used to bind it and a run that is already SUCCEEDED never enters it --
+    # the actor is billed, the dataset exists, and the caller got an
+    # UnboundLocalError instead of the rows. The start response carries the
+    # same `data` shape, `defaultDatasetId` included, so it is the answer and
+    # not merely a placeholder.
+    run = start
     elapsed = 0
     status = start["data"]["status"]
     while status in ("READY", "RUNNING") and elapsed < APIFY_RUN_TIMEOUT_SECS:

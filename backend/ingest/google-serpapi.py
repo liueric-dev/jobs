@@ -176,6 +176,13 @@ GOOGLE_JOBS_STALE_AFTER_DAYS = 30
 # overlap. 20h (not 24) so a fixed daily cron time drifting a few minutes
 # never skips a legitimate next-day run.
 MIN_HOURS_BETWEEN_RUNS = float(os.environ.get("GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS", "20"))
+#: D35. This module's docstring and backend/README.md both document
+#: CLAIM_TTL_MINUTES as configuration, and nothing read it -- try_claim() was
+#: called without `ttl_minutes`, so lib/state.py's DEFAULT_CLAIM_TTL_MINUTES
+#: applied and setting the env var did nothing at all. Documented configuration
+#: that is silently ignored is worse than undocumented configuration.
+CLAIM_TTL_MINUTES = int(os.environ.get(
+    "CLAIM_TTL_MINUTES", state.DEFAULT_CLAIM_TTL_MINUTES))
 
 
 def log_query_stats(conn, slug, new_count, total_fetched, days_since_last_run):
@@ -233,7 +240,8 @@ def pick_stale_queries_by_bucket(conn, buckets):
                 # window another run already covered.
                 break
             dataset = f"google_jobs:query:{q['slug']}"
-            if state.try_claim(conn, dataset, table=schema.WATERMARK_TABLE):
+            if state.try_claim(conn, dataset, table=schema.WATERMARK_TABLE,
+                               ttl_minutes=CLAIM_TTL_MINUTES):
                 picked.append((q, watermarks.get(q["slug"])))
                 claimed_in_bucket += 1
             # else: another machine already holds this claim -- try the next-stalest candidate

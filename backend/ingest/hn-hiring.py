@@ -74,11 +74,10 @@ import os
 import sys
 import re
 import html as html_module
-import hashlib
 import json
 import urllib.request
 import urllib.error
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 
 # ingest/ and tools/ sit one level below the pipeline modules they import
@@ -89,7 +88,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import relevance  # noqa: E402  (relevance.py -- for the role vocabulary)
 import schema  # noqa: E402  (schema.py)
-from lib import dbconn, http, ids, state, text  # noqa: E402
+from lib import dbconn, http, state, text  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
 from lib.upsert import UpsertErrorRate, upsert_checked  # noqa: E402
 
@@ -396,6 +395,7 @@ def main():
     records = []
     declined = []          # comment ids re-read but yielding no usable record
     fetch_errors = 0
+    null_items = 0
     now = utc_now_str()
     for kid_id in new_kid_ids:
         try:
@@ -407,6 +407,22 @@ def main():
                 print(f"[debug] fetch failed for comment {kid_id}: {e}", file=sys.stderr)
             continue  # transient failure -- don't mark seen, retry next run
         if not comment:
+            # D42. A null item is HN answering "this comment is gone" -- deleted
+            # or dead. That is PERMANENT, unlike the fetch failure above, so it
+            # is marked seen rather than retried. It used to `continue` before
+            # the INSERT, which put a permanent condition on the transient path
+            # and re-fetched every dead comment in every thread on every run,
+            # for the life of the thread.
+            #
+            # Marked seen but NOT counted as declined: `declined` means "fetched
+            # and judged irrelevant", and a comment that no longer exists was
+            # never judged.
+            conn.execute(
+                "INSERT INTO hn_seen_comments (comment_id, fetched_at) VALUES (%s, %s) "
+                "ON CONFLICT (comment_id) DO NOTHING",
+                (str(kid_id), now),
+            )
+            null_items += 1
             continue
 
         conn.execute(
@@ -462,18 +478,19 @@ def main():
                         table=schema.WATERMARK_TABLE)
     conn.close()
 
-    skipped = len(new_kid_ids) - len(records) - fetch_errors
+    skipped = len(new_kid_ids) - len(records) - fetch_errors - null_items
     if DEBUG_PRINT_KEYS:
         print(f"[debug] thread {thread['id']} ({thread.get('title')}): "
               f"{len(kid_ids)} total kids, {len(already_seen_ids)} already processed, "
-              f"{len(new_kid_ids)} new, {skipped} unparseable, {fetch_errors} fetch errors",
+              f"{len(new_kid_ids)} new, {skipped} unparseable, {fetch_errors} fetch errors, "
+              f"{null_items} gone (deleted/dead)",
               file=sys.stderr)
 
-    if new_count or closed_count or fetch_errors or result.errors:
+    if new_count or closed_count or fetch_errors or null_items or result.errors:
         print(f"hn-hiring: thread '{thread.get('title')}' -- {new_count} new, "
               f"{skipped} skipped (unparseable), {closed_count} closed (stale), "
               f"{len(result.errors)} record(s) dropped, "
-              f"{fetch_errors} fetch errors.")
+              f"{fetch_errors} fetch errors, {null_items} gone.")
 
     if upsert_failure:
         print(f"hn-hiring ingest FAILED: {upsert_failure}")

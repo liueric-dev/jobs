@@ -480,26 +480,32 @@ class TestGoogleApify(NormalizerContract):
         self.assert_ids_unique(records, "google_jobs")
 
     @require("google-apify")
-    def test_an_immediately_successful_run_still_raises_UnboundLocalError(self):
-        """Audit item 1 / D17, reproduced.
+    def test_an_immediately_successful_run_returns_its_dataset(self):
+        """Audit item 1 / D17 -- FIXED 2026-07-31, and this is the flip.
 
-        `run_actor_query` binds `run` only inside the `while` body
-        (google-apify.py:182-186). A start response that is already SUCCEEDED
-        skips the loop entirely, passes the `status != "SUCCEEDED"` check,
-        and then reads `run["data"]["defaultDatasetId"]` -- a name that was
-        never assigned. The result is a paid actor run whose results are
-        never collected, reported as one failed query.
+        `run_actor_query` used to bind `run` only inside the `while` body. A
+        start response that is already SUCCEEDED skips the loop entirely,
+        passes the `status != "SUCCEEDED"` check, and then read
+        `run["data"]["defaultDatasetId"]` -- a name that was never assigned.
+        The result was a paid actor run whose results are never collected,
+        reported as one failed query among many.
 
-        This asserts the CURRENT behaviour on purpose. It is the reproduction
-        `DEFECTS.md` D17 says is blocked on this harness; whoever fixes the
-        defect flips this assertion to the dataset items and the fixture is
-        already here.
+        The previous version of this test asserted the UnboundLocalError on
+        purpose, as the reproduction `DEFECTS.md` D17 said was blocked on this
+        harness. `run = start` before the loop is the whole fix; this asserts
+        the rows instead, which is what the assertion was left here to become.
+
+        The cassette is unchanged -- `_immediate_success()` rewrites the start
+        response's status, so the same recorded bytes drive both the old
+        failure and the new success.
         """
         announce("google-apify")
         cassette = _immediate_success(cassettes.Cassette.load("google-apify"))
         with cassettes.replay(cassette=cassette):
-            with self.assertRaises(UnboundLocalError):
-                self.apify.run_actor_query("AI engineer", "New York")
+            items = self.apify.run_actor_query("AI engineer", "New York")
+        self.assertTrue(items, "an immediately-SUCCEEDED run returned no items")
+        records = [self.apify.normalize_job(j, "nyc") for j in items]
+        self.assert_normalizes(records, platform="google_jobs")
 
 
 if __name__ == "__main__":

@@ -73,14 +73,12 @@ runs all ingest scripts sequentially so they never run concurrently.
 import os
 import sys
 import re
-import html as html_module
-import hashlib
 import time
 import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
-from datetime import datetime, timedelta, timezone
+from datetime import timezone
 
 
 # ingest/ and tools/ sit one level below the pipeline modules they import
@@ -90,7 +88,7 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema  # noqa: E402  (schema.py)
-from lib import dbconn, http, ids, state, text  # noqa: E402
+from lib import dbconn, http, state, text  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
 from lib.upsert import UpsertErrorRate, upsert_checked  # noqa: E402
 
@@ -160,6 +158,13 @@ def parse_feed(xml_bytes, category):
         if not source_id:
             continue
 
+        # D29. Parsed once and reused. It was called twice on the same string,
+        # which was merely wasteful here -- but `posted_at` feeds
+        # HASH_FIELDS_SHORT via posted_at_timestamp, so two calls are two
+        # chances for one row to carry a value its own timestamp disagrees
+        # with if the parse ever stops being pure.
+        posted_at = parse_posted_at(pub_date)
+
         records.append({
             "platform": "weworkremotely",
             "company_token": text.slugify(company_name),
@@ -169,8 +174,8 @@ def parse_feed(xml_bytes, category):
             "location_raw": region or None,
             "department": rss_category or None,
             "job_url": link or None,
-            "posted_at": parse_posted_at(pub_date),
-            "posted_at_ts": text.posted_at_timestamp(parse_posted_at(pub_date)),
+            "posted_at": posted_at,
+            "posted_at_ts": text.posted_at_timestamp(posted_at),
             "salary_text": None,
             "seniority_guess": text.guess_seniority(title),
             "location_is_nyc": bool(text.NYC_PATTERN.search(region)),

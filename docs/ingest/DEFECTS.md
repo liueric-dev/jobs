@@ -53,52 +53,107 @@ given).
 
 ---
 
+## Task 34's pass over this register, 2026-07-31
+
+**Eleven closed, six re-dispositioned, three left open with reasons.** Every row
+below was re-checked against the code rather than taken from this file.
+
+**Two entries were already done and still listed as owed** — which is the register's
+own failure mode, and the reason this pass re-read the code instead of the table:
+
+- **D45's body has said `### D45 — fixed` since task 16's follow-up landed**, while its
+  index row said *"**open** — needs a task"*. The index is the part anyone scans.
+- **D27's five unused imports are all absent from `ats.py`**, verified name by name.
+
+**Nine were dispositioned *"fix with harness — task 09"*, and task 09 landed three
+tranches ago** (`09-fetcher-harness.md`, `68f026f`). Nothing rescheduled them, so they
+were neither open-with-an-owner nor closed — invisible in both directions. Three are now
+fixed (D10, D12, D17); six are marked **open, UNBLOCKED**, which is a real status rather
+than a stale blocker.
+
+**D17 was the cheapest confirmed bug in the repo** and had been waiting on a fix of two
+lines. `run_actor_query()` bound `run` only inside the poll loop, so an actor run that
+came back `SUCCEEDED` immediately skipped the loop, passed the status check, and read a
+name that was never assigned — **a paid Apify run whose results are never collected,
+reported as one failed query among many.** The reproduction was already committed at
+`tests/test_ingest_cassettes.py`, written to assert the `UnboundLocalError` on purpose
+with a note saying *"whoever fixes the defect flips this assertion."* It is flipped.
+
+**Three counts in this register were wrong**, all in the same direction — the code had
+more of the defect than the entry claimed:
+
+| entry | recorded | actual |
+|---|---|---|
+| D28 | *"4 unused imports"* | **5** — the whole `from datetime import …` line is dead |
+| D30 | *"5 unused imports"* | 5, but `timezone` **is** used and would have gone in a sweep |
+| A5 (task 34) | two stale docstring sites | **three**, plus the cassette's own `note` |
+
+Counted with an AST walk over binding-vs-`Name`-use rather than by grep, because grep
+cannot tell an import from the word appearing in a comment — which is exactly how D32's
+`ids` was miscounted in the first place.
+
+**Three are left open on purpose, with the reason recorded:**
+
+- **D31** (three of six ingests bypass `lib.http` retry/backoff) — *"I could not
+  determine whether this is deliberate or an incomplete migration"* is still the honest
+  state, and `weworkremotely.md` says so. Each of the three imports `http` **solely for
+  `DEFAULT_TIMEOUT`** and then calls `urllib.request.urlopen` directly, which is either a
+  deliberate opt-out of backoff for a cheap endpoint or a migration nobody finished.
+  **This is a decision, not a fix**, and making it silently uniform would change retry
+  behaviour on three live sources to settle a documentation question.
+- **D33** (`google_jobs_query_stats` accumulates, read by nothing) — the adaptive-cadence
+  consumer that was meant to read it is **task 25**. Deleting the table now destroys the
+  input; wiring it now is task 25's job. Left with the pointer.
+- **D34** (22 orphaned `job_ingest_state` watermark rows) — a DELETE against the live
+  database, not a code change. It needs the owner at a psql prompt and gains nothing from
+  being run by an agent mid-refactor.
+
 ## Index
 
 | id | class | disposition | one-line |
 |---|---|---|---|
 | [D01](#d01) | silent data loss | **fixed** — task 03 | Per-record upsert errors discarded at 8 call sites |
-| [D02](#d02) | silent data loss | fix with harness — task 09 | `builtin-nyc.py` title/company zip can silently misattribute |
-| [D03](#d03) | silent data loss | fix with harness — task 09 | `builtin-nyc.py` salary regex unscoped, captures false positives |
+| [D02](#d02) | silent data loss | **open, UNBLOCKED** — task 09 landed | `builtin-nyc.py` title/company zip can silently misattribute |
+| [D03](#d03) | silent data loss | **open, UNBLOCKED** — task 09 landed | `builtin-nyc.py` salary regex unscoped, captures false positives |
 | [D04](#d04) | silent data loss | won't-fix (documented) | `weworkremotely.py` token from display name — silent duplicate rows |
-| [D05](#d05) | silent data loss | fix with harness — task 09 | `weworkremotely.py` drops items with zero counters at any verbosity |
+| [D05](#d05) | silent data loss | **open, UNBLOCKED** — task 09 landed | `weworkremotely.py` drops items with zero counters at any verbosity |
 | [D06](#d06) | silent data loss | won't-fix (documented) | `weworkremotely.py` all-feeds-empty indistinguishable from a quiet day |
 | [D07](#d07) | silent data loss | won't-fix (mitigated) | Google sources: non-English relative dates silently lose `posted_at` |
 | [D08](#d08) | silent data loss | fix before deploy — task 24 | Contributor API: empty submit still advances the watermark |
 | [D09](#d09) | silent data loss | fix before deploy — task 24 | Contributor API: unreadable query bank silently mislabels `mode` |
-| [D10](#d10) | silent data loss | fix with harness — task 09 | `match.py`: bad `tech_stack` JSON silently becomes `[]` |
-| [D11](#d11) | silent data loss | fix with harness — task 09 | `match.py`: demoted/orphaned rows deleted with no recoverable log |
-| [D12](#d12) | silent data loss | fix with harness — task 09 | `match.py`: a typo'd `criteria.json` section silently disables itself |
-| [D13](#d13) | silent data loss | fix with harness — task 09 | `match.py`/`extract.py`: seniority vocabulary drift scores as free |
+| [D10](#d10) | silent data loss | **fixed** — task 34, 2026-07-31 — now reported, still `[]` | `match.py`: bad `tech_stack` JSON silently becomes `[]` |
+| [D11](#d11) | silent data loss | **open, UNBLOCKED** — task 09 landed | `match.py`: demoted/orphaned rows deleted with no recoverable log |
+| [D12](#d12) | silent data loss | **fixed** — task 34, 2026-07-31 — `check_criteria_sections()`, 4 tests | `match.py`: a typo'd `criteria.json` section silently disables itself |
+| [D13](#d13) | silent data loss | **open, UNBLOCKED** — task 09 landed | `match.py`/`extract.py`: seniority vocabulary drift scores as free |
 | [D14](#d14) | silent data loss | won't-fix (documented, low current risk) | `match.py --profile` can silently prune another profile's rows |
 | [D15](#d15) | silent data loss | **fixed** — task 08 | `score.py`: `fit_score`/`primary_track` stored unvalidated (audit item 8) |
 | [D16](#d16) | loud failure | **fixed** — task 08 | `score.py`: missing `buckets` key kills a profile's whole batch |
-| [D17](#d17) | loud failure | fix with harness — task 09 | `google-apify.py`: `UnboundLocalError` on immediate-success poll (audit item 1) |
+| [D17](#d17) | loud failure | **fixed** — task 34, 2026-07-31 — reproduction flipped to assert the rows | `google-apify.py`: `UnboundLocalError` on immediate-success poll (audit item 1) |
 | [D18](#d18) | loud failure | fix opportunistically | Uncaught `KeyError` on malformed config (audit item 6) |
 | [D19](#d19) | loud failure | fix opportunistically | Normalization outside the per-unit `try` in 4 scripts (audit item 7) |
 | [D20](#d20) | loud failure | fix opportunistically | `match.py`: no per-record isolation, one bad row kills the run (audit item 3) |
 | [D21](#d21) | loud failure | fix opportunistically | `hn-hiring.py`: `relevance.json` load failure crashes at import |
 | [D22](#d22) | loud failure | won't-fix (deliberate) | `ensure_schema` raises uncaught if `public.events` exists |
-| [D23](#d23) | silent data loss | fix with harness — task 09 | `hn-hiring.py`: ledger-before-upsert crash window strands comments (audit item 4) |
+| [D23](#d23) | silent data loss | **open, UNBLOCKED** — task 09 landed | `hn-hiring.py`: ledger-before-upsert crash window strands comments (audit item 4) |
 | [D24](#d24) | silent data loss (unconfirmed) | won't-fix (unconfirmed; revisit if it recurs) | `extract.py`: 15 rows possibly permanently starved at `facts_version=1` |
 | [D25](#d25) | silent data loss | **fixed** — `28f1d0e` | Live model silently differed from the documented default |
-| [D26](#d26) | cosmetic | fold into task 34 | Stale "`unescape=False`" claim in two files contradicts `ats.py` |
+| [D26](#d26) | cosmetic | **fixed** — task 34, 2026-07-31 — the surviving half was a test's *reason* | Stale "`unescape=False`" claim in two files contradicts `ats.py` |
 | [D27](#d27) | cosmetic | **fixed** — verified 2026-07-31, all five absent | `ats.py`: 5 unused imports |
-| [D28](#d28) | cosmetic | fold into task 34 | `builtin-nyc.py`: 4 unused imports, `http` imported for one constant |
-| [D29](#d29) | cosmetic | fold into task 34 | `weworkremotely.py`: `parse_posted_at` called twice on the same value |
-| [D30](#d30) | cosmetic | fold into task 34 | `weworkremotely.py`: 5 unused imports |
-| [D31](#d31) | cosmetic | fold into task 34 | Inconsistent `lib.http` usage — 3 of 6 ingest scripts bypass retry/backoff |
-| [D32](#d32) | cosmetic | fold into task 34 | `hn-hiring.py`: 3 unused imports |
-| [D33](#d33) | cosmetic | fold into task 34 | `google_jobs_query_stats` accumulates, read by nothing |
-| [D34](#d34) | cosmetic | fold into task 34 | 22 orphaned `job_ingest_state` watermark rows |
-| [D35](#d35) | cosmetic | fold into task 34 | `CLAIM_TTL_MINUTES` documented but unread by `google-serpapi.py` |
+| [D28](#d28) | cosmetic | **fixed** — task 34, 2026-07-31 — **5** unused, not the 4 recorded | `builtin-nyc.py`: 4 unused imports, `http` imported for one constant |
+| [D29](#d29) | cosmetic | **fixed** — task 34, 2026-07-31 | `weworkremotely.py`: `parse_posted_at` called twice on the same value |
+| [D30](#d30) | cosmetic | **fixed** — task 34, 2026-07-31 — `timezone` IS used and was kept | `weworkremotely.py`: 5 unused imports |
+| [D31](#d31) | cosmetic | **open — needs a decision, not a fix** | Inconsistent `lib.http` usage — 3 of 6 ingest scripts bypass retry/backoff |
+| [D32](#d32) | cosmetic | **fixed** — task 34, 2026-07-31 | `hn-hiring.py`: 3 unused imports |
+| [D33](#d33) | cosmetic | **open — belongs to task 25** | `google_jobs_query_stats` accumulates, read by nothing |
+| [D34](#d34) | cosmetic | **open — a data cleanup, needs the live DB** | 22 orphaned `job_ingest_state` watermark rows |
+| [D35](#d35) | cosmetic | **fixed** — task 34, 2026-07-31 — env var now actually read | `CLAIM_TTL_MINUTES` documented but unread by `google-serpapi.py` |
 | [D36](#d36) | silent data loss | won't-fix (patched API-side) | `claimed_by` asymmetry already caused a real ownership-check bug |
 | [D37](#d37) | cosmetic | won't-fix (low stakes) | `google-apify.py`: abandoned actor runs billed and untracked |
 | [D38](#d38) | cosmetic | won't-fix (harmless) | `POST /v1/events` impression-dedup race under concurrent requests |
 | [D39](#d39) | cosmetic | fix opportunistically | `extract.py`: concurrent runs would double-spend LLM calls (no lock) |
 | [D40](#d40) | cosmetic | fix opportunistically | `score.py`: login-triggered and nightly runs can double-spend |
 | [D41](#d41) | cosmetic | fix before deploy — task 24 | Contributor API: `claim` is unmetered beyond the daily cap (self-documented gap) |
-| [D42](#d42) | cosmetic | fold into task 34 | `hn-hiring.py`: null comment items re-fetched forever (audit item 5) |
+| [D42](#d42) | cosmetic | **fixed** — task 34, 2026-07-31 — marked seen, counted, reported | `hn-hiring.py`: null comment items re-fetched forever (audit item 5) |
 | [D43](#d43) | silent data loss | **fixed** — task 08 | `score.py`: a tombstone left the previous score in place, and `has_fields` let an all-null answer through |
 | [D44](#d44) | loud failure | **fixed** — task 08 | `evals/__main__.py`: `evals run` raised `UnboundLocalError` for every task |
 | [D45](#d45) | silent under-sizing | **fixed** — verified 2026-07-31; the body has said so and this row did not | `company_ats`: the `never_found` write-back from `ats_seed` is partial. 35 rows against a true population of 139 |

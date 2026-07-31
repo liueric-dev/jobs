@@ -327,13 +327,25 @@ def load_facts(conn, cfgs):
             "advanced_degree_required", "customer_facing", "remote_policy",
             "gap_friendly_language", "location_is_nyc", "location_is_remote")
     out = []
+    corrupt = []
     for r in rows:
         d = dict(zip(cols, r))
+        raw = d["tech_stack"]
         try:
-            d["tech_stack"] = json.loads(d["tech_stack"] or "[]")
+            d["tech_stack"] = json.loads(raw or "[]")
         except (TypeError, json.JSONDecodeError):
+            # D10. Still `[]`, because one unreadable row must not kill a run --
+            # but no longer SILENT. `[]` is priced as "tech:missing" downstream,
+            # exactly like an unextracted field, so corrupt JSON and an honest
+            # absence scored identically and neither showed up anywhere.
             d["tech_stack"] = []
+            corrupt.append(d.get("job_id"))
         out.append(d)
+    if corrupt:
+        print(f"match: {len(corrupt)} row(s) have unreadable tech_stack JSON and are "
+              f"being scored as if the field were missing: "
+              f"{', '.join(str(j) for j in corrupt[:5])}"
+              f"{' ...' if len(corrupt) > 5 else ''}", file=sys.stderr)
     return out
 
 
@@ -371,8 +383,44 @@ def prune_orphans(conn, profile, facts, *, dry_run=False):
     return n
 
 
+#: Every top-level section `score_job()` reads. D12: each lookup is a `.get()`
+#: with a default, so a section whose name is misspelled in a profile's
+#: `criteria_json` does not raise -- it disables that section's entire
+#: contribution and scores every posting as though the rule were not there.
+#: `profiles.validate()` runs at write time and nothing re-checked at read time.
+#:
+#: Kept as a name list rather than a schema because `score_job()` is pure and
+#: must stay that way: this is checked by the caller, once per profile per run,
+#: never inside the scorer.
+CRITERIA_SECTIONS = frozenset({
+    "ai_involvement", "archetypes", "base", "flags", "location",
+    "seniority", "tech", "unknown_penalty", "years_experience",
+})
+
+
+def check_criteria_sections(profile):
+    """Warn about criteria_json keys `score_job()` will never read.
+
+    Returns the unknown names. Deliberately a warning, not a raise: an
+    unrecognised section may be a forward-compatible key written by a newer
+    version, and refusing to score a whole profile over one stray name is a
+    worse failure than scoring it with one section quiet. The point is that it
+    stops being SILENT.
+    """
+    unknown = sorted(k for k in profile.criteria
+                     if not k.startswith("_") and k not in CRITERIA_SECTIONS)
+    if unknown:
+        print(f"match: profile '{profile.profile}' criteria_json has "
+              f"{len(unknown)} section(s) that score_job() never reads: "
+              f"{', '.join(unknown)}. Each contributes NOTHING to the score. "
+              f"Known sections: {', '.join(sorted(CRITERIA_SECTIONS))}",
+              file=sys.stderr)
+    return unknown
+
+
 def match_profile(conn, profile, facts, *, rebuild=False, dry_run=False):
     """Recompute one profile's matches. Returns (written, deleted, skipped)."""
+    check_criteria_sections(profile)
     seen = {} if rebuild else existing_versions(conn, profile.profile)
     now = utc_now_str()
 

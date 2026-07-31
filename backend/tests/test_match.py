@@ -653,5 +653,55 @@ class TestPursuitGoldens(unittest.TestCase):
             sum(1 for j in shared_floor if self.score[j] >= self.floor), 51)
 
 
+class TestCriteriaSectionsAreCheckedAtReadTime(unittest.TestCase):
+    """D12: a misspelled criteria section disabled itself in silence.
+
+    Every lookup in `score_job()` is a `.get()` with a default, so a profile
+    whose `criteria_json` says "senority" scores every posting as though the
+    seniority rule did not exist -- no error, no reason row, no clue. The
+    check lives in the CALLER, because `score_job()` is pure and stays pure.
+    """
+
+    class _Profile:
+        profile = "test"
+
+        def __init__(self, criteria):
+            self.criteria = criteria
+
+    def test_the_shipped_criteria_files_have_no_unknown_sections(self):
+        # If this fails, either a section was added to a config without being
+        # taught to score_job(), or CRITERIA_SECTIONS has gone stale.
+        for name in ("criteria.json", "pursuit-criteria.json"):
+            path = os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), "config", name)
+            with open(path) as fh:
+                criteria = json.load(fh)
+            with self.subTest(config=name):
+                self.assertEqual(
+                    match.check_criteria_sections(self._Profile(criteria)), [],
+                    f"{name} has a section score_job() never reads")
+
+    def test_a_typo_is_reported_rather_than_ignored(self):
+        criteria = {"base": 50, "senority": {"target": ["junior"]}}
+        self.assertEqual(
+            match.check_criteria_sections(self._Profile(criteria)), ["senority"])
+
+    def test_underscore_comment_keys_are_not_reported(self):
+        # `_comment` fields are load-bearing documentation in this repo and
+        # appear in every config; flagging them would make the check noise.
+        criteria = {"base": 50, "_comment": "why 50", "_source": "task 13"}
+        self.assertEqual(
+            match.check_criteria_sections(self._Profile(criteria)), [])
+
+    def test_every_section_score_job_reads_is_declared(self):
+        # The frozenset is hand-maintained; this pins it against the source.
+        import re as _re
+        src = open(match.__file__).read()
+        body = src[src.index("def score_job("):src.index("def existing_versions(")]
+        read = set(_re.findall(r'criteria\.get\("([a-z_]+)"', body))
+        self.assertEqual(read - match.CRITERIA_SECTIONS, set(),
+                         "score_job() reads a section CRITERIA_SECTIONS omits")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
