@@ -1,6 +1,14 @@
 # 12 — `FACTS_VERSION` bump and re-extract
 
-**Status:** todo. **Depends on:** 04, 07, 11. **Blocks:** 13, 30.
+**Status:** ~~todo.~~ **DONE, `c4a8ff5` and `2b4dba2`.** **Depends on:** 04, 07, 11.
+**Blocks:** 13, 30.
+**Corrected 2026-07-30:** this line still read `todo` after the task landed.
+[`README.md`](../README.md)'s Phase 2 row for 12 says `done` — *"the extraction gate
+retargeted to `pursuit`, which took the bump from 5,317 rows to 863"* — and `HANDOFF.md`'s
+*State at handoff* table carries `12 | FACTS_VERSION 3, extraction gate retargeted to
+pursuit | c4a8ff5, 2b4dba2`. `git log -1 c4a8ff5` reads *"FACTS_VERSION 3, retarget the
+extraction gate to pursuit (tranche_two/12)"*; `2b4dba2` is *"Sharpen 12's ai_operations
+re-check: the spread, not the 3.4x"*. Task 13 was **not** blocked by this when it ran.
 
 Carry task 11's three changes into `job_facts` with one version bump and one full
 re-extraction.

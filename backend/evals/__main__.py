@@ -289,12 +289,36 @@ def cmd_label_sample(args):
         rows, promoted = labels.confirm_scores(rows, prof.criteria)
         picked = labels.sample(rows, args.n, seed=args.seed,
                                overlap=args.overlap)
-        if not args.dry_run:
-            labels.register_set(conn, args.label_set, picked,
-                                seed=args.seed, profile=profile,
-                                note=args.note)
+        # THE REDRAW GUARD RUNS BEFORE save_set(), WHICH IS BELOW AND OUTSIDE
+        # THIS BLOCK. save_set() overwrites the committed fixture -- the file
+        # the report reads -- so a refusal discovered after it would already
+        # have desynced the fixture from the database it was refused by. The
+        # rule itself lives in labels.register_set(); this only decides where
+        # in the command it is asked, and how the refusal is rendered.
+        #
+        # The dry run asks the same question read-only rather than skipping
+        # it. It writes nothing, so it is never the run that does the damage --
+        # but "would write ..." for a draw that cannot be registered is exactly
+        # the wrong answer to give the one command an operator runs to find out
+        # whether the real one will work.
+        refused = None
+        try:
+            if args.dry_run:
+                refused = labels.redraw_refusal(conn, args.label_set, picked)
+            else:
+                labels.register_set(conn, args.label_set, picked,
+                                    seed=args.seed, profile=profile,
+                                    note=args.note)
+        except labels.SetAlreadyDrawn as e:
+            refused = str(e)
     finally:
         conn.close()
+
+    if refused:
+        print(f"evals label sample REFUSED: {refused}", file=sys.stderr)
+        print(f"  Nothing was registered and {args.out} was not written.",
+              file=sys.stderr)
+        return 2
 
     counts = {}
     platforms = {}

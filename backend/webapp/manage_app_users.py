@@ -8,6 +8,7 @@ which is the browser-facing surface.
 
     python3 manage_app_users.py init-schema                     # once, admin credential
     python3 manage_app_users.py add --email you@x.com --profile tech --admin
+    python3 manage_app_users.py set-profile --email you@x.com --profile pursuit
     python3 manage_app_users.py list
     python3 manage_app_users.py disable --email you@x.com
     python3 manage_app_users.py sessions --email you@x.com
@@ -104,6 +105,67 @@ def cmd_add(args):
     print("google_sub is bound on their first successful login. Until then the")
     print("row is matched by email; afterwards by sub, so an email change is")
     print("harmless and a recycled address cannot inherit this account.")
+
+
+def cmd_set_profile(args):
+    """Move an existing user to a different profile.
+
+    THE COMMAND THAT MAKES app_users.profile CORRECTABLE. `add` is the only
+    other writer of that column and `email` is UNIQUE, so re-running `add`
+    against an existing address is refused rather than being an update. Without
+    this subcommand the only remaining path is an UPDATE typed by hand, which
+    README.md tells operators not to do -- and which skips the profile check
+    below, the one thing standing in for the foreign key that is deliberately
+    absent (schema_web.py:119-125).
+
+    SESSIONS ARE NOT REVOKED, ON PURPOSE. require_user re-joins app_users on
+    every request and reads u.profile out of that join (auth.py:96-104,128-129);
+    app_sessions stores no copy of the profile (schema_web.py:127-138). The next
+    request therefore already sees the new value, and revoking would log someone
+    out to achieve nothing. Same reasoning as `disable` taking effect on the
+    next request rather than the next login.
+    """
+    email = args.email.strip().lower()
+    with connect() as conn:
+        # The same check `add` makes, and for the same reason: no foreign key.
+        # load_one() returns paused profiles too, which is again correct -- an
+        # operator may well move a user onto a profile they have not activated
+        # yet, so an inactive target warns below instead of failing.
+        target = profiles.load_one(conn, args.profile)
+        if target is None:
+            known = [p.profile for p in profiles.load_active(conn)]
+            print(f"no such profile: {args.profile!r}. active profiles: "
+                  f"{', '.join(known) or '(none)'}", file=sys.stderr)
+            sys.exit(1)
+
+        row = conn.execute(
+            "SELECT id, profile FROM app_users WHERE email = %s", (email,)).fetchone()
+        if row is None:
+            print(f"no user with email {email!r}; use add to create them",
+                  file=sys.stderr)
+            sys.exit(1)
+        user_id, before = row
+
+        conn.execute("UPDATE app_users SET profile = %s WHERE id = %s",
+                     (args.profile, user_id))
+        conn.commit()
+
+    print(f"id       : {user_id}")
+    print(f"email    : {email}")
+    print(f"profile  : {before} -> {args.profile}")
+    if not target.active:
+        # The failure this command exists to correct, so it must not be silent:
+        # the first row this service ever had landed on an inactive profile and
+        # nothing said so. A warning rather than an error -- see the docstring.
+        print()
+        print(f"WARNING: profile {args.profile!r} has active = False.")
+        print("The pipeline works only for active profiles (profiles.load_active),")
+        print("so nothing new is extracted, matched or scored for this user until")
+        print("someone activates it. They can still log in; the list they see is")
+        print("whatever rows already exist.")
+    print()
+    print("Takes effect on their NEXT request -- require_user re-reads "
+          "app_users every time, so no session needs revoking.")
 
 
 def cmd_list(args):
@@ -211,6 +273,12 @@ def main():
     a.add_argument("--name", default=None, dest="name")
     a.add_argument("--admin", action="store_true")
     a.set_defaults(func=cmd_add)
+
+    sp = sub.add_parser("set-profile",
+                        help="move an existing user to a different profile")
+    sp.add_argument("--email", required=True)
+    sp.add_argument("--profile", required=True, help="which pipeline profile they see")
+    sp.set_defaults(func=cmd_set_profile)
 
     l = sub.add_parser("list", help="list users")
     l.set_defaults(func=cmd_list)

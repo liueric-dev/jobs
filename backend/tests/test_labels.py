@@ -1679,6 +1679,244 @@ class TestSchemaAgainstPostgres(unittest.TestCase):
         self.assertIn("missing", problems[0])
 
 
+# --------------------------------------------------------------------------
+# The redraw window, which closes the first time anyone answers anything
+# --------------------------------------------------------------------------
+
+def _drawn(job_ids, *, overlap=()):
+    """A drawn set in the shape register_set() consumes.
+
+    Positions come from the order given, so a caller can hand the same job ids
+    back in a different order and see that the digest -- which is over the
+    SORTED ids -- does not move.
+    """
+    return [{"job_id": j, "stratum": "surfaced", "platform": "greenhouse",
+             "overlap": j in overlap, "position": i}
+            for i, j in enumerate(job_ids)]
+
+
+@unittest.skipUnless(scratchdb.available(),
+                     "no reachable Postgres for a scratch schema")
+class TestASetCannotBeRedrawnOnceItIsDrawn(unittest.TestCase):
+    """The window HANDOFF.md:275 calls closed, closed in code.
+
+    THE DEFECT THIS PINS. register_set() inserts `ON CONFLICT DO NOTHING` on
+    both tables, so re-running `evals label sample` with a different --seed or
+    --n did not fail: the existing items kept their old `position` and
+    `overlap`, newly drawn job_ids were APPENDED, and `eval_label_sets.n` and
+    `job_id_sha256` went on describing the first draw. digest() existed and was
+    never compared against the stored value anywhere. Three disagreeing records
+    of one set -- database, committed fixture, published figures -- and nothing
+    red.
+
+    Against a real Postgres rather than a fake connection: the guard is a claim
+    about what two TABLES hold, and one of them is `eval_labels`, which a fake
+    connection reports empty forever -- so it would pass the unguarded code.
+    """
+
+    def setUp(self):
+        self._ctx = scratchdb.scratch_schema()
+        self.conn, self.name = self._ctx.__enter__()
+        labels.ensure_schema(self.conn)
+        self.rows = _drawn(("a1", "b2", "c3"))
+        labels.register_set(self.conn, "pursuit-v1", self.rows, seed=0,
+                            profile="pursuit")
+
+    def tearDown(self):
+        self._ctx.__exit__(None, None, None)
+
+    def _stored(self):
+        return self.conn.execute(
+            "SELECT n, job_id_sha256 FROM eval_label_sets "
+            "WHERE label_set = 'pursuit-v1'").fetchone()
+
+    def _job_ids(self):
+        return [r[0] for r in self.conn.execute(
+            "SELECT job_id FROM eval_label_items WHERE label_set = "
+            "'pursuit-v1' ORDER BY job_id").fetchall()]
+
+    def test_re_registering_the_same_draw_is_a_no_op_and_does_not_raise(self):
+        # THIS IS WHAT THE GUARD MUST NOT BREAK. A re-run of the same command
+        # with the same seed is how an operator recovers from a crash between
+        # register_set() and save_set(), and it is how pursuit-v1's own
+        # defect-4 redraw was verified against the committed fixture. Handed
+        # back in a different order, because the digest is over the SORTED ids
+        # and a guard that keyed on insertion order would refuse this.
+        stored = self._stored()
+        labels.register_set(self.conn, "pursuit-v1", list(reversed(self.rows)),
+                            seed=0, profile="pursuit")
+        self.assertEqual(self._stored(), stored)
+        self.assertEqual(self._job_ids(), ["a1", "b2", "c3"])
+
+    def test_a_draw_with_different_job_ids_is_refused(self):
+        other = _drawn(("a1", "b2", "c4"))
+        with self.assertRaises(labels.SetAlreadyDrawn) as caught:
+            labels.register_set(self.conn, "pursuit-v1", other, seed=1,
+                                profile="pursuit")
+        msg = str(caught.exception)
+        # Both digests, the stored n and the label count, so the reader can
+        # tell "I changed the seed" from "the corpus moved under me" without
+        # going to the database to find out which.
+        self.assertIn(labels.digest(self.rows), msg)
+        self.assertIn(labels.digest(other), msg)
+        self.assertIn("n=3", msg)
+        self.assertIn("0 row(s)", msg)
+        # And it refused BEFORE writing: `c4` was not appended, which is the
+        # shape the unguarded version left behind.
+        self.assertEqual(self._job_ids(), ["a1", "b2", "c3"])
+
+    def test_one_label_refuses_even_a_redraw_at_the_same_digest(self):
+        labels.record(self.conn, axis="A", job_id="a1",
+                      field="ai_involvement", value="none",
+                      labeller_id="alice", label_set="pursuit-v1")
+        self.conn.commit()
+
+        # SAME DIGEST, DIFFERENT SET. The job ids are the digest's only input,
+        # so moving which rows are `overlap` -- exactly what pursuit-v1's
+        # defect-4 redraw did -- hashes identically. Those flags decide which
+        # postings every labeller is shown first and which rows the
+        # inter-annotator ceiling is computed over, so re-registering under
+        # alice silently changes what her answer was an answer to.
+        moved = _drawn(("a1", "b2", "c3"), overlap=("c3",))
+        self.assertEqual(labels.digest(moved), labels.digest(self.rows))
+        with self.assertRaises(labels.SetAlreadyDrawn) as caught:
+            labels.register_set(self.conn, "pursuit-v1", moved, seed=0,
+                                profile="pursuit")
+        self.assertIn("1 row(s)", str(caught.exception))
+        self.assertIn("labelled", str(caught.exception))
+
+    def test_a_different_name_is_always_free_to_draw(self):
+        # The refusal is not a lock on the sampler. The remedy the message
+        # names -- a new --label-set -- has to work with labels in the table,
+        # or the guard would make the tool unusable exactly when it matters.
+        labels.record(self.conn, axis="A", job_id="a1",
+                      field="ai_involvement", value="none",
+                      labeller_id="alice", label_set="pursuit-v1")
+        self.conn.commit()
+        labels.register_set(self.conn, "pursuit-v2", _drawn(("d4", "e5")),
+                            seed=1, profile="pursuit")
+        self.assertEqual(self._job_ids(), ["a1", "b2", "c3"])
+
+
+class _NoCloseConn:
+    """The scratch connection with close() removed.
+
+    cmd_label_sample owns the connection _labels_conn() hands it and closes it
+    in a finally. Handed the scratch schema's only session it would close that,
+    and tearDown could no longer drop the schema.
+    """
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def close(self):
+        pass
+
+
+@unittest.skipUnless(scratchdb.available(),
+                     "no reachable Postgres for a scratch schema")
+class TestARefusedSampleDoesNotRewriteTheFixture(unittest.TestCase):
+    """`evals label sample` registers the set BEFORE it writes --out.
+
+    Which is why the guard has to be asked there and not inside save_set(): the
+    fixture is what report time reads, and a refusal discovered after the file
+    had been rewritten would already have desynced it from the database that
+    refused it -- leaving the operator with the one state nothing can tell
+    apart from a good run.
+
+    Exit 2, matching the `report` refusal (__main__.py's
+    `except labels.Uninterpretable` handler) rather than 1, which in this CLI
+    means "nothing to do".
+    """
+
+    def setUp(self):
+        import tempfile
+        self._ctx = scratchdb.scratch_schema()
+        self.conn, self.name = self._ctx.__enter__()
+        labels.ensure_schema(self.conn)
+        labels.register_set(self.conn, "pursuit-v1", _drawn(("a1", "b2")),
+                            seed=0, profile="pursuit")
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.out = os.path.join(tmp.name, "labelset-pursuit-v1.jsonl")
+        with open(self.out, "w", encoding="utf-8") as fh:
+            fh.write('{"job_id": "a1", "position": 0}\n')
+            fh.write('{"job_id": "b2", "position": 1}\n')
+        with open(self.out, "rb") as fh:
+            self.before = fh.read()
+
+    def tearDown(self):
+        self._ctx.__exit__(None, None, None)
+
+    def _run(self, **overrides):
+        """Drive cmd_label_sample against the scratch schema.
+
+        Everything patched here is upstream of the guard -- the corpus read and
+        the profile row -- and nothing downstream of it is. register_set(),
+        redraw_refusal(), save_set() and the command's own control flow are the
+        real ones, which is the whole point: the claim under test is about the
+        ORDER of two calls in that function.
+        """
+        import argparse
+        import contextlib
+        import io
+        from unittest import mock
+
+        import profiles
+        import relevance
+        from evals import __main__ as evals_main
+
+        args = argparse.Namespace(
+            n=6, out=self.out, label_set="pursuit-v1", profile="pursuit",
+            seed=1, overlap=0, per_platform=10, note=None, dry_run=False)
+        for k, v in overrides.items():
+            setattr(args, k, v)
+
+        class _Prof:
+            criteria = {}
+
+        err = io.StringIO()
+        with mock.patch.object(evals_main, "_labels_conn",
+                               return_value=_NoCloseConn(self.conn)), \
+             mock.patch.object(profiles, "load_one", return_value=_Prof()), \
+             mock.patch.object(relevance, "for_profile", return_value={}), \
+             mock.patch.object(labels, "pool", return_value=_pool_rows()), \
+             mock.patch.object(labels, "confirm_scores",
+                               side_effect=lambda rows, criteria: (rows, [])), \
+             contextlib.redirect_stderr(err), \
+             contextlib.redirect_stdout(io.StringIO()):
+            rc = evals_main.cmd_label_sample(args)
+        self.stderr = err.getvalue()
+        return rc
+
+    def _unchanged(self):
+        with open(self.out, "rb") as fh:
+            self.assertEqual(fh.read(), self.before)
+
+    def test_a_refused_sample_leaves_the_out_file_byte_identical(self):
+        self.assertEqual(self._run(), 2)
+        self._unchanged()
+        self.assertIn("REFUSED", self.stderr)
+        self.assertIn(self.out, self.stderr)
+        # And the database is the state it was refused from, not a merge of
+        # the two draws.
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM eval_label_items "
+                              "WHERE label_set = 'pursuit-v1'").fetchone()[0],
+            2)
+
+    def test_a_dry_run_reports_the_refusal_instead_of_would_write(self):
+        # A dry run writes nothing, so it is never the run that does the
+        # damage -- but it is the run an operator makes to find out whether the
+        # real one will work, and "would write ..." is the wrong answer.
+        self.assertEqual(self._run(dry_run=True), 2)
+        self._unchanged()
+        self.assertIn("REFUSED", self.stderr)
+
+
 class TestAnAbsentFieldIsNotANullAnswer(unittest.TestCase):
     """`normalized.get(field)` cannot tell silence from a verdict.
 

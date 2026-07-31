@@ -1,7 +1,24 @@
 # 19 — JSON-LD parser
 
-**Status:** todo. **Depends on:** 09, 16. **Blocks:** 20.
-**Estimated yield:** 30–60 relevant postings/day.
+**Status:** ~~todo.~~ **DROPPED on the evidence, `2fecec5`.** **Depends on:** 09, 16.
+**Blocks:** 20.
+**Estimated yield:** ~~30–60 relevant postings/day.~~ **≤1.1–2.3/day, and that is a
+ceiling rather than a measurement.**
+
+**Corrected 2026-07-30:** this line still read `todo` after the spike ran and the task was
+dropped. [`README.md`](../README.md)'s Phase 3 row for 19 says *"measured before building —
+**2 of 55 employers publish `JobPosting`, 1 of 35 in the target population. DROPPED**"*,
+`HANDOFF.md`'s *State at handoff* table carries `19 | JSON-LD coverage spike — dropped on
+the evidence | 2fecec5`, and `git log -1 2fecec5` reads *"JSON-LD coverage spike: drop task
+19 (tranche_three/19)"*. The evidence is in [`docs/jsonld-coverage.md`](../../../jsonld-coverage.md).
+
+**Nothing below this block was rewritten**, because the design it describes is what was
+priced and rejected — the record of what was believed is the point. Read the rest of this
+file as the case that was made, not as work to do. **One consequence to carry forward:**
+`Blocks: 20` is now a broken edge. Task 20 (iCIMS via Firecrawl) still names 19 in its own
+`Depends on:` line and task 21's premise was *"cheap because 19's parser does most of the
+work"* — README already records 21 as needing a re-scope for exactly this reason. Neither
+was re-scoped here.
 
 Read `schema.org/JobPosting` structured data from employer career pages that have no
 public feed. The most durable and least adversarial way to reach the long tail.

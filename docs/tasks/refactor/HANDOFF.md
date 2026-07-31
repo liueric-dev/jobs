@@ -1,8 +1,11 @@
 # Handoff — the `docs/tasks/refactor/` run
 
-Written 2026-07-28, and rolling — last updated after **the intra-annotator ceiling was
-made reachable at all, `role_track` went on the form, and a paired bootstrap landed in
-`evals/metrics.py`** (suite 1070 → **1107**). Before that: **task 29 was unblocked: four
+Written 2026-07-28, and rolling — last updated after **task 29 stopped being blocked.**
+The OAuth credentials are in, `.env` is correct, the owner's account is on `pursuit`, and
+the sign-in chain was verified end to end without a browser. **The next session's job is
+to label.** See § *task 29 is UNBLOCKED* immediately below. Before that: **the
+intra-annotator ceiling was made reachable at all, `role_track` went on the form, and a
+paired bootstrap landed in `evals/metrics.py`** (suite 1070 → 1107 → **1166**). Before that: **task 29 was unblocked: four
 defects fixed in the sampler, the label tables created, and the 200-row set drawn, redrawn
 and pinned** (`c65d34b`, `2f64e08`, `90170d1`). Before that: **step 0, the gate fix**, implemented and
 written to the database (mock gate recall 48.3% → 89.7%, live tier ≤2 869 → 880); the
@@ -16,15 +19,20 @@ made) and [`CLAUDE_UPDATES.md`](CLAUDE_UPDATES.md) (what happened, per task).
 are mechanical.**~~ **That sentence was WRONG and it is the headline of this update.** The
 first command was mechanical; the second would have drawn a set that measured the wrong
 gate, starved its own key stratum, and could not have reached task 29's Definition of done
-at any turnout. See § *task 29's "two mechanical minutes"*. **Task 29 is still the whole of
-a fresh session's job, and what is left of it is now genuinely only people**: Google OAuth
-credentials and ten Builders, both the repo owner's.
+at any turnout. See § *task 29's "two mechanical minutes"*. ~~**Task 29 is still the whole
+of a fresh session's job, and what is left of it is now genuinely only people**: Google
+OAuth credentials and ten Builders, both the repo owner's.~~
 
-## Orientation — there are five "READ THIS FIRST" sections, in this order
+**SUPERSEDED 2026-07-30, and this time in the cheap direction. The credentials are in.**
+Task 29 is still the whole of a fresh session's job, but nothing is blocked: sign in and
+label. § *task 29 is UNBLOCKED* is the operational entry point and `LABELLING-NIGHT.md`
+§ *Case A* is the command list.
 
-That is four too many, and the file has earned each one. **The fifth is the newest and is
-the one with an action in it**: two values in `backend/webapp/.env` are wrong in a way that
-produces no error, and the labelling night runs through them. If you read nothing else:
+## Orientation — there are six "READ THIS FIRST" sections, in this order
+
+That is five too many, and the file has earned each one. **The sixth is the newest and it
+is the only one that is an instruction rather than a warning**: the pre-flight is done and
+the next session labels. If you read nothing else:
 
 1. **Task 29 is the whole critical path** (§ *what is blocked*), and **its schema, its
    sampler and its 200-row set are now DONE** (§ *task 29's "two mechanical minutes"*).
@@ -33,10 +41,11 @@ produces no error, and the labelling night runs through them. If you read nothin
    second of those two commands carried **four** defects, none of them red, and the set it
    would have drawn measured the wrong gate. Fixed, drawn, **redrawn once more after the
    set was already committed**, pinned at
-   `backend/evals/fixtures/labelset-pursuit-v1.jsonl`. **What is left really is only
-   people** — Google OAuth credentials and ten Builders. And **the 55 postings in
-   `docs/tasks/refactor/mock/` are still not its data** — they are invented, and reduce
-   its scope by zero postings.
+   `backend/evals/fixtures/labelset-pursuit-v1.jsonl`. ~~**What is left really is only
+   people** — Google OAuth credentials and ten Builders.~~ **The credentials landed
+   2026-07-30 and the first labeller is the owner; see § *task 29 is UNBLOCKED*.** And
+   **the 55 postings in `docs/tasks/refactor/mock/` are still not its data** — they are
+   invented, and reduce its scope by zero postings.
 2. **Do not re-tune task 13's weights** (§ *the ranking is a product now*). Its DoD is
    unmet on purpose. Nothing measured since — including the mock corpus's 5-of-5 on
    branding traps — licenses changing them. Only task 29 does.
@@ -45,10 +54,18 @@ produces no error, and the labelling night runs through them. If you read nothin
    re-extraction bill or a ~1,018-call re-scoring bill. Run `score.py --stale-report`
    first; it needs no API key.
 
-4. **The night's pre-flight has two values that are wrong and silent**
+4. ~~**The night's pre-flight has two values that are wrong and silent**
    (§ *the ceiling was unreachable, and the night's pre-flight*). `FRONTEND_ORIGIN`
    sends every successful sign-in to a dead origin, and the one `app_users` row is on the
-   wrong profile. The executable list is `LABELLING-NIGHT.md`, ~15 minutes.
+   wrong profile. The executable list is `LABELLING-NIGHT.md`, ~15 minutes.~~
+   **BOTH FIXED 2026-07-30 and verified.** `FRONTEND_ORIGIN` and `ALLOWED_ORIGINS` are
+   `http://localhost:8421`; the owner's row is on `pursuit`. The diagnosis is kept in that
+   section as the record of a failure mode that produced no error — it is the reason the
+   values are now what they are.
+5. **A solo sitting cannot produce a report, and that is correct behaviour, not a bug**
+   (§ *task 29 is UNBLOCKED*). `evals label report` exits 2 for as long as there is one
+   labeller. **Do not route around it** — no `--force` exists and none should be added.
+   One second person on the ten `overlap` rows, ~10 minutes, unblocks every field.
 
 **And one standing prohibition, now guarded by a test rather than a paragraph:** do not
 add the four phrase families in § *the gate fix LANDED*. `tools/mock-acceptance.py` scores
@@ -96,6 +113,268 @@ the digits are a convenience with a shelf life.** That is not a caveat added for
 is the fourth time this file has recorded the same failure. The `fastapi` claim needed a different instrument again —
 **ask which interpreter the observation was made with**, because "it fails to import" is a
 fact about an environment, not about a repo.
+
+## READ THIS FIRST: task 29 is UNBLOCKED, and the next session labels
+
+**Done 2026-07-30. Nothing is committed — the working tree carries all of it.** Suite
+1160 → **1166** (main) and 61 → **75** (webapp). For the first time in this run **there is
+no blocker on task 29 at all**: no credential, no code, no person. The remaining work is
+someone reading postings and answering six questions.
+
+### What changed
+
+| | before | after |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` / `_SECRET` | empty strings, `/v1/auth/login` → 503 | **set**, `config.oauth_configured()` → True |
+| `FRONTEND_ORIGIN` | `http://localhost:5173` — nothing serves it | **`http://localhost:8421`** |
+| `ALLOWED_ORIGINS` | `http://localhost:5173` | **`http://localhost:8421`** |
+| owner's `app_users` row | profile `tech`, which task 12 paused | **`pursuit`** |
+| moving a user between profiles | no supported path — `email` is UNIQUE and `add` refuses | **`manage_app_users.py set-profile`**, 14 tests |
+| re-drawing a pinned label set | silently appended rows, desynced the fixture | **refused**, exit 2, 6 tests |
+
+**The sign-in chain was verified end to end without a browser**, which is worth repeating
+because it is cheap and it is the step that used to be assumed: `/v1/label` signed out
+302s to `/v1/auth/login?next=/v1/label`; that 302s to
+`https://accounts.google.com/o/oauth2/v2/auth` carrying
+`redirect_uri=http://localhost:8421/v1/auth/callback`, `response_type=code`,
+`code_challenge_method=S256`, `scope=openid email profile`. `/v1/health` returns
+`{"ok":true}`. **What is NOT verified is the Google console entry**, which no local check
+can reach — a mismatch there fails visibly with `redirect_uri_mismatch` before the browser
+returns, so it is the friendly failure and not one to plan around.
+
+### Start here
+
+```bash
+cd backend/webapp && .venv/bin/uvicorn app:app --port 8421
+# then open http://localhost:8421/v1/label
+```
+
+`.venv` is the only interpreter with `fastapi`; system `python3` cannot import it, and that
+has already been mistaken once for "fastapi is not installed". `LABELLING-NIGHT.md`
+§ *Case A — solo, localhost* is the full list.
+
+### The finding that changed the ORDER of the work
+
+**Axis B answers are stamped with the SESSION's profile, and labels cannot be edited.**
+`webapp/label.py:440` passes `profile=user.profile if q.axis == labels_mod.AXIS_B else
+None`, under a comment reading *"profile comes from the SESSION, never from the form …
+what keeps axis B rows attributable to a cohort"*, and `eval_labels` carries **no UPDATE
+and no DELETE grant** (`schema_web.py:63`: *"A label is evidence"*). Labelling one posting
+while still on `tech` would have recorded that `would_apply` answer as a `tech` preference
+**permanently, with no correction path**. It was caught by checking what the form does with
+`user.profile` before the first submit rather than after — the profile move is not tidying
+and it is not reversible after the fact.
+
+**Generalisation, and it is the same one this file keeps writing down:** the pre-flight
+list said "move the row" and gave *"tech is inactive"* as the reason. That reason was true,
+minor, and not the one that mattered. **A step can be right for a weak reason and the weak
+reason is what gets it skipped when someone is in a hurry.**
+
+### What a solo sitting produces, and what it cannot
+
+**`evals label report` will exit 2 for as long as there is one labeller.** The ceiling
+column is bound to `labels.inter_annotator()`, which needs **two distinct `labeller_id`s
+on the same item**; `Interpretable` is the only thing `report.render_labels()` accepts, and
+its `__post_init__` raises when a cell is missing. **There is deliberately no `--force`.**
+This is a designed refusal — *"making the bad report unrepresentable rather than
+discouraged is the whole design"* — and a session that finds a way around it has broken the
+thing, not fixed it.
+
+Everything else works at any count. Nothing requires 200: `status` and `export` are fine,
+`next_item()` resumes exactly where a labeller stopped, indefinitely, and `tail_offset()`
+computes each labeller's window at serve time from their own rank with **`k` appearing
+nowhere in it** — so Builders arriving in a month sort after the owner, his rank stays 0,
+and his queue never shifts under him. **His first ten items are already the `overlap`
+block** (`band 0`), stratified 5 `surfaced` / 3 `below_floor` / 2 `gate_rejected`.
+
+**The cheapest unblock in this task: one second person, ten minutes, ten rows.** They never
+see the other 190. Arrange it *before* a long solo sitting rather than after — the labels
+are not wasted either way, but nothing collected has a scale to be read against until that
+person exists. **The DoD deviation is recorded in
+`tranche_five/29-labelling-session.md` § *Deviation — the first sitting is SOLO***, line by
+line, rather than tuned away; same treatment task 13's unmet lines got.
+
+**And the owner's own fallback is the intra-annotator ceiling**, which needs no code: the
+same ten `overlap` rows at `/v1/label?round=2`, no sooner than
+`labels.ROUND_TWO_DELAY_DAYS = 7` days after the round-1 answers. It is the **weaker**
+quantity and `interpretable()` was deliberately **not** changed to accept it as the
+ceiling; it renders as a footnote.
+
+### Which axis carries the profile, and why a solo Axis B is NOT a proxy
+
+Asked directly on 2026-07-30 and worth answering here, because a later session will
+reasonably wonder whether one person's `would_apply` answers are worth anything.
+
+**Only Axis B carries a profile, and the split is enforced with a raise rather than by
+convention** (`labels.record()`, `evals/labels.py:958-962`):
+
+| axis | fields | `profile` stored |
+|---|---|---|
+| **A** | `ai_involvement`, `seniority_level`, `role_archetype`, `remote_policy`, `role_track` | **NULL** — *"axis A is profile-independent -- see the CHECK constraint in ensure_schema()"* |
+| **B** | `would_apply` | **`pursuit`**, from the session, never the form |
+
+So the extraction questions are recorded as facts about the posting, true for every cohort
+forever — which is the mechanical reason Axis A is *"the asset"* and survives a change of
+vertical. Only *"would you apply"* is stamped.
+
+**And the repo owner is a Builder, not staff.** `29-labelling-session.md` § *Logistics*
+says so as its opening premise — no roster access, no instructor authority, *"asking ~10
+classmates for twenty minutes."* **His Axis B answers are therefore genuine cohort
+preference at n=1, not a stand-in for it.** The circularity Axis B exists to avoid is
+specifically *a model* substituting for a human — the defect named in `claude-bench.py:417`.
+A Builder answering for themselves is the intended instrument, and a future session should
+not discount these labels as second-best.
+
+**What n=1 does cost is different and sharper:** `consensus()` promotes a single labeller's
+answer to "the majority human answer" with `tied` always empty and **nothing recording that
+the majority was of size one.** With one labeller there is no way to separate *"the model
+disagrees with Builders"* from *"the model disagrees with Eric."* That — not the missing
+ceiling cell — is what the report's refusal is really protecting, and it is why a second
+person's ten minutes buys more than a second hundred postings of the owner's own would.
+
+### How many to label, and the number STILL nobody has measured
+
+**Verified 2026-07-30: the strata are INTERLEAVED, not blocked.** Sorted by `position`,
+every 50-row block is roughly the set's own 50 / 25 / 25:
+
+| positions | surfaced | below_floor | gate_rejected |
+|---|---:|---:|---:|
+| 0–9 (the overlap block) | 5 | 3 | 2 |
+| 10–59 | 30 | 6 | 14 |
+| 60–109 | 27 | 13 | 10 |
+| 110–159 | 21 | 19 | 10 |
+| 160–199 | 25 | 9 | 16 |
+
+**So any prefix is a proportional miniature of the whole set and there is no wrong place to
+stop.** This is worth stating because the opposite arrangement — strata in blocks — would
+have made "label 50" mean "label only `surfaced`", and nothing in the tooling would have
+said so.
+
+**What each stopping point buys**, computed with `metrics.wilson()` rather than by hand:
+
+| labelled | Axis A: 95% CI at an observed 85% | `gate_rejected` seen | recall bound if the owner would apply to none |
+|---:|---|---:|---:|
+| 10 | [0.49, 0.94] | 2 | 66% |
+| 60 | [0.71, 0.92] | 16 | 19% |
+| 110 | [0.77, 0.91] | 26 | 13% |
+| 200 | [0.79, 0.89] | 50 | **7%** |
+
+**Read the middle column against task 06's floors — 76% on `seniority_level`, 94% on
+`ai_involvement` — because that is what makes it legible:**
+
+- **At 60** an observed 85% cannot be told apart from `seniority_level`'s own 76%
+  instability. It *does* already exclude 0.94, so a real `ai_involvement` problem surfaces
+  this early.
+- **At 110** the interval clears 0.76 — this is where Axis A becomes a defensible claim for
+  every field, and it is also the DoD's number.
+- **200 barely improves Axis A** (width 0.14 → 0.10) and nearly halves the recall bound.
+  **The back half is bought almost entirely for the recall question**, which is the one no
+  other instrument in this repo can answer at all.
+
+**Recommended: ~60 in the first sitting, 110 as the target across two or three, 200 only if
+the recall question earns it** — it does the moment any `gate_rejected` row turns out to be
+one the owner would genuinely apply to. The back half is also *cheaper per row*: about a
+quarter of the set is `gate_rejected`, most of it unambiguous, and 26 of those 50 carry no
+`job_facts` at all, so they only ever feed Axis B and the recall bound.
+
+**THE DELIVERABLE THE NEXT SESSION SHOULD ACTUALLY BRING BACK IS A STOPWATCH READING.**
+Every budget figure in this run — *"~20 items each"*, *"~28 at five labellers"* — was
+computed against a **five**-question form; the form asks **six**, and this file already
+records that the per-posting time *"was never measured, only assumed"* and that inventing a
+correction factor would repeat the 110-vs-84 error. **The first ten rows are the
+instrument.** Time them, write the number down here, and every Builder-session estimate
+afterwards stops being a guess. That is a smaller deliverable than the labels and a more
+reusable one.
+
+**And use the abstention.** *"I can't tell from this posting"* stores NULL and is
+dropped-and-counted, never folded in — *"folding them in as a value would score two people
+who both gave up as two people who concurred."* Forcing a guess to keep the count up is
+worse than a lower count.
+
+### The first finding arrived BEFORE the first label, and it is a vocabulary one
+
+**Recorded 2026-07-30, from the repo owner reading postings in the form.** It is one
+Builder's judgement at n=1 — authoritative for Axis B, and **not yet a licence to change
+the gate.** Written down now because the repo's convention is rationale at decision time,
+and because it is the exact finding task 12 predicted and could not name.
+
+**The observation:** commercial / sales roles that *sell AI products* are strong Pursuit
+targets — the employer explicitly wants people who are enthusiastic about AI and who use
+it — and **the vocabulary cannot express them.**
+
+**Verified against the code, and the gap is structural:**
+
+- **`ARCHETYPE` has no sales value at all.** Its own first line is the admission —
+  `extract.py:262-266`, *"The original twelve. All software engineering."* Across all 26
+  there is no sales, account executive, business development or commercial. The nearest,
+  `solutions` and `forward_deployed`, are **solutions *engineering*** — technical presales,
+  still engineering. A commercial role lands in `other`, or is mislabelled `solutions`
+  because the word matches.
+- **`ROLE_TRACK` has no plain commercial track either.** `revenue_operations` is RevOps —
+  the ops function *behind* selling, not selling — and `solutions_and_implementation` is
+  again the technical side.
+- **This was predicted in writing.** `ROLE_TRACK`'s own comment says the corpus is
+  *"pre-Phase-3 and tech-heavy"* and that task 11 is *"explicit that a taxonomy derived
+  from it 'will not describe the population's opportunity space' and expects revision."*
+  Task 12 then measured the consequence: 12 → 26 archetypes made `other` **worse**, 31.1%
+  of the cohort corpus and **44.0% of first-time extractions**, because *"the vocabulary
+  fits the corpus it was derived from and fails on the part of the cohort corpus nobody had
+  looked at."* **This is that part, being looked at.**
+
+**The sharper half is `ai_involvement`, and it may overturn a design assumption.** Its four
+values — `none`, `uses_ai_tools`, `builds_llm_features`, `core_ml_research` — all describe
+what the *person does with* AI, so a commercial role selling an AI product can honestly
+score **`none`**. That is precisely the shape of **task 13's four floor misses**
+(*"carry `ai_involvement = 'none'` and read as AI-adjacent only because the employer is an
+AI company"*), the pattern **task 05 measured at 6.7% precision**, and the one the gate was
+deliberately tightened *against*. `DECISIONS.md` says only task 29's labels can settle
+whether those are correct rejections or weight errors. **They are being settled, and the
+first answer contradicts the assumption.**
+
+**But the two claims are not the same claim, and the difference is the whole finding.**
+Task 05's pattern was **broad** — *any* role at an AI employer, including facilities and
+admin. This one is **narrow**: the *product* is AI and the posting selects for AI
+enthusiasm. **`ai_involvement` conflates "does this person use AI" with "is this role
+about AI", and for customer-facing commercial work those come apart.** That is a missing
+distinction, not a wrong value, and no amount of re-tuning the existing four values
+produces it.
+
+**This is also the standing argument against dropping Axis A from the form.** A model
+**cannot report that its own vocabulary is wrong** — it can only pick from the list or emit
+`other`/NULL. *"None of these fit, and here is the shape that is missing"* is information no
+LLM in this pipeline can generate, because the list is the only thing it is allowed to
+return. **`role_archetype` and `role_track` are the two questions whose answers a model
+structurally cannot substitute for**, which is the opposite of the intuition that says the
+extraction fields are the skippable ones.
+
+**How it is being captured, and the one thing that cannot be:**
+
+- `role_track` → **`no_track_fits`**, a verdict, deliberately distinct from the *"I can't
+  tell"* abstention that `validate()` would otherwise collapse it into.
+- `role_archetype` → **`other`**, the same signal at the coarser grain.
+- **There is no free-text field on the form** — checked. So it records *that* nothing fits
+  and never *what* is missing. **A side list of the postings where the answer is
+  "commercial/sales" is the only place the content can live**, and it is the input to
+  re-running `backend/tools/derive-role-tracks.py`.
+
+**Do not act on this yet.** n=1, and it would move the gate — the one artefact this run has
+damaged the premise of (§ *GATE 2 is the one at risk*). What makes it actionable is other
+Builders agreeing, which is another thing the second labeller buys.
+
+### The redraw window is about to close, and now something guards it
+
+`register_set()` used `ON CONFLICT DO NOTHING` on both tables, so re-running `evals label
+sample --label-set pursuit-v1` with a different `--seed` did not error: existing items kept
+their old `position` and `overlap`, new job_ids were **appended**, and
+`eval_label_sets.n` and `job_id_sha256` went on describing the first draw while `--out`
+overwrote the committed fixture. `labels.digest()` was computed and **never compared** to
+the stored hash anywhere. `redraw_refusal()` now compares it and refuses; **verified live
+on both the dry-run and the write path**, exit 2, fixture byte-identical, 200 items intact.
+
+An identical re-draw is still allowed, on purpose — that is crash recovery. **But any
+label at all refuses even an identical-digest redraw**, because the job ids are the
+digest's only input, so a draw that keeps them and moves the `overlap` flags hashes the
+same while changing what every labeller was shown.
 
 ## READ THIS FIRST: task 29's "two mechanical minutes" were four defects, and the set is drawn
 
@@ -542,7 +821,15 @@ Degenerate draws are now skipped and counted, with `draws_used` carrying what th
 rests on. D63 has the measured before/after. **The guard would have been silently deciding
 the very comparison it was written to protect.**
 
-### The night's pre-flight — two values are wrong and neither errors
+### ~~The night's pre-flight — two values are wrong and neither errors~~ FIXED, and this is the diagnosis
+
+> **Both values were corrected on 2026-07-30 and verified; the OAuth secrets are in.**
+> Everything below is now the RECORD of why they are what they are, not a list of work.
+> It is kept in full because the failure produced no error at all, and the diagnosis is
+> the only thing that explains why `FRONTEND_ORIGIN=http://localhost:8421` is not an
+> arbitrary value. **Do not act on this section — read § *task 29 is UNBLOCKED*.** The
+> Case B parts (a tunnel host, `SESSION_COOKIE_SECURE=true`) become live again the day
+> Builders label from their own devices.
 
 **Verified 2026-07-30.** `LABELLING-NIGHT.md` is the executable version, ~15 minutes.
 
@@ -836,9 +1123,10 @@ still holds.
 
 ## State at handoff
 
-**Branch `webapp-service`, suite green at 1107 tests** (task files say 263, earlier
-handoffs 782, 837, 878, 1030, 1058 and 1070; **1107 is the floor now** — the round-2 path,
-`role_track` on the form and the paired bootstrap added 37 between them).
+**Branch `webapp-service`, suite green at ~~1107~~ ~~1160~~ 1166 tests** (task files say 263,
+earlier handoffs 782, 837, 878, 1030, 1058, 1070 and 1107; **1166 is the floor now**).
+~~1107 is the floor now — the round-2 path, `role_track` on the form and the paired
+bootstrap added 37 between them.~~
 **The whole suite passes** — `python3 -m unittest discover -s backend/tests` from
 the repo root. Working tree is clean apart from untracked `scripts/`, which
 predates this run and is not ours.
@@ -846,15 +1134,40 @@ predates this run and is not ours.
 **On that number: it was 1067, then 1068, then 1070 across a single afternoon** — the
 implementing session's report, a re-run an hour later, and a re-run after `90170d1` added
 the overlap-stratification tests. All three were correct when taken. This file already
-records that test counts drift under concurrent agents (§ *how this run works*); **1070 is
+records that test counts drift under concurrent agents (§ *how this run works*); ~~**1070 is
 what a re-run reported as this paragraph was written, and it is the floor because it is the
-largest.** Re-run before quoting it, and do not treat a number quoted in a handoff as a
+largest.**~~ Re-run before quoting it, and do not treat a number quoted in a handoff as a
 number you have measured.
+
+**And it happened again, exactly as that paragraph predicts. Both counts in this section
+were re-measured on 2026-07-30 and both were low:**
+
+| suite | command | this file said | re-measured 2026-07-30 | after the solo-labelling work |
+|---|---|---:|---:|---:|
+| main | `python3 -m unittest discover -s backend/tests` (repo root, system `python3`) | 1107 | 1160 | **`Ran 1166 tests` … `OK`** |
+| webapp | `.venv/bin/python -m unittest discover -s tests -t .` (from `backend/webapp/`) | 55 | 61 | **`Ran 75 tests` … `OK`** |
+
+**Both moved in the safe direction: the suites GREW and nothing broke.** 1107 and 55 were
+each correct when they were written — this is drift, not a regression, and it is now the
+sixth and seventh instance of it recorded in this file. **1166 and 75 are the floors now.**
+Neither is a number you have measured until you re-run it; that is the whole point of the
+paragraph above, which was written before this update and correctly anticipated it.
+
+**And the fourth column is the eighth instance, acquired while writing the third.** The
+1160/61 column was measured at the start of the 2026-07-30 solo-labelling session and was
+correct then. Three agents were working in parallel: the pin guard added 6 to the main
+suite and `manage_app_users.py set-profile` added 14 to the webapp suite **while the
+documenting agent was writing 61 down**. Neither number was wrong when taken and both were
+stale by the time the paragraph containing them was saved. **The instrument is
+`| grep -E '^(Ran|OK|FAILED)'` at the moment you need the number**, not a column in this
+file — the previous three sentences say so and the column still went stale, which is the
+finding.
 
 ~~`backend/webapp/tests/` is a separate matter: **`fastapi` is not installed here**, so five
 modules fail to import and always have.~~ **WRONG, corrected 2026-07-29.** `fastapi`
 **is** installed, in **`backend/webapp/.venv`**, which is a separate environment with a
-separate `requirements.txt`. Under it, `backend/webapp/` reports **55 tests, OK**. The
+separate `requirements.txt`. Under it, `backend/webapp/` reports ~~**55 tests, OK**~~
+~~**61 tests, OK**~~ **75 tests, OK** (re-measured 2026-07-30; see the table above). The
 original observation was made with system python. `backend/tests/` is still the suite that
 gates work here and still does not cover `webapp/`; the two are run with two interpreters.
 See § *task 29's "two mechanical minutes"* for what this changes — chiefly that serving
@@ -903,6 +1216,10 @@ Thirteen tasks committed, one experiment, plus the two conversational decisions:
 | 29 | **round 2 made reachable at all — the intra-annotator ceiling had no code path** | this session |
 | 29 | **`role_track` a 6th question, `NO_TRACK_FITS`; `FIELD_KINDS` drift found** | this session |
 | 30 | **paired bootstrap into `evals/metrics.py` — degenerate resamples no longer scored 0.0** | this session |
+| 29 | **OAuth credentials in, `.env` origins fixed, owner's account moved to `pursuit`** | UNCOMMITTED |
+| 29 | **`manage_app_users.py set-profile` — moving a user between profiles had no path** | UNCOMMITTED |
+| 29 | **`redraw_refusal()` — a pinned set could be silently re-drawn; now refused** | UNCOMMITTED |
+| — | **doc sweep: 5 stale `Status:` lines, `label.py` citations, both suite counts** | UNCOMMITTED |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -999,14 +1316,35 @@ line, and never-extracted-first-then-FIFO selection.
 **`FACTS_VERSION` was deliberately NOT bumped. Task 12 must carry it.** The debt is
 recorded at `schema.py:158`.
 
-## Nothing is in flight
+## Nothing is in flight — but the tree is NOT clean
 
 **Nothing is half-written and nothing is waiting on a reply.** Step 0 is implemented,
 committed and written to the database, and so are task 29's four sampler fixes and its
-drawn set; the docs were rolled forward in the same session each time. The working tree is
-clean apart from untracked `scripts/`, which predates this run and is not ours. **The next
-session starts from a finished state**, not from a handover — and for task 29 it starts
-from a finished state that is waiting on the repo owner, not on an implementer.
+drawn set; the docs were rolled forward in the same session each time. ~~The working tree
+is clean apart from untracked `scripts/`, which predates this run and is not ours.~~
+
+**AMENDED 2026-07-30: the working tree carries the whole solo-labelling change and NONE of
+it is committed.** It is finished, not half-done — both suites are green at **1166** and
+**75** — but a fresh session will find modifications, not a clean checkout:
+
+```
+ M backend/evals/__main__.py            M backend/webapp/manage_app_users.py
+ M backend/evals/labels.py             ?? backend/webapp/tests/test_set_profile.py
+ M backend/tests/test_labels.py         M docs/tasks/refactor/  (8 files)
+```
+
+plus `backend/webapp/.env`, which is **gitignored and will never appear in `git status`** —
+and which now holds the OAuth secrets. Untracked `scripts/` still predates this run and is
+still not ours.
+
+**Two database writes have no commit and cannot be inferred from the tree**, the same way
+the gate write and the label tables could not: the owner's `app_users` row moved from
+`tech` to `pursuit`, and `eval_labels` is **still empty** — so the redraw window is open
+until the first label is submitted, and `redraw_refusal()` is what now closes it on
+purpose rather than by memory.
+
+**The next session starts from a finished state**, and for task 29 it starts from one that
+is waiting on nobody.
 
 **What the task-29 session wrote to the database**, all of it new and none of it touching
 anything that existed: the three label tables created by `evals label init-schema` as
@@ -1510,7 +1848,15 @@ constraint this file had recorded bought nothing until `relevance.for_profile()`
 real. A real dependency that no artifact shows you is being violated is worse than one
 nobody wrote down.
 
-**What task 29 is blocked on now, and it is only two things, both the repo owner's:**
+> **SUPERSEDED 2026-07-30 — task 29 is blocked on NOTHING.** The two items below were the
+> last of it and both are closed: the OAuth credentials are in `backend/webapp/.env` and
+> `config.oauth_configured()` returns True; `FRONTEND_ORIGIN` and `ALLOWED_ORIGINS` are
+> `http://localhost:8421`; the owner's `app_users` row is on `pursuit`. **Ten Builders is
+> no longer a blocker either, only a ceiling constraint** — one labeller can start now,
+> and one *second* person on the ten `overlap` rows is what makes the report render. See
+> § *task 29 is UNBLOCKED*. The text below is kept as the record of what was blocking.
+
+**~~What task 29 is blocked on now, and it is only two things, both the repo owner's:~~**
 
 1. **Google OAuth credentials.** `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are empty
    strings in `backend/webapp/.env`, so `/v1/auth/login` returns **503**
@@ -1934,9 +2280,11 @@ quality beats volume. That is a call for the repo owner, not for an implementer.
 
 **Task 29 is the whole critical path and it is still the one thing in this plan that
 cannot be done by an agent.** Step 0 — the gate fix — is done, and so is everything on 29
-that an agent *could* do: the schema, the sampler and the drawn set. **What is left of 29
-is two asks of the repo owner** — OAuth credentials and ten Builders. Everything else in
-this list needs credentials (15, 20) or a re-scope (21).
+that an agent *could* do: the schema, the sampler and the drawn set. ~~**What is left of 29
+is two asks of the repo owner** — OAuth credentials and ten Builders.~~ **Both closed
+2026-07-30: the credentials are in and the owner's account is on `pursuit`. What is left
+is the sitting itself.** Everything else in this list needs credentials (15, 20) or a
+re-scope (21).
 
 0. ~~**Fix the relevance gate.**~~ **DONE 2026-07-29** — `4eefb7e`, `e8f3b72`, `9dab9e6`
    and a database write. Mock gate recall 48.3% → 89.7%, live tier ≤2 869 → 880,
@@ -1976,7 +2324,8 @@ this list needs credentials (15, 20) or a re-scope (21).
    critical path one task narrower than this file implied: **31 can proceed without the
    labelling night.**
 
-   **What is left is two asks of the repo owner and nothing else:**
+   **~~What is left is two asks of the repo owner and nothing else:~~ BOTH CLOSED
+   2026-07-30 — kept below as the record. What is left is the sitting.**
 
    - **Google OAuth credentials** in `backend/webapp/.env`. `GOOGLE_CLIENT_ID` and
      `GOOGLE_CLIENT_SECRET` are empty strings, so `/v1/auth/login` returns 503
@@ -2261,6 +2610,17 @@ half-finished work under 14's number, and 17's commit carried both. The general 
 one `STEPS` already has — shared files get a single owner, named in advance.
 
 ## Pending follow-ups with no task of their own
+
+- **No archetype or track expresses a commercial / sales role, and the cohort wants them.**
+  Added 2026-07-30 from the owner labelling. `ARCHETYPE`'s 26 values contain no sales,
+  account executive, business development or commercial value — its own comment reads
+  *"The original twelve. All software engineering."* (`extract.py:262-266`) — and
+  `ROLE_TRACK`'s nearest is `revenue_operations`, which is RevOps rather than selling.
+  Separately, **`ai_involvement` cannot distinguish "uses AI" from "sells AI"**, so a strong
+  target scores `none` and reads as task 05's 6.7%-precision false positive. **Nothing is
+  scheduled to act on either**, and acting needs more than one Builder saying so. Full
+  write-up in § *the first finding arrived BEFORE the first label*;
+  `backend/tools/derive-role-tracks.py` re-runs the derivation.
 
 - **There is no loader from `eval_labels` into anything that can re-tune the weights, and
   no task owns building one.** Added 2026-07-30. `backend/tools/calibrate-match.py` is what

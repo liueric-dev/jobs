@@ -1,6 +1,14 @@
 # 08 — Score validation
 
-**Status:** todo. **Depends on:** 07. **Blocks:** nothing, but should precede 30.
+**Status:** ~~todo.~~ **DONE, `e1cdf7b`.** **Depends on:** 07. **Blocks:** nothing, but
+should precede 30.
+**Corrected 2026-07-30:** this line still read `todo` after the task landed.
+[`README.md`](../README.md)'s Phase 1 row for 08 says `done` and records the finding —
+*"the bucket reproduces at 89%, the number at 24%"* — and `HANDOFF.md`'s *State at
+handoff* table carries `08 | score validation, score.normalize(), D15/D16/D43/D44 |
+e1cdf7b`. `git log -1 e1cdf7b` reads *"Score validation, score.normalize(),
+D15/D16/D43/D44 (tranche_two/08)"*. The stale `todo` made this task look like a live
+dependency of 30.
 
 **This task is [`docs/ingestion_tests/04-score-validation.md`](../../ingestion_tests/04-score-validation.md).**
 It needs almost no amendment. This file records the two places the pivot touches it.

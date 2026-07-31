@@ -10,7 +10,202 @@ however long it takes to collect ten email addresses.
 **Read `tranche_five/29-labelling-session.md` for what the night is FOR.** This file is
 only the sequence of operations, in the order they have to happen.
 
+**Added 2026-07-30: there are two cases and this file was written entirely for the second
+one.** Everything below the divider assumes **Case B** — ten Builders on their own devices,
+reaching the service through a tunnel — and it is all still correct for that. **The repo
+owner is going to label ALONE on localhost first**, which is a shorter list and, more
+importantly, **produces a different and incomplete result**. That is Case A, immediately
+below. Case A is a strict subset of Case B's setup except for the two values that invert
+(`SESSION_COOKIE_SECURE`, and the origin).
+
 ---
+
+## Case A — solo, localhost
+
+**One person, at the machine running the service, over plain HTTP.** ~10 minutes of setup,
+and read § *What a solo run can and cannot produce* **before** doing it, because the
+report at the end will refuse to print and that is the designed behaviour, not a fault.
+
+### A1. `backend/webapp/.env` — verified 2026-07-30, and it is already right
+
+```
+FRONTEND_ORIGIN=http://localhost:8421
+ALLOWED_ORIGINS=http://localhost:8421
+SESSION_COOKIE_SECURE=false
+GOOGLE_REDIRECT_URI=http://localhost:8421/v1/auth/callback
+```
+
+> **Correction, 2026-07-30.** This file and `HANDOFF.md` both say `FRONTEND_ORIGIN` and
+> `ALLOWED_ORIGINS` are `http://localhost:5173` today — see § *2. `FRONTEND_ORIGIN`* below,
+> which still reads that way and is **left standing as the record of what was found**.
+> **They are not `:5173` any more.** Checked directly today: `backend/webapp/.env:57` reads
+> `FRONTEND_ORIGIN=http://localhost:8421` and `:67` reads
+> `ALLOWED_ORIGINS=http://localhost:8421`, each under a comment block explaining the
+> `:5173` failure. `grep -n 5173 backend/webapp/.env` returns **nothing**. The file is
+> gitignored (`.gitignore:18`), so there is no commit to point at and no way to date the
+> change from history — **verify it yourself before the sitting rather than trusting either
+> value written here.** The diagnosis in § *2* was right; only its "today" has expired.
+
+**`SESSION_COOKIE_SECURE=false` is correct for Case A and must NOT be flipped to `true`.**
+It defaults to `true` on purpose so that the insecure setting has to be typed out, and the
+instinct on reading it is to "fix" it. Over plain-HTTP `localhost` a `true` here makes the
+**browser silently discard the session cookie**: sign-in appears to succeed and every page
+after it is signed out again. It flips to `true` only when the origin becomes `https://`,
+which is Case B.
+
+### A2. Google console — one redirect URI and one test user
+
+- **Authorized redirect URI:** `http://localhost:8421/v1/auth/callback`, **byte-for-byte**,
+  trailing slash included, matching `GOOGLE_REDIRECT_URI` in `.env` exactly. This is the
+  one value in the whole setup that fails **loudly** — Google refuses with
+  `redirect_uri_mismatch` before the request reaches this service.
+- **Test users:** the owner's own Google address. While the consent screen is unverified,
+  an address absent from that list is refused **by Google**, with no log line here. Solo
+  does not exempt you from the two-allowlist trap (§ *4* below); it just makes it a list
+  of one on each side.
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` still have to be filled in. That is § *1*
+  below and it is the only hard blocker in either case.
+
+### A3. Move the owner's `app_users` row from `tech` to `pursuit`
+
+The one existing row is `ericliu93@gmail.com` on profile **`tech`**, which task 12 made
+**inactive**. Labelling from it means labelling as a user of a dead profile.
+
+**Use `manage_app_users.py set-profile`** — which changes an existing user's `profile` in
+place, keeping their `id`, their bound `google_sub` and their session. It exists precisely
+so that this row does not have to be deleted and re-added, which would unbind `google_sub`.
+
+**And it is not optional tidying. Axis B answers are stamped with the SESSION's profile** —
+`label.py:440` passes `profile=user.profile if q.axis == labels_mod.AXIS_B else None`, under
+a comment reading *"profile comes from the SESSION, never from the form … what keeps axis B
+rows attributable to a cohort"*. `eval_labels` carries **no UPDATE and no DELETE grant**
+(`schema_web.py:63`: *"A label is evidence"*). So labelling while still on `tech` records
+every `would_apply` answer as a `tech` preference **permanently, with no correction path**.
+Run this before the first label, not after.
+
+```bash
+cd backend/webapp
+.venv/bin/python manage_app_users.py set-profile --email ericliu93@gmail.com --profile pursuit
+.venv/bin/python manage_app_users.py list     # confirm the row now reads pursuit
+```
+
+**Hand-writing an `UPDATE app_users SET profile = 'pursuit'` is not the path**, and the
+reason is the one `backend/webapp/README.md:76-78` already gives for `add`: *"`--profile`
+is which pipeline profile they see; it is validated against the `profiles` table at insert
+time."* SQL typed at a prompt skips that validation, so a typo — `persuit`, `Pursuit` — is
+accepted by the database and shows up as an empty job list with no error. It is the same
+class of silent failure as everything else on this page.
+
+> ~~Written 2026-07-30 **without reading `set-profile`'s implementation**, which was being
+> added in parallel. Named and described here from its specification; run
+> `manage_app_users.py --help` and confirm the subcommand exists before relying on this
+> paragraph.~~
+>
+> **RESOLVED the same day: it landed, and it was then RUN.** `ericliu93@gmail.com` reads
+> `pursuit` — verified with `manage_app_users.py list`, `sessions=0`, `google_sub` still
+> unbound because nobody has ever logged in. The description above survived contact with
+> the implementation. Two details it did not have: no inactive-profile warning fired,
+> because task 12 left `pursuit` **active** and only `tech` paused; and the command prints
+> *"Takes effect on their NEXT request"* rather than revoking sessions, because
+> `require_user` re-joins `app_users` on every request (`auth.py:96-104`) and
+> `app_sessions` stores no copy of the profile. **This step is DONE and should not be
+> re-run.**
+
+### A4. Serve it
+
+```bash
+cd backend/webapp
+.venv/bin/uvicorn app:app --port 8421
+```
+
+**`backend/webapp/.venv` is the only interpreter that can import `fastapi`** — see
+§ *Serving it* below for why, and do not conclude anything about the repo from an import
+error made with system `python3`. Then open `http://localhost:8421/v1/label`, sign in, and
+confirm you land on a **posting** rather than on `:5173`.
+
+### A5. What a solo run can and cannot produce
+
+**This is the part worth reading twice, because the run ends in a refusal.**
+
+`python3 -m evals label report` **exits 2 and prints `evals label report REFUSED:`** when
+there has been only one labeller — `cmd_label_report()` in `backend/evals/__main__.py`,
+*"except labels.Uninterpretable as e: … print(f"evals label report REFUSED: {e}") … return
+2"*. **That is correct behaviour and not a bug to route around.**
+
+> **Cite these by symbol, not by digit.** `backend/evals/labels.py` and
+> `backend/evals/__main__.py` were **being edited by another agent while this section was
+> written** — `labels.py` grew by ~107 lines between two reads twenty minutes apart, moving
+> `inter_annotator()` from `:1404` to `:1511` inside that window. Numbers below are what
+> `grep -n` returned at the moment of writing on 2026-07-30 and are **expected to be wrong
+> by the time you read them**. `HANDOFF.md` has recorded this same failure four times; the
+> symbol name is the pointer and `grep -n` is the instrument.
+
+The mechanism, so it is not mistaken for a configuration problem:
+
+- The report's ceiling column is bound to the **inter**-annotator quantity and nothing
+  else. In `_three_quantity_report()`: `inter = labels.inter_annotator(golden_rows, kinds)`
+  (`evals/__main__.py:482`) feeding `ceiling=inter["fields"]` (`:486`). `intra_annotator()`
+  is computed on the line between them and passed to the renderer — **but never as the
+  ceiling.**
+- `labels.inter_annotator()` (`backend/evals/labels.py:1511`, whose first docstring line is
+  *"THE CEILING: how often two different people give the same answer"*) builds an `answers`
+  dict keyed by `labeller_id` and then **skips the item**: `if len(answers) < 2:` … `continue`
+  (`:1563`), counting it under `single_labeller_items`. **Two distinct `labeller_id`s on the
+  same item is the requirement.** One labeller means every item is skipped and the ceiling
+  block comes back empty.
+- `labels.interpretable()` (`:1950`) refuses per field for whichever of floor / ceiling /
+  measured is absent, and `Interpretable` is the only thing `report.render_labels()`
+  accepts. **A report without a ceiling is unrepresentable, not merely discouraged.**
+- **There is deliberately no `--force`.** `labels.py:1891` says so in as many words: *"a
+  `--force` flag would undo it and there deliberately is not one."* The `report`
+  subparser (`evals/__main__.py:629-639`) takes `--golden`, `--run`, `--selfcheck` and
+  `--label-set`, and no override.
+
+**So a solo sitting produces labels, not a report.** The labels are real, they are stored,
+and nothing about them is provisional — what is missing is the scale to read a model score
+against.
+
+**What unblocks it is small and specific: one second person answering the ten `overlap`
+rows.** Not the set — the block. Roughly **10 minutes**, they never see the other 190
+postings, and the queue serves the overlap block first to everyone by construction. That
+is the whole of what stands between a solo sitting and a printable report.
+
+The other route is the **intra**-annotator ceiling — the owner re-answering those same ten
+rows seven days later — and it is deliberately *not* wired to the report's ceiling column.
+See `tranche_five/29-labelling-session.md`, § *Deviation* and § *Optional follow-up* below.
+
+### A6. How many to do, and the one thing to bring back
+
+**Do the first ten and time them.** They are the `overlap` block, the queue serves them
+first automatically, and they are the exact ten a second person has to answer. Everything
+after that is a trade you can make with a real number instead of a guess.
+
+**Recommended: ~60 in the first sitting, 110 as the target across two or three, all 200
+only if the recall question earns it.** The strata are interleaved — every 50-row block is
+roughly the set's own 50/25/25 — so **any prefix is a proportional miniature and there is
+no wrong place to stop.** `next_item()` resumes exactly where you stopped, indefinitely.
+The power table behind those three numbers, read against task 06's 76% and 94%
+self-consistency floors, is in `HANDOFF.md` § *How many to label*.
+
+**The deliverable that is not labels: the per-posting time.** Every budget figure in this
+run — *"~20 items each"*, *"~28 at five labellers"* — was computed against a **five**-question
+form. The form asks **six**, and the per-posting time has never been measured, only
+assumed. **Write the stopwatch reading into `HANDOFF.md` when you stop.** It is what turns
+every future Builder-session estimate from a guess into arithmetic.
+
+**Use the abstention.** *"I can't tell from this posting"* is stored as NULL and dropped
+from the agreement rates rather than folded in, because *"folding them in as a value would
+score two people who both gave up as two people who concurred."* A forced guess to keep the
+count up is worse than a lower count.
+
+---
+
+## Case B — ten Builders, own devices
+
+**Everything from here down is Case B**, and it is unchanged and still correct. Case A
+readers still need § *1* (the OAuth secrets), § *4* (the two-allowlist trap), § *Serving
+it* and § *Afterwards*; the `:5173` diagnosis in § *2* is the record of a value that has
+since been corrected — see A1.
 
 ## The four things that are wrong today, in order
 
@@ -147,8 +342,16 @@ installed".** If an import fails, check which interpreter made the observation b
 concluding anything about the repo.
 
 No install and no code is needed. The route exists and is wired:
-`backend/webapp/label.py:241` (the form), `:296` (submit), `:364` (progress), included
+~~`backend/webapp/label.py:241` (the form), `:296` (submit), `:364` (progress)~~, included
 at `backend/webapp/app.py:91`.
+
+> **Re-checked 2026-07-30 with `grep -n '@router' backend/webapp/label.py`, and all three
+> had moved again.** Current, with the text quoted because the digits keep expiring:
+> **`:266`** `@router.get("/v1/label", response_class=HTMLResponse)`, **`:354`**
+> `@router.post("/v1/label")`, **`:466`** `@router.get("/v1/label/progress")`. `app.py:91`
+> has not moved. These are the **third** set of numbers for one unchanged set of routes —
+> `:218`/`:256`/`:311` in `29-labelling-session.md`, then `:241`/`:296`/`:364` here.
+> **The route decorator is the durable pointer; run the grep.**
 
 Sanity-check before sending any link: sign in yourself and confirm you land on a
 posting rather than on `:5173`.
@@ -162,7 +365,10 @@ https://<the origin you set as FRONTEND_ORIGIN>/v1/label
 ```
 
 Signed out, that URL **302s to Google** rather than returning 401 — deliberate, because
-it is a URL somebody pastes out of an email (`webapp/label.py:249-255`). They sign in
+it is a URL somebody pastes out of an email (~~`webapp/label.py:249-255`~~ — **stale,
+re-checked 2026-07-30: that range is now the abstention radio button. The 302 is at
+`:274-280`, inside `label_form()`, reading `except HTTPException as e: if e.status_code ==
+401: return RedirectResponse("/v1/auth/login?next=/v1/label", status_code=302)`**). They sign in
 with Google, answer six questions per posting, and the form walks them to the next one.
 Each labeller's queue starts with the shared **overlap block** and then rotates into
 their own window of the tail, so ten people at twenty postings each cover ~110 distinct
@@ -212,12 +418,15 @@ postings, not 200. `progress()` counts round 2 against the overlap block precise
 the footer does not read "3 / 200" on a ten-row queue.
 
 **It cannot be run sooner than 7 days after their first label, and the delay IS the
-measurement.** `labels.ROUND_TWO_DELAY_DAYS = 7` (`backend/evals/labels.py:1007`),
-sourced from `docs/ingestion_tests/03-metrics-and-golden-set.md:25`'s *"a week apart"*.
+measurement.** `labels.ROUND_TWO_DELAY_DAYS = 7` (~~`backend/evals/labels.py:1007`~~ —
+**`:1114` when re-checked 2026-07-30, and moving; grep the name**), sourced from
+`docs/ingestion_tests/03-metrics-and-golden-set.md:25`'s *"a week apart"*.
 Served an hour later it measures whether they remember their first answer, which comes
 back near 100% and would then be quoted as a ceiling. The form enforces this: too soon,
 and it names the **date** to come back on rather than showing an empty page
-(`labels.round_two_ready()` at `:1010`, rendered by `_TOO_SOON` in `webapp/label.py`).
+(`labels.round_two_ready()` ~~at `:1010`~~ — **`:1117` today; `:1010` now resolves to
+`def progress(...)`, a different function entirely** — rendered by `_TOO_SOON`,
+`webapp/label.py:519`, used at `:300`).
 
 If you decide to spend it, the link is the same URL with one parameter:
 

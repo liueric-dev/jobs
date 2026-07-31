@@ -781,9 +781,116 @@ def load_set(path):
     return corpus.load(path)
 
 
+class SetAlreadyDrawn(ValueError):
+    """A second draw under a name that is already pinned to a first one.
+
+    Raised, never warned, and never downgraded by a flag -- the same stance
+    `Uninterpretable` takes one section down and for the same reason: a warning
+    is a thing people read once, and this one has to survive being re-read at
+    11pm by whoever is re-running the sampler because a stratum came out short.
+
+    THE DAMAGE IS SILENT, WHICH IS WHY IT NEEDS AN EXCEPTION. register_set()
+    inserts `ON CONFLICT DO NOTHING` on both tables, so a re-draw with a
+    different --seed or --n does not fail: the existing items keep their old
+    `position` and `overlap`, newly drawn job_ids are APPENDED, and
+    `eval_label_sets.n` and `job_id_sha256` go on describing the first draw. The
+    database, the committed fixture and the published figures then disagree
+    three ways, and nothing anywhere is red.
+    """
+
+
+def redraw_refusal(conn, label_set, rows):
+    """Why this draw may not be registered under this name, or None if it may.
+
+    A string rather than a raise, so a caller that has not written anything yet
+    -- `evals label sample --dry-run` -- can ASK the question read-only and
+    report the answer, instead of finding out by being refused. register_set()
+    below turns the same string into SetAlreadyDrawn, so there is one rule and
+    two renderings of it, not two rules.
+
+    THREE OUTCOMES, AND THE MIDDLE ONE IS THE POINT.
+
+    No stored row -- a first draw. Allowed, unchanged.
+
+    Stored digest EQUALS this draw's -- allowed, and it must stay allowed. A
+    re-run of the same command with the same seed is how an operator recovers
+    from a crash between register_set() and save_set(), and how `pursuit-v1`'s
+    own defect-4 redraw was verified. Refusing every re-registration would make
+    the sampler unusable for the one safe case it is used for most.
+
+    Stored digest DIFFERS -- refused. CLAUDE.md pins eval sets by sorted
+    `job_id`; a set regenerated in place changes what every published figure was
+    measured on while the figures sit unchanged in the docs, now wrong. The
+    message names both digests so the reader can tell "I changed the seed" from
+    "the corpus moved under me", which are different mistakes with different
+    fixes.
+
+    AND `eval_labels` OVERRIDES ALL THREE. Any label at all for the set refuses
+    any re-registration, INCLUDING one at the same digest. Same digest does not
+    mean same set: the job ids are the digest's whole input, so a re-draw that
+    keeps them and moves the `overlap` flags -- exactly what the defect-4 redraw
+    did -- hashes identically. Those flags decide which postings every labeller
+    sees and which rows the inter-annotator ceiling is computed over, so moving
+    them under someone who has already answered silently changes what their
+    answers were answers to. The set tables would not even record the move
+    (ON CONFLICT DO NOTHING), but save_set() rewrites the committed fixture,
+    which is what report time reads. HANDOFF.md:275 calls this window closed as
+    prose; this is the prose in code.
+    """
+    stored = conn.execute(
+        "SELECT n, job_id_sha256 FROM eval_label_sets WHERE label_set = %s",
+        (label_set,)).fetchone()
+    if stored is None:
+        return None
+    stored_n, stored_sha = stored
+    fresh_sha = digest(rows)
+    labelled = conn.execute(
+        "SELECT COUNT(*) FROM eval_labels WHERE label_set = %s",
+        (label_set,)).fetchone()[0]
+
+    # Both digests, both counts, on every refusal -- including the one where
+    # the digests match, where seeing them match is what tells the reader the
+    # refusal is about the labels and not about the draw.
+    facts = (f"stored sha256(sorted job_id)={stored_sha} over n={stored_n}; "
+             f"this draw is {fresh_sha} over n={len(rows)}; "
+             f"eval_labels holds {labelled} row(s) for {label_set!r}")
+
+    if labelled:
+        return (
+            f"{label_set} has been labelled and cannot be re-registered "
+            f"({facts}). This holds even at an identical digest: the job ids "
+            f"are the digest's only input, so a draw that keeps them and moves "
+            f"the `overlap` flags hashes the same, and those flags decide what "
+            f"every labeller was shown. Draw the new set under a NEW "
+            f"--label-set and a new --out; the existing labels stay attached "
+            f"to the set they were answers to.")
+    if fresh_sha != stored_sha:
+        return (
+            f"{label_set} is already drawn from a different set of job ids "
+            f"({facts}). An eval set is pinned by its sorted job_id and is "
+            f"never regenerated in place -- the figures measured on the first "
+            f"draw would stay in the docs, unchanged and now wrong. Draw under "
+            f"a NEW --label-set and a new --out, or, while eval_labels is "
+            f"still empty for it, DELETE FROM eval_label_sets WHERE label_set "
+            f"= '{label_set}' first (the items cascade) and say in --note why.")
+    return None
+
+
 def register_set(conn, label_set, rows, *, seed, profile, note=None):
-    """Record the set and its items. Writes nothing to eval_labels."""
+    """Record the set and its items. Writes nothing to eval_labels.
+
+    THE REDRAW GUARD IS HERE, NOT IN THE CLI, so every caller inherits it --
+    the same argument webapp/schema_web.py:97 makes for putting init-schema's
+    work in one function two entry points call. A check in cmd_label_sample
+    protects the one path that exists today and none of the ones added later,
+    and the failure it is protecting against is invisible from every side.
+    See redraw_refusal() for what is refused and why.
+    """
     from lib.timeparse import utc_now_str
+
+    refusal = redraw_refusal(conn, label_set, rows)
+    if refusal:
+        raise SetAlreadyDrawn(refusal)
 
     conn.execute(
         """

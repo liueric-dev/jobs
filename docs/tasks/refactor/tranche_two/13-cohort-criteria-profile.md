@@ -1,6 +1,15 @@
 # 13 — Cohort criteria profile
 
-**Status:** todo. **Depends on:** 11, 12. **Blocks:** 26, 29, 30.
+**Status:** ~~todo.~~ **DONE, `fa2d7a7`.** **Depends on:** 11, 12. **Blocks:** 26, 29, 30.
+**Corrected 2026-07-30:** this line still read `todo` after the task landed, and it was
+the most expensive of the four stale `Status:` lines — **it made task 26 look blocked on
+an unstarted task when it is not.** [`README.md`](../README.md)'s Phase 2 row for 13 says
+`done`, `HANDOFF.md`'s *State at handoff* table carries `13 | cohort criteria profile —
+DoD 122-123 unmet, not tuned | fa2d7a7`, and `git log -1 fa2d7a7` reads *"Cohort criteria
+profile (tranche_two/13)"*. **Done is not the same as met**: DoD lines 122-123 are
+deliberately unmet and deliberately not tuned into being met — 16/20 above the floor,
+10/20 in the top 20. See `HANDOFF.md`, § *the ranking is a product now, and the DoD it
+did not meet*, and do not read `DONE` here as a licence to re-tune the weights.
 
 > **Correction, 2026-07-28.** Three things below are wrong about the code as it stands.
 > This is the seventh task file confirmed so; the other six are listed at

@@ -1,6 +1,10 @@
 # 35 — Extraction input sanity
 
-**Status:** done (implemented with this file). **Depends on:** nothing. **Blocks:** nothing.
+**Status:** DONE, `303f7b9` (implemented with this file). **Depends on:** nothing.
+**Blocks:** nothing.
+**Amended 2026-07-30:** this line agreed with [`README.md`](../README.md) already — it was
+the only `done` task file naming no commit. Filled in from `HANDOFF.md`'s *State at
+handoff* table (`35 | extraction input-sanity gate — 8 poisoned rows, not 3 | 303f7b9`).
 
 Extraction had no opinion about what it was reading. Give it one.
 
