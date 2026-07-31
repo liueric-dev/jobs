@@ -1,8 +1,17 @@
 ---
-script: docs/ingest/DEFECTS.md
-commit: dd49a27 (audit base) + 28f1d0e (current HEAD, webapp-service)
-generated: 2026-07-28
+script: none -- this is a register over every ingest path, not a per-script reference
+written: 2026-07-28
+code_at: dd49a27 (audit base) + 28f1d0e (current HEAD, webapp-service)
+generator: none
 ---
+
+> **Provenance.** `generator: none` is literal: nothing in this repo produces
+> `docs/ingest/*.md`. Earlier versions carried `generated:` frontmatter naming a
+> tool that was never written, which made `.claude/CLAUDE.md`'s *"never hand-edit"*
+> instruction unfollowable — the only way to fix a wrong line was to break the rule.
+> The claim was dropped across all fourteen files on 2026-07-31; see
+> [`34-documentation-cleanup.md`](../tasks/refactor/34-documentation-cleanup.md) §A2.
+> These files are hand-written and are maintained by hand.
 
 # Ingest audit defect register
 
@@ -74,7 +83,7 @@ given).
 | [D24](#d24) | silent data loss (unconfirmed) | won't-fix (unconfirmed; revisit if it recurs) | `extract.py`: 15 rows possibly permanently starved at `facts_version=1` |
 | [D25](#d25) | silent data loss | **fixed** — `28f1d0e` | Live model silently differed from the documented default |
 | [D26](#d26) | cosmetic | fold into task 34 | Stale "`unescape=False`" claim in two files contradicts `ats.py` |
-| [D27](#d27) | cosmetic | fold into task 34 | `ats.py`: 5 unused imports |
+| [D27](#d27) | cosmetic | **fixed** — verified 2026-07-31, all five absent | `ats.py`: 5 unused imports |
 | [D28](#d28) | cosmetic | fold into task 34 | `builtin-nyc.py`: 4 unused imports, `http` imported for one constant |
 | [D29](#d29) | cosmetic | fold into task 34 | `weworkremotely.py`: `parse_posted_at` called twice on the same value |
 | [D30](#d30) | cosmetic | fold into task 34 | `weworkremotely.py`: 5 unused imports |
@@ -92,7 +101,7 @@ given).
 | [D42](#d42) | cosmetic | fold into task 34 | `hn-hiring.py`: null comment items re-fetched forever (audit item 5) |
 | [D43](#d43) | silent data loss | **fixed** — task 08 | `score.py`: a tombstone left the previous score in place, and `has_fields` let an all-null answer through |
 | [D44](#d44) | loud failure | **fixed** — task 08 | `evals/__main__.py`: `evals run` raised `UnboundLocalError` for every task |
-| [D45](#d45) | silent under-sizing | **open** — needs a task | `company_ats`: the `never_found` write-back from `ats_seed` is partial. 35 rows against a true population of 139 |
+| [D45](#d45) | silent under-sizing | **fixed** — verified 2026-07-31; the body has said so and this row did not | `company_ats`: the `never_found` write-back from `ats_seed` is partial. 35 rows against a true population of 139 |
 
 ---
 

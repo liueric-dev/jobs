@@ -1,3 +1,9 @@
+---
+script: backend/ingest/workday.py
+written: 2026-07-28
+generator: none
+---
+
 # Workday CXS ingest
 
 **Hand-written, not generated.** Every other file in `docs/ingest/` carries

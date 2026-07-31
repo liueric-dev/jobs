@@ -1,6 +1,7 @@
 ---
 script: backend/ingest/ats.py
-hand_written: 2026-07-28
+written: 2026-07-28
+generator: none
 supersedes: the generated 2026-07-27 version at commit dd49a27
 ---
 

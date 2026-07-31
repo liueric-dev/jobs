@@ -1,4 +1,6 @@
-# docs/tasks/pursuit/
+# docs/tasks/refactor/
+
+*(This tree was called `pursuit/` while it was being planned and is `refactor/` on disk. The old name survives in `MASTER-PLAN-pursuit.md` and a few task files, which are left as written.)*
 
 Work breakdown for retargeting the pipeline from one software engineer's job
 search to the Pursuit AI-Native cohort — ~30 Builders, entry-level, AI-adjacent
@@ -21,7 +23,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | | Task | Lands | |
 |---|---|---|---|
 | 01 | [Pin the production model](tranche_one/01-pin-production-model.md) | one answer to "what runs in production", enforced in code | done |
-| 02 | [Triage the ingest audit defects](tranche_one/02-triage-audit-defects.md) | [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md) — 42 defects enumerated, classified, scheduled | done |
+| 02 | [Triage the ingest audit defects](tranche_one/02-triage-audit-defects.md) | [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md) — **45** defects enumerated, classified, scheduled (`D01`–`D45`; this row said 42 and `CLAUDE_UPDATES.md` said 41 — both were counts taken before `D43`–`D45` were added by tasks 08 and 19) | done |
 | 03 | [Stop discarding upsert errors](tranche_one/03-fix-silent-upsert-errors.md) | `UpsertResult.errors` read in every ingest path — all 8 sites | done |
 | 04 | [Quota and wall-clock baseline](tranche_one/04-quota-baseline.md) | `cost-test.py` measuring requests and seconds, not dollars — **the binding constraint is `EXTRACT_BATCH_SIZE=40`, not quota** | done |
 | 05 | [Corpus volume under a widened gate](tranche_one/05-widened-gate-volume.md) | a number: how many rows a Pursuit gate would admit — **N = 43/day**, [`docs/pursuit-gate-volume.md`](../../pursuit-gate-volume.md) | done |

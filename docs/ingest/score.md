@@ -1,8 +1,17 @@
 ---
 script: backend/score.py
-commit: dd49a27
-generated: 2026-07-27
+written: 2026-07-27
+code_at: dd49a27
+generator: none
 ---
+
+> **Provenance.** `generator: none` is literal: nothing in this repo produces
+> `docs/ingest/*.md`. Earlier versions carried `generated:` frontmatter naming a
+> tool that was never written, which made `.claude/CLAUDE.md`'s *"never hand-edit"*
+> instruction unfollowable — the only way to fix a wrong line was to break the rule.
+> The claim was dropped across all fourteen files on 2026-07-31; see
+> [`34-documentation-cleanup.md`](../tasks/refactor/34-documentation-cleanup.md) §A2.
+> These files are hand-written and are maintained by hand.
 
 > Stage 4 of 4. For why `fit_score` annotates but never orders a list, and
 > what a tombstoned narrative does to the ranking, see

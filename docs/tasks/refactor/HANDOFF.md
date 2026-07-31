@@ -1543,7 +1543,7 @@ still holds.
 
 ## State at handoff
 
-**Branch `webapp-service`, suite green at ~~1107~~ ~~1160~~ ~~1166~~ 1171 tests** (task
+**Branch `webapp-service`, suite green at ~~1107~~ ~~1160~~ ~~1166~~ ~~1171~~ **1178** tests (run, not statically counted, 2026-07-31)** (task
 files say 263, earlier handoffs 782, 837, 878, 1030, 1058, 1070 and 1107; ~~**1166 is the
 floor now**~~ **1171 is the floor now** — `Ran 1171 tests` … `OK`, re-run 2026-07-31; the
 five are `backend/tests/test_label_findings.py`). **Webapp untouched this session, still

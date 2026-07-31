@@ -486,7 +486,7 @@ def record_ats_validation():
     return f"{len(results)} validation probes -- " + ", ".join(results)
 
 
-#: Memorial Sloan Kettering: 87-88 open postings, the SMALLEST of the four
+#: Memorial Sloan Kettering: 79 open postings when recorded, the SMALLEST of the four
 #: live Workday tenants in `company_ats` (Moelis 43 is smaller but sits behind
 #: an `Experienced-Hires` site that is not the shape task 18 walks; nyp 367 and
 #: nordstrom 862 are both several times the bytes for no extra shape).
@@ -507,9 +507,23 @@ def record_workday_cxs():
     WALK: it is a single page, and every multi-page failure in
     `docs/ingest/workday.md:241-249` is about what the second page does.
     NVIDIA's board is 2,000 postings -- 100 pages -- so walking it to get that
-    would commit megabytes to prove pagination. msk is 88 postings: five
-    pages, the last one short, which is the smallest thing that is still a
-    real walk.
+    would commit megabytes to prove pagination. msk was 79 postings when this
+    was recorded on 2026-07-28: FOUR pages, the last one short (20+20+20+19,
+    `total` 79/0/0/0), which is the smallest thing that is still a real walk.
+
+    THE COMMITTED CASSETTE'S OWN `note` STILL SAYS "five pages", AND STAYS
+    WRONG ON PURPOSE. That string is baked into
+    `fixtures/cassettes/workday-cxs.json` at record time, so the only way to
+    correct it is to re-record -- which the two guards below exist to refuse,
+    because a re-record against today's board is how failure 5's only recorded
+    evidence gets destroyed. A false sentence inside an artifact that must not
+    be regenerated is cheaper than the regeneration. Read the JSON's page
+    count, not its prose.
+
+    (The board was 88 over five pages at task 16's validation. It moved before
+    the recording, which is ordinary -- it is why nothing in the ingest path
+    reconciles against a stored count, and why this docstring said five pages
+    for three days after the bytes said four.)
 
     WHAT THESE BYTES PIN THAT A CONSTRUCTED FIXTURE CANNOT. Failure 5 --
     `total` reported on the offset=0 page only, every later page answering
@@ -543,8 +557,8 @@ def record_workday_cxs():
             recorded_by=RECORDED_BY,
             note=f"ingest/workday.py collect_tenant('{tenant}', '{dc}', "
                  f"'{site}') -- the whole board at the production "
-                 f"limit={workday.PAGE_LIMIT}, five pages ending in a short "
-                 f"one, plus fetch_detail() for the first posting. Records "
+                 f"limit={workday.PAGE_LIMIT}, every page to the end of the "
+                 f"board, plus fetch_detail() for the first posting. Records "
                  f"failure 5 from real bytes: `total` is on the offset=0 page "
                  f"ONLY and every later page answers 0, so a walk that takes "
                  f"the latest value reconciles a complete board against zero "

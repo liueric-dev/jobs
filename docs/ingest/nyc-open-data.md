@@ -1,7 +1,16 @@
 ---
 script: backend/ingest/nyc-open-data.py
 written: 2026-07-28
+generator: none
 ---
+
+> **Provenance.** `generator: none` is literal: nothing in this repo produces
+> `docs/ingest/*.md`. Earlier versions carried `generated:` frontmatter naming a
+> tool that was never written, which made `.claude/CLAUDE.md`'s *"never hand-edit"*
+> instruction unfollowable — the only way to fix a wrong line was to break the rule.
+> The claim was dropped across all fourteen files on 2026-07-31; see
+> [`34-documentation-cleanup.md`](../tasks/refactor/34-documentation-cleanup.md) §A2.
+> These files are hand-written and are maintained by hand.
 
 > **Hand-written, and deliberately carries no `generated:` line.** The other
 > files in this directory claim `script:`/`commit:`/`generated:` frontmatter

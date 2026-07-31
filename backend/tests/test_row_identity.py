@@ -168,9 +168,23 @@ class TestStripHtml(unittest.TestCase):
             "822d85aa697beb7eb7cd4976122bbfe28691cd27a7b62bf3da98ad22e5e5d4f6")
 
     def test_unescape_variants_both_frozen(self):
-        """Both behaviours must stay reachable: ats.py passes unescape=False
-        to preserve its stored hashes, the other sources rely on the default.
-        Collapsing them rewrote 217 of 242 weworkremotely rows once already."""
+        """Both behaviours must stay reachable, because both are in stored hashes.
+
+        ~~ats.py passes unescape=False to preserve its stored hashes.~~ **That
+        reason is false and was corrected 2026-07-31 (D26).** No caller in this
+        repo passes `unescape=False` any more -- `ats.py` calls
+        `text.strip_html(html.unescape(content))`, and its own comment says
+        "Passing unescape=False was leaving `&amp;` in the stored text."
+
+        The assertions below are unchanged and still right. `content_hash` is
+        row identity, and rows written under the old behaviour are still in the
+        table, so the non-unescaping path must keep producing exactly what it
+        produced then even though nothing calls it. Collapsing the two rewrote
+        217 of 242 weworkremotely rows once already.
+
+        The docstring is the point: a test can keep passing for years while the
+        reason it was written stops being true, and a green test on the
+        conclusion does not check the claim."""
         markup = "<div>Hello &amp; <b>welcome</b>\n\n  to   NYC</div>"
         self.assertEqual(text.strip_html(markup), "Hello & welcome to NYC")
         self.assertEqual(text.strip_html(markup, unescape=False),

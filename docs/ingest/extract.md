@@ -1,6 +1,7 @@
 ---
 script: backend/extract.py
-generated: 2026-07-27
+written: 2026-07-27
+generator: none
 partially_hand_revised: 2026-07-28
 ---
 
