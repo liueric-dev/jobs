@@ -2,9 +2,10 @@
 
 ## START HERE — a fresh session's sixty seconds, 2026-07-31
 
-*This file has eight "READ THIS FIRST" sections, which is seven too many and is a defect it
-has been recording about itself for a week. This block is the fix: everything below is
-context. Verify anything here before acting on it — the instrument is named in each case.*
+*This file had eight "READ THIS FIRST" sections and now has three — the four that
+described finished work were archived on 2026-07-31 (task 34, § Orientation), and this
+block is the entry point. Everything below is context. Verify anything here before acting
+on it — the instrument is named in each case.*
 
 **State, verified 2026-07-31 by `python3 backend/tools/label-findings.py`:**
 
@@ -25,7 +26,9 @@ next session's task**, and its file did not exist until this decision — `READM
 to `34-documentation-cleanup.md` and nothing was there. That broken link is itself a
 specimen of the debt the session is for.
 
-**Read [`34-documentation-cleanup.md`](34-documentation-cleanup.md) first.** It carries the
+**For the state of the run in one page with an instrument beside every number, read
+[`AUDIT.md`](AUDIT.md).** For this task's backlog, read
+**[`34-documentation-cleanup.md`](34-documentation-cleanup.md).** It carries the
 verified backlog, in priority order, with the evidence for each item. **Everything in it
 was re-checked against the code on 2026-07-31** rather than inherited from a document —
 because the single clearest lesson of the previous session is that this run's follow-ups go
@@ -197,13 +200,23 @@ Task 29 is still the whole of a fresh session's job, but nothing is blocked: sig
 label. § *task 29 is UNBLOCKED* is the operational entry point and `LABELLING-NIGHT.md`
 § *Case A* is the command list.
 
-## Orientation — there are seven "READ THIS FIRST" sections, in this order
+## Orientation — three "READ THIS FIRST" sections, in this order
 
-That is six too many, and the file has earned each one. ~~**The sixth is the newest and it
-is the only one that is an instruction rather than a warning**: the pre-flight is done and
-the next session labels.~~ **The seventh is the newest and it is a correction to an
-estimate this whole file plans against** — § *the stopwatch reading*, itself now corrected
-a second time and in the opposite direction. If you read nothing else:
+> **SPLIT 2026-07-31 (task 34). There were seven, and this file had been calling that
+> "six too many" about itself for a week while the count went up.** Four of the seven
+> described work that had already landed — the stopwatch reading, the sampler defects, the
+> ceiling and pre-flight, the gate fix. Finished work is history, and history was standing
+> in front of the next reader. Those four are now stubs pointing at
+> [`docs/archive/`](../../archive/); their text is intact and `git log --follow` reaches
+> the original. **Two operational subsections did NOT move** — `FRONTEND_ORIGIN` and the
+> `app_users` schema are how the service is configured, not the story of how it was fixed.
+>
+> The file went 3,481 → ~2,690 lines. The three that remain are all *standing*: one open
+> track, and two prohibitions. **If a fifth ever appears, check first whether it is
+> describing something that already happened.**
+
+The three are: task 29's labelling surface (open, the owner's), the ranking DoD that is
+unmet on purpose, and the cost lever in the profiles table. If you read nothing else:
 
 0. **Labelling has started and the drawn set is now permanent.** ~~30 rows, 5 postings, one
    labeller.~~ **186 rows, 31 postings, one labeller, and the ten `overlap` rows are DONE**
@@ -301,115 +314,9 @@ is the fourth time this file has recorded the same failure. The `fastapi` claim 
 **ask which interpreter the observation was made with**, because "it fails to import" is a
 fact about an environment, not about a repo.
 
-## READ THIS FIRST: ~~the stopwatch reading, and the budget is out by 2.5x~~ the stopwatch reading was RE-DERIVED, and the correction goes the other way
+## ARCHIVED: the stopwatch reading, measured at n=4 and re-derived at n=29
 
-**Corrected 2026-07-31, later the same day, at n=29 intervals instead of n=4.** The
-section below it is kept in full, because it is what the run planned against for a day and
-because the way it was wrong is the reusable part.
-
-**The re-derived number: median 93 s, mean 110 s per posting** (n=29). Instrument:
-`python3 backend/tools/label-findings.py --timing` — successive `min(labelled_at)` per
-`job_id` in submit order, over all 31 labelled postings, one labeller (`u_090b0ad12e99`),
-`2026-07-31T02:56:05`–`05:25:27` UTC.
-
-Raw intervals, printed before any statistic because a sitting contains breaks:
-
-```
- 87  170  247  110  5765   81  178   83  133   93
-125   74  113  131   119  171  116   80   69  251
- 43  101   38   78    50   67   91   76   73  149
-```
-
-**One interval of 5,765 s is excluded as a break** at the tool's default `--break-secs
-600`. Both figures are printed so the exclusion can be argued with: **including** the
-break, median 97 s / mean 299 s (n=30); **excluding** it, **median 93 s / mean 110 s**
-(n=29). A mean over a list containing a 96-minute gap is a statistic about dinner.
-
-**There IS a warm-up curve, and it runs the direction the note below said it did not.**
-First 7 intervals mean **137 s**; last 7 mean **83 s**. The labeller speeds up. **The
-original n=4 sample — 87, 170, 247, 110, mean 153.5 s — is the first four intervals of
-this list and sits entirely inside the warm-up.** It was not a rate; it was the price of
-learning the form.
-
-| what this file says | ~~at 154 s~~ | at the median 93 s |
-|---|---|---|
-| *"Twenty minutes, in person, in one sitting"* → ~20 postings (`29` § *Logistics*) | ~~~8 postings~~ | **13 postings** |
-| *"one second person and ten minutes"*, the ten `overlap` rows | ~~~26 minutes~~ | **16 minutes** |
-| 60 postings | ~~~2.6 hours~~ | **1.6 h** |
-| ≥100 postings, one person (the DoD) | ~~~4.3 hours~~ | **2.6 h** |
-| 200 postings, one person | — | **5.2 h** |
-
-**THE IRONY IS THE FINDING, and it is worth one sentence.** The superseded section's own
-closing caveat reads *"the fastest interval is the first, which is the opposite of a
-warm-up curve and is the thing to re-check as the count grows."* It named the re-check,
-the re-check was run, and **the re-check overturned the section that asked for it.** A
-caveat that specifies its own instrument is worth more than a caveat that hedges.
-
-**What this changes about asking people, and it changes it twice.** ~~Ask for half an
-hour.~~ Ask for **about twenty minutes** — ten `overlap` rows at 93 s is 16 min, and those
-ten rows are now the *only* thing standing between this run and a printable
-`evals label report`, because the overlap block is already complete on the owner's side.
-The ask got smaller and what it buys got larger in the same measurement.
-
-**Caveats that belong beside the number wherever it is quoted**: one labeller; six-question
-form, not a factor applied to a five-question one; submit-to-submit includes reading, and
-**the first posting's own reading time is not in the figure at all**, so the true rate is
-*higher* than 93 s rather than lower. And the curve means **a rate taken from a fresh
-labeller's first few postings overstates the cost of the rest** — which is now measured
-rather than asserted, at 137 s against 83 s.
-
-**Re-derive it, do not re-quote it — and that instruction now has a command.** It was
-issued three times and re-quoted three times, because re-deriving needed four lines of SQL
-first. `backend/tools/label-findings.py` is those four lines, kept. An instruction to
-re-derive that requires someone to write SQL is an instruction that decays into a
-quotation.
-
-Full working: `tranche_five/29-labelling-session.md` § *Findings, 2026-07-31*, E.
-
----
-
-> **SUPERSEDED 2026-07-31. Everything from here to the end of this section is the n=4
-> reading, kept verbatim.** It is what §§ *How many to label*, *recommended next steps* and
-> *Pending follow-ups* were written against, and a reader who was working from "154 s" or
-> "~8 postings" needs to see it to recognise what they had.
-
-**Added 2026-07-31.** This file has asked three times for the one number nobody had
-measured, and warned each time against inventing a correction factor for it. **It is now
-measured, and it is worse than every estimate built on it.**
-
-Instrument: `eval_labels.labelled_at`, successive `min(labelled_at)` per `job_id`, over the
-first five labelled postings. **No stopwatch was needed — the rows carry it.** Intervals:
-**87 s, 170 s, 247 s, 110 s. Median 170 s, mean 154 s.**
-
-| what this file says | at 154 s/posting |
-|---|---|
-| *"Twenty minutes, in person, in one sitting"* → ~20 postings (`29` § *Logistics*) | **~8 postings** |
-| *"one second person and ten minutes"*, the ten `overlap` rows | **~26 minutes** |
-| *"~28 items each"* at five labellers, to reach ≥100 | **~72 minutes each** |
-| ≥100 postings, one person (the DoD) | **~4.3 hours** |
-
-**The recommendation in § *How many to label* survives and gets cheaper to state.** That
-section already says ~60 in the first sitting and 110 as the target across two or three,
-and that 200 is bought almost entirely for the recall question. At this rate **60 postings
-is ~2.6 hours**, which is not one sitting — so *"across two or three"* was right and the
-per-sitting figure inside it was not.
-
-**What this changes about asking people.** The second labeller's ten rows are the cheapest
-unblock in task 29 and that is unchanged — they still turn every refused field into a
-printable one, they still never see the other 190, and they should still be arranged
-**before** a long solo sitting. **But it is not a ten-minute favour.** Asking for it as one
-and then keeping somebody for half an hour is how the second labeller does not become a
-third. Ask for half an hour.
-
-**Caveats, because this is n=4 intervals and the file's own rule is to state them beside
-the number**: one labeller; submit-to-submit includes reading; **the first posting's own
-reading time is not in the figure at all**, so the true rate is *higher* than 154 s rather
-than lower; and the fastest interval is the first, which is the opposite of a warm-up curve
-and is the thing to re-check as the count grows. **Re-derive it, do not re-quote it** — the
-query is four lines and this file has now gone stale on eight numbers it quoted.
-
-This is a measurement of the **six**-question form, not a factor applied to a five-question
-one. Full working: `tranche_five/29-labelling-session.md` § *Findings, 2026-07-31*, E.
+> **MOVED 2026-07-31 → [`docs/archive/handoff-stopwatch-reading.md`](../../archive/handoff-stopwatch-reading.md).** Measured the per-posting labelling rate, 2026-07-31. The n=4 reading (154 s) and its same-day correction at n=29 (93 s median). Superseded as a *narrative* by the single entry in HANDOFF.md's § Pending follow-ups, which carries the live number.
 
 ## READ THIS FIRST: task 29 is UNBLOCKED ~~, and the next session labels~~
 
@@ -796,478 +703,17 @@ label at all refuses even an identical-digest redraw**, because the job ids are 
 digest's only input, so a draw that keeps them and moves the `overlap` flags hashes the
 same while changing what every labeller was shown.
 
-## READ THIS FIRST: task 29's "two mechanical minutes" were four defects, and the set is drawn
+## ARCHIVED: task 29's "two mechanical minutes" were four defects, and the set is drawn
 
-**Done 2026-07-29, three commits: `c65d34b` (three sampler fixes), `2f64e08` (rank spacing
-and the drawn set) and `90170d1` (the stratified overlap block, and a redraw), plus the
-label tables created in the live database.**
+> **MOVED 2026-07-31 → [`docs/archive/handoff-sampler-defects.md`](../../archive/handoff-sampler-defects.md).** Recorded 2026-07-29. Four defects in `labels.sample()` found before the 200-row set was drawn, plus a fifth found after it was pinned. All fixed; the set is drawn and permanent. Nothing here is outstanding.
 
-**This file said task 29's first two commands were "mechanical" and called them "two
-mechanical minutes"** — in its own Orientation, in § *what is blocked*, and in
-§ *recommended next steps*. **They were not.** `init-schema` was. `evals label sample`,
-as it stood, would have drawn a 200-row set that
+## ARCHIVED: the ceiling was unreachable, and the night's pre-flight
 
-- **(a)** classified every row against a gate the pipeline does not run,
-- **(b)** starved the one stratum the precision figure is quoted from,
-- **(c)** could not have reached task 29's Definition of done at any turnout, and
-- **(d)** put the inter-annotator ceiling on the easy cases.
+> **MOVED 2026-07-31 → [`docs/archive/handoff-ceiling-and-preflight.md`](../../archive/handoff-ceiling-and-preflight.md).** Recorded 2026-07-30; the ceiling diagnosis and the pre-flight fixes, all landed and verified.
 
-**None of the four was red.** Nothing asserted coverage, `sample()` under-fills in silence,
-a set drawn against the wrong gate looks exactly like a set drawn against the right one,
-and **(d) was found only after the set had been drawn, pinned and committed** — by looking
-at the ten rows the block actually contained rather than at the strata totals, which were
-correct. All four are fixed and the set has been redrawn.
+## Operational reference kept from the pre-flight section
 
-### The four defects, each measured against the live corpus
-
-**1. The sampler classified against the AUTHOR's gate, not the cohort's.** `labels.pool()`
-(`evals/labels.py:498`) and `pool_query()` (`:440`) defaulted `cfg` to `relevance.load()`
-— the shared `config/relevance.json` — while taking a **profile** as the argument that
-names the population. `classify()` tests `tier > max_tier` **before** it looks at
-`match_score` (`evals/labels.py:544-546`, in `classify()` at `:542`), so the gate decides
-the stratum first and everything else second. The rationale now lives in `pool_query()`'s
-own docstring at `:444-453`, with these numbers in it — the argument is `cfg IS REQUIRED`
-rather than a defaulted one, so the defect cannot be reintroduced by omission.
-
-| classified `surfaced` | count |
-|---|---:|
-| under the shared author gate | 59 |
-| under `pursuit`'s own gate | **144** |
-
-**85 postings the pipeline actively surfaces would have been filed as `gate_rejected`** —
-the one stratum whose entire value is being identified correctly. Fixed with
-`relevance.for_profile()` (`relevance.py:100-109`); the CLI now loads the profile row and
-hands its gate in explicitly rather than letting the default resolve
-(`evals/__main__.py:279-292`).
-
-**And this is what made this file's own ordering constraint real.** "Draw the sample AFTER
-the gate fix" (§ *what is blocked*) bought **nothing** while the sampler was reading a
-different gate from the one commit 4 wrote. The constraint was correct and inoperative,
-which is the worst of both — it is a real dependency that no artifact would have shown you
-was being violated.
-
-**2. The recency window starved `surfaced`.** `--per-platform` defaulted to 400 rows per
-platform, which held **29 of pursuit's 144** surfaced postings: greenhouse 6/65, ashby
-13/52, google_jobs 9/26. `sample()` takes what a stratum has and moves on. `PARTITION BY
-platform` answers CLAUDE.md's "~85% greenhouse/ashby" composition complaint and does
-nothing at all about the recency truncation underneath it — **two different traps, one of
-which was being mistaken for the other.** The default is now the whole table (`jobs` is
-~14,000 rows; one `SELECT` over all of it is free), and `cmd_label_sample` **exits 2 and
-names the shortfall** on any under-filled stratum (`evals/__main__.py:306-345`).
-
-**3. Distinct coverage was capped at ONE labeller's throughput.** `next_item()`
-(`evals/labels.py:924`, the defect written up at `:927-936`) served every labeller the
-identical queue — `overlap DESC, position ASC` for everyone. Ten volunteers doing
-twenty postings each therefore answered **the same twenty**, so
-
-```
-distinct = overlap + n_labellers * (budget - overlap)
-```
-
-had a structurally **zero second term**: distinct coverage could never exceed what one
-person completed, and task 29's "≥100 labelled postings from ≥5 labellers" was unreachable
-**regardless of turnout**. The tail is now rotated by the labeller's rank; overlap rows
-still come first, because they are what makes the agreement ceiling measurable.
-
-**4. The overlap block was not stratified, and it carries the ENTIRE inter-annotator
-ceiling.** `sample()` marked the first `overlap` rows of a `job_id` sort — stratified by
-nothing at all. The overlap block is the only part of the set more than one person sees, so
-it is not a sample of the set: **it is the whole of one of the three quantities task 29
-exists to produce.** The first draw of `pursuit-v1` came back
-
-| overlap block | first draw | redrawn | set proportion |
-|---|---:|---:|---:|
-| `surfaced` | 3 | **5** | 5.0 |
-| `below_floor` | 1 | **3** | 2.5 |
-| `gate_rejected` | **6** | **2** | 2.5 |
-
-against a set that is 50 / 25 / 25. That particular draw was ~2% likely — **but the
-mechanism carried no guarantee against it**, which is the defect; the draw is only how it
-was noticed. **Six of ten rows would have been postings the pipeline threw away** —
-*"Senior Mechanical Engineer, Systems Integration"*, *"Branch Operations Coordinator
-Borough Park"* — on which every labeller answers Axis B "no" and agreement is
-near-unanimous **for free**. **That is a ceiling measured on the easy cases**, which is the
-same failure as evaluating on the population the pipeline already chose, one level in.
-CLAUDE.md names the outer version of it; this was the inner one.
-
-Fixed by proportional allocation across strata, largest remainder, at
-`evals/labels.py:665-679`, with the rationale and these numbers at `:648-664`. The redrawn
-block reads as real judgement calls — **AI Engineer at Brex, Legal Engineer at Harvey,
-Operations Analyst at NYC DYCD** — which is what an agreement ceiling has to be measured on
-to mean anything.
-
-**Two things about the redraw that are counterintuitive and must be stated precisely:**
-
-- **The pin did NOT move.** `sha256(sorted job_id)` is still
-  `afb2d58f5d369dfd03ad9237a8b16396cea31b838a67343f51aceecf70cd1763`. **Set membership is
-  unchanged**; only which ten of the 200 rows are marked `overlap` moved. Every digest and
-  every stratum count already written in this file is still correct — verified by
-  recomputing both from the committed fixture.
-- **The redraw was safe only because `eval_labels` was empty, and it CHECKED that rather
-  than assuming it.** Redrawing a set somebody has already labelled silently reassigns what
-  their answers were answers to. The check is the difference between a correction and a
-  data loss, and it cost nothing to make.
-
-### The methodological finding, and it is the reusable one
-
-The first version of fix 3 rotated by `sha256(labeller_id)` — stateless, no rank to
-derive, obviously adequate. The plan asserted it would give 110 distinct postings, from
-the formula above.
-
-**Verified against the drawn set rather than against the formula: 84.**
-
-| rotation | distinct postings (190-row tail, ten labellers, twenty each) |
-|---|---:|
-| `sha256(labeller_id)` | **84** |
-| rank-spaced by `2**64/phi` | **110** — the ideal |
-
-Hashing spreads people at *random*, and random windows **collide**; the formula assumes
-*disjoint* windows. It is the birthday problem, and here it cost **26 postings and the
-Definition of done** — 84 misses "≥100", 110 meets it, at the same twenty-minute sitting.
-The reasoning is recorded in the code that earned it — `tail_offset()` at
-`evals/labels.py:869`, both numbers in its docstring at `:874-883`, and `_PHI64` at `:866`
-under a comment (`:859-865`) explaining that the constant is there for its
-low-discrepancy property and not as a hash. **That comment is the guard**: without it,
-`2**64/phi` reads like an arbitrary magic number and the obvious "simplification" back to a
-hash costs 26 postings silently.
-
-**An idealised formula is not a measurement.** This file already says to verify a plan's
-claims *about the code* before implementing them (§ *how this run works*). This is the
-same rule one level up: **verify a plan's claims about its own arithmetic against the
-artifact, not against the algebra.** The algebra was not wrong; it was describing a
-different mechanism from the one being built.
-
-**And the sharper version, which defect 4 paid for: A TOTAL IS NOT A COMPOSITION.** The
-drawn set's strata totals were **exactly right** — 100 / 50 / 50, checked, committed,
-reported. The ten-row block *inside* them was 6/3/1 against 2.5/5/2.5, and the totals could
-not see it, because every marginal a check was being run against still summed correctly.
-**Three of this session's four defects were found by measuring an artifact that had already
-passed its own checks** — the gate misclassification by counting `surfaced` two ways, the
-84-vs-110 by counting distinct postings instead of trusting the formula, and the overlap
-skew by reading the ten rows rather than their totals. **The check that finds this class of
-defect is always the same one: disaggregate, and look at what is actually in the bucket.**
-
-### What landed
-
-- **The three label tables now exist in the live database.** `eval_label_sets`,
-  `eval_label_items`, `eval_labels`, created by `python3 -m evals label init-schema` run as
-  `jobs_pipeline`, which holds CREATE on `public`. **This file was right that they did not
-  exist.** `jobs_web` was then granted SELECT / SELECT+INSERT / sequence USAGE per
-  `labels.WEB_PRIVILEGES` (`evals/labels.py:240`), and `labels.verify_schema()` (`:353`)
-  passes.
-- **The set is drawn, redrawn and pinned: `pursuit-v1`.** n=200, seed 0, overlap 10,
-  profile `pursuit`, drawn against the cohort gate over the full window. **surfaced 100 /
-  below_floor 50 / gate_rejected 50**, nine platforms with none above 54.
-  `sha256(sorted job_id)` =
-  `afb2d58f5d369dfd03ad9237a8b16396cea31b838a67343f51aceecf70cd1763`, committed at
-  `backend/evals/fixtures/labelset-pursuit-v1.jsonl`. **The redraw for defect 4 did not
-  change any of those numbers** — it changed which ten rows are marked `overlap`, from
-  3/1/6 to **5 surfaced / 3 below_floor / 2 gate_rejected**. All of it re-verified from the
-  committed fixture rather than from the tool that wrote it.
-- **Six rows were excluded from `below_floor`, deliberately.** SQL called them below-floor
-  because they have no `job_matches` row; `score_job()` recomputes them **at or above the
-  floor**, which means `match.py` had not caught up with their facts. "No `job_matches`
-  row" has two causes and they are indistinguishable in SQL. Keeping them would have
-  contaminated a recall stratum with a measurement of the scheduler.
-- **`eval_labels` is EMPTY, and `pursuit-v1` is an eval set.** CLAUDE.md: pinned by sorted
-  `job_id`, **never train on it, never recycle it.** Its emptiness is also what made the
-  defect-4 redraw safe, and **that window is now closed** — once a labeller has answered
-  anything, the set cannot be redrawn without invalidating their answers.
-- **The repo owner set overlap 10 and a budget of ~20 items per labeller.** That **breaks
-  one line of task 29's Definition of done** — it asks for 20 postings overlapped and gets
-  10 — and buys **110 distinct postings** in the twenty-minute sitting the task specifies.
-  Recorded rather than quietly met. **At the DoD's 5-labeller fallback, ≥100 distinct needs
-  ~28 items each.** That is the number a smaller turnout will need, and it is worth knowing
-  before the session rather than at 7pm on the night. **Both figures were re-verified on the
-  redrawn set**, not carried over from the first one.
-
-### Two of this file's own facts were wrong, and both were load-bearing
-
-**`fastapi` IS installed.** This file said it was not — at `:218-220` and `:927-930`
-before this update shifted them, now struck through in § *state at handoff* and in
-§ *findings later tasks must not inherit* (cited by section, because inserting this one
-moved both, which is the drift this file already warns about) — and said that five webapp
-modules therefore always fail to import. It is installed in
-**`backend/webapp/.venv`** — fastapi 0.140.0, plus uvicorn, starlette, pydantic and httpx
-— and `.venv/bin/python -m unittest discover -s tests -t .` under `backend/webapp/` reports
-**55 tests, OK** (re-run 2026-07-29 while writing this). **`backend/webapp/requirements.txt`
-is a SEPARATE file from `backend/requirements.txt`** and lists exactly those five packages;
-its own header records that the venv sets `include-system-site-packages = false`, so
-"anything missing here is missing at runtime and nowhere else". **The "five modules fail to
-import" observation was made with system python** — a true statement about the wrong
-interpreter, and `backend/requirements.txt` being `psycopg[binary]` alone is what made it
-look confirmed.
-
-**The consequence is the part that matters: serving `/v1/label` needs no install and no
-code.** The route already exists — `backend/webapp/label.py:241` (the form), `:296`
-(submit), `:364` (progress); these read `:218`/`:256`/`:311` until the round-2 path landed
-on 2026-07-30 — wired at `backend/webapp/app.py:91`, server-rendered HTML,
-and already blind to `fit_score`. **Every estimate in this file that priced "get the form
-served" as an install plus task 33's territory was pricing work that is done.**
-
-**`tests/test_labels.py:423` does not forbid mock rows in `eval_labels`.** This file cites
-it for that twice. Open the line. **Today it reads**
-
-```
-                _label(job, "role_archetype", "backend", "alice", round_no=1),
-```
-
-— a fixture row inside `test_the_two_ceilings_are_different_quantities` (`:416`), which is
-about intra- versus inter-annotator agreement being different quantities. It says nothing
-about `source = 'mock'`, and it never did: **checked twice within one day it resolved to
-two different lines, neither of them a mock assertion**, because that file was being edited
-underneath the citation. Quote the text, not just the number.
-
-The real containment is **`backend/evals/mock_corpus.py:3-6`** — the module docstring, and
-it is the binding statement: *"Nothing in this module may ever reach `eval_labels`."* It is
-pinned by **`backend/tests/test_mock_corpus.py:939`**
-(`test_the_module_says_plainly_that_it_is_not_a_label`), which asserts the caveat travels
-with the module, and backed by two structural tests: **`:919`** — no module under `ingest/`
-references it — and **`:930`** — no step in `run-daily.py`'s `STEPS` does either. Those two
-are the ones that matter, because `ingest/` is the only path to the production `jobs`
-table. **And `pool_query()` has no platform filter of any kind**, so nothing downstream
-stops a `platform = 'mock'` row being sampled if one ever existed.
-
-**This is not a live risk.** The `jobs` table carries nine platforms and none of them is
-`mock`; nothing has ever written one. So the conclusion — *"nothing from that corpus has
-ever reached the database"* — **stands, for a different reason than the one given.** The
-citation was wrong and the containment is real and lives somewhere else. That is exactly
-the failure mode the "cite `file:line`, then re-read the line" rule exists for, and it
-survived two sessions inside the rule.
-
-## READ THIS FIRST: the ceiling was unreachable, and the night's pre-flight
-
-**Done 2026-07-30. Suite 1070 → 1107.** Three things landed and one of them was a defect
-of the same family as the four above: **correct, tested, and with no path to it from
-production.**
-
-### What the inter-annotator ceiling IS, and what it is responsible for
-
-Asked directly, and worth answering here because two different ceilings are discussed in
-this section and the difference decides what the night has to collect.
-
-**What it is: how often two different people give the same answer about the same posting,
-per field.** `labels.inter_annotator()` (`evals/labels.py:1404` as of 2026-07-30 — **find it
-by name**, this file's line numbers have moved three times in one session). Its own first
-line is the definition — *"THE CEILING: how often two different people give the same
-answer."*
-
-**What it is responsible for: making every other number in the report readable.** The
-docstring puts it better than a paraphrase can:
-
-> Without it, "the model agrees with humans 80% of the time" cannot be read: if humans
-> agree with each other 98% the model is bad, and if they agree 79% the model has already
-> saturated the task and no prompt change will help.
-
-So it is not a nice-to-have statistic beside the model score. **It is the scale the model
-score is denominated in**, and the same 80% means "fix the prompt" or "stop working on this"
-depending entirely on it.
-
-**And it is responsible for that structurally, not by convention.** It is one of the three
-fields of `labels.Interpretable` (`:1778`), whose `__post_init__` raises `Uninterpretable`
-if `floor`, `ceiling` or `measured` is missing or has no `n` (`:1808-1815`) — and
-`Interpretable` is *"the ONLY thing report.render_labels() accepts, so there is no code path
-anywhere that prints a model-vs-human number alone. Making the bad report unrepresentable
-rather than discouraged is the whole design; a `--force` flag would undo it and there
-deliberately is not one."* **A labelling night that produces no ceiling produces no
-report** — not a report with a caveat.
-
-The three quantities it sits between:
-
-| | quantity | source | what it bounds |
-|---|---|---|---|
-| floor | model self-consistency | `metrics.selfcheck` | below which disagreement is instability, not error |
-| **ceiling** | **two people, same posting** | **`inter_annotator()`** | **above which there is nothing left to resolve** |
-| measured | model vs the majority human answer | `model_vs_human()` | the question itself |
-
-**Where it is measured, and why the overlap block's stratification mattered.** Only the
-`overlap` rows are seen by more than one person, so the ceiling is computed on those and
-nothing else — **10 rows in `pursuit-v1`, stratified 5 `surfaced` / 3 `below_floor` /
-2 `gate_rejected`.** That stratification was defect 4 of the previous session: an
-unstratified block came back 6 of 10 `gate_rejected`, i.e. postings the pipeline threw away,
-on which agreement is near-unanimous **for free**. A ceiling measured on the easy cases is
-too high, and every model score read against it then looks worse than it is.
-
-**How to read the numbers it returns** (all `metrics.field_cell()`, so they mean exactly
-what they mean in the self-consistency table — that is what lets floor and ceiling be
-columns of one quantity rather than two statistics that merely look alike):
-
-- **`agree2`** — the two lowest-sorted labeller ids. Arbitrary but stable, one Bernoulli
-  trial per item, so it **carries a Wilson interval** and is the cell that goes in the table.
-- **`pairwise`** — the mean over all C(N,2) pairs. The **better point estimate**, and it
-  carries **no interval**, because pairs drawn from one item are not independent trials.
-- **`unanimous`** — everyone agreed.
-- **Abstentions are dropped and counted**, never folded in: a NULL is "I cannot tell from
-  this posting", and *"folding them in as a value would score two people who both gave up as
-  two people who concurred."*
-- `by_platform` sits **beside** the blended figure and never replaces it — the per-platform
-  cells are single-digit at any label count this session can realistically collect, which is
-  what `is_thin()` exists to make visible.
-
-**Versus the intra-annotator ceiling, which is the subject of the rest of this section:**
-intra is *one* person answering the same posting twice, a week apart. It is a **different
-quantity**, and a weaker one — `inter_annotator`'s docstring calls inter *"the better
-ceiling"* and keeps intra *"because attrition may leave it as the only one with any n"*.
-Inter comes free from overlapping a set; intra costs every volunteer a second sitting.
-`tests/test_labels.py`'s `test_the_two_ceilings_are_different_quantities` is the pin
-(`:465` today — cited by name for the reason above). `intra_annotator()` is at
-`evals/labels.py:1477`.
-
-**The practical consequence for the night: the inter-annotator ceiling is the one you
-cannot skip.** Ten Builders each answering the ten overlap rows produces it at no extra
-cost, and without it there is no report at all. The second sitting is optional.
-
-### The intra-annotator ceiling could not be collected at all
-
-`labels.intra_annotator()` has existed and been tested since task 07. **Nothing could
-ever feed it.** `webapp/label.py` never passed `round_no` to `labels.record()`, and
-`next_item()`'s queue filter had **no `round_no` predicate** — its docstring said *"the
-next job this labeller has not answered anything about"*, which is exactly what it did, so
-once a labeller answered a posting it was never served to them again. Every row that could
-exist was `round_no = 1`, and the function that reads round 2 was unreachable.
-
-**A tested function with no caller reads exactly like a working feature.** That is the
-generalisation, and it is the same shape as defect 3 above: nothing was red, because
-nothing asserted that the *path* existed.
-
-**What landed.** `next_item(..., round_no=2)` serves the **overlap block only**,
-restricted to rows that labeller answered in round 1 and has not answered in round 2
-(`evals/labels.py:1112-1145`). `labels.round_two_ready()` (`:1010`) enforces
-`ROUND_TWO_DELAY_DAYS = 7` (`:1007`) and returns a **date**, so the form says *"come back
-on the 8th"* rather than showing an empty page. `progress()` counts round 2 against the
-overlap block, not the 200-row set (`:903-925`) — *"3 / 200"* on a ten-row queue reads as
-an eight-hour evening. The form takes `?round=2` and carries it through the POST and the
-303 (`webapp/label.py:257`, `:320`, `:360`).
-
-**Why the overlap block and not a fresh 5-10:** both ceilings are then measured on
-**identical postings** and can be read against each other, instead of differing for two
-reasons at once. **Why seven days:** served an hour later, round 2 measures whether the
-labeller *remembers* their first answer — near 100%, and it would be quoted as a ceiling.
-D58 and D59 in `DECISIONS.md`.
-
-**And the decision this does NOT make:** whether to spend ten volunteers' second ten
-minutes on the weaker of two ceilings. **That is the repo owner's call on the night, not
-an implementer's.** Both paths are implemented; the round-2 link is simply not sent unless
-someone chooses to send it.
-
-### Three documents disagreed about which ceiling gets measured, and all three are now reconciled
-
-Worth knowing because each was internally consistent, so nothing looked wrong:
-
-**Line numbers below are given as they were BEFORE the corrections were written, because
-writing them moved every one of them.** Current positions in parentheses. Quote the text.
-
-- `tranche_two/07-metrics-and-golden-set.md:57-59` (now struck through at `:71-75`) said
-  inter-annotator *"is a better ceiling and it costs nothing extra"* and read as
-  **superseding** the intra-annotator one.
-- `07:81`'s DoD asked for *"Inter-annotator agreement … not just intra-annotator"* — while
-  **`07:77` (now `:143`) inherits `docs/ingestion_tests/03-metrics-and-golden-set.md`'s DoD
-  wholesale**, and `03:142` (now `03:179`) requires *"the self-consistency floor and human
-  self-agreement ceiling beside each number"*, where `03:25` defines that ceiling as the
-  **intra**-annotator quantity. So 07 replaced a requirement and inherited it in the same
-  breath.
-- **`03:107-108` (now `03:127-128`) claimed the tool *"supports a second pass over
-  already-labelled jobs"* — false from the day it was written until 2026-07-30.**
-
-**The resolution, recorded in all three:** the capability question is closed — both
-ceilings are collectable, over the same postings, and the "second pass" clause is true
-again.
-Inter-annotator is the better ceiling and comes **free** from the overlap block;
-intra-annotator is the weaker one, kept because attrition may leave it as the only one
-with any n, and it **costs a second sitting**. `interpretable()` accepts the
-inter-annotator cell as `ceiling`, so a report is renderable without round 2 ever
-happening. **The spending question is left open on purpose.** "Supersedes" was retracted
-rather than deleted; see 07, § *Both ceilings are collectable now*.
-
-### `role_track` is a sixth question, and the budget arithmetic was computed for five
-
-On the form with a `labels.NO_TRACK_FITS` choice, because `extract.py:338` tells the model
-null means *"no listed track describes this role"* — a **verdict** — while the form's *"I
-can't tell from this posting"* is an **abstention**, and `validate()` collapses both to
-None. Without the new value `model_vs_human` would score a verdict and a shrug as
-agreement. The fold happens at comparison time only (`labels.as_model_domain()`, `:1492`);
-storage keeps them distinct. D60 and D61.
-
-**Measured 2026-07-30 after that morning's nightly run, and it is why the field is worth a
-question:** `role_track` is NULL on **261 of 917** `job_facts` rows at `facts_version = 3`
-(**28.5%**; non-null 656 of 917), and within `pursuit-v1` on **16 of 100 `surfaced`, 16 of
-50 `below_floor`, 50 of 50 `gate_rejected` — 82 of 200**.
-
-> **Superseded and correct when taken (2026-07-29, before the run):** 244 of 881 = 27.7%
-> corpus-wide, 83 of 200 in the set, 17 of 50 `below_floor`. **One `below_floor` row
-> acquired a `role_track` overnight** — that is the whole of the in-set delta — and 36 new
-> v3 rows moved the denominator. **A pin on set membership buys nothing about the derived
-> facts underneath it**; see § *nothing is in flight*, under *"the other agent in the room
-> is the cron job"*, where this is written up as the third instance.
-
-On those 82 `model_vs_human` is silent, which inverts the usual argument: **if
-a human confidently assigns a track where the extractor abstained, the NULL rate is an
-extraction problem; if the human cannot either, the vocabulary is wrong.** Different fixes,
-and no other instrument tells them apart. Written up in `docs/role-track-derivation.md`,
-whose `:324-325` asked for exactly this validation.
-
-**Also measured, and it bounds what the night can produce — re-verified 2026-07-30 after
-the nightly run and UNCHANGED by it:** **26 of the 50 `gate_rejected` rows have no
-`job_facts` row at all** (24 carry facts), so `model_vs_human` can score no axis-A field on
-them. `surfaced` is 100/100 and `below_floor` 50/50. And **the pinned
-fixture carries the score axis itself** — `match_score` on 100/100 surfaced (range 40–92),
-`computed_score` on 50/50 below_floor (range 0–34), and **neither column on any of the 50
-gate_rejected** — so an axis-B precision figure needs no database read, and
-**`gate_rejected` cannot enter a precision rate at all**: it yields a recall bound (k of
-50, with a Wilson interval), never a rate.
-
-**THE BUDGET FIGURE NOW COMPETES WITH A SIXTH QUESTION.** *"≥100 distinct needs ~28 items
-each at 5 labellers"* (§ *recommended next steps*, and D57) was computed against a
-five-question form in a twenty-minute sitting. The form asks six. **No new number is
-asserted here — re-check the arithmetic before the night, not during it.** And if round 2
-is spent, that is **~10 more minutes per labeller**, seven days later.
-
-**A drift this found:** `role_track` was **missing from `evals/tasks/extract.py`'s
-`FIELD_KINDS` entirely** — task 11 added the column and never registered it, exactly the
-drift that file's own comment warns about. Caught by an **existing** test the moment the
-field went on the form.
-
-### A paired bootstrap, and the guard it refuses
-
-`bootstrap_delta()` lifted into `evals/metrics.py:705` from
-`tools/learned-ranker-probe.py`, **rejecting one line of the original on the way**: the
-probe scores a degenerate resample (no positives) as average precision **0.0**
-(`learned-ranker-probe.py:438`). Both sides of such a draw get 0.0, so its delta is exactly
-0.0, and every one is another exact zero in the middle of the distribution the percentiles
-read off — **the interval widens toward zero and manufactures "not distinguishable" out of
-an arithmetic guard.** Rare at n in the hundreds; **routine at the per-`role_track` n of
-about a dozen task 30 needs** (one positive in twelve rows makes ~35% of draws degenerate).
-Degenerate draws are now skipped and counted, with `draws_used` carrying what the interval
-rests on. D63 has the measured before/after. **The guard would have been silently deciding
-the very comparison it was written to protect.**
-
-### ~~The night's pre-flight — two values are wrong and neither errors~~ FIXED, and this is the diagnosis
-
-> **Both values were corrected on 2026-07-30 and verified; the OAuth secrets are in.**
-> Everything below is now the RECORD of why they are what they are, not a list of work.
-> It is kept in full because the failure produced no error at all, and the diagnosis is
-> the only thing that explains why `FRONTEND_ORIGIN=http://localhost:8421` is not an
-> arbitrary value. **Do not act on this section — read § *task 29 is UNBLOCKED*.** The
-> Case B parts (a tunnel host, `SESSION_COOKIE_SECURE=true`) become live again the day
-> Builders label from their own devices.
-
-**Verified 2026-07-30.** `LABELLING-NIGHT.md` is the executable version, ~15 minutes.
-
-1. **`FRONTEND_ORIGIN` sends a successful sign-in to a dead origin.** It is
-   `http://localhost:5173` in `backend/webapp/.env`, and the post-login redirect is built
-   from it — `RedirectResponse(config.FRONTEND_ORIGIN + safe_next_path(next_path))`
-   (`webapp/auth.py:359-360`). But `/v1/label` is served by **this service on `:8421`**
-   (per `GOOGLE_REDIRECT_URI`, and `PORT` defaults to 8421), and **`frontend/` is a lone
-   `.gitkeep`** — there is no dev server on `:5173` to start. **So with the OAuth secrets
-   filled in and nothing else changed, sign-in SUCCEEDS, the session cookie is set, and the
-   volunteer lands nowhere.** No error, no log line. **One-line `.env` fix, to be made
-   alongside the secrets**, plus `ALLOWED_ORIGINS` in the same file. This file already
-   warned that it *"must point at the origin the service is actually served from"*; what is
-   new is that the current value is confirmed wrong and the failure is confirmed silent.
-2. **The only `app_users` row is `ericliu93@gmail.com` on profile `tech`, which task 12
-   made inactive.** It is **not a working example of a cohort labeller** — every Builder
-   needs `--profile pursuit`. Copying the existing row's shape adds people to a dead
-   profile.
+*These two subsections did not move. They are how the labelling service is configured, not the story of how it was fixed.*
 
 #### What `FRONTEND_ORIGIN` should actually be set to
 
@@ -1405,104 +851,9 @@ weight errors, and task 29's labels are the only thing that can settle it.**
 construction — no labels, no `job_events` — and `match_score` is free arithmetic,
 so the cost of the current set being wrong is one `match.py --rebuild`.
 
-## READ THIS FIRST: the gate fix LANDED, and what it did not buy
+## ARCHIVED: the gate fix LANDED, and what it did not buy
 
-**Done 2026-07-29, four commits: `4eefb7e`, `e8f3b72`, `9dab9e6`, plus a database write.**
-Step 0 is closed. What follows is the record, not a plan.
-
-| metric | before | after |
-|---|---|---|
-| mock gate recall | 14/29 = 48.3% [31.4–65.6] | **26/29 = 89.7% [73.6–96.4]** |
-| mock gate precision | 58.3% | **72.2%** |
-| mock false positives | 10 ids | **the same 10 ids, unchanged** |
-| live tier ≤2, open | 869 (t1 450 / t2 419) | **880 (t1 456 / t2 424)** |
-| `extract.remaining` | 2 | **13** |
-| suite | 1030 | **1058** |
-
-**Say it the long way wherever it is quoted: "48.3% → 89.7% *on the mock corpus*."** That
-corpus was built to contain the failure mode it measures. It is not a claim about the
-pipeline's recall on real postings, and nothing here reduces task 29 by one posting.
-
-**What the defect was.** The gate is conjunctive — one AI term **and** one entry-level term
-in the *same field* (`migrate_pursuit_profile.py:216,229`). Task 10 built a
-description-first gate and handed it a **title** vocabulary: `associate, coordinator,
-assistant, specialist, analyst`. A description does not restate its own title's seniority
-noun, so the AI half matched and the entry half did not. 14 of the 15 lost postings failed
-on that one group.
-
-**What was done.** The gate moved out of a dict literal inside a migration that refuses to
-run and into `backend/config/pursuit-relevance.json` (a no-op, proven by byte-identical
-compiled SQL). `description_include`'s entry group became a **strict superset** of the
-title group — the same eleven nouns byte-for-byte, plus three phrases — so the title path
-*cannot* change and the description path *can only gain*. `\ycustomer success\y` was
-narrowed to four manager-and-above terms rather than removed.
-
-### The four phrase families that must stay out, and why the harness will tell you otherwise
-
-Compiled through `relevance.tier_sql` against 13,447 live open rows:
-
-| family | live rows admitted | mock cost |
-|---|---:|---|
-| `we provide/offer … training` | **+17** | zero |
-| `we (will) train` | **+5** | zero |
-| `preferred but not required` | **+5** | zero |
-| `experience … preferred / is a plus` | **+123** | zero |
-
-They admit `Software Engineer, RL Training Infra | OpenAI`, `Full-Stack Software Engineer,
-Reinforcement Learning | Anthropic`, `Product Manager, Gen AI | Scale AI`. **`\ywe train\y`
-matched OpenAI's *"we train models"*.**
-
-**On the mock corpus all four measure as FREE**, because every intended-bad mock posting
-carrying that phrasing has no AI vocabulary at all, so the conjunction rejects it on the
-other half. That is a property of a corpus written to a specification. Adding them takes
-mock recall to 100% at **~136 live junk rows**. Refused.
-`backend/tests/test_pursuit_gate.py` carries a **sentinel** asserting their absence with
-these counts in its docstring. **If the harness tells you they are free, that is the
-harness's limitation, not a discovery.**
-
-**The general rule this earned:** a synthetic corpus can bound *recall* but cannot price
-*precision*, because its negatives were written by whoever wrote its positives.
-
-### Read the size of it honestly
-
-**+11 postings on an 869-row pool is +1.3%.** It does not meaningfully change what task
-29's labellers see and it moves GATE 2's ≥200/day question **not at all**. Doing it first
-was still right — the defect was real, the fix was cheap, and a labelling session run
-through a knowingly-broken gate is wasted — but do not read a recovery into it that it
-does not deliver.
-
-The 11 new rows were hand-checked as a **census, not a sample**: ~7 on-target, 1 clear
-false positive (`Research Engineer, Interpretability | Anthropic`, which really does say
-"no research experience is required"), 3 ambiguous. **~64% strict against the incumbent
-gate's 10.0%** (`migrate_pursuit_profile.py:166-167`) — the rows added are better than the
-rows already in. The extraction backlog is 11 calls, ~$0.004, drained on the first nightly.
-
-**Three mock false negatives remain — mock_016, mock_017, mock_018 — and they are
-unreachable on purpose.** Only the rejected families recover them.
-
-### What step 0 got wrong about the code, found by verifying it before implementing
-
-- **`AI_VOCAB` had exactly ONE copy**, not two. Step 0 required a test that "the two copies
-  are equal", which could not fail. It is now meaningful *because* the JSON move created
-  two literals — the test is kept and its docstring says so.
-- **`migrate_pursuit_profile.py` refuses to run before it checks `--apply`**, so even a dry
-  run exits 1. It was already retired as a write path; that is what made the JSON move
-  coherent. It still self-consumes `COHORT_RELEVANCE` at four sites, so the symbol was kept
-  as a loader, not deleted.
-- **`relevance.load()` merges over `DISABLED`, not over `config/relevance.json`**
-  (`relevance.py:88-90`). **A per-profile gate must be complete, not a patch** — an omitted
-  key goes permissive, it does not inherit.
-- **`profiles.upsert` stores NULL for a falsy `relevance_cfg`** (`profiles.py:207`). An
-  empty dict silently reverts `pursuit` to the shared author gate. The post-write md5 is
-  what catches it.
-- **`--force-placeholders` is not a flag on `migrate_profiles.py`** — it is on
-  `migrate_pursuit_profile.py:462-465`. Step 0 warned about the wrong script.
-- **The module docstring at `:71-78` pointed at nothing missing.** `migrate_profiles.py`,
-  `config/pursuit-persona.json` and `config/pursuit-criteria.json` all exist, as do all six
-  flags it names.
-- Paths: **`relevance.py` is `backend/relevance.py`, not under `lib/`**; there is **no
-  repo-root `config/`**; `extract._eligible_sql` is `:541-579`, not `:397`; tier assignment
-  is `relevance.py:297-299` and `tier <= max_tier` is `:331`.
+> **MOVED 2026-07-31 → [`docs/archive/handoff-gate-fix.md`](../../archive/handoff-gate-fix.md).** Recorded 2026-07-29. Step 0's relevance-gate fix: mock gate recall 48.3% -> 89.7%, live tier <=2 869 -> 880. Its own first line says "What follows is the record, not a plan." The four forbidden phrase families it names are now guarded by a test, not by this prose.
 
 ## The measurement that should shape what comes next
 
@@ -1752,35 +1103,7 @@ the fourth an order of magnitude high.**
 
 ## The two decisions the repo owner made in conversation — LANDED
 
-They existed nowhere but this file, and the two agents mid-flight on them at the previous
-handoff left **nothing in the tree**. Both were re-run from scratch and are now committed
-in `943d899`. Kept here because they are the *why*, and the commit is only the *what*.
-
-**1. Selective majority-of-3, keyed on measured per-source agreement.** Task 06's gate
-fired its stop branch — `ai_involvement` self-agrees only 77.8% on `hn_whoishiring`
-against 92.2% on greenhouse/ashby, and it is the cohort's entire targeting mechanism.
-Sources measured below a threshold get three extraction passes and a majority vote;
-sources above it stay at one. This satisfies both fired gate branches with one mechanism.
-Rejected: uniform majority-of-3, a confidence field alone, and proceeding as-is.
-
-**As built:** threshold 0.90 (task 06's own gate line), so exactly one platform qualifies
-— **+4.2% of calls, not 3x**. `config/extraction-policy.json`, `extract.vote_facts()`,
-and `job_facts.extraction_passes` / `.vote_unanimity` as the stability signal task 11
-consumes.
-
-**2. The 40/day extraction ceiling: drain loop with a wall-clock guard, AND fix the
-selection order.** Both, not either. `EXTRACT_BATCH_SIZE = 40` against one `extract.py`
-invocation in `run-daily.py` capped the pipeline at 40 postings a night against 43/day
-intake and 80/day recently. Selection was `ORDER BY first_seen DESC`, which CLAUDE.md
-forbids for eval corpora and which was making the same biased selection in production.
-
-**As built:** `drain_loop()` with `EXTRACT_DEADLINE_SECS=3600`, a **zero-progress break**
-(without it a rate-limited endpoint re-selects the same batch until the deadline —
-strictly worse than one batch), `stopped=drained|deadline|no-progress` in the summary
-line, and never-extracted-first-then-FIFO selection.
-
-**`FACTS_VERSION` was deliberately NOT bumped. Task 12 must carry it.** The debt is
-recorded at `schema.py:158`.
+> **MOVED 2026-07-31 → [`docs/archive/handoff-owner-decisions.md`](../../archive/handoff-owner-decisions.md).** Recorded 2026-07-28, landed in `943d899`. Selective majority-of-3 extraction and the 40/day ceiling. Both shipped; the rationale is in DECISIONS.md under EXTRACT.
 
 ## Nothing is in flight — but the tree is NOT clean
 
@@ -3080,113 +2403,11 @@ re-scope (21).
 
 ## What these sessions measured, and what it means
 
-Four numbers landed that change how the rest of the plan should be read.
-
-**The Phase 3 estimates are not reliable, and this is still the run's headline finding.**
-Three sources measured, three far below estimate:
-
-| task | estimate | measured |
-|---|---|---|
-| 05 (gate volume) | — | 43/day, ≈3/day usable |
-| 14 (NYC Open Data) | 20–60/day | **1.8/day** |
-| 18 (Workday) | 80–200/day | **~1/day** at four tenants; ~12/day extrapolated to fifty |
-| 19 (JSON-LD) | 30–60/day | **≤1.1–2.3/day**, a ceiling that is not reachable — **dropped** |
-
-**Four for four.** This is no longer a caution about one estimate; it is the most
-reliable finding of the whole run. Every Phase 3 number that has been checked has
-come back an order of magnitude high, and they were all produced by the same
-method from the same table. **Tasks 15, 20 and 21 are sized identically and should
-be treated as unfounded until measured.** A spike costs an afternoon; task 19's
-cost 333 HTTP requests and no LLM calls at all.
-
-Tasks 15, 19, 20 and 21 are sized from the same table by the same method. **Measure before
-building.**
-
-**Task 11 measured the same shortfall from a third direction, and it is the sharpest
-version yet.** Across 863 cohort-eligible postings — the ones that already pass task 10's
-gate — the AI-operations archetype the whole retarget is aimed at appears **5 times, across
-3 employers**. Not 5%: five postings. The vocabulary hole was real and is now fixed, but
-fixing it revealed that the roles are not there to be classified. Meanwhile the `other`
-bucket, which the task file assumed was full of ops roles, turned out to be **47.5% tech
-roles the vocabulary simply lacked** against 12.6% ops. The corpus is still a software
-corpus.
-
-**And the shape of the shortfall matters more than its size.** Of 329 Workday postings
-pulled from four NYC employers — a hospital system, a bank, a retailer — **zero have any AI
-vocabulary in the title**, by any method. Task 10 reached the same place from the other
-direction: its gate improved precision from 6.7% to 10.0% and is still 90% junk. The
-problem is not that the boards are unreachable or that the gate is too tight. **These
-employers are not posting these roles.** That is a question about the plan's premise, and
-it is not answerable by building more ingest.
-
-**The gate is not the bottleneck; sourcing is.** Task 10 raised hand-checked precision from
-task 05's 6.7% to 10.0% — a real improvement, and still 90% junk. Its own report says the
-bottleneck is sourcing rather than gating, and task 14's 1.8/day is the same finding from
-the other side.
-
-**Extraction capacity is no longer the constraint.** The drain loop replaced a hard 40/day
-ceiling with ~1,260 calls/hour of headroom against 43–80/day of intake. Whatever binds
-next, it is not this.
-
-**Silence is still the failure mode, and it was caught live.** Task 18's first run dropped
-**161 of NewYork-Presbyterian's postings** — real NYC hospital jobs — while printing
-`4/4 tenants ok`. The task found it itself, on a third run, after having already reported
-success. Nothing else in the pipeline would have noticed. When a source's numbers look
-clean that is not evidence: reconcile against the count the API itself returned.
+> **MOVED 2026-07-31 → [`docs/archive/handoff-session-measurements.md`](../../archive/handoff-session-measurements.md).** Session narrative through 2026-07-31. Retained for the figures and their instruments; the live numbers are in HANDOFF.md § State at handoff and AUDIT.md.
 
 ## How these sessions ran it, and what worked
 
-**Task 11's session: three subagents in two rounds.** Round 1 ran the corpus-evidence
-agent and the scoring agent in parallel — disjoint files, neither blocking the other.
-Round 2 ran the extraction agent, which needed round 1's derived vocabulary. The
-orchestrator took the baseline, verified every claim, made the one judgement call it would
-not delegate (pricing 14 new archetypes for the author's profile), and committed.
-
-**The first session: six subagents in parallel, orchestrator verifying and committing.**
-Nothing was committed by a subagent in either session. Every task was checked against the
-code and the database before its commit. Mechanics worth keeping:
-
-- **Every agent gets an explicit file-ownership list.** Five ran concurrently with one
-  genuine collision all session (`record_cassettes.py`, below).
-- **`run-daily.py`'s `STEPS` is orchestrator-only.** It is the one file every ingest task
-  wants to edit. Agents report the line they want; the orchestrator wires it.
-- **Take the baseline before the first agent starts.** Tier-count-by-platform for every
-  active profile, and the test count. Task 10's "the author's profile is unaffected" claim
-  was only checkable because that snapshot existed — and by the time it was checked, a
-  concurrent agent had added 1,030 rows on a new platform, which would otherwise have
-  looked like a regression.
-- **The handoff is rolling, not terminal.** This file, `DECISIONS.md`, `CLAUDE_UPDATES.md`
-  and `README.md` were updated in the same turn as every commit. The previous handoff was
-  written once at the end, from a context already spent, which is why it read as recall
-  rather than record.
-
-**Five of six agents in the first session, and three of three in task 11's, completed
-without sending a report at all.** They go idle silently. Do not wait for a summary; check
-the artifacts. That is the norm, not the exception. **Sixteen of sixteen across the run
-now**, all five mock-acceptance agents included — and two of them sent idle
-notifications *twice*, for work already verified and committed, while a sixth agent
-(a planning one) went idle twice and never reported at all, even when asked directly.
-Treat the notification as "go look", including the second time, and do not spend turns
-chasing a report that may not exist. **Budget for the artifacts being the only output
-you will get.**
-
-**Verification that actually caught things in task 11, in order of value.** Reading the
-diff caught the most; the suite caught the least. Worth copying:
-
-1. **Re-run the agent's own tool and grep for the prose's numbers.** Caught the
-   unreproducible figures.
-2. **Recompute a headline number independently.** Surfaced the 54-vs-55 distinction.
-3. **Prove an equivalence claim by exhaustion, not by reading.** The rewritten tombstone
-   guard was checked over a 192-case cross product of the four signals it reads.
-4. **AST-check the invariant.** `score_job()`'s purity is a CLAUDE.md rule; walking the
-   function for I/O calls and imports is three lines and does not rely on a promise.
-5. **`match.py --dry-run` against the live database.** The claim "this change is inert in
-   production" is worth exactly nothing unverified; it reports 0 matched or it does not.
-
-**The one real collision:** `backend/evals/record_cassettes.py` accumulated two agents'
-changes at once. Task 14's commit deliberately excluded it rather than ship task 17's
-half-finished work under 14's number, and 17's commit carried both. The general fix is the
-one `STEPS` already has — shared files get a single owner, named in advance.
+> **MOVED 2026-07-31 → [`docs/archive/handoff-session-method.md`](../../archive/handoff-session-method.md).** Method notes from the same sessions. The durable half is promoted to HANDOFF.md § How this run works.
 
 ## Pending follow-ups with no task of their own
 

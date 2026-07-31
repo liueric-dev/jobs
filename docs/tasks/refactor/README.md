@@ -9,7 +9,8 @@ roles, all industries, NYC.
 The full reasoning is in [`MASTER-PLAN-pursuit.md`](MASTER-PLAN-pursuit.md),
 [`SOURCING-STRATEGY.md`](SOURCING-STRATEGY.md) and
 [`ADDENDUM-google-jobs-providers.md`](ADDENDUM-google-jobs-providers.md).
-This file is the ordered index.
+This file is the ordered index. **[`AUDIT.md`](AUDIT.md) is the one-page state of the
+run** — what is measured, with the instrument for each figure, and what is open.
 
 It absorbs the outstanding work from
 [`docs/ingestion_tests/`](../../ingestion_tests/) — tasks 03, 04 and 05 there

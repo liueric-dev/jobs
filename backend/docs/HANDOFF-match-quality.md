@@ -139,6 +139,14 @@ accumulate.
 
 ## 4. Measurement traps — all seven of these bit on this codebase
 
+> **PROMOTED 2026-07-31 to [`docs/MEASUREMENT-TRAPS.md`](../../docs/MEASUREMENT-TRAPS.md),
+> which is the copy to read and to cite.** These seven are domain-independent while
+> the rest of this file is bound to one software engineer's job search, and
+> `.claude/CLAUDE.md` points every session at the promoted path. Kept here in full
+> rather than replaced by a link: this section is what §§ 3 and 5 argue against, and
+> a reader working through this document needs it in place. The promoted copy carries
+> later additions from the refactor run that are not below.
+
 These cost more time than the actual engineering. Every one produced a
 plausible-looking number that was wrong. 4.1–4.5 were found during the scoring
 rework; 4.6 and 4.7 were found afterwards, reading the tool that reports the
