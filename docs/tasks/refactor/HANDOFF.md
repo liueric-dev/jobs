@@ -259,10 +259,22 @@ said so.
 | 110 | [0.77, 0.91] | 26 | 13% |
 | 200 | [0.79, 0.89] | 50 | **7%** |
 
-**Read the middle column against task 06's floors — 76% on `seniority_level`, 94% on
-`ai_involvement` — because that is what makes it legible:**
+**Read the middle column against task 06's floors — ~~76% on `seniority_level`, 94% on
+`ai_involvement`~~ 85.2% and 94.8% — because that is what makes it legible:**
 
-- **At 60** an observed 85% cannot be told apart from `seniority_level`'s own 76%
+> **FIGURES CORRECTED 2026-07-31, and the pair that was here is the superseded one.**
+> 76% / 94% are the **provisional n=17** figures from 2026-07-27.
+> `docs/ingestion_tests/README.md` carries them under a heading that reads *"Superseded"*,
+> and `DECISIONS.md` § *06 — Was 76% real?* answers its own question with **no**. The live
+> measurements are **`seniority_level` 85.2% [77.6–90.6]** and **`ai_involvement` 94.8%
+> [89.1–97.6]**, n=115, `--repeat 3`, `deepseek-v4-flash` at temperature 0. This file
+> quoting the dead pair is the exact thing that README predicted would happen — *"retained
+> because published text still cites them"* — and it is corrected rather than deleted so
+> the next reader can see which number they may have been working from. **The bullets below
+> are left as written**: at these floors the reading is directionally the same and the
+> conclusion (110 is where Axis A becomes defensible) does not move.
+
+- **At 60** an observed 85% cannot be told apart from `seniority_level`'s own ~15%
   instability. It *does* already exclude 0.94, so a real `ai_involvement` problem surfaces
   this early.
 - **At 110** the interval clears 0.76 — this is where Axis A becomes a defensible claim for
@@ -1323,9 +1335,9 @@ committed and written to the database, and so are task 29's four sampler fixes a
 drawn set; the docs were rolled forward in the same session each time. ~~The working tree
 is clean apart from untracked `scripts/`, which predates this run and is not ours.~~
 
-**AMENDED 2026-07-30: the working tree carries the whole solo-labelling change and NONE of
+~~**AMENDED 2026-07-30: the working tree carries the whole solo-labelling change and NONE of
 it is committed.** It is finished, not half-done — both suites are green at **1166** and
-**75** — but a fresh session will find modifications, not a clean checkout:
+**75** — but a fresh session will find modifications, not a clean checkout:~~
 
 ```
  M backend/evals/__main__.py            M backend/webapp/manage_app_users.py
@@ -1333,15 +1345,36 @@ it is committed.** It is finished, not half-done — both suites are green at **
  M backend/tests/test_labels.py         M docs/tasks/refactor/  (8 files)
 ```
 
-plus `backend/webapp/.env`, which is **gitignored and will never appear in `git status`** —
-and which now holds the OAuth secrets. Untracked `scripts/` still predates this run and is
+~~plus `backend/webapp/.env`, which is **gitignored and will never appear in `git status`** —
+and which now holds the OAuth secrets.~~ Untracked `scripts/` still predates this run and is
 still not ours.
+
+> **RE-AMENDED 2026-07-31: all of the above is COMMITTED, at `4374ede` — "Unblock task 29,
+> and guard the pin before the first label closes it" — plus the four commits before it.**
+> The file list above is now the *contents* of that commit rather than a description of a
+> dirty tree. `git status` is clean apart from untracked `scripts/`, which still predates
+> this run and is still not ours. `backend/webapp/.env` remains gitignored and still holds
+> the OAuth secrets, so that half stands. Suite counts re-run 2026-07-31 and unchanged at
+> the time of the commit: **1166** and **75**.
 
 **Two database writes have no commit and cannot be inferred from the tree**, the same way
 the gate write and the label tables could not: the owner's `app_users` row moved from
-`tech` to `pursuit`, and `eval_labels` is **still empty** — so the redraw window is open
-until the first label is submitted, and `redraw_refusal()` is what now closes it on
+`tech` to `pursuit`, and ~~`eval_labels` is **still empty** — so the redraw window is open
+until the first label is submitted, and~~ `redraw_refusal()` is what now closes it on
 purpose rather than by memory.
+
+> **THE REDRAW WINDOW IS CLOSED. Measured 2026-07-31: `eval_labels` holds 30 rows** — 5
+> postings × 6 questions, one labeller (`u_090b0ad12e99`), round 1, `labelled_at`
+> `2026-07-31T02:56:05`–`03:06:19` UTC, which is the evening of 2026-07-30 in New York and
+> is **one sitting, not two**. So `pursuit-v1` is now permanently pinned: `redraw_refusal()`
+> refuses every redraw, identical digest included, exactly as designed. **Nothing can be
+> added to or removed from the drawn set from here on.** A third database write to add to
+> the list above: the labels themselves.
+>
+> This also makes two things live that this file records as risks rather than facts.
+> `consensus()` promoting a majority of size one is happening now, not hypothetically. And
+> the per-posting timing is no longer unmeasured — see the pending follow-up below and
+> `tranche_five/29-labelling-session.md` § *Findings, 2026-07-31*, E.
 
 **The next session starts from a finished state**, and for task 29 it starts from one that
 is waiting on nobody.
@@ -2611,6 +2644,20 @@ one `STEPS` already has — shared files get a single owner, named in advance.
 
 ## Pending follow-ups with no task of their own
 
+- **The per-posting labelling time is MEASURED, and the twenty-minute budget is out by
+  ~2.5x.** Added 2026-07-31; this is the *"stopwatch reading"* § *How many to label* asks
+  the next session to bring back. Derived from `eval_labels.labelled_at` over the first five
+  labelled postings — successive `min(labelled_at)` per `job_id` — giving submit-to-submit
+  intervals of **87 / 170 / 247 / 110 s**: **median 170 s, mean 154 s**. So **twenty minutes
+  is ~8 postings, not ~20**; the ten `overlap` rows a second labeller contributes are
+  **~26 minutes, not ten**; and the DoD's ≥100 postings is ~4.3 hours for one person.
+  n=4 intervals, one labeller, submit-to-submit includes reading, and the *first* posting's
+  reading time is not in the figure at all — so the true rate is **higher** than 154 s,
+  not lower. This is a measurement of the six-question form rather than a correction factor
+  applied to a five-question one, which is what this file warned against inventing.
+  Re-derive it as the count grows. `tranche_five/29-labelling-session.md`
+  § *Findings, 2026-07-31*, E.
+
 - **No archetype or track expresses a commercial / sales role, and the cohort wants them.**
   Added 2026-07-30 from the owner labelling. `ARCHETYPE`'s 26 values contain no sales,
   account executive, business development or commercial value — its own comment reads
@@ -2621,6 +2668,22 @@ one `STEPS` already has — shared files get a single owner, named in advance.
   scheduled to act on either**, and acting needs more than one Builder saying so. Full
   write-up in § *the first finding arrived BEFORE the first label*;
   `backend/tools/derive-role-tracks.py` re-runs the derivation.
+
+  > **First entry on the side list this asks for, added 2026-07-31.** Notion, *Commercial
+  > Solutions Consultant, New York*, job `8ba8616b7c91d2a1b5112cdc`, `ashby`, NYC, open.
+  > **It confirms the "mislabelled `solutions` because the word matches" prediction on a
+  > real row:** the title contains the literal word *Solutions* and the extractor returned
+  > `role_archetype: solutions`, `role_track: solutions_and_implementation`. It is a
+  > code-verified instance of the class and **NOT a second Builder agreeing** — the
+  > *"acting needs more than one Builder"* bar is untouched by it.
+  >
+  > It also puts a number on the `ai_involvement` half. The row is extracted
+  > `uses_ai_tools` and scores **63**; flipping only `ai_involvement` to `none` takes it to
+  > **13**, and flipping seniority to `junior` as well still leaves it at **38 — below
+  > `MATCH_FLOOR`, where no `job_matches` row is written at all.** So the conflation is not
+  > a ranking nuisance, it is a deletion. **The posting is not in `pursuit-v1` and can never
+  > be added** now that the redraw window has closed, so this session cannot settle it.
+  > `tranche_five/29-labelling-session.md` § *Findings, 2026-07-31*, A.
 
 - **There is no loader from `eval_labels` into anything that can re-tune the weights, and
   no task owns building one.** Added 2026-07-30. `backend/tools/calibrate-match.py` is what

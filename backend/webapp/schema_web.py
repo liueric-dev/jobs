@@ -85,6 +85,79 @@ REQUIRED_SEQUENCES.update(_labels.WEB_SEQUENCES)
 #: independent statement rather than a tautology.
 TABLES_TOUCHED = frozenset(REQUIRED_TABLES)
 
+#: app_users.prior_domain -- the industry a Builder is changing career FROM.
+#:
+#: WHAT IT IS FOR, AND IT IS NOT SCORING. It exists so that Axis B disagreement
+#: between two labellers can be decomposed within and across background instead
+#: of being read as noise. `labels.AXIS_B_FIELD` is "would_apply", and on a
+#: bridge role a Builder with prior commercial experience and one without give
+#: OPPOSITE answers that are both correct. `labels.inter_annotator()` reads that
+#: as disagreement and depresses the Axis B ceiling -- which makes every model
+#: score denominated in it read as BETTER than it is. eval_labels.labeller_id is
+#: app_users.id (label.py, submit_label), so the decomposition is a plain join
+#: and neither labels.py function needs to change. Axis A is unaffected: its
+#: rows carry no profile at all, enforced by eval_labels_axis_shape.
+#:
+#: DERIVED, NOT INVENTED. The first eight are the industry list in
+#: config/pursuit-persona.json's `background_summary`, verbatim and in its
+#: order: "healthcare, education, retail, hospitality, logistics,
+#: administration, the trades, the military".
+#:
+#: `other` is a real domain this list does not name, priced as no-information
+#: the way config/pursuit-criteria.json's `_archetypes_other_comment` prices the
+#: archetype of the same name -- "no information, no verdict", never a penalty.
+#:
+#: `none` IS NOT NULL AND THE DISTINCTION IS THE POINT. background_summary says
+#: the cohort is "early-career AND career-changing adults", so a Builder with no
+#: prior domain is a real answer about a real person. NULL means NOBODY ASKED.
+#: Collapsing the two would score an unasked labeller as a labeller with no
+#: background, which is the same conflation `_seniority_unknown_comment` refuses
+#: for seniority and that labels.py refuses for the "I cannot tell" abstention.
+PRIOR_DOMAINS = (
+    "healthcare", "education", "retail", "hospitality",
+    "logistics", "administration", "trades", "military",
+    "other", "none",
+)
+
+#: The CHECK is generated from PRIOR_DOMAINS rather than typed out beside it, so
+#: the vocabulary cannot be widened in Python while the database keeps refusing
+#: the new value -- a failure that would surface as a 500 on one operator's
+#: command and nowhere else.
+_PRIOR_DOMAIN_CHECK = (
+    "prior_domain IS NULL OR prior_domain IN ("
+    + ", ".join(f"'{v}'" for v in PRIOR_DOMAINS) + ")"
+)
+
+
+def _ensure_prior_domain(conn):
+    """Add prior_domain and its CHECK to an app_users that predates them.
+
+    CREATE TABLE IF NOT EXISTS is a no-op on a table that already exists, so it
+    carries a new column to fresh databases only. This one already has a row --
+    the repo owner's, and it is the labeller behind every row in eval_labels --
+    so without this the column would exist in the DDL and nowhere the labels
+    are.
+
+    Routed through dbconn.add_missing_columns rather than a bare ADD COLUMN IF
+    NOT EXISTS for the reason that function documents at length: the IF NOT
+    EXISTS form still takes an ACCESS EXCLUSIVE lock when the column is already
+    there, so issuing it every run makes every run contend with ordinary
+    readers. The catalog check means the steady state issues no DDL at all.
+
+    The constraint is guarded the same way and for the same reason. Adding it
+    scans the table, which is free at one row and is not a habit worth forming.
+    """
+    added = dbconn.add_missing_columns(conn, "app_users",
+                                       [("prior_domain", "TEXT")])
+    present = conn.execute(
+        "SELECT 1 FROM pg_constraint WHERE conname = 'app_users_prior_domain'"
+    ).fetchone()
+    if not present:
+        conn.execute("ALTER TABLE app_users ADD CONSTRAINT "
+                     f"app_users_prior_domain CHECK ({_PRIOR_DOMAIN_CHECK})")
+        conn.commit()
+    return added
+
 
 def ensure_schema(conn):
     """Create this service's tables. Idempotent, DDL, admin credential only.
@@ -103,19 +176,22 @@ def ensure_schema(conn):
     schema.ensure_schema(conn)
     schema.ensure_app_view(conn)
 
-    conn.execute("""
+    conn.execute(f"""
         CREATE TABLE IF NOT EXISTS app_users (
             id TEXT PRIMARY KEY,
             email TEXT NOT NULL UNIQUE,
             google_sub TEXT UNIQUE,
             display_name TEXT,
             profile TEXT NOT NULL,
+            prior_domain TEXT,
             is_admin BOOLEAN NOT NULL DEFAULT FALSE,
             active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TEXT NOT NULL,
-            last_login_at TEXT
+            last_login_at TEXT,
+            CONSTRAINT app_users_prior_domain CHECK ({_PRIOR_DOMAIN_CHECK})
         )
     """)
+    _ensure_prior_domain(conn)
     # profile is bare TEXT with NO foreign key to profiles(profile), matching
     # job_scores.profile and job_matches.profile in ../schema.py. A real FK
     # would make this service's DDL depend on a table it must not own, which is

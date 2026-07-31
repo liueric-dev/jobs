@@ -8,6 +8,8 @@ which is the browser-facing surface.
 
     python3 manage_app_users.py init-schema                     # once, admin credential
     python3 manage_app_users.py add --email you@x.com --profile tech --admin
+    python3 manage_app_users.py add --email them@x.com --profile pursuit \
+        --prior-domain healthcare
     python3 manage_app_users.py set-profile --email you@x.com --profile pursuit
     python3 manage_app_users.py list
     python3 manage_app_users.py disable --email you@x.com
@@ -17,8 +19,30 @@ which is the browser-facing surface.
 THIS FILE IS THE ACCESS CONTROL. Google authenticates; it does not authorise.
 A Google login for an address with no row here is refused, and no row is ever
 created by the login path -- see auth.py. That is deliberate and it is not an
-oversight to "fix" by auto-provisioning: every active profile costs real money,
-because extract.py and score.py both fan out per active profile.
+oversight to "fix" by auto-provisioning: an active profile costs real money.
+
+    CORRECTED 2026-07-31. This paragraph used to read "because extract.py and
+    score.py both fan out per active profile." That is true of score.py and
+    FALSE of extract.py, and the difference decides whether per-Builder
+    profiles are affordable at all.
+
+    score.py loops `for prof in targets` and issues LLM calls inside it, so its
+    cost really is per profile. extract.py does not loop over profiles anywhere:
+    it builds ONE cfgs list and hands it to _eligible_sql -> relevance.union_sql,
+    which is an OR across every active gate ("does this row clear the bar for
+    ANY profile?"). Facts are extracted once per POSTING and shared -- extract.py's
+    own module docstring calls the stage "flat in the number of users".
+
+    So adding an active profile cannot multiply extraction calls. It can only
+    add the postings its gate admits that no other active gate already does. For
+    N profiles sharing one gate that delta is exactly zero. The real per-profile
+    cost is score.py, and `pursuit` currently has daily_narrative_budget = 0.
+
+--prior-domain IS FOR MEASUREMENT, NOT FOR SCORING. Nothing reads it yet. It
+records which industry a Builder is changing career from so that Axis B
+labelling disagreement can be decomposed rather than read as noise; see
+schema_web.PRIOR_DOMAINS for the whole argument and for why 'none' and an
+omitted flag are different answers.
 
 TWO CREDENTIALS: `init-schema` is the only command that issues DDL and the only
 one that reads JOBS_ADMIN_DATABASE_URL. Everything else runs on the same
@@ -90,16 +114,18 @@ def cmd_add(args):
         conn.execute(
             """
             INSERT INTO app_users (id, email, google_sub, display_name, profile,
-                is_admin, active, created_at, last_login_at)
-            VALUES (%s, %s, NULL, %s, %s, %s, TRUE, %s, NULL)
+                prior_domain, is_admin, active, created_at, last_login_at)
+            VALUES (%s, %s, NULL, %s, %s, %s, %s, TRUE, %s, NULL)
             """,
-            (user_id, email, args.name, args.profile, args.admin, utc_now_str()),
+            (user_id, email, args.name, args.profile, args.prior_domain,
+             args.admin, utc_now_str()),
         )
         conn.commit()
 
     print(f"id       : {user_id}")
     print(f"email    : {email}")
     print(f"profile  : {args.profile}")
+    print(f"domain   : {args.prior_domain or '(not asked)'}")
     print(f"admin    : {args.admin}")
     print()
     print("google_sub is bound on their first successful login. Until then the")
@@ -139,20 +165,33 @@ def cmd_set_profile(args):
             sys.exit(1)
 
         row = conn.execute(
-            "SELECT id, profile FROM app_users WHERE email = %s", (email,)).fetchone()
+            "SELECT id, profile, prior_domain FROM app_users WHERE email = %s",
+            (email,)).fetchone()
         if row is None:
             print(f"no user with email {email!r}; use add to create them",
                   file=sys.stderr)
             sys.exit(1)
-        user_id, before = row
+        user_id, before, domain_before = row
 
         conn.execute("UPDATE app_users SET profile = %s WHERE id = %s",
                      (args.profile, user_id))
+        # OMITTING --prior-domain LEAVES IT ALONE; it does not clear it. This
+        # subcommand's job is the profile, and a flag that silently nulls an
+        # unrelated column when you forget it would destroy the one attribute
+        # the Axis B decomposition depends on -- and eval_labels has no UPDATE
+        # grant, so the labels already recorded against it could not be re-keyed.
+        if args.prior_domain is not None:
+            conn.execute("UPDATE app_users SET prior_domain = %s WHERE id = %s",
+                         (args.prior_domain, user_id))
         conn.commit()
 
     print(f"id       : {user_id}")
     print(f"email    : {email}")
     print(f"profile  : {before} -> {args.profile}")
+    if args.prior_domain is not None:
+        print(f"domain   : {domain_before or '(not asked)'} -> {args.prior_domain}")
+    else:
+        print(f"domain   : {domain_before or '(not asked)'} (unchanged)")
     if not target.active:
         # The failure this command exists to correct, so it must not be silent:
         # the first row this service ever had landed on an inactive profile and
@@ -176,7 +215,8 @@ def cmd_list(args):
                    u.google_sub IS NOT NULL, u.created_at, u.last_login_at,
                    (SELECT count(*) FROM app_sessions s
                      WHERE s.user_id = u.id AND s.revoked_at IS NULL
-                       AND s.expires_at > %s)
+                       AND s.expires_at > %s),
+                   u.prior_domain
             FROM app_users u ORDER BY u.created_at
             """,
             (utc_now_str(),),
@@ -185,10 +225,11 @@ def cmd_list(args):
     if not rows:
         print("no users yet -- nobody can log in")
         return
-    for uid, email, profile, is_admin, active, linked, created, last, live in rows:
+    for uid, email, profile, is_admin, active, linked, created, last, live, domain in rows:
         flags = ",".join(f for f, on in (
             ("admin", is_admin), ("linked", linked), ("DISABLED", not active)) if on)
         print(f"{uid}  {email:<32}  {profile:<12}  {flags or '-':<20}  "
+              f"domain={domain or '-':<15}  "
               f"sessions={live}  created={created}  last_login={last or '-'}")
 
 
@@ -259,7 +300,14 @@ def cmd_revoke_sessions(args):
     print(f"revoked {len(rows)} session(s) for {email}")
 
 
-def main():
+def build_parser():
+    """The argument parser, separated from main() so a test can read it.
+
+    Split out when --prior-domain landed: its `choices` come from
+    schema_web.PRIOR_DOMAINS, and "the CLI and the CHECK constraint offer the
+    same vocabulary" is a property worth asserting rather than assuming. There
+    is no way to assert it while the parser only exists inside main().
+    """
     p = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -267,10 +315,20 @@ def main():
                        help="create this service's tables (needs JOBS_ADMIN_DATABASE_URL)")
     i.set_defaults(func=cmd_init_schema)
 
+    # choices= comes from schema_web.PRIOR_DOMAINS, which also generates the
+    # CHECK constraint, so argparse and the database cannot disagree about the
+    # vocabulary. Not required: NULL means "nobody asked", which is a different
+    # answer from 'none' and must stay reachable by simply not passing the flag.
+    domain_help = ("industry they are changing career FROM; omit if not asked. "
+                   "'none' means genuinely early-career, which is NOT the same "
+                   "as omitting it")
+
     a = sub.add_parser("add", help="allow an email to log in")
     a.add_argument("--email", required=True)
     a.add_argument("--profile", required=True, help="which pipeline profile they see")
     a.add_argument("--name", default=None, dest="name")
+    a.add_argument("--prior-domain", default=None, dest="prior_domain",
+                   choices=schema_web.PRIOR_DOMAINS, help=domain_help)
     a.add_argument("--admin", action="store_true")
     a.set_defaults(func=cmd_add)
 
@@ -278,6 +336,9 @@ def main():
                         help="move an existing user to a different profile")
     sp.add_argument("--email", required=True)
     sp.add_argument("--profile", required=True, help="which pipeline profile they see")
+    sp.add_argument("--prior-domain", default=None, dest="prior_domain",
+                    choices=schema_web.PRIOR_DOMAINS,
+                    help=domain_help + ". Omitting it leaves the stored value alone")
     sp.set_defaults(func=cmd_set_profile)
 
     l = sub.add_parser("list", help="list users")
@@ -300,7 +361,11 @@ def main():
     r.add_argument("--email", required=True)
     r.set_defaults(func=cmd_revoke_sessions)
 
-    args = p.parse_args()
+    return p
+
+
+def main():
+    args = build_parser().parse_args()
     args.func(args)
 
 

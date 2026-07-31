@@ -1809,3 +1809,85 @@ digit-for-digit** — `random.Random` and `numpy.random.default_rng` draw differ
 lists from the same seed, so the two agree only to resampling error, and nothing should
 be built on comparing their digits. The shared seed (11) is the same *discipline*, not the
 same stream.
+
+### 29 — per-Builder scoring is ONE derivation function, not N criteria files
+
+Recorded 2026-07-31 from a design session dated 2026-07-30. **Nothing is built**; this
+entry exists so the reframe is not re-litigated from scratch, and so the reasons it is
+*not* what task 11 already rejected are on the record.
+
+DECIDED: per-`(posting, Builder)` scoring is the destination, in the form of **one
+derivation function from a `user_facts` record to criteria deltas, composed over
+`config/pursuit-criteria.json` as the population prior**. Rejected: thirty hand-authored
+per-Builder criteria files.
+
+**Why this is not the thing task 11 already rejected.**
+`tranche_two/11-archetype-superset-role-track.md` §2 rejects eight track profiles because
+*"eight configs nobody can validate is worse than one"* and because
+*"`learned-ranker-probe.py` already identified hand-tuned weights as the bottleneck."*
+Thirty authored files is that first objection four times worse. The split:
+
+- **The artifact-count argument does not survive the reframe.** One generator is one
+  artifact to validate, and the per-Builder configs stop being authored at all — they
+  become regenerable outputs. Task 11's own section heading two paragraphs later is
+  **"Derive it, do not author it"**, and its closing line is *"If a track later proves to
+  need its own weights, promote it to a profile. `profiles` already supports that; nothing
+  is foreclosed."* The reframe is what that file asks for, applied one level up.
+- **The hand-tuned-weights argument survives intact**, and lands on the derivation
+  function's own coefficients. It is concentrated in one place, not removed. That is risk 3.
+- **Task 11's cost argument supports the reframe:** *"Compute is not the constraint —
+  `job_matches` is arithmetic."*
+
+**Plumbing that already exists.** Each verified 2026-07-31 rather than cited from memory;
+by symbol where the line is likely to move.
+
+| | |
+|---|---|
+| `job_matches` PK `(job_id, profile)` | `schema.py`, `MATCHES_TABLE` DDL |
+| `job_scores` PK `(job_id, profile)` | `schema.py`, `SCORES_TABLE` DDL |
+| the N-profile cross product | `MATCH_FLOOR`'s own comment, *"at N profiles the full cross product is N x 11k rows"* |
+| *"flat in the number of users"* | `extract.py` module docstring |
+| *"a brand-new profile gets a full ranked list in seconds"* | `schema.py`'s two-tier note |
+| moving a user between profiles | `app_users.profile`, `manage_app_users.cmd_set_profile` |
+| the frozen response contract | `API-CONTRACT-v1.md`'s top-level `profile` field — a per-Builder profile name is a different string in a field that already exists, **so the freeze is not broken** |
+
+**The one claim that needed reconciling, and it resolves in the reframe's favour.**
+`manage_app_users.py`'s header said *"extract.py and score.py both fan out per active
+profile."* True of `score.py`, which loops `for prof in targets` with LLM calls inside it.
+**False of `extract.py`**, which loops over profiles nowhere: it builds one `cfgs` list and
+hands it to `_eligible_sql` → `relevance.union_sql`, an **OR** across every active gate
+(*"does this row clear the bar for ANY profile?"*). Facts are extracted once per **posting**
+and shared. So an added profile cannot multiply extraction calls — it can only add the
+postings its own gate admits that no other active gate does, and **for N profiles sharing
+one derived gate that delta is exactly zero.** The header comment was corrected in the same
+change. Extraction cost is genuinely flat across profiles sharing a gate; the real
+per-profile cost is `score.py`, and `pursuit` runs at `daily_narrative_budget = 0`.
+
+**Risks, unranked, none dropped.**
+
+1. **Ground truth gets scarcer per stratum exactly as parameters are added.** ~30 Builders,
+   and the measured rate is ~154 s/posting — so twenty minutes is ~8 postings, not 20
+   (`29-labelling-session.md` § *Findings, 2026-07-31*, E). Current turnout is one.
+2. **`inter_annotator()` and `interpretable()` stay correct for Axis A and become the wrong
+   instrument for Axis B.** Do not change either function; the fix is a labeller attribute
+   to decompose by, which is why `app_users.prior_domain` landed.
+3. **Two unfitted layers compose.** `pursuit-criteria.json`'s `_unfitted` plus the
+   derivation function's own numbers, and error cannot be attributed between them.
+4. **n=1 validation.** Validating a per-Builder function against its author is structurally
+   the `claude-bench.py:417` "single run as ground truth" defect with a person substituted.
+   Live rather than hypothetical: `eval_labels` has one labeller today.
+5. **Resume parsing moves onto the critical path** as the source of `user_facts`.
+6. **PII posture changes in a public repo that is also a portfolio piece.** The decision
+   wants making **before the first resume lands**, not after.
+7. **There is no loader from `eval_labels` into anything that can re-tune weights, and
+   nobody owns building one** (`HANDOFF.md` § *Pending follow-ups*). `calibrate-match.py`'s
+   ground truth is `job_scores` — the LLM — so sweeping with it fits the weights to the
+   model the labels exist to check. And *"what an axis-B `would_apply` consensus means as a
+   regression target"*, including the ties `consensus()` deliberately refuses to break, is
+   decided nowhere. **This is a hard dependency, not a caveat.**
+
+**Explicitly not done:** the derivation function, per-Builder profiles, a `user_facts`
+table, and any change to a number in `pursuit-criteria.json`.
+
+Reversible — it is a direction with no code behind it. The one thing that is not free to
+reverse is risk 6, which is why it is called out with a deadline.

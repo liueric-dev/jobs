@@ -268,3 +268,282 @@ versus *stop working on this*. **Rendering the bad report unrepresentable rather
 discouraged is the whole design.** If attrition ever leaves intra as the only ceiling with
 any n, that is a decision to take explicitly and write down, not one to acquire by
 loosening a keyword argument.
+
+## Findings, 2026-07-31 — a hard case, a blind corpus, a ceiling caveat, and the first timing number
+
+**Recorded from a design session dated 2026-07-30.** That session ran against a **shallow
+clone**, so nothing it produced was treated as a measurement. Every figure below was
+re-derived against the working tree and the live database on **2026-07-31** before being
+written here; each one names the instrument that produced it. **Three of its claims
+reproduced exactly, one did not, and one of its premises was wrong** — the corrections are
+stated with the original claim beside them, per correction 5's convention above.
+
+Nothing here changes the gate, the form, the drawn sample, the DoD, or any weight.
+
+### A. A mid-level bridge role, admitted by accident
+
+**The posting is real, and its title is not what the session called it.** It is
+`Commercial Solutions Consultant, New York` — **not** "Solutions Consultant, Commercial" —
+Notion, `ashby`, `location_is_nyc`, status `open`, job `8ba8616b7c91d2a1b5112cdc`. The
+title is the string `title_include` and `title_exclude` are matched against, so the name is
+load-bearing rather than cosmetic.
+
+**A1 — the gate. Reproduces exactly, and the consequence is worse than the session
+stated.** Instrument: `relevance.tier_sql()` compiled from the **live**
+`profiles.relevance_json` for `pursuit` — verified byte-identical to
+`config/pursuit-relevance.json` on every key, comments included — with each term tested
+standalone using Postgres `~*` against the stored `description_text`.
+
+| group | terms hit |
+|---|---|
+| AI, description | `ai tool`, `\yai\y` — 2 of 21 |
+| entry-level, description | **`\yspecialist\y` alone** — 1 of 14 |
+| `title_include`, **both groups** | **nothing** |
+| `title_exclude` | nothing |
+
+Tier **1**, and `max_tier_to_score` is 2, so it is admitted and extracted. The single
+entry-level hit is *"troubleshoot in front of a customer without a specialist in the
+room"* — a clause whose subject is a person the team does **not** have.
+
+**What the session missed: the title path contributes nothing in either group.** The
+description path is the only way in, so that one incidental word is the *only* thing
+standing between this posting and tier 3. Rewrite the clause as *"without a solutions
+engineer in the room"* and the posting is never extracted, for no change in the job.
+
+Added to `pursuit-relevance.json`'s `_entry_level_note` as a known weakness, **documentation
+only**. It is a different shape from the `\yassociate\y` / `\yanalyst\y` weaknesses already
+listed there: those match a *senior title* and `title_exclude`'s seniority block is designed
+to catch them — a precision leak with a backstop. This is a **recall** leak with no backstop
+in either direction, because nothing can exclude on a word that is doing its job in a
+subordinate clause.
+
+> **The comment edit diverges the file from the database, and that is recorded rather than
+> repaired.** `config/pursuit-relevance.json` and `profiles.relevance_json` were byte-identical
+> on every key before this change; they now differ in exactly one, `_entry_level_note`.
+> **Provably inert:** `relevance.load()` merges with `if not k.startswith("_")`, so no
+> comment key can reach `tier_sql`. Verified 2026-07-31 — no `_` key survives the load, and
+> the SQL emitted from the edited file is identical to the SQL emitted from the DB row. No
+> re-import was run; a `migrate_profiles.py` pass would sync it and is not worth a write to
+> the live profile row for a comment.
+
+**A2 — the score. The session's premise was wrong: this is a measurement, not a
+simulation.** The instruction was to label the range SIMULATED because *"the extractor has
+not been run on this posting; the fact vectors are hand-written."* **It has been run.**
+There is a real `job_facts` row (`facts_version` 3, extracted 2026-07-28,
+`deepseek-v4-flash`, `extraction_passes` 1) and a real `job_matches` row:
+
+```
+seniority_level  mid             role_archetype   solutions
+ai_involvement   uses_ai_tools   customer_facing  true
+match_score      63   base +50  seniority:mid -25  archetype:solutions +10
+                      ai:uses_ai_tools +20  flag:customer_facing +8
+```
+
+63 is above `MATCH_FLOOR` (**40**, `schema.py:228`, re-checked 2026-07-31 — note
+`pursuit-criteria.json`'s `_scale` still cites `:206`, which has drifted). It sits at rank
+**42 of 152** `pursuit` `job_matches` rows.
+
+So the two flips are recorded as a **counterfactual on a measured row**, run through the
+pure `score_job()` with every other field held at its extracted value:
+
+| | `ai_involvement = uses_ai_tools` | `ai_involvement = none` |
+|---|---:|---:|
+| `seniority_level = junior` | 88 | **38 — below the floor; no row is written at all** |
+| `seniority_level = mid` *(as extracted)* | **63** | 13 |
+
+**The claimed range of "roughly 13 to 98" does not reproduce. It is 13 to 88.** 13 is
+exact. Reaching 98 requires a **third** flip — `gap_friendly_language` false→true — which is
+the single most self-consistent field the extractor has, at **100% [96.8–100]**
+(`docs/ingestion_tests/README.md`). Quoting 98 as the range of two flips silently borrows a
+flip from the one field that never flips.
+
+**The `ai_involvement` flip is the one that matters here, and it is not hypothetical.** The
+posting carries a genuine requirement — *"You're obsessed with AI, constantly building with
+the newest tools"*, under **Skills You'll Need to Bring** — and, separately, the exact
+company boilerplate, its *"A Note on AI"* block. The figure to read this against is not the
+94.8% headline but the decomposition beside it: **8 of 115 records (7.0%, [3.6–13.1])
+changed whether the job is in the AI opportunity space at all** across three runs of the
+same prompt on the same text. `seniority_level` is **85.2% [77.6–90.6]**. Both are
+cross-referenced from `docs/ingestion_tests/README.md` rather than restated here.
+
+**And the instruction that would discount the boilerplate never fires on this posting.**
+`pursuit-persona.json`'s `scoring_instructions` does say to name *"an AI mention that turns
+out to be company boilerplate rather than part of the job"* — but that is the **narrative**
+prompt, consumed by `score.py` for `fit_score`, and `pursuit` has
+`daily_narrative_budget = 0` and **zero rows in `job_scores`**. `ai_involvement` is decided
+by `extract.py`, whose prompt has no persona in it by design. The instruction that would
+catch this boilerplate is attached to the stage that never runs on it.
+
+**A3 — the hole, and a competing reading that is probably the better one.**
+
+The session's claim: the hole is not the archetype, because `solutions` is priced 10 and
+`_archetypes_bridge_comment` already describes this posting; the hole is that
+`seniority_level` conflates *distance-to-role* with *distance-in-a-transferable-domain*.
+`pursuit-criteria.json`'s `_years_experience_no_prior_domain_comment` already records that
+punt and its reason — *"there is no scalar in this file that can represent 'these fifteen
+years transfer'"* — and this posting is the case where the demanded experience **is** in
+the transferable domain, so the punt has a measured cost: **25 points**, the `seniority:mid`
+delta, which is the entire difference between rank 42 and the head of the list.
+
+**`HANDOFF.md` § *the first finding arrived BEFORE the first label* says something
+different about the archetype half, and this row supports the handoff, not the session.**
+That finding records that no archetype or track expresses a commercial/sales role and that
+such a role *"lands in `other`, or is **mislabelled `solutions` because the word
+matches**."* This posting's title contains the literal word *Solutions*, and the extractor
+returned `role_archetype: solutions` and `role_track: solutions_and_implementation`. **Both
+readings are recorded and neither is asserted**; settling it needs the labels this task
+exists to collect.
+
+The two conflations are different and they compose: the handoff's is `ai_involvement`
+failing to separate *"uses AI"* from *"sells AI"*; this one is `seniority_level` failing to
+separate the two kinds of distance. **This posting is a candidate entry for the
+commercial/sales side list** the handoff calls *"the only place the content can live"*, and
+which feeds `backend/tools/derive-role-tracks.py`. It is **not** a second Builder agreeing —
+it is a code-verified instance of the class, and the handoff's *"acting needs more than one
+Builder saying so"* still binds.
+
+**One consequence for this task specifically: the posting is not in `pursuit-v1` and can
+never be added.** `eval_labels` now holds rows, so `redraw_refusal()` refuses every redraw
+of the set, identical digest included. Whatever this posting is evidence of, it is not
+evidence this labelling session will produce.
+
+### B. `mock-postings-v3` cannot detect this class
+
+Measured 2026-07-31 from `docs/tasks/refactor/mock/mock-postings-v3-answer-key.json`; the
+key's own `postings_sha256` re-verified against `mock-postings-v3.json` and matching.
+**Neither file was edited.**
+
+- **29 good / 25 bad / 1 undecided** — reproduces exactly.
+- **All 29 good entries are `seniority_level: junior`. Zero good entries at mid or above** —
+  reproduces exactly.
+- `failure_modes`: `clean_reject` 5, `seniority` 7, `branding_trap` 5,
+  `not_a_real_employer` 5, `out_of_scope_location` 5, `technical_bar` 4 — reproduces
+  exactly, and all 31 are attached to `bad` entries with **none on a `good` one**. Every
+  mode is a rejection mode.
+
+**Correction to the session's phrasing.** `good <=> junior` is **not** a perfect
+correlation: it is not a biconditional. `good ⇒ junior` holds perfectly at 29/29, but the
+converse fails — 10 `bad` entries and the 1 `undecided` are junior too. The claim the
+consequence actually rests on is the one that holds: **no good entry sits at mid or above**,
+so `seniority.tolerate.mid = -25` cannot be falsified against this corpus in either
+direction.
+
+**Addition the session did not find, and it is the same defect one field over.** All 29
+good entries are also `ai_involvement: uses_ai_tools`. **The `ai_involvement` weights are
+unfalsifiable against v3 for exactly the same structural reason** — and A2 shows that
+`ai_involvement`, not seniority, is the flip that decides whether a posting is written at
+all.
+
+So the corpus is precision-shaped in two dimensions, not one, and the *"reachable mid,
+transferable domain"* false-negative class is structurally invisible to any measurement run
+on it. **v3 is sha256-pinned; this is a note toward a successor corpus and a candidate
+sixth failure mode, not a change to v3.**
+
+### C. An interpretation caveat on the Axis B ceiling, and one time-sensitive action
+
+`AXIS_B_FIELD` is `would_apply` (`evals/labels.py`). § *Which axis carries the profile* in
+`HANDOFF.md` already establishes that Axis B rows are stamped with the session's profile
+and Axis A rows carry none. **What is not recorded anywhere: that profile is the COHORT,
+identical for every Builder, and no labeller attribute exists at all.**
+
+On a posting like A, a Builder with prior commercial experience and one without give
+**opposite answers that are both correct**. `labels.inter_annotator()` reads that as
+disagreement and depresses the Axis B ceiling — and since every model score is denominated
+in that ceiling, the effect is to make the model **read as better than it is**. This is the
+neighbour of, and not the same as, the handoff's `consensus()` n=1 caveat: that one is about
+a majority of size one, this one is about two people who genuinely disagree for a reason
+nothing records.
+
+**Axis A is unaffected**, as this file already says — and it is enforced rather than
+conventional: `eval_labels_axis_shape` CHECKs that axis A carries `profile IS NULL`.
+
+**ACTION TAKEN, and its deadline is the first Builder sitting rather than the solo one.**
+A nullable `prior_domain` column on `app_users`, closed vocabulary, settable via
+`manage_app_users.py add --prior-domain` and `set-profile --prior-domain`, shown in `list`.
+`eval_labels.labeller_id` is `app_users.id`, so the decomposition is a plain equijoin: **no
+change to the pinned item set, the form's questions, `labels.inter_annotator()` or
+`labels.interpretable()`**, all of which stay exactly as they are.
+
+Vocabulary — **derived, not invented.** The first eight are the industry list in
+`pursuit-persona.json`'s `background_summary`, verbatim and in its order: `healthcare`,
+`education`, `retail`, `hospitality`, `logistics`, `administration`, `trades`, `military`.
+Plus `other` — a real domain the list does not name, priced as no-information the way
+`_archetypes_other_comment` prices the archetype of the same name — and `none`, a genuinely
+early-career Builder, which `background_summary` requires by describing the cohort as
+*"early-career **and** career-changing"*. **NULL means nobody asked, and that is a different
+statement from `none`**; collapsing them would score an unasked labeller as one with no
+background, the same conflation `_seniority_unknown_comment` refuses for seniority and
+`labels.py` refuses for the abstention.
+
+**Nothing reads the column.** It does not commit the project to per-Builder scoring, and it
+is one `ALTER TABLE` to drop if that decision goes the other way.
+
+### D. Direction: per-Builder scoring is a derivation function
+
+Recorded as a decision in `DECISIONS.md` § *29 — per-Builder scoring is a derivation
+function, not N criteria files*, which carries the verified plumbing, task 11's reasoning
+and which half of it survives, the `extract.py` / `score.py` cost reconciliation, and seven
+risks. **Nothing is built.** The short form: per-`(posting, Builder)` scoring in the form of
+**one derivation function** from a `user_facts` record to criteria deltas composed over
+`pursuit-criteria.json` as the population prior — **not** thirty hand-authored criteria
+files.
+
+### E. The stopwatch reading, which is the number this file has been guessing at
+
+`HANDOFF.md` asks for it by name: *"THE DELIVERABLE THE NEXT SESSION SHOULD ACTUALLY BRING
+BACK IS A STOPWATCH READING … every budget figure in this run was computed against a
+**five**-question form; the form asks **six**."* **It is now derivable, because labelling
+has started.**
+
+State, measured 2026-07-31: `eval_labels` holds **30 rows — 5 postings × 6 questions, one
+labeller, round 1**, `labelled_at` spanning `2026-07-31T02:56:05` to `03:06:19` UTC. Those
+are UTC stamps from `lib.timeparse.utc_now_str()`; in New York it was the evening of
+2026-07-30, and it is **one sitting**, not two.
+
+Instrument: successive `min(labelled_at)` per `job_id`. Submit-to-submit intervals:
+**87 s, 170 s, 247 s, 110 s**. **Median 170 s, mean 154 s**, total span 614 s.
+
+**What that does to the numbers this file plans against:**
+
+| claim, and where it appears | at 154 s/posting |
+|---|---|
+| *"Twenty minutes, in person, in one sitting"* → ~20 postings (§ *Logistics*) | **~8 postings** |
+| *"one second person and ten minutes"*, the ten `overlap` rows (§ *Deviation*) | **~26 minutes** |
+| ≥100 postings, one person (Definition of done) | **~4.3 hours** |
+
+**The twenty-minute budget is out by roughly 2.5x**, in the direction that matters, on the
+one number every Builder-session estimate in this run is built from.
+
+**Caveats, stated with it rather than after it:** n = 4 intervals from 5 postings and one
+labeller; submit-to-submit includes reading time; the first posting's own reading time is
+not measured at all, so the true per-posting figure is *higher* than 154 s, not lower; and
+the fastest interval is the first, which is the opposite of a warm-up curve and is worth
+re-checking as the count grows. `HANDOFF.md` warns against inventing a correction factor for
+the sixth question — **this is a measurement of the six-question form, not a factor applied
+to a five-question one**, and it should be re-derived rather than re-quoted once there are
+more rows.
+
+> **Correction to § *Deviation — the first sitting is SOLO*, 2026-07-31.** That section
+> calls the second labeller's contribution *"one second person and ten minutes"*, and
+> `HANDOFF.md` says it twice more. **At the measured rate the ten `overlap` rows are ~26
+> minutes, and ~15 minutes even at the fastest interval observed.** Everything else in that
+> paragraph stands: it is still the cheapest unblock in this task, the ten rows still turn
+> every refused field into a printable one, and it should still be arranged **before** a
+> long solo sitting. It is not a ten-minute favour, and asking for it as one will fail on
+> contact.
+
+**Deliberately NOT recorded here: model-vs-human agreement.** Labels exist, `job_facts`
+exists for these rows, and the comparison is two SQL statements away. `evals label report`
+exits 2 for as long as there is one labeller, by design — *"rendering the bad report
+unrepresentable rather than discouraged is the whole design"* — and a number computed around
+that refusal and written into a document is the refusal defeated, with the added defect that
+a document has no exit code. The state above is the whole of what is recorded.
+
+### Suites, re-run 2026-07-31
+
+`backend/`: **`Ran 1166 tests`, `OK`** before this change. `backend/webapp/` under its own
+`.venv`: **75 → 93, `OK`** (18 added: `prior_domain`'s vocabulary, the generated CHECK, the
+CLI-vs-database agreement, and the join). Neither went down.
+
+**Note for task 34:** `CLAUDE.md` still says *"It was at 263 tests"*. The measured figure is
+**1166**. That is stale by roughly 900 and is a documentation defect, not a regression.

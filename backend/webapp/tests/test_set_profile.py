@@ -66,6 +66,7 @@ class FakeConn:
         self.profiles = {r[0]: r for r in profile_rows}
         self.user_row = user_row
         self.updates = []
+        self.domain_updates = []
         self.commits = 0
 
     # `with connect() as conn:` -- psycopg's own context manager, which yields
@@ -83,10 +84,13 @@ class FakeConn:
             return FakeResult([row] if row else [])
         if "FROM profiles" in flat and "WHERE active" in flat:
             return FakeResult([r for r in self.profiles.values() if r[7]])
-        if flat.startswith("SELECT id, profile FROM app_users"):
+        if flat.startswith("SELECT id, profile, prior_domain FROM app_users"):
             return FakeResult([self.user_row] if self.user_row else [])
         if flat.startswith("UPDATE app_users SET profile"):
             self.updates.append(params)
+            return FakeResult([])
+        if flat.startswith("UPDATE app_users SET prior_domain"):
+            self.domain_updates.append(params)
             return FakeResult([])
         raise AssertionError(f"unexpected SQL: {flat}")
 
@@ -104,11 +108,12 @@ def _patched(conn):
         manage_app_users.connect = original
 
 
-def _run(conn, email="you@x.com", profile="pursuit"):
+def _run(conn, email="you@x.com", profile="pursuit", prior_domain=None):
     """Run the command against `conn`. Returns (stdout, stderr, exit_code)."""
     out, err = io.StringIO(), io.StringIO()
     code = 0
-    args = argparse.Namespace(email=email, profile=profile)
+    args = argparse.Namespace(email=email, profile=profile,
+                              prior_domain=prior_domain)
     with _patched(conn), contextlib.redirect_stdout(out), \
             contextlib.redirect_stderr(err):
         try:
@@ -118,7 +123,7 @@ def _run(conn, email="you@x.com", profile="pursuit"):
     return out.getvalue(), err.getvalue(), code
 
 
-def _conn(user=("u_abc", "tech"), profile_rows=None):
+def _conn(user=("u_abc", "tech", None), profile_rows=None):
     return FakeConn(
         profile_rows if profile_rows is not None
         else [_profile_row("pursuit"), _profile_row("tech")],
@@ -155,6 +160,48 @@ class TestTheProfileChanges(unittest.TestCase):
     def test_the_operator_is_told_no_logout_is_needed(self):
         out, _, _ = _run(_conn())
         self.assertIn("NEXT request", out)
+
+
+class TestPriorDomainRidesAlong(unittest.TestCase):
+    """--prior-domain is optional here, and OMITTING IT MUST NOT CLEAR IT.
+
+    The column exists so Axis B labelling disagreement can be decomposed by
+    background (schema_web.PRIOR_DOMAINS). eval_labels has no UPDATE grant, so
+    a set-profile run that silently nulled prior_domain would leave every label
+    already recorded against that labeller permanently un-decomposable -- the
+    damage is not in this table and cannot be repaired from it.
+    """
+
+    def test_omitting_the_flag_writes_nothing_to_prior_domain(self):
+        conn = _conn(user=("u_abc", "tech", "healthcare"))
+        out, err, code = _run(conn)
+        self.assertEqual((err, code), ("", 0))
+        self.assertEqual(conn.updates, [("pursuit", "u_abc")])
+        self.assertEqual(conn.domain_updates, [])       # the whole point
+        self.assertIn("healthcare (unchanged)", out)
+
+    def test_passing_the_flag_updates_the_row_found_by_email(self):
+        conn = _conn(user=("u_abc", "tech", None))
+        out, err, code = _run(conn, prior_domain="logistics")
+        self.assertEqual((err, code), ("", 0))
+        # By id, for the same reason the profile UPDATE is.
+        self.assertEqual(conn.domain_updates, [("logistics", "u_abc")])
+        self.assertIn("(not asked) -> logistics", out)
+
+    def test_none_is_writable_and_is_not_the_same_as_omitting(self):
+        # 'none' is a real answer -- a genuinely early-career Builder -- and
+        # NULL means nobody asked. The command has to be able to say the first.
+        conn = _conn(user=("u_abc", "tech", None))
+        out, _, code = _run(conn, prior_domain="none")
+        self.assertEqual(code, 0)
+        self.assertEqual(conn.domain_updates, [("none", "u_abc")])
+
+    def test_a_refused_profile_writes_no_domain_either(self):
+        conn = _conn()
+        _, err, code = _run(conn, profile="nope", prior_domain="military")
+        self.assertEqual(code, 1)
+        self.assertEqual(conn.domain_updates, [])
+        self.assertEqual(conn.commits, 0)
 
 
 class TestWhatItRefuses(unittest.TestCase):
@@ -228,7 +275,7 @@ class TestItUsesLoadOneAndNotLoadActive(unittest.TestCase):
         # load_active would return nothing for this connection, so a command
         # validating against it would refuse the move outright.
         rows = [_profile_row("pursuit", active=False)]
-        conn = FakeConn(rows, ("u_abc", "tech"))
+        conn = FakeConn(rows, ("u_abc", "tech", None))
         self.assertEqual(profiles.load_active(conn), [])
         self.assertIsNotNone(profiles.load_one(conn, "pursuit"))
         out, err, code = _run(conn)
