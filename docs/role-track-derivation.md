@@ -30,6 +30,15 @@ per-candidate table**: the probe patterns overlap and `role_archetype` is single
 adding the columns would double-count the postings hardest to classify. The tool prints
 both, and labels the unions as such.
 
+> **Superseded as a description of the CURRENT vocabulary, 2026-07-31 — and correct
+> when taken.** Every figure in this Headline, and in *(a) The archetype superset* below,
+> is over the **427 `other` rows at `facts_version = 2`**, which was the current version
+> on 2026-07-28. The tool that produced them had **no version filter at all** (D65), so
+> re-running it after task 12's bump kept answering a question about the twelve-value
+> vocabulary. At `facts_version = 3` the nine tech values reclaim **9 of 294**, not 203 of
+> 427. The tech gap was real and is largely closed; what is left is a different bucket.
+> See § *The commercial gap in `ARCHETYPE`, and the one value proposed for it*.
+
 **Two of the seven proposed candidates are not supported and are dropped**
 (`automation_specialist`, `data_coordination`). Together they would reclaim **1** row of 427.
 
@@ -224,6 +233,11 @@ Distinct-row unions, printed by the tool's TOTAL EFFECT section:
 | **all 14 recommended** | **242 (56.7%)** | **237 (27.5%)** |
 | the 2 dropped candidates alone | 1 (0.2%) | 14 (1.6%) |
 
+> **Read the whole of this table as `facts_version = 2`.** Reproduce it with
+> `--facts-version 2`, or `--facts-version 0` for the historical all-versions population
+> (696 rows) the tool used to return by default. The v3 equivalents are in § *The
+> commercial gap in `ARCHETYPE`, and the one value proposed for it*.
+
 **14 recommended values reclaim 242 of 427 `other` rows (56.7%), leaving 185.** Adding the
 two dropped candidates back would reclaim **1** further row. In the cohort, the same 14
 values name 237 of 863 (27.5%) by title probe alone — a floor, since the probe reads titles
@@ -307,6 +321,30 @@ trade flips. Phase 3 is what will decide it. **If re-running `derive-role-tracks
 Phase 3 produces a third and fourth distinct vertical, the correct move is not to add
 another eight values — it is SOC.**
 
+### Where the line sits after the 2026-07-31 re-derivation
+
+**The proposal below is 26 → 27, and it is one value rather than five partly because of
+this section.** Five would be 26 → 31, which is another eight-values-shaped move made
+without the fourth vertical that was supposed to trigger the SOC decision — the escape
+hatch would be being stepped over rather than argued with.
+
+Two things keep 27 on the hand-maintained side of the line. **`revenue_commercial` is not
+a new vertical; it is a grain mismatch inside an existing one.** `ROLE_TRACK` already names
+this work (`revenue_operations`) and `ARCHETYPE` cannot, so the value closes a gap between
+two vocabularies the system already maintains rather than extending the taxonomy outward.
+And **the corpus is still the same two verticals** — 886 postings across 158 employers,
+overwhelmingly software companies plus the NYC-government block, and the one non-tech mass
+large enough to notice is a single telehealth employer's hiring spree. Nothing in it is a
+third vertical.
+
+**The four deferred families are the thing to watch, and they are deferred rather than
+refuted.** `finance_accounting`, `strategy_bizops`, `people_recruiting` and `clinical_care`
+all have real mass and, for three of them, real employer spread. If Phase 3's non-tech
+sources bring them back with the spread they currently lack — a hospital system, a bank, a
+university — **that is the fourth-vertical signal this section is waiting for, and the
+answer then is SOC, not 26 → 31.** Recording them here in evidence shape is what makes
+that call checkable rather than a fresh argument each time.
+
 ---
 
 ## What I could not do, and what I did not do
@@ -320,10 +358,15 @@ another eight values — it is SOC.**
   that the extractor actually assigns these values, and how consistently, needs an eval
   against frozen fixtures — `backend/evals/fixtures/`, never `ORDER BY first_seen DESC` —
   and a self-agreement floor beside it, since `deepseek-v4-flash` agrees with itself only
-  76% on `seniority_level`. Not done here; it belongs with task 12's re-extraction.
+  ~~76%~~ **85.2%** on `seniority_level` (**superseded 2026-07-28** by task 06 at n=115;
+  the 76% was n=17 and pessimistic — DECISIONS.md § *06 — Was 76% real?*). Not done here;
+  it belongs with task 12's re-extraction.
 - **The provisional vocabulary has not been validated against Builder preference.** It cannot
   be until task 29 produces labels. **UPDATE 2026-07-30: it now will be.** `role_track` is
   a question on the labelling form — see § *The validation this document asked for* below.
+  **UPDATE 2026-07-31: it now partially has been** — 31 of 200 postings, one labeller. The
+  answer, and the reasons it is a partial one, are in § *The commercial gap in `ARCHETYPE`,
+  and the one value proposed for it*.
 
 ---
 
@@ -434,8 +477,244 @@ against a model NULL reads as agreement — both saying no listed track fits.
 
 ### One thing this does not settle
 
-The vocabulary question this document flags at `:305-308` — whether a third and fourth
+The vocabulary question this document flags in § *The O\*NET/SOC escape hatch* — whether a third and fourth
 distinct vertical after Phase 3 means SOC rather than eight more hand-maintained values —
 is **not** what task 29 answers. Task 29 asks whether the nine values fit the postings
 the cohort actually sees. Whether a hand-maintained list is the right *mechanism* at 26
 values is a separate decision and still open.
+
+> **Partly settled 2026-07-31**, and in the direction of *not yet*: see § *Where the line
+> sits after the 2026-07-31 re-derivation* above. The mechanism question is still open;
+> what is now on the record is why 26 → 27 does not decide it and 26 → 31 would.
+
+---
+
+## The commercial gap in `ARCHETYPE`, and the one value proposed for it — 2026-07-31
+
+**One value is proposed — `revenue_commercial` — and it is NOT applied.** The vocabulary
+and this rationale land; `extract.ARCHETYPE` is untouched at 26 values and
+`schema.FACTS_VERSION` is untouched at 3. The reason is DECISIONS.md **D64**: `pursuit-v1`
+is being labelled right now, and re-extraction rewrites the model answers those labels
+exist to be read against, mid-collection, on a set whose redraw window has closed.
+
+**Measured 2026-07-31, after that morning's nightly** — `max(first_seen)`
+2026-07-31T04:08:06, `max(extracted_at)` 2026-07-31T04:10:45. The date is not decoration;
+see § *A corpus statistic here has a shelf life of one night*. Two read-only tools, no LLM
+calls and no API key: `tools/derive-role-tracks.py --archetypes` and the new
+`tools/label-findings.py --vocabulary --side-list`.
+
+### The instrument was wrong first, and fixing it inverts this document's headline
+
+`derive-role-tracks.py`'s `load_other()` had **no `facts_version` filter**. Its docstring
+claimed it returned every `job_facts` row *the current vocabulary* could only call `other`;
+it returned rows from **every vocabulary the project has ever had**. That was true on
+2026-07-28, when the current version *was* 2. It stopped being true at task 12's bump —
+which is precisely the moment this tool exists to be re-run.
+
+Unfiltered, `other` is **696** rows, of which **402 (58%) are `facts_version = 2`** — the
+twelve-value vocabulary, which never contained the fourteen values the tool exists to
+evaluate. Raw `other` matches, unfiltered → at v3:
+
+| candidate | unfiltered | v3 |
+|---|---:|---:|
+| `hardware_embedded` | 54 | **3** |
+| `infrastructure_compute` | 42 | **2** |
+| `engineering_management` | 32 | **0** |
+| `qa_test` | 22 | **0** |
+| `mobile` | 16 | **0** |
+| `business_systems` | 15 | **0** |
+| `developer_relations` | 11 | **0** |
+| `ai_operations` | 10 | **0** |
+| **tech values, distinct-row union** | **202 (29.0% of 696)** | **9 (3.1% of 294)** |
+
+**What this inverts is the conclusion, not just the arithmetic.** Those 202 rows are
+`other` *under the twelve-value vocabulary*, on the author's tech corpus. Counting them as
+reclaim credits fourteen new values with rows nobody is asking the extractor to re-judge —
+and the v3 population is a different **corpus** as well as a different vocabulary, since
+task 12 retargeted the extraction gate to `pursuit`, so it contains almost none of that
+data-centre and hardware work. **The remaining `other` bucket is therefore not evidence
+that the 26 values sit unused. It is a different, smaller gap**, and the whole of this
+section is about what is in it.
+
+A `--facts-version` flag now defaults to `schema.FACTS_VERSION`; `--facts-version 0` means
+all versions and reproduces every historical figure above. The population is printed in the
+header of every run. Two smaller fixes travelled with it: `_families()` derived its family
+list from two hardcoded `("ops", "tech")` tuples while `CANDIDATES` had grown a third, so
+**the commercial family was probed, counted and never printed** — it and the union-reclaim
+table now both derive the list from `CANDIDATES`. D65 has the reasoning.
+
+### The corpus, restated at `facts_version = 3`
+
+| | |
+|---|---|
+| **cohort** | **886** open postings at relevance tier ≤ 2 under `pursuit`, across **158** employers |
+| **other** | **294** `job_facts` rows at v3 with `role_archetype = 'other'` — **31.3%** of the 940 rows at v3 |
+| **near-duplicate blocks** | 79 blocks, **212 postings collapsed (23.9%)**, 674 representatives into the clustering |
+
+**Two rates that are not comparable, written together because they are being compared.**
+`other` is **8.0% at `facts_version = 2`** (402 of 5,024 — the author's tech corpus, twelve
+values) and **31.3% at v3** (294 of 940 — pursuit-eligible, twenty-six values). **Those
+differ by vocabulary AND by corpus.** So *"12 → 26 made `other` worse"* — a claim currently
+circulating as settled, and traceable to task 12's own headline — **conflates two changes
+and cannot be read as a verdict on the vocabulary.** What survives is weaker and still
+worth acting on: fourteen new values were not followed by any visible shrinkage.
+
+### What the 294 actually are
+
+| | rows | of 294 | |
+|---|---:|---:|---|
+| `role_track` **also NULL** | **182** | **62%** | neither vocabulary has a word for the role |
+| `role_track` assigned | 112 | 38% | the coarse vocabulary copes; the fine one cannot |
+
+The 112, by track: `business_operations` **36**, `revenue_operations` **35**,
+`product_and_marketing` 18, `business_analysis` 11, `data_and_analytics` 5,
+`solutions_and_implementation` 4, `software_engineering` 3.
+
+**The 112 are the finding, not the 182.** Seventy-one of them — 63% — are
+`business_operations` or `revenue_operations`: rows where the extractor knew what kind of
+work it was looking at and had no archetype to say it with. That is a vocabulary defect
+with a specific shape, and it is the shape `revenue_commercial` is cut to.
+
+**Employer spread of the bucket itself, because the raw rate does not dedup it:**
+
+| employer | rows of 294 | |
+|---|---:|---|
+| Sailor Health | **57** | **19.4% of the whole bucket** — one telehealth clinical-psychologist role posted once per US state |
+| AlphaSense | 17 | |
+| Toast | 15 | |
+| Datadog | 13 | |
+| Anthropic | 11 | |
+
+**One employer is a fifth of the `other` problem.** Any headline rate over this bucket that
+has not collapsed near-duplicates is measuring Sailor Health's hiring spree, which is the
+same trap § *Near-duplicate blocks* was built for one level up.
+
+> **Use 57, not 59.** A figure of **59** circulated for a few hours on 2026-07-31 and is
+> the count of Sailor Health's rows at v3 **regardless of archetype** — the wrong
+> denominator for a claim about the `other` bucket. The two rows it adds are not `other` at
+> all: *Credentialing Specialist* (`admin_ops`) and *Revenue Cycle Management (RCM)
+> Associate* (`support_ops`), both already named by task 11's ops values. Recorded rather
+> than silently corrected because 59 and 57 are both true statements about the same
+> employer and only one of them answers this question.
+
+### The validation asked for in § *What I could not do, and what I did not do*
+
+**Human labels, 2026-07-31: 186 label rows over 31 of `pursuit-v1`'s 200 postings, by ONE
+labeller** — 19 `surfaced`, 9 `gate_rejected`, 3 `below_floor`.
+
+| the humans' own answer | rate | 95% CI |
+|---|---|---|
+| `role_archetype = other` | **17 of 31 — 55%** | [0.38, 0.71] |
+| `role_track = no_track_fits` | **13 of 31 — 42%** | [0.26, 0.59] |
+
+**This is not an agreement figure and must not be written as one.** It is what the humans
+said, on its own; `label-findings.py` deliberately prints no model-vs-human comparison,
+because with one labeller there is no inter-annotator ceiling to denominate a model score
+against (D57, D61). **And the population is different from every corpus figure above** — a
+stratified 200-row eval set, not the cohort corpus. The 55% and the 31.3% are two
+populations, not a confirmation.
+
+**The labelled sample and the corpus disagree in emphasis, and the corpus is where the
+commercial mass is.** Only **2 of the 13** `no_track_fits` rows are commercial — both
+Notion *Commercial Solutions Consultant* (Japan and San Francisco), both `would_apply =
+no`. The other eleven span rotational and analyst programmes (Carta *Finance and Equity
+Analyst — Rotational*, Notion *People Analytics & Operations — Rotational*), ops
+specialists (Coinbase *Specialist, Market Operations*), non-software engineering (Shield AI
+*Senior Mechanical Engineer*, NewYork-Presbyterian *Licensed Engineer*), recruiting (Finix
+*Senior Technical Recruiter*) and data annotation (Cohere).
+
+**So the labels support the *existence* of the gap and not this particular value.** They
+are 31 rows by one person, and they are read here as corroboration that `other` is a live
+problem in the postings a Builder actually sees — not as the derivation. The derivation is
+the corpus evidence below. Stated plainly because the temptation to read a 55% as a mandate
+for whatever value one already wanted is exactly what the two-populations warning exists to
+stop.
+
+### `revenue_commercial` — the evidence
+
+Counts are **upper bounds** on the same terms as § *(a)*: the probe patterns overlap,
+`role_archetype` is single-valued, `dedup` is post-collapse and `emp` is distinct
+employers. **Read `emp` first.**
+
+| value | cohort raw/dedup/emp | other raw/dedup/emp |
+|---|---|---|
+| `revenue_commercial` | 148 / 91 / **31** | 68 / 48 / **23** |
+
+Thirty-one employers in the cohort and twenty-three in `other` is the **widest employer
+spread of any candidate in this run, in both populations at once**; the runner-up is
+`marketing_ops` at 25 and 16, then `implementation_analyst` and `support_ops` at 23 in the
+cohort and almost nothing in `other`. (§ *(a)* called `marketing_ops` the widest of the
+original seven at **29** — a v2 figure, not comparable to these, which is what the two
+blockquotes above are for.) The mass is not
+one employer's spree: Databricks ×34, Datadog ×12 and Braze ×11 lead the cohort, Toast
+×14, Datadog ×9 and MongoDB ×6 lead `other`. Deal Desk Analyst, GTM Strategy and Operations
+Associate, Commercial Associate, Enterprise Security Sales Specialist, Solutions Architect
+(pre-sales), Specialist Seller.
+
+**Distinct-row union reclaim** — unions, not column sums, printed by the tool's TOTAL
+EFFECT section:
+
+| set | `other` / 294 | cohort / 886 |
+|---|---|---|
+| **`revenue_commercial` alone** | **68 (23.1%)** | **148 (16.7%)** |
+| ops, recommended (5) | 38 (12.9%) | 184 (20.8%) |
+| tech, recommended (9) | 9 (3.1%) | 67 (7.6%) |
+| all 15 recommended | 108 (36.7%) | 361 (40.7%) |
+
+**One value reclaims more of the current `other` bucket than the fourteen this project
+actually adopted.** Those fourteen reclaim 38 + 9 — **at most 47** together, and fewer as a
+union wherever the two families overlap — against **68** for `revenue_commercial` on its
+own. Residual `other` after all fifteen: **186**.
+
+### The structural argument, which matters more than the count
+
+**`ROLE_TRACK` has `revenue_operations`. `ARCHETYPE` has no commercial value at all.**
+`extract.ARCHETYPE`'s own first line is the admission — `# The original twelve. All
+software engineering.` — and the fourteen added by task 11 are five ops and nine tech.
+Nothing in the tuple names commercial work.
+
+So a **Deal Desk Analyst gets a coherent `role_track` and can only be `other` at the finer
+grain.** That is not a missing value in a list; it is **two vocabularies meant to be one
+space at two grains, and on commercial work they are not.** The 35 `other` rows carrying
+`revenue_operations` measured above are that asymmetry, row by row.
+
+**This is why the recommendation is one value and not five.** Four other families were
+probed and have mass; none of them has this argument behind them. A count says *"here are
+some rows"*; the asymmetry says *"the system already believes this category exists and
+cannot express it."* And 12 → 26 is the move that has already been tried without a visible
+fall in `other` — adding five at once repeats it, at the exact point where § *The
+O\*NET/SOC escape hatch* says the alternative to a longer list is SOC.
+
+### Four families probed and deferred, with their counter-evidence
+
+Kept visible rather than dropped, on this document's own standard: the evidence *against* a
+value is the part a later reader cannot reconstruct. All four are still probed and still
+printed by the tool.
+
+| value | cohort raw/dedup/emp | other raw/dedup/emp | why deferred |
+|---|---|---|---|
+| `finance_accounting` | 28 / 27 / **19** | 22 / 21 / **16** | Real mass and real spread — the strongest of the four. Deferred, not refuted: FP&A Analyst, Billing Analyst, Order Operations Analyst, Treasury Associate. Adding it is a second value on count alone, which is the thing 12 → 26 already tested. |
+| `strategy_bizops` | 31 / 25 / **19** | 26 / 22 / **17** | Same shape, and worse defined: *Strategy Associate*, *Competitive Intelligence Lead*, *Strategic Partnerships Manager* and *GTM Strategy and Operations Associate* are not one family, and the last of them is already `revenue_commercial`'s. A value that overlaps the proposed one is the wrong second value. |
+| `people_recruiting` | 13 / 12 / **10** | 8 / 7 / **7** | Distributed but thin — 12 dedup postings. `admin_ops` already catches People Operations Coordinator; what it misses is recruiting proper, and the corpus has a handful. |
+| `clinical_care` | 58 / **11** / **3** | 56 / **9** / **1** | **Refuted, not deferred.** 56 raw `other` matches collapse to **one employer** — Sailor Health. This is the employer-spread rule doing exactly the job it was written for, and the reason `emp` is read first. |
+
+The six dropped candidates together would reclaim **113 of 294 (38.4%)** — a figure that
+looks decisive until it is read through the `emp` column: **56 of those rows are Sailor
+Health.** Net of the fifteen recommended values, the six add **92** rows.
+
+### What applying it will need
+
+Recorded so the next `FACTS_VERSION` bump is not surprised. Per
+`config/extraction-policy.json`'s `_not_a_version_note`, the vocabulary lands and the bump
+does not, so that one re-extraction pays for both.
+
+- A weight in **both** `config/criteria.json` and `config/pursuit-criteria.json`.
+  `tests/test_match.py:484` asserts `set(extract.ARCHETYPE)` equals the priced set
+  *exactly*, so a new value fails the suite until both are edited — by design, per
+  `match.py`'s `archetype:<value>:unpriced` path.
+- The count at `tests/test_extract.py:720`, 26 → 27.
+- A `FACTS_VERSION` bump, because both vocabularies are interpolated into `_INSTRUCTIONS`
+  (`extract.py:322`), whose own comment asks for one on exactly this kind of change.
+- **Not a cost decision.** Task 12 measured the full re-extraction at 863 calls / 28m31s /
+  ~\$0.33 (`docs/facts-v3-diff.md`). The objection is the labelling session, and it expires
+  when the session does.

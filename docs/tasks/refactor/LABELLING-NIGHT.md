@@ -166,9 +166,30 @@ and nothing about them is provisional — what is missing is the scale to read a
 against.
 
 **What unblocks it is small and specific: one second person answering the ten `overlap`
-rows.** Not the set — the block. Roughly **10 minutes**, they never see the other 190
-postings, and the queue serves the overlap block first to everyone by construction. That
-is the whole of what stands between a solo sitting and a printable report.
+rows.** Not the set — the block. ~~Roughly **10 minutes**~~ — **~16 minutes, measured; see
+the correction below** — they never see the other 190 postings, and the queue serves the
+overlap block first to everyone by construction. That is the whole of what stands between a
+solo sitting and a printable report.
+
+> **Corrected 2026-07-31, and the ask is now READY TO SEND.** Three figures have stood on
+> this line and all three are kept:
+>
+> | figure | where it came from | status |
+> |---|---|---|
+> | ~~**10 minutes**~~ | a guess, written before anything was labelled | superseded |
+> | ~~**~26 minutes**~~ | measured 2026-07-31 at **n=4 intervals** | superseded — it was taken inside the warm-up curve |
+> | **~16 minutes** | measured at **n=29 intervals**, median 93 s/posting | **current** |
+>
+> Instrument: `python3 tools/label-findings.py --timing`, from `backend/`. Re-run it before
+> quoting any of this; the figure has moved once per sitting so far.
+>
+> **And the owner's half is already done.** All ten `overlap` rows — queue positions 0–9 —
+> **are answered**, so the second labeller's ten rows complete the inter-annotator ceiling
+> **immediately**, with no further work from the owner and no coordination beyond sending
+> the link. The ask is ten postings and about a quarter of an hour, and it is the only thing
+> standing between the labels already collected and a printable report.
+>
+> **It is not a ten-minute favour, and asking for it as one will fail on contact.**
 
 The other route is the **intra**-annotator ceiling — the owner re-answering those same ten
 rows seven days later — and it is deliberately *not* wired to the report's ceiling column.
@@ -180,6 +201,13 @@ See `tranche_five/29-labelling-session.md`, § *Deviation* and § *Optional foll
 first automatically, and they are the exact ten a second person has to answer. Everything
 after that is a trade you can make with a real number instead of a guess.
 
+> **DONE, 2026-07-31 — and the trade can now be made with the real number.** Two sittings
+> the same night put **186 label rows over 31 postings** into `eval_labels`, one labeller
+> (`u_090b0ad12e99`), round 1 only, window `02:56:05`–`05:25:27` UTC. **Queue positions
+> 0–30 are contiguous, so the ten `overlap` rows are complete.** By stratum: surfaced 19,
+> gate_rejected 9, below_floor 3. `next_item()` resumes at position 31; this paragraph is
+> the record of the first ten, not an instruction to redo them.
+
 **Recommended: ~60 in the first sitting, 110 as the target across two or three, all 200
 only if the recall question earns it.** The strata are interleaved — every 50-row block is
 roughly the set's own 50/25/25 — so **any prefix is a proportional miniature and there is
@@ -187,11 +215,52 @@ no wrong place to stop.** `next_item()` resumes exactly where you stopped, indef
 The power table behind those three numbers, read against task 06's 76% and 94%
 self-consistency floors, is in `HANDOFF.md` § *How many to label*.
 
+> **Priced 2026-07-31, at a measured 93 s/posting.** The three targets above were chosen
+> without a rate; here is what each one costs. **Nothing in the recommendation changes** —
+> the numbers are cheaper than this file implied, not different.
+>
+> | target | cost at 93 s |
+> |---|---|
+> | twenty minutes | **13 postings** |
+> | ~60, the first sitting | **1.6 h** |
+> | 110, the target | **~2.8 h** across two or three sittings |
+> | ≥100, the DoD's own line | **2.6 h** |
+> | all 200 | **5.2 h** |
+>
+> Figures computed at the earlier **154 s** — *"twenty minutes ≈ 8 postings"*, *"100 ≈ 4.3
+> hours"* — are superseded and are left in place in
+> `tranche_five/29-labelling-session.md` § *Findings, 2026-07-31*, E, with the n each was
+> taken at. **154 s was measured over the first four intervals of the first sitting and the
+> labeller was still warming up:** first quartile 137 s, last quartile 83 s at n=29.
+
 **The deliverable that is not labels: the per-posting time.** Every budget figure in this
 run — *"~20 items each"*, *"~28 at five labellers"* — was computed against a **five**-question
 form. The form asks **six**, and the per-posting time has never been measured, only
-assumed. **Write the stopwatch reading into `HANDOFF.md` when you stop.** It is what turns
-every future Builder-session estimate from a guess into arithmetic.
+assumed. ~~**Write the stopwatch reading into `HANDOFF.md` when you stop.**~~ It is what
+turns every future Builder-session estimate from a guess into arithmetic.
+
+> **Discharged 2026-07-31 — it is a command now, not a thing to write down.** Run it from
+> `backend/`:
+>
+> ```bash
+> python3 tools/label-findings.py --timing     # the stopwatch reading
+> python3 tools/label-findings.py              # every section
+> ```
+>
+> Read-only, no LLM, no API key. It prints the intervals **raw and in order** before any
+> statistic, calls anything over `--break-secs` (default 600) a break in the sitting and
+> excludes it, and prints both figures so the exclusion can be argued with — a median taken
+> across a 96-minute gap is *"a statistic about dinner"*, and this sitting contained exactly
+> one such gap. It also splits first quartile against last, because *"is there a warm-up
+> curve"* is the question a growing label count is supposed to answer and one median cannot
+> show it.
+>
+> **Re-derive it after each sitting; do not re-quote it from here.** The instruction to
+> re-derive has been issued three times in this run and re-quoted three times, which is the
+> whole reason the tool exists — the four lines of SQL are kept so the next session runs a
+> command instead of writing them. **It deliberately prints no model-vs-human agreement**;
+> `evals label report` still exits 2 for as long as there is one labeller and this is not a
+> route around that.
 
 **Use the abstention.** *"I can't tell from this posting"* is stored as NULL and dropped
 from the agreement rates rather than folded in, because *"folding them in as a value would
@@ -413,9 +482,11 @@ one person gives the same answer twice. It is the *weaker* of the two ceilings; 
 is the better one. Round 2 is kept because attrition may leave the weaker one as the
 only ceiling with any usable n.
 
-**Cost: ~10 more minutes per labeller who does it**, on the overlap block only — 10
-postings, not 200. `progress()` counts round 2 against the overlap block precisely so
-the footer does not read "3 / 200" on a ten-row queue.
+~~**Cost: ~10 more minutes per labeller who does it**~~ — **~16 minutes at the measured 93
+s/posting, and read that as an upper bound**, since a re-read of a posting seen before is
+plausibly faster and nobody has measured it. On the overlap block only — 10 postings, not
+200. `progress()` counts round 2 against the overlap block precisely so the footer does not
+read "3 / 200" on a ten-row queue.
 
 **It cannot be run sooner than 7 days after their first label, and the delay IS the
 measurement.** `labels.ROUND_TWO_DELAY_DAYS = 7` (~~`backend/evals/labels.py:1007`~~ —

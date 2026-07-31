@@ -21,9 +21,12 @@ TWO POPULATIONS, BECAUSE THE SUPERSET SERVES BOTH
             gated on ACTIVE profiles and `pursuit` is inactive, so most of these
             rows have NO job_facts and the analysis must run off title and
             description_text rather than off extracted values.
-    other   every job_facts row whose role_archetype is already 'other'. These
-            are the postings today's twelve values cannot name, and any new
-            value's worth is partly how many of them it reclaims.
+    other   every job_facts row at the CURRENT facts_version whose
+            role_archetype is already 'other'. These are the postings today's
+            vocabulary cannot name, and any new value's worth is partly how
+            many of them it reclaims. The version filter was missing until
+            2026-07-31 and its absence made every reclaim figure this tool
+            printed an overstatement -- see load_other().
 
 WHY THE CLUSTERING READS TITLES AND NOT DESCRIPTIONS
     Measured, not assumed. Clustering title+description at any description
@@ -204,13 +207,38 @@ def load_cohort(conn, profile, max_tier):
     return [Posting(*r) for r in rows], row
 
 
-def load_other(conn):
-    """Every job_facts row the current vocabulary could only call 'other'."""
-    return [Posting(*r) for r in conn.execute(
-        """SELECT j.id, j.title, j.company_name, j.platform, j.description_text
-             FROM job_facts f JOIN jobs j ON j.id = f.job_id
-            WHERE f.role_archetype = 'other'"""
-    ).fetchall()]
+def load_other(conn, facts_version):
+    """Every job_facts row the CURRENT vocabulary could only call 'other'.
+
+    THE facts_version FILTER IS THE WHOLE CORRECTNESS OF THIS FUNCTION, and it
+    was missing until 2026-07-31. Without it the query returns rows extracted
+    under EVERY vocabulary this project has ever had, and the reclaim counts
+    below are then answers to a question nobody asked.
+
+    Measured on the live table the day the filter was added:
+
+        facts_version 2   402 'other' of 5,024   (the TWELVE-value vocabulary)
+        facts_version 3   294 'other' of   940   (the twenty-six)
+
+    So 58% of the unfiltered population never had access to the fourteen
+    values this tool exists to evaluate. `hardware_embedded` is the clearest
+    case: 54 raw 'other' rows match its title probe unfiltered and only THREE
+    of them are v3. The other ~50 are not evidence that a value is missing --
+    they are rows that predate the value and would be reclaimed by
+    re-extraction alone. Reading them as reclaim credits a new value with work
+    a re-run already does.
+
+    Pass an explicit version to ask a historical question on purpose; the
+    default is schema.FACTS_VERSION, so the honest question is the cheap one.
+    """
+    sql = """SELECT j.id, j.title, j.company_name, j.platform, j.description_text
+               FROM job_facts f JOIN jobs j ON j.id = f.job_id
+              WHERE f.role_archetype = 'other'"""
+    params = ()
+    if facts_version is not None:
+        sql += " AND f.facts_version = %s"
+        params = (facts_version,)
+    return [Posting(*r) for r in conn.execute(sql, params).fetchall()]
 
 
 def collapse_duplicates(rows):
@@ -444,6 +472,44 @@ CANDIDATES = {
         r"\b(developer advocate|developer relations|devrel|developer experience|"
         r"technical evangelist|community engineer|technical writer|"
         r"documentation)\b"),
+    # -- COMMERCIAL. Added 2026-07-31, probed and NOT adopted; the evidence is
+    #    in docs/role-track-derivation.md, "What the first labels showed".
+    #
+    #    These exist because ARCHETYPE has no commercial value at all -- its own
+    #    first line admits it, "The original twelve. All software engineering."
+    #    -- while ROLE_TRACK already has `revenue_operations`. The two
+    #    vocabularies are supposed to be the same space at two grains, and on
+    #    commercial work they are not: a Deal Desk Analyst gets a coherent
+    #    track and can only be `other` at the finer grain. That asymmetry is a
+    #    structural argument, not a count, and it is why revenue_commercial is
+    #    the one recommendation rather than one of five.
+    #
+    #    clinical_care is kept as a DROP because it is this file's own
+    #    employer-spread rule doing its job: 56 raw 'other' matches collapse to
+    #    9 dedup at ONE employer, a telehealth hiring spree posted per US
+    #    state. Read `emp` first, exactly as the header says. --
+    "revenue_commercial": (
+        "commercial", "recommend",
+        r"\b(sales|deal desk|renewals?|account executive|account manager|"
+        r"business development|sales development|partner|partnerships|"
+        r"revenue|gtm|go.to.market|quota|enablement|commercial|"
+        r"development representative|sdr|bdr)\b"),
+    "finance_accounting": (
+        "commercial", "drop",
+        r"\b(fp&a|financial analyst|finance|accounting|accountant|controller|"
+        r"treasury|order operations|billing|equity analyst|audit)\b"),
+    "people_recruiting": (
+        "commercial", "drop",
+        r"\b(recruit|talent|candidate experience|people operations|people ops|"
+        r"human resources|hris|compensation|onboarding specialist)\b"),
+    "strategy_bizops": (
+        "commercial", "drop",
+        r"\b(strategy|strategic|chief of staff|competitive intelligence|"
+        r"business operations|bizops|corporate development)\b"),
+    "clinical_care": (
+        "commercial", "drop",
+        r"\b(clinical|psychologist|psychiatr|telehealth|therapist|clinician|"
+        r"nurse|registered nurse|\brn\b|physician|patient care|social worker)\b"),
 }
 
 
@@ -532,7 +598,7 @@ def report_archetypes(cohort, other, args):
           f"{'raw':>6}{'dedup':>8}{'emp':>7}")
     print("  " + "-" * (len(header) - 2))
 
-    for family in ("ops", "tech"):
+    for family in _families():
         print(f"  -- {family} --")
         for name, (fam, status, pattern) in CANDIDATES.items():
             if fam != family:
@@ -576,6 +642,21 @@ def _union(rows, names):
     return hit
 
 
+def _families():
+    """Family order, taken from CANDIDATES rather than written out again.
+
+    It was written out again -- `("ops", "tech")`, in two places -- and a
+    third family added in 2026-07-31 was probed, counted, and then silently
+    not printed, because neither loop knew about it. A hardcoded list of the
+    things a dict contains is a second definition of the dict.
+    """
+    seen = []
+    for fam, _st, _p in CANDIDATES.values():
+        if fam not in seen:
+            seen.append(fam)
+    return seen
+
+
 def _names(family=None, status=None):
     return [n for n, (fam, st, _p) in CANDIDATES.items()
             if (family is None or fam == family)
@@ -595,7 +676,7 @@ def report_total_effect(cohort, other, args):
 
     rec, dropped = _names(status="recommend"), _names(status="drop")
     print(f"  RECOMMENDED ({len(rec)}):")
-    for family in ("ops", "tech"):
+    for family in _families():
         names = _names(family=family, status="recommend")
         print(f"    {family:<5} {', '.join(names)}")
     print(f"  DROPPED ({len(dropped)}): {', '.join(dropped)}")
@@ -610,10 +691,13 @@ def report_total_effect(cohort, other, args):
     print(f"  {'set':<34} {'other/' + str(len(other)):>14} "
           f"{'cohort/' + str(len(cohort)):>15}")
     print("  " + "-" * 66)
-    rows = [
-        ("ops, recommended", _names("ops", "recommend")),
-        ("ops, all proposed by task 11", _names("ops")),
-        ("tech, recommended", _names("tech", "recommend")),
+    # Per-family rows are derived rather than listed, for the same reason
+    # _families() exists: a family added to CANDIDATES and left out of a
+    # hardcoded list here is a candidate that is probed and never totalled.
+    rows = [(f"{family}, recommended", _names(family, "recommend"))
+            for family in _families()]
+    rows.insert(1, ("ops, all proposed by task 11", _names("ops")))
+    rows += [
         ("ALL RECOMMENDED", rec),
         ("dropped candidates only", dropped),
     ]
@@ -676,15 +760,24 @@ def main():
                    help="example titles printed per cluster and per candidate")
     p.add_argument("--tracks", action="store_true", help="clustering only")
     p.add_argument("--archetypes", action="store_true", help="candidate probe only")
+    p.add_argument("--facts-version", type=int, default=schema.FACTS_VERSION,
+                   help="facts_version of the 'other' population probed. "
+                        "Defaults to the current one, because a row extracted "
+                        "under an older vocabulary is not evidence that a "
+                        "value is missing. Pass 0 for every version.")
     args = p.parse_args()
+    facts_version = args.facts_version or None
 
     do_tracks = args.tracks or not args.archetypes
     do_arch = args.archetypes or not args.tracks
 
     conn = dbconn.connect_or_exit("derive-role-tracks", schema=schema.SCHEMA)
     cohort, profile_row = load_cohort(conn, args.profile, args.max_tier)
-    other = load_other(conn)
+    other = load_other(conn, facts_version)
     reps, blocks = collapse_duplicates(cohort)
+    print(f"\n  'other' population: facts_version"
+          f" {facts_version if facts_version else 'ALL (historical)'},"
+          f" {len(other)} rows")
 
     report_corpus(cohort, profile_row, blocks, reps, args)
     if do_tracks:

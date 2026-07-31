@@ -41,7 +41,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | | Task | Lands | |
 |---|---|---|---|
 | 10 | [Description-first relevance gate](tranche_two/10-description-first-gate.md) | AI-tool vocabulary matched against `description_text` — **876 rows eligible for the cohort, 573 newly, 13.2/day; precision 10.0% vs task 05's 6.7%**, [`docs/pursuit-description-gate.md`](../../pursuit-description-gate.md). **Amended 2026-07-29:** it handed the description path a *title* entry-level vocabulary, so the conjunction could not be satisfied on a description — mock gate recall 48.3%. Fixed in Cross-cutting below; the figures above are unrestated | done |
-| 11 | [Archetype superset, `role_track`, missingness](tranche_two/11-archetype-superset-role-track.md) | 12 archetypes → **26**, derived from the corpus; provisional 9-value `role_track`; `normalize()` stops laundering absence into sentinels — **`other` was mostly a TECH gap: 203 of 427 reclaimed by tech values, 54 by ops**, [`docs/role-track-derivation.md`](../../role-track-derivation.md) | done |
+| 11 | [Archetype superset, `role_track`, missingness](tranche_two/11-archetype-superset-role-track.md) | 12 archetypes → **26**, derived from the corpus; provisional 9-value `role_track`; `normalize()` stops laundering absence into sentinels — **`other` was mostly a TECH gap: 203 of 427 reclaimed by tech values, 54 by ops**, [`docs/role-track-derivation.md`](../../role-track-derivation.md). **Amended 2026-07-31:** that reclaim was measured over every `facts_version` the project has had — 58% of those rows predate the vocabulary being evaluated — so it describes the TWELVE-value corpus. At `facts_version = 3` the same nine tech values reclaim **9 of 294**, and the vocabulary is re-derived: one further value, `revenue_commercial`, is **proposed and deliberately not applied** while `pursuit-v1` is being labelled. D64, D65 | done |
 | 12 | [`FACTS_VERSION` bump and re-extract](tranche_two/12-facts-version-bump.md) | one bump carrying 11's changes — **and the extraction gate retargeted to `pursuit`, which took the bump from 5,317 rows to 863. `other` ROSE to 31.1%**, [`docs/facts-v3-diff.md`](../../facts-v3-diff.md) | done |
 | 13 | [Cohort criteria profile](tranche_two/13-cohort-criteria-profile.md) | entry-level target, `uses_ai_tools` weighted above `builds_llm_features` — **done; 144 matched of 859. DoD 122-123 partially unmet and deliberately not tuned into being met: 16/20 above floor, 10/20 in the top 20** | done |
 
@@ -79,7 +79,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 
 | | Task | Lands | |
 |---|---|---|---|
-| 29 | Two-axis labelling session | Axis A extraction correctness, Axis B Builder preference | todo |
+| 29 | [Two-axis labelling session](tranche_five/29-labelling-session.md) | Axis A extraction correctness, Axis B Builder preference — **labelling has started: 186 label rows over 31 of the 200 postings, all ten `overlap` rows answered, and ONE labeller. `evals label report` still refuses to report, correctly: with one labeller there is no inter-annotator ceiling to denominate a model score against** | in progress |
 
 ## Phase 7 — Ranking and display
 

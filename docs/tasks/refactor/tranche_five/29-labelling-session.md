@@ -231,7 +231,27 @@ Line by line, and the split is not where it looks:
 | labellers blind to `fit_score` | **yes** | met structurally and independently of turnout — `backend/webapp/label.py` references neither `fit_score` nor `match_score` anywhere (correction 7) |
 | three quantities per field, per platform | **NO** | the report refuses. See below |
 | sample pinned, never-train | **already met** | `pursuit-v1`, `sha256(sorted job_id)` = `afb2d58f…0cd1763` |
-| the gate decision recorded | **partial** | the `gate_rejected` rows can be *read* by one person and a branch *drafted*; it cannot be **settled**, because with no ceiling there is no scale to read a disagreement rate against |
+| the gate decision recorded | ~~**partial**~~ **evidence collected, decision still open** | the `gate_rejected` rows can be *read* by one person and a branch *drafted*; it cannot be **settled**, because with no ceiling there is no scale to read a disagreement rate against. **Updated 2026-07-31: the evidence now exists — see § *Findings, 2026-07-31 (second sitting)*, B** |
+
+> **Re-checked against 31 labelled postings, 2026-07-31 (second sitting).** The table above
+> was written before the sitting; the rows below are what it looks like after it, and the
+> original wording is left standing because **none of the NOs became yeses**. Instrument:
+> `tools/label-findings.py`, 186 label rows / 31 postings / 1 labeller / round 1. Lettered
+> references below are to § *Findings, 2026-07-31 (second sitting)* at the end of this file,
+> **not** to the section of the same letters above it.
+>
+> | DoD line | before the sitting | after 31 postings |
+> |---|---|---|
+> | ≥100 postings, from ≥5 labellers | **NO** | still **NO** — **31 postings from 1 labeller**. The posting count is now demonstrably reachable (§ A: 100 is ~2.6 h, not the ~4.3 h this file last recorded); the labeller count is not reachable alone at any effort |
+> | 10 overlapped, agreement computed | **NO** | still **NO** — **all ten `overlap` rows are answered**, by one person. Agreement remains *structurally* uncomputable: `labels.inter_annotator()` needs two distinct `labeller_id`s on the same item |
+> | all strata represented | **yes** | still **yes**, and now with counts rather than by construction: **surfaced 19, gate_rejected 9, below_floor 3** |
+> | blind to `fit_score` | **yes** | unchanged — met structurally, independently of turnout |
+> | three quantities per field, per platform | **NO** | still **NO**, and the report still refuses. `tools/label-findings.py` does not change this and deliberately prints no model-vs-human number |
+> | sample pinned, never-train | **already met** | unchanged, and now **irreversibly**: `eval_labels` holds rows, so `redraw_refusal()` refuses every redraw |
+> | the gate decision recorded | **partial** | **evidence collected, decision still open** — three non-surfaced postings the labeller would apply to (§ B). That is evidence for the *"gate too tight"* branch of § *Gates*; it is not that branch taken |
+>
+> **Nothing in the DoD was tuned.** The first sitting's deviation stands as written; this is
+> the same deviation measured.
 
 **The report is EXPECTED to refuse, and that is not a defect to work around.**
 `evals label report` exits 2 with `evals label report REFUSED:` for as long as there is one
@@ -523,6 +543,10 @@ the sixth question — **this is a measurement of the six-question form, not a f
 to a five-question one**, and it should be re-derived rather than re-quoted once there are
 more rows.
 
+> **SUPERSEDED 2026-07-31 (second sitting): the figure is ~16 minutes, not ~26.** Left
+> standing because it was right for n=4 and the drift is the lesson — see § *Findings,
+> 2026-07-31 (second sitting)*, A and E.
+>
 > **Correction to § *Deviation — the first sitting is SOLO*, 2026-07-31.** That section
 > calls the second labeller's contribution *"one second person and ten minutes"*, and
 > `HANDOFF.md` says it twice more. **At the measured rate the ten `overlap` rows are ~26
@@ -547,3 +571,212 @@ CLI-vs-database agreement, and the join). Neither went down.
 
 **Note for task 34:** `CLAUDE.md` still says *"It was at 263 tests"*. The measured figure is
 **1166**. That is stale by roughly 900 and is a documentation defect, not a regression.
+
+## Findings, 2026-07-31 (second sitting) — the timing number reverses, the recall branch gets its evidence, and the vocabulary gap is not the shape finding A recorded
+
+**Recorded 2026-07-31, from the sitting itself rather than from a design session.** The
+section above was written when `eval_labels` held **30 rows over 5 postings**; the same
+labeller kept going the same night. **This is a second sitting continuing the first, not a
+second sitting a day later** — the window is contiguous apart from one break, and the file
+above records only its first ten minutes.
+
+Every figure below was re-derived on **2026-07-31** against the live database by
+**`backend/tools/label-findings.py`**, a read-only tool added this session — no LLM, no API
+key, no write of any kind. Read its module docstring before quoting anything from it; it
+exists because *"an instruction to re-derive that requires someone to write four lines of
+SQL first is an instruction that decays into a quotation,"* and this file is one of the two
+documents that decayed. **Run the tool; do not re-quote this section.**
+
+State at the time of writing, from `tools/label-findings.py`:
+
+| quantity | value |
+|---|---|
+| label rows | **186** |
+| distinct postings | **31** |
+| labellers | **1** (`u_090b0ad12e99`) |
+| rounds | **1** only |
+| by stratum | surfaced **19**, gate_rejected **9**, below_floor **3** |
+| window | `2026-07-31T02:56:05` – `05:25:27` UTC |
+| queue positions answered | **0–30, contiguous** — so the ten-row `overlap` block (positions 0–9) is **complete** |
+
+**That last row is the operationally important one.** The overlap block is answered in
+full, so a second labeller's ten rows produce the inter-annotator ceiling **immediately**,
+with no further work from the owner. See E.
+
+Nothing here changes the gate, the form, the drawn sample, the DoD, or any weight.
+
+### A. The stopwatch reading, re-derived at n=29 — and it moves the OTHER way
+
+**Instrument:** successive `MIN(labelled_at)` per `job_id`, in submit order —
+`tools/label-findings.py --timing`. The same instrument the first sitting used, at 7.25x
+the n.
+
+Raw intervals, seconds, in order (n=30):
+
+```
+ 87  170  247  110 5765   81  178   83  133   93
+125   74  113  131  119  171  116   80   69  251
+ 43  101   38   78   50   67   91   76   73  149
+```
+
+**The 5,765 s interval is a break in the sitting, not a posting that took 96 minutes**, and
+it is excluded at the tool's default `--break-secs 600`. Both figures are printed so the
+exclusion can be argued with:
+
+| | median | mean | n |
+|---|---:|---:|---:|
+| including breaks | 97 s | **299 s** | 30 |
+| **excluding breaks** | **93 s** | **110 s** | 29 |
+
+**This overturns the caveat that finding E of the section above attached to its own
+number.** E ends: *"the fastest interval is the first, which is the opposite of a warm-up
+curve and is the thing to re-check as the count grows."* Re-checked at n=29:
+
+| | mean |
+|---|---:|
+| first quartile (7 intervals) | **137 s** |
+| last quartile (7 intervals) | **83 s** |
+
+**The labeller speeds up.** There is a warm-up curve, and E's four intervals — 87, 170,
+247, 110, mean **153.5 s** — sit **entirely inside it**. E asked for exactly this re-check
+and the re-check reversed its note. A rate taken from the first few postings overstates the
+cost of the rest by roughly 65%.
+
+**Budgets at the 93 s median**, all of them replacing figures computed at 154 s:
+
+| claim, and where it appears | at 154 s (superseded) | **at 93 s** |
+|---|---|---|
+| the ten `overlap` rows, a second labeller (§ *Deviation*) | ~26 min | **~16 min** |
+| *"Twenty minutes, in person, in one sitting"* (§ *Logistics*) | ~8 postings | **13 postings** |
+| ~60 in the first sitting (`LABELLING-NIGHT.md` § *A6*) | — | **1.6 h** |
+| ≥100 postings, one person (Definition of done) | ~4.3 h | **2.6 h** |
+| all 200 | — | **5.2 h** |
+
+**The caveat that survives both derivations:** submit-to-submit includes reading time, and
+the first posting's own reading time is not in the figure at all — so the true per-posting
+rate is *higher* than 93 s, not lower. This remains a measurement of the **six**-question
+form, not a factor applied to a five-question one.
+
+> **Correction to § *Findings, 2026-07-31*, finding E — 2026-07-31 (second sitting).** E's
+> **154 s** was correct arithmetic on the four intervals it had, and it is left standing
+> above rather than edited. **At n=29 the figure is 93 s and every budget derived from 154 s
+> is out by ~1.65x in the optimistic direction.** The lesson is not that E was careless — it
+> is that **a rate measured over the first four postings of a first sitting is a measurement
+> of a warm-up curve**, and this file had no way to know that until the count grew. E's own
+> instruction, *"it should be re-derived rather than re-quoted once there are more rows,"*
+> is the thing that produced this correction. Both numbers, and the n each was taken at,
+> stay visible.
+
+**Five tests pin this** — `backend/tests/test_label_findings.py` — including the
+break-exclusion threshold and the curve's refusal to invent a trend when the sitting is too
+short to show one.
+
+### B. The recall question is now LIVE, and it is the DoD's open branch
+
+**Instrument:** `eval_labels.would_apply` × `eval_label_items.stratum`, with Wilson
+intervals — `tools/label-findings.py --recall`. **This is a human answer against a PIPELINE
+decision, not against the model.** It is a recall bound; it needs no ceiling and it is not
+an agreement rate.
+
+| stratum | yes | no | n | rate | 95% CI |
+|---|---:|---:|---:|---:|---|
+| surfaced | 6 | 13 | 19 | 32% | [0.15, 0.54] |
+| below_floor | 1 | 2 | 3 | 33% | [0.06, 0.79] |
+| gate_rejected | 2 | 7 | 9 | 22% | [0.06, 0.55] |
+
+**Three postings the pipeline did not surface, that the labeller would apply to:**
+
+| posting | stratum | what the pipeline knew |
+|---|---|---|
+| **Brex — AI Engineer, Ecosystem** | below_floor | `ai_involvement = builds_llm_features` |
+| **Ramp — Software Engineer, Accounting** | gate_rejected | **no `job_facts` row at all** |
+| **Twilio — Frontend Software Engineer** | gate_rejected | `ai_involvement = none` |
+
+§ *Gates* above carries the branch *"Gate-rejected bucket contains good roles → task 10's
+gate is too tight"*, and the DoD carries *"The gate decision above is recorded, including
+which branch was taken."* **This is evidence for that branch. It is recorded as evidence,
+not as a decision taken**, and § *Deviation*'s line moves from *partial* to **evidence
+collected, decision still open** accordingly.
+
+**Two caveats, stated beside it rather than after it:**
+
+1. **The three intervals overlap almost completely.** [0.15, 0.54], [0.06, 0.79] and
+   [0.06, 0.55] cannot tell the strata apart at these n. Nothing here says gate_rejected is
+   *worse* than surfaced; what it says is that the gate-rejected bucket is **not empty of
+   roles the owner would apply to**, which is the branch's own trigger condition.
+2. **n=1 labeller, and that labeller is a software engineer by background.** Two of the
+   three are plain software-engineering roles. That is precisely the confound the
+   `prior_domain` column of finding C above exists to decompose — and it is
+   **undecomposable at one labeller**, whatever the column holds.
+
+### C. The vocabulary gap, measured — and it is not the shape finding A recorded
+
+**Instrument:** the humans' own `role_track` / `role_archetype` answers —
+`tools/label-findings.py --vocabulary`. **Population: 31 labelled postings of a stratified
+200-row eval set.** Not the cohort corpus; any comparison across the two is a comparison of
+different populations and has to say so.
+
+| answer | count | rate | 95% CI |
+|---|---:|---:|---|
+| `role_track = no_track_fits` | **13 of 31** | 42% | [0.26, 0.59] |
+| `role_archetype = other` | **17 of 31** | 55% | [0.38, 0.71] |
+
+**But the bucket is not the shape the section above predicts.** Only **2 of the 13** are
+commercial/sales roles — both of them Notion *Commercial Solutions Consultant*, the Japan
+and San Francisco variants — and **the owner answered `would_apply = no` to both**.
+Location is a plausible confound on that answer and it is not controlled for, so **this does
+not refute finding A**: the NYC posting A is about (`8ba8616b7c91d2a1b5112cdc`) is not in
+`pursuit-v1` and, per A3's last paragraph, can never be added.
+
+The rest of the 13 is a different list entirely: rotational and analyst programmes, ops
+specialists, non-software engineering (mechanical, laboratory, building), recruiting, and
+data annotation.
+
+**At corpus scale the commercial finding is corroborated, and that measurement lives in
+`docs/role-track-derivation.md`** — referenced by name deliberately, because restating its
+numbers here is how a figure acquires two homes and one of them goes stale. **The point that
+belongs to *this* file: the labelled sample and the corpus disagree in emphasis. They are
+different populations, and the 31-posting figure above is the one this file owns.**
+
+**No vocabulary change is proposed here.** Whether a value gets added is decided in
+`docs/role-track-derivation.md`, against the corpus, and not against 31 postings from one
+labeller.
+
+### D. What 31 postings did and did not meet
+
+Covered line by line, against the original wording, in the blockquote appended to §
+*Deviation — the first sitting is SOLO* above. The short form: **no NO became a yes.** The
+posting count is reachable and now demonstrably cheap (A); the labeller count is not; the
+report still refuses; and the only line that moved is the gate decision, from *partial* to
+*evidence collected, decision still open* (B). **The DoD lines are unchanged.**
+
+### E. What is now the cheapest unblock, sharpened to a number
+
+**All ten `overlap` rows are answered.** Positions 0–9 of `pursuit-v1` are complete, so the
+second labeller's contribution is exactly ten rows at ~93 s — **~16 minutes** — and the
+ceiling, hence the entire three-quantity report, lands the moment they finish. Not a second
+sitting, not a share of the 200, and no further work from the owner to prepare it.
+
+The figures this supersedes, both left visible where they appear: **"ten minutes"**
+(§ *Deviation*, and `LABELLING-NIGHT.md` § *A5*) was a guess made before anything was
+measured; **"~26 minutes"** (finding E's correction block above) was measured at n=4 inside
+the warm-up curve. **~16 minutes is the current figure and it is the one to ask with.**
+
+Everything else in § *Deviation*'s paragraph stands unchanged: it is still the cheapest
+unblock in this task, it still turns every refused field into a printable one, and it should
+still be arranged **before** a long solo sitting rather than after.
+
+**Still deliberately NOT recorded: model-vs-human agreement.** The tool that produced every
+figure above prints none, by design and in its own docstring — *"a number computed here and
+pasted into a document would have no exit code to protect the next reader."* Every quantity
+in A–C is either the humans' own answers (a marginal rate) or a human answer against a
+**pipeline** decision (a recall bound). **Neither is a per-item agreement rate and neither
+needs a ceiling.** `evals label report` still exits 2, still has no `--force`, and this tool
+is not a route around it.
+
+### Suites, re-run 2026-07-31 (second sitting)
+
+`backend/`, `python3 -m unittest discover -s tests -t .`: **`Ran 1171 tests`, `OK`** —
+**1166 → 1171**, five added in `backend/tests/test_label_findings.py`. `backend/webapp/`
+under its own `.venv`: **`Ran 93 tests`, `OK`**, untouched by this change. Neither went
+down.

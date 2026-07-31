@@ -1891,3 +1891,141 @@ table, and any change to a number in `pursuit-criteria.json`.
 
 Reversible — it is a direction with no code behind it. The one thing that is not free to
 reverse is risk 6, which is why it is called out with a deadline.
+
+## D64 — the commercial gap in `ARCHETYPE` is recorded as a proposal, not applied
+
+**2026-07-31.** `derive-role-tracks.py --archetypes` was re-run against the population it
+is now correct about (D65) and re-derives the archetype vocabulary at `facts_version = 3`
+for the first time since task 12 made 3 current. It recommends **one** new value,
+`revenue_commercial`. **Nothing was applied**: `extract.ARCHETYPE` is still 26 values and
+`schema.FACTS_VERSION` is still 3. The evidence, the four candidates dropped and the
+counter-evidence for each are in `docs/role-track-derivation.md` § *The commercial gap in
+`ARCHETYPE`, and the one value proposed for it*.
+
+**Decided: land the vocabulary and the rationale, and do not bump.** This follows
+`config/extraction-policy.json`'s `_not_a_version_note` exactly — a change that ought to
+move `FACTS_VERSION` deliberately does not, yet, so that the next bump carries it and one
+re-extraction pays for both.
+
+**The objection is that `pursuit-v1` is being labelled right now. Cost is not the
+objection.** Both vocabularies are interpolated into `_INSTRUCTIONS` (`extract.py:322`),
+the cache-keyed fixed prefix whose own comment asks for a `FACTS_VERSION` bump on exactly
+this kind of change — so applying the value means re-extracting the corpus, which rewrites
+the model answers the human labels exist to be read against, **mid-collection, on a set
+whose redraw window has closed.** 31 of 200 items are labelled and the overlap block is
+complete.
+
+**And the two halves could not be reconciled afterwards, which is what makes it
+irreversible rather than merely awkward.** `job_facts`' primary key is `job_id` **alone**
+(`schema.py`, `FACTS_TABLE` DDL) — one row per posting — so re-extraction *overwrites* the
+answers the first 31 postings were labelled beside; they are not kept at the old version.
+And `eval_labels` records `labelled_at`, `round_no` and `labeller_id` but **no
+`facts_version`** (`evals/labels.py`, `eval_labels` DDL), so nothing marks which extraction
+a label was formed against. This is D61's *"membership is pinned; the extraction under it
+is not"* done deliberately, across every axis-A field at once, instead of one row at a
+time by the cron job.
+
+**Cost, recorded so it is not re-derived as an objection:** task 12 measured the whole
+re-extraction at **863 calls / 28m31s / ~\$0.33**; `docs/facts-v3-diff.md` has the sizing.
+The bill is not what is being avoided.
+
+**What applying it will need, so the next bump is not surprised:** a weight in **both**
+`config/criteria.json` and `config/pursuit-criteria.json` — `tests/test_match.py:484`
+asserts `set(extract.ARCHETYPE)` equals the priced set *exactly*, so a new value fails the
+suite until both are edited — and the count at `tests/test_extract.py:720`, 26 → 27.
+
+**Rejected: bumping `FACTS_VERSION` now and treating the labels already collected as a
+separate round.** `round_no` means *this labeller saw this posting before* (D58, D62); it
+does not and cannot mean *these labels sit beside a different extraction*. With the old
+facts overwritten and nothing recording which version a label met, the pre-bump rows would
+be neither comparable to the post-bump rows nor separable from them. The vocabulary gain
+will still be there in a week; the reconcilability would not be.
+
+**Rejected: adding all five probed commercial values** — `finance_accounting`,
+`strategy_bizops`, `people_recruiting` and `clinical_care` alongside `revenue_commercial`.
+**12 → 26 is the move that has already been tried and was not followed by a fall in
+`other`** — task 12 reported it *rising*, though that comparison conflates a vocabulary
+change with a corpus change and is corrected in
+`docs/role-track-derivation.md`. What survives the correction is that fourteen new values
+bought no visible shrinkage, which is the part that matters
+here. Adding five at once repeats that, and at 26 hand-maintained values
+the stated alternative to growing the list is SOC, not a longer list
+(`docs/role-track-derivation.md` § *The O\*NET/SOC escape hatch*). One value carried by a
+structural argument is a different bet from five carried by counts. The four are **deferred
+with their evidence printed, not refuted** — `clinical_care` alone is refuted, by employer
+spread: 56 of its 56 `other` matches are one employer.
+
+**Rejected: reading the corpus `other` rate as a finding about Builder preference.**
+`other` is **31.3%** over the 940 `job_facts` rows at v3; the humans answered
+`role_archetype = other` on **17 of 31 = 55%** of labelled postings drawn from a stratified
+200-row eval set. **Two different populations, and neither is an agreement figure.**
+`tools/label-findings.py` prints them side by side and deliberately prints no
+model-vs-human comparison, for the reason D57 and D61 give: one labeller, no
+inter-annotator ceiling. The two also disagree in *emphasis* — only **2 of the 13** human
+`no_track_fits` rows are commercial (both Notion *Commercial Solutions Consultant*), while
+the corpus is where the commercial mass is. Treating either as corroboration of the other
+would be the false-corroboration shape D61 already records at 27.7%.
+
+Reversible: completely — two documents changed and no code. The bump is the part that
+would not have been.
+
+## D65 — `load_other()` probes the CURRENT `facts_version` by default
+
+**2026-07-31.** `tools/derive-role-tracks.py`'s `load_other()` had **no `facts_version`
+filter**. Its docstring said it returned every `job_facts` row *the current vocabulary*
+could only call `other`; it returned rows from **every vocabulary the project has ever
+had**. Correct on the day it was written — 2026-07-28, when the current version *was* 2 —
+and silently wrong from task 12's bump onward, which is the interval in which the tool
+exists to be re-run.
+
+**Measured.** Unfiltered, `other` is **696** rows, of which **402 (58%) are
+`facts_version = 2`** — the twelve-value vocabulary, which never contained the fourteen
+values the tool exists to evaluate. At v3 the population is **294 of 940**. The effect on
+the printed reclaim, raw `other` matches unfiltered → at v3:
+
+| candidate | unfiltered | v3 |
+|---|---:|---:|
+| `hardware_embedded` | 54 | **3** |
+| `infrastructure_compute` | 42 | **2** |
+| `engineering_management` | 32 | **0** |
+| `qa_test` | 22 | **0** |
+| `mobile` | 16 | **0** |
+| `business_systems` | 15 | **0** |
+| `developer_relations` | 11 | **0** |
+| `ai_operations` | 10 | **0** |
+| tech values, distinct-row union | 202 (29.0% of 696) | **9 (3.1% of 294)** |
+
+**Decided:** `--facts-version`, defaulting to `schema.FACTS_VERSION`. `--facts-version 0`
+means *all versions* and reproduces the historical figures exactly; the population is
+printed in the header of every run, so no figure from this tool can be quoted without it.
+
+**The conclusion this inverts is the point, not the flag.** Those 202 tech rows are
+`other` **under the twelve-value vocabulary**, on the author's tech corpus. Counting them
+as reclaim credits fourteen new values with rows the extractor is not being asked to
+re-judge: the v3 population is a different corpus as well as a different vocabulary — task
+12 retargeted the extraction gate to `pursuit` — and it contains almost none of that
+hardware and data-centre work, which is why the same probes match 3 and 2 rows there. So
+the remaining v3 `other` bucket is **not** evidence that the 26 values sit unused; it is a
+different and smaller gap. `docs/role-track-derivation.md`'s original headline — *"mostly
+a tech vocabulary gap"* — is true of the population it was measured on and does not
+describe the current one; it is corrected beside itself there, not swept.
+
+**Rejected: leaving the historical population as the default.** The default is what gets
+run, and what gets run is what gets quoted; a tool whose headline number silently answers a
+question about a vocabulary two versions old is the *"silence is this system's failure
+mode"* rule (CLAUDE.md) in documentation form.
+
+**Rejected: deleting the pre-bump rows, or filtering them out of the query permanently.**
+The v2 rows are the evidence for what task 11 actually decided, and a later reader who
+cannot reproduce the 427/696-row figures cannot audit that decision. Making the version an
+**explicit argument** keeps both populations reachable and forces whoever quotes a number
+to name which one it is over.
+
+**Two smaller fixes in the same file, recorded because each had hidden a whole family.**
+`_families()` derived its family list from two hardcoded `("ops", "tech")` tuples while
+`CANDIDATES` had grown a third — so the commercial family was probed, counted, and **never
+printed**. It now derives the list from `CANDIDATES`, as does the union-reclaim table's
+per-family rows. A hardcoded list beside a data structure that already knows the answer is
+the same defect twice.
+
+Reversible: yes, and cheaply — the flag makes every prior figure re-derivable.

@@ -1,24 +1,37 @@
 # Handoff — the `docs/tasks/refactor/` run
 
-Written 2026-07-28, and rolling — last updated after **the first labels were collected and
-the twenty-minute budget turned out to be wrong.**
+Written 2026-07-28, and rolling — last updated after **the sitting ran on to 31 postings,
+the stopwatch reading was overturned by the re-check this file asked for, and the recall
+question was earned.**
 
-**LABELLING HAS STARTED. 30 rows, 5 postings, one labeller, 2026-07-30 evening
-(`2026-07-31T02:56–03:06` UTC).** Three consequences, and the third is the one that changes
-plans: **the redraw window is CLOSED** — `redraw_refusal()` now refuses every redraw of
-`pursuit-v1`, identical digest included, so the drawn set is permanent; **`consensus()`
-promoting a majority of size one is happening now**, not hypothetically; and **the
-per-posting rate is measured at ~154 s, so twenty minutes is ~8 postings rather than ~20**
-and the "one second person, ten minutes" unblock is **~26 minutes**. See § *the stopwatch
-reading* below. The job is still to label — there is just less of it per sitting than every
-estimate in this file assumed.
+~~**LABELLING HAS STARTED. 30 rows, 5 postings, one labeller, 2026-07-30 evening
+(`2026-07-31T02:56–03:06` UTC).**~~ **SUPERSEDED 2026-07-31 — the sitting kept going.
+186 label rows / 31 distinct postings / one labeller (`u_090b0ad12e99`) / round 1 only,
+window `2026-07-31T02:56:05`–`05:25:27` UTC.** By stratum: `surfaced` 19, `gate_rejected`
+9, `below_floor` 3. **All ten `overlap` rows are complete** — `position` 0–30 is
+contiguous and the overlap block is 0–9 — so **a second labeller's ten rows now produce
+the inter-annotator ceiling immediately**, with nothing to label first. Instrument for
+every figure in this update: `python3 backend/tools/label-findings.py`, new this session,
+read-only, no API key.
+
+**Four consequences, and two of them are new.** (1) **The redraw window is CLOSED** —
+`redraw_refusal()` refuses every redraw of `pursuit-v1`, identical digest included, so the
+drawn set is permanent. (2) **`consensus()` promoting a majority of size one is happening
+now**, not hypothetically. (3) ~~**the per-posting rate is measured at ~154 s, so twenty
+minutes is ~8 postings rather than ~20** and the "one second person, ten minutes" unblock
+is **~26 minutes**~~ **— WRONG, and the correction goes the *cheap* way. At n=29 intervals
+the median is 93 s**: twenty minutes is **13 postings**, the ten `overlap` rows are
+**~16 minutes**, and the DoD's ≥100 postings is **~2.6 hours**. See § *the stopwatch
+reading*. (4) **The recall question is earned.** Three postings the pipeline did *not*
+surface are ones the labeller says they would apply to, two of them `gate_rejected` —
+which is the exact trigger § *How many to label* wrote for itself.
 
 ~~last updated after **task 29 stopped being blocked.**~~
 The OAuth credentials are in, `.env` is correct, the owner's account is on `pursuit`, and
 the sign-in chain was verified end to end without a browser. ~~**The next session's job is
 to label.**~~ See § *task 29 is UNBLOCKED* immediately below. Before that: **the
 intra-annotator ceiling was made reachable at all, `role_track` went on the form, and a
-paired bootstrap landed in `evals/metrics.py`** (suite 1070 → 1107 → **1166**). Before that: **task 29 was unblocked: four
+paired bootstrap landed in `evals/metrics.py`** (suite 1070 → 1107 → 1166 → **1171**). Before that: **task 29 was unblocked: four
 defects fixed in the sampler, the label tables created, and the 200-row set drawn, redrawn
 and pinned** (`c65d34b`, `2f64e08`, `90170d1`). Before that: **step 0, the gate fix**, implemented and
 written to the database (mock gate recall 48.3% → 89.7%, live tier ≤2 869 → 880); the
@@ -46,14 +59,24 @@ label. § *task 29 is UNBLOCKED* is the operational entry point and `LABELLING-N
 That is six too many, and the file has earned each one. ~~**The sixth is the newest and it
 is the only one that is an instruction rather than a warning**: the pre-flight is done and
 the next session labels.~~ **The seventh is the newest and it is a correction to an
-estimate this whole file plans against** — § *the stopwatch reading*. If you read nothing
-else:
+estimate this whole file plans against** — § *the stopwatch reading*, itself now corrected
+a second time and in the opposite direction. If you read nothing else:
 
-0. **Labelling has started and the drawn set is now permanent.** 30 rows, 5 postings, one
-   labeller. `redraw_refusal()` refuses every redraw of `pursuit-v1` from here on, so
+0. **Labelling has started and the drawn set is now permanent.** ~~30 rows, 5 postings, one
+   labeller.~~ **186 rows, 31 postings, one labeller, and the ten `overlap` rows are DONE**
+   (2026-07-31). `redraw_refusal()` refuses every redraw of `pursuit-v1` from here on, so
    nothing can be added to or removed from it — including postings later found to be
-   exactly the hard case worth labelling. **And a sitting is ~8 postings, not ~20**
-   (§ *the stopwatch reading*).
+   exactly the hard case worth labelling. ~~**And a sitting is ~8 postings, not ~20**~~
+   **A sitting is ~13 postings per twenty minutes, not ~8 and not ~20** — the 154 s that
+   figure came from was measured entirely inside a warm-up curve (§ *the stopwatch
+   reading*).
+
+   **THE SINGLE HIGHEST-VALUE ACTION IS ONE OTHER PERSON FOR ABOUT TWENTY MINUTES, and it
+   got both cheaper and more valuable in the same update.** The overlap block being
+   complete means the second labeller's ten rows are the *last* input the ceiling needs —
+   they do not have to be preceded by anything, and `evals label report` prints the moment
+   they land. At the re-derived 93 s that ask is **~16 minutes**, not the ~26 this file
+   said yesterday and not the ten it said three times before that.
 
 1. **Task 29 is the whole critical path** (§ *what is blocked*), and **its schema, its
    sampler and its 200-row set are now DONE** (§ *task 29's "two mechanical minutes"*).
@@ -135,7 +158,77 @@ is the fourth time this file has recorded the same failure. The `fastapi` claim 
 **ask which interpreter the observation was made with**, because "it fails to import" is a
 fact about an environment, not about a repo.
 
-## READ THIS FIRST: the stopwatch reading, and the budget is out by 2.5x
+## READ THIS FIRST: ~~the stopwatch reading, and the budget is out by 2.5x~~ the stopwatch reading was RE-DERIVED, and the correction goes the other way
+
+**Corrected 2026-07-31, later the same day, at n=29 intervals instead of n=4.** The
+section below it is kept in full, because it is what the run planned against for a day and
+because the way it was wrong is the reusable part.
+
+**The re-derived number: median 93 s, mean 110 s per posting** (n=29). Instrument:
+`python3 backend/tools/label-findings.py --timing` — successive `min(labelled_at)` per
+`job_id` in submit order, over all 31 labelled postings, one labeller (`u_090b0ad12e99`),
+`2026-07-31T02:56:05`–`05:25:27` UTC.
+
+Raw intervals, printed before any statistic because a sitting contains breaks:
+
+```
+ 87  170  247  110  5765   81  178   83  133   93
+125   74  113  131   119  171  116   80   69  251
+ 43  101   38   78    50   67   91   76   73  149
+```
+
+**One interval of 5,765 s is excluded as a break** at the tool's default `--break-secs
+600`. Both figures are printed so the exclusion can be argued with: **including** the
+break, median 97 s / mean 299 s (n=30); **excluding** it, **median 93 s / mean 110 s**
+(n=29). A mean over a list containing a 96-minute gap is a statistic about dinner.
+
+**There IS a warm-up curve, and it runs the direction the note below said it did not.**
+First 7 intervals mean **137 s**; last 7 mean **83 s**. The labeller speeds up. **The
+original n=4 sample — 87, 170, 247, 110, mean 153.5 s — is the first four intervals of
+this list and sits entirely inside the warm-up.** It was not a rate; it was the price of
+learning the form.
+
+| what this file says | ~~at 154 s~~ | at the median 93 s |
+|---|---|---|
+| *"Twenty minutes, in person, in one sitting"* → ~20 postings (`29` § *Logistics*) | ~~~8 postings~~ | **13 postings** |
+| *"one second person and ten minutes"*, the ten `overlap` rows | ~~~26 minutes~~ | **16 minutes** |
+| 60 postings | ~~~2.6 hours~~ | **1.6 h** |
+| ≥100 postings, one person (the DoD) | ~~~4.3 hours~~ | **2.6 h** |
+| 200 postings, one person | — | **5.2 h** |
+
+**THE IRONY IS THE FINDING, and it is worth one sentence.** The superseded section's own
+closing caveat reads *"the fastest interval is the first, which is the opposite of a
+warm-up curve and is the thing to re-check as the count grows."* It named the re-check,
+the re-check was run, and **the re-check overturned the section that asked for it.** A
+caveat that specifies its own instrument is worth more than a caveat that hedges.
+
+**What this changes about asking people, and it changes it twice.** ~~Ask for half an
+hour.~~ Ask for **about twenty minutes** — ten `overlap` rows at 93 s is 16 min, and those
+ten rows are now the *only* thing standing between this run and a printable
+`evals label report`, because the overlap block is already complete on the owner's side.
+The ask got smaller and what it buys got larger in the same measurement.
+
+**Caveats that belong beside the number wherever it is quoted**: one labeller; six-question
+form, not a factor applied to a five-question one; submit-to-submit includes reading, and
+**the first posting's own reading time is not in the figure at all**, so the true rate is
+*higher* than 93 s rather than lower. And the curve means **a rate taken from a fresh
+labeller's first few postings overstates the cost of the rest** — which is now measured
+rather than asserted, at 137 s against 83 s.
+
+**Re-derive it, do not re-quote it — and that instruction now has a command.** It was
+issued three times and re-quoted three times, because re-deriving needed four lines of SQL
+first. `backend/tools/label-findings.py` is those four lines, kept. An instruction to
+re-derive that requires someone to write SQL is an instruction that decays into a
+quotation.
+
+Full working: `tranche_five/29-labelling-session.md` § *Findings, 2026-07-31*, E.
+
+---
+
+> **SUPERSEDED 2026-07-31. Everything from here to the end of this section is the n=4
+> reading, kept verbatim.** It is what §§ *How many to label*, *recommended next steps* and
+> *Pending follow-ups* were written against, and a reader who was working from "154 s" or
+> "~8 postings" needs to see it to recognise what they had.
 
 **Added 2026-07-31.** This file has asked three times for the one number nobody had
 measured, and warned each time against inventing a correction factor for it. **It is now
@@ -350,6 +443,53 @@ one the owner would genuinely apply to. The back half is also *cheaper per row*:
 quarter of the set is `gate_rejected`, most of it unambiguous, and 26 of those 50 carry no
 `job_facts` at all, so they only ever feed Axis B and the recall bound.
 
+#### THE RECALL QUESTION IS EARNED — 2026-07-31, and the trigger was this section's own
+
+The sentence above sets the bar: 200 is bought *"the moment any `gate_rejected` row turns
+out to be one the owner would genuinely apply to."* **Two have.** Instrument:
+`python3 backend/tools/label-findings.py`, `eval_labels.would_apply` × `eval_label_items.stratum`,
+over the 31 postings labelled 2026-07-31 by one labeller, Wilson intervals from
+`metrics.wilson()`.
+
+| stratum | yes | no | n | rate | 95% CI |
+|---|---:|---:|---:|---:|---|
+| `surfaced` | 6 | 13 | 19 | 32% | [0.15, 0.54] |
+| `below_floor` | 1 | 2 | 3 | 33% | [0.06, 0.79] |
+| `gate_rejected` | 2 | 7 | 9 | 22% | [0.06, 0.55] |
+
+**The three postings the pipeline did NOT surface and the labeller would apply to:**
+
+- **Brex — *AI Engineer, Ecosystem*** (`below_floor`), extracted
+  `ai_involvement = builds_llm_features`. Scored, and scored under the floor.
+- **Ramp — *Software Engineer, Accounting*** (`gate_rejected`), **no `job_facts` row at
+  all** — nothing in this repo has an opinion about it, by construction.
+- **Twilio — *Frontend Software Engineer*** (`gate_rejected`), extracted
+  `ai_involvement = none`.
+
+**TWO CAVEATS THAT MUST TRAVEL WITH THIS TABLE, and neither is optional.**
+
+1. **The three Wilson intervals overlap almost completely.** [0.15, 0.54], [0.06, 0.79] and
+   [0.06, 0.55] cannot tell the strata apart at these n. **This is a trigger, not a rate** —
+   the named postings above are what earns the back half of the set, not the 22%. Do not
+   quote "22% of `gate_rejected` would be applied to"; at n=9 it means nothing.
+2. **The single labeller is a software engineer by background, and two of the three
+   postings are plain software-engineering roles.** That is exactly the confound
+   `app_users.prior_domain` was added to decompose, and **it cannot be decomposed at
+   n=1.** Whether these are pipeline recall misses or one person's own history is a
+   question a second labeller with a different `--prior-domain` answers and nothing else
+   does.
+
+**What it changes:** 200 is now on the table on its own stated terms, at **5.2 h** for one
+person at the re-derived 93 s (§ *the stopwatch reading*) rather than the ~8.5 h the 154 s
+figure implied. It does **not** license touching the gate — see § *the first finding
+arrived BEFORE the first label* for why n=1 is not a licence.
+
+~~**THE DELIVERABLE THE NEXT SESSION SHOULD ACTUALLY BRING BACK IS A STOPWATCH READING.**~~
+**DELIVERED 2026-07-31 — twice, and the second reading corrected the first.** 93 s median,
+n=29, `tools/label-findings.py --timing`; § *the stopwatch reading*. The paragraph is kept
+because it is the request that produced the number and because its warning against
+inventing a correction factor is what made the re-derivation legible when it arrived.
+
 **THE DELIVERABLE THE NEXT SESSION SHOULD ACTUALLY BRING BACK IS A STOPWATCH READING.**
 Every budget figure in this run — *"~20 items each"*, *"~28 at five labellers"* — was
 computed against a **five**-question form; the form asks **six**, and this file already
@@ -374,6 +514,38 @@ and because it is the exact finding task 12 predicted and could not name.
 **The observation:** commercial / sales roles that *sell AI products* are strong Pursuit
 targets — the employer explicitly wants people who are enthusiastic about AI and who use
 it — and **the vocabulary cannot express them.**
+
+> **AMENDED 2026-07-31 at n=31, and the amendment splits the finding in two. The vocabulary
+> gap is real and larger than stated. The *commercial* framing of it was not the dominant
+> shape in the labelled sample — it is corroborated at corpus scale instead, and the two
+> populations disagree in emphasis.** Both must be quoted with their population attached;
+> this is the file's own *"disaggregate, and look at what is actually in the bucket"* rule
+> applied to its own headline finding.
+>
+> **Population A — the 31 labelled postings** (`tools/label-findings.py`, the humans' own
+> answers, one labeller, 2026-07-31). `role_track = no_track_fits` on **13 of 31 = 42%**
+> [0.26, 0.59]; `role_archetype = other` on **17 of 31 = 55%** [0.38, 0.71]. So more than
+> half the postings a Builder actually read had no archetype that fits. **But only 2 of
+> those 13 are commercial/sales** — both Notion *Commercial Solutions Consultant* (Japan,
+> and San Francisco) — and **the owner answered `would_apply = no` on both.** Location is a
+> plausible confound and is not controlled for; do not read the two `no`s as a retraction of
+> the finding. The NYC variant of that same role, which *is* the code-verified instance this
+> file records as side-list entry #1 (`8ba8616b7c91d2a1b5112cdc`), **is not in `pursuit-v1`
+> and can never be added.** The rest of the 13 is a different population entirely:
+> rotational and analyst programmes, ops specialists, non-software engineering (mechanical,
+> laboratory, building), recruiting, and data annotation. § *Pending follow-ups* now carries
+> all 17 with the model's answers beside them.
+>
+> **Population B — the cohort corpus** (`tools/derive-role-tracks.py --archetypes`,
+> `facts_version = 3`, 294 `other` rows). **Strongly corroborated here.** A single proposed
+> value, `revenue_commercial`, reclaims **68 of 294 = 23.1%** of the `other` bucket — more
+> than the fourteen values task 11 actually adopted reclaim between them (47). Working,
+> counts, and the reasons four other candidates were dropped: § *Pending follow-ups*.
+>
+> **The honest summary is therefore narrower than the 2026-07-30 headline and better
+> evidenced than it:** `ARCHETYPE` has no commercial value, that gap is the single largest
+> nameable slice of `other` at corpus scale, and **it is not what the first 31 human labels
+> were mostly complaining about.** Both sentences are true of different populations.
 
 **Verified against the code, and the gap is structural:**
 
@@ -1196,13 +1368,32 @@ still holds.
 
 ## State at handoff
 
-**Branch `webapp-service`, suite green at ~~1107~~ ~~1160~~ 1166 tests** (task files say 263,
-earlier handoffs 782, 837, 878, 1030, 1058, 1070 and 1107; **1166 is the floor now**).
+**Branch `webapp-service`, suite green at ~~1107~~ ~~1160~~ ~~1166~~ 1171 tests** (task
+files say 263, earlier handoffs 782, 837, 878, 1030, 1058, 1070 and 1107; ~~**1166 is the
+floor now**~~ **1171 is the floor now** — `Ran 1171 tests` … `OK`, re-run 2026-07-31; the
+five are `backend/tests/test_label_findings.py`). **Webapp untouched this session, still
+93.**
 ~~1107 is the floor now — the round-2 path, `role_track` on the form and the paired
 bootstrap added 37 between them.~~
 **The whole suite passes** — `python3 -m unittest discover -s backend/tests` from
 the repo root. Working tree is clean apart from untracked `scripts/`, which
 predates this run and is not ours.
+
+**Two code artifacts landed 2026-07-31 and both are instruments rather than pipeline.**
+
+- **`backend/tools/label-findings.py` — NEW.** Read-only, no LLM call, no API key. Every
+  figure in this update's labelling sections comes from it: `--timing`, the recall table,
+  the vocabulary marginals, `--side-list`. **It exists because *"re-derive, do not
+  re-quote"* was issued three times and re-quoted three times** — re-deriving needed four
+  lines of SQL first, and an instruction that costs four lines of SQL decays into a
+  quotation. **It deliberately prints no model-vs-human agreement**, and it is not a route
+  around `evals label report`'s exit 2: a number computed around that refusal and pasted
+  into a document has no exit code to protect the next reader.
+- **`backend/tools/derive-role-tracks.py` — FIXED.** `load_other()` gained a
+  `--facts-version` flag defaulting to `schema.FACTS_VERSION`, and every run now prints the
+  population it read in its header. Before the fix it probed rows extracted under every
+  vocabulary the project has ever had. § *findings later tasks must not inherit* has the
+  before/after table and the conclusion it inverts.
 
 **On that number: it was 1067, then 1068, then 1070 across a single afternoon** — the
 implementing session's report, a re-run an hour later, and a re-run after `90170d1` added
@@ -1215,24 +1406,30 @@ number you have measured.
 **And it happened again, exactly as that paragraph predicts. Both counts in this section
 were re-measured on 2026-07-30 and both were low:**
 
-| suite | command | this file said | re-measured 2026-07-30 | after the solo-labelling work | re-run 2026-07-31 |
-|---|---|---:|---:|---:|---:|
-| main | `python3 -m unittest discover -s backend/tests` (repo root, system `python3`) | 1107 | 1160 | `Ran 1166 tests` … `OK` | **1166, `OK`** |
-| webapp | `.venv/bin/python -m unittest discover -s tests -t .` (from `backend/webapp/`) | 55 | 61 | `Ran 75 tests` … `OK` | **93, `OK`** |
+| suite | command | this file said | re-measured 2026-07-30 | after the solo-labelling work | re-run 2026-07-31 | after `label-findings.py` |
+|---|---|---:|---:|---:|---:|---:|
+| main | `python3 -m unittest discover -s backend/tests` (repo root, system `python3`) | 1107 | 1160 | `Ran 1166 tests` … `OK` | 1166, `OK` | **`Ran 1171 tests` … `OK`** |
+| webapp | `.venv/bin/python -m unittest discover -s tests -t .` (from `backend/webapp/`) | 55 | 61 | `Ran 75 tests` … `OK` | **93, `OK`** | 93, untouched |
 
 **The fifth column is 2026-07-31 and is the first time one of these was quoted and then
 held.** 1166 reproduced exactly; webapp went 75 → **93** because `prior_domain` added 18
 (the vocabulary, the generated CHECK, the CLI-vs-database agreement, and the join). Same
 direction as every other movement in this table: **the suites grew and nothing broke.**
 
+**The sixth column is later on 2026-07-31.** 1166 → **1171**: five tests in
+`backend/tests/test_label_findings.py`, covering the break-exclusion threshold, the
+warm-up split, and the Wilson-interval formatting. The webapp suite was not touched by this
+session and is still 93. **Ninth instance of the same drift, and the same direction again.**
+
 **Task 34 should know that `CLAUDE.md` still says *"It was at 263 tests; it should not go
-down."*** The measured figure is **1166**. That instruction is stale by roughly 900 and any
+down."*** The measured figure is **1171**. That instruction is stale by roughly 900 and any
 agent following it literally is checking against a number nine times too small to catch a
 regression.
 
 **Both moved in the safe direction: the suites GREW and nothing broke.** 1107 and 55 were
 each correct when they were written — this is drift, not a regression, and it is now the
-sixth and seventh instance of it recorded in this file. **1166 and 75 are the floors now.**
+sixth and seventh instance of it recorded in this file. ~~**1166 and 75 are the floors
+now.**~~ **1171 and 93 are the floors now** (2026-07-31).
 Neither is a number you have measured until you re-run it; that is the whole point of the
 paragraph above, which was written before this update and correctly anticipated it.
 
@@ -1304,10 +1501,16 @@ Thirteen tasks committed, one experiment, plus the two conversational decisions:
 | 29 | **`redraw_refusal()` — a pinned set could be silently re-drawn; now refused** | ~~UNCOMMITTED~~ `4374ede` |
 | — | **doc sweep: 5 stale `Status:` lines, `label.py` citations, both suite counts** | ~~UNCOMMITTED~~ `4374ede` |
 | 29 | **the first 30 labels — 5 postings, one labeller** | no commit — a database write |
-| 29 | **the per-posting rate MEASURED at ~154 s; the 20-minute budget is out by 2.5x** | `127c7c0` |
+| 29 | ~~**the per-posting rate MEASURED at ~154 s; the 20-minute budget is out by 2.5x**~~ | `127c7c0` |
 | 29 | **`app_users.prior_domain` — Axis B disagreement was undecomposable by background** | `127c7c0` |
 | 29 | **a design session's 4 findings verified: 1 did not reproduce, 1 premise was wrong** | `127c7c0` |
 | — | **`extract.py` does NOT fan out per profile — `manage_app_users.py`'s header corrected** | `127c7c0` |
+| 29 | **the sitting ran to 186 rows / 31 postings; ALL TEN `overlap` rows done** | no commit — a database write |
+| 29 | **`tools/label-findings.py` — the re-derivation this file asked for three times, as a command** (+5 tests, suite → **1171**) | this session |
+| 29 | **the per-posting rate RE-DERIVED at 93 s, n=29 — the 154 s reading was a warm-up curve, and the correction is CHEAPER** | this session |
+| 29 | **the recall question EARNED — 3 postings the pipeline did not surface, 2 of them `gate_rejected`, that the labeller would apply to** | this session |
+| 11 | **`derive-role-tracks.py` had NO `facts_version` filter — 58% of its `other` population was the twelve-value vocabulary; the "26 values are unused" reading inverts** | this session |
+| 11 | **`revenue_commercial` proposed — 23.1% of the v3 `other` bucket from ONE value; deliberately NOT applied, no `FACTS_VERSION` bump while `pursuit-v1` is open** | this session |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -2087,6 +2290,37 @@ Each of these is a documented claim that is **wrong about the code as it now sta
   form: if a function takes the name of a thing, it must not independently default the
   thing's configuration.** `relevance.load()` is a legitimate default for a caller that has
   no profile; it is never a legitimate default for one that does.
+- **`tools/derive-role-tracks.py` probed the `other` bucket across EVERY vocabulary the
+  project has ever had, and the conclusion that inverts is task 12's.** Found and fixed
+  2026-07-31. `load_other()` had no `facts_version` filter, so its `other` population was
+  **696 rows — 402 of them at `facts_version = 2`, the TWELVE-value vocabulary, which never
+  contained any of the values being probed.** 58% of what the tool called "postings the 26
+  values failed to describe" were postings the 26 values were never offered for. The
+  printed reclaim figures moved accordingly:
+
+  | candidate | raw `other` matches, unfiltered | at `facts_version = 3` |
+  |---|---:|---:|
+  | `hardware_embedded` | 54 | **3** |
+  | `infrastructure_compute` | 42 | **2** |
+  | `engineering_management` | 32 | **0** |
+  | `qa_test` | 22 | **0** |
+  | `mobile` | 16 | **0** |
+  | `business_systems` | 15 | **0** |
+  | `developer_relations` | 11 | **0** |
+  | `ai_operations` | 10 | **0** |
+
+  **The conclusion this inverts: the 26 values ARE being used by the extractor.** Reading
+  the unfiltered column, task 11's tech values look inert — 54 `hardware_embedded`-shaped
+  postings still sitting in `other` says the vocabulary was added and ignored. At v3 there
+  are three, and five of the eight are at zero, which says the opposite: **the extractor is
+  applying them, and the v3 `other` bucket is a different gap.** Fixed by a
+  `--facts-version` flag defaulting to `schema.FACTS_VERSION`; the population is now printed
+  in the header of every run (`'other' population: facts_version 3, 294 rows`), and
+  `--facts-version 0` reproduces the historical figure for anyone checking this entry.
+  **Same family as the `labels.pool()` defect immediately above** — a tool that resolves a
+  population by default resolves the wrong one, every marginal still adds up, and nothing
+  looks wrong. **The general form: a tool that reports on "the current vocabulary" must say
+  which version it read, in its own output, every time.**
 - **A TOTAL IS NOT A COMPOSITION, and the sub-block that carries a whole measurement needs
   its own stratification.** `sample()` marked the first `overlap` rows of a `job_id` sort.
   The set's strata totals were exactly right — 100/50/50, checked and committed — while the
@@ -2395,12 +2629,19 @@ is two asks of the repo owner** — OAuth credentials and ten Builders.~~ **Both
 is the sitting itself.** Everything else in this list needs credentials (15, 20) or a
 re-scope (21).
 
-> **AMENDED 2026-07-31. The sitting has started, and the single highest-value action is no
+> ~~**AMENDED 2026-07-31. The sitting has started, and the single highest-value action is no
 > longer "label more" — it is "get one more person for half an hour."** 30 labels exist
-> from one labeller. Every field in the report is refused for want of a *second*
-> `labeller_id` on the same item, not for want of volume, so **the tenth row from a second
-> person is worth more than the hundredth row from the first.** The ask is ~26 minutes at
-> the measured rate, not the ten minutes this file says three times.
+> from one labeller. … The ask is ~26 minutes at
+> the measured rate, not the ten minutes this file says three times.~~
+>
+> **AMENDED AGAIN 2026-07-31, later the same day. The conclusion is unchanged and both of
+> its numbers moved in the good direction.** 186 labels / 31 postings exist from one
+> labeller, and **all ten `overlap` rows are among them.** Every field in the report is
+> still refused for want of a *second* `labeller_id` on the same item, not for want of
+> volume — so **the tenth row from a second person is worth more than the hundredth row
+> from the first**, and it is now the *last* thing the ceiling needs rather than the first.
+> The ask is **~16 minutes** at the re-derived 93 s (§ *the stopwatch reading*), not the
+> ~26 written above and not the ten written three times before that.
 
 0. ~~**Fix the relevance gate.**~~ **DONE 2026-07-29** — `4eefb7e`, `e8f3b72`, `9dab9e6`
    and a database write. Mock gate recall 48.3% → 89.7%, live tier ≤2 869 → 880,
@@ -2432,28 +2673,48 @@ re-scope (21).
 
    ~~**Do not redraw this set.** It can only be redrawn while `eval_labels` is empty, and
    the first submitted label closes that window.~~ **MOOT 2026-07-31: the window is closed.**
-   30 labels exist, so `redraw_refusal()` refuses every redraw including an identical-digest
+   ~~30 labels~~ **186 labels over 31 postings** exist, so `redraw_refusal()` refuses every
+   redraw including an identical-digest
    one. This is no longer an instruction to follow — it is a property of the system, and
    the set is what it is. **The cost is already visible:** a mid-level bridge role that is
    exactly the hard case worth a label (Notion `8ba8616b7c91d2a1b5112cdc`,
    § *Pending follow-ups*) is not in the set and cannot be added.
 
-   **What to do next, in order, and the first one is not labelling.**
+   **What to do next, in order. REORDERED 2026-07-31 — the old list's steps 1 and 3 are
+   done or cheaper, and a step has been added at the end that did not exist yesterday.**
 
-   1. **Get the second labeller. Ask for half an hour, not ten minutes.** Ten `overlap`
-      rows at the measured 154 s/posting is ~26 minutes (§ *the stopwatch reading*). This
-      is still the cheapest unblock in the task by a wide margin — it turns every refused
-      field into a printable one and it is the difference between *"the model disagrees
-      with Builders"* and *"the model disagrees with Eric"*, which `consensus()` cannot
-      currently tell apart. **It buys more than a second hundred postings of the owner's
-      own would.** Set their `--prior-domain` when you add them; it costs one flag and it
-      is the only chance to record it before the labels land.
-   2. **Then label to ~60**, which is ~2.6 hours at the measured rate and is where an
-      observed 85% starts excluding 0.94. Stop wherever — § *How many to label* verified
-      2026-07-30 that the strata are interleaved, so **any prefix is a proportional
-      miniature of the whole set** and there is no wrong place to stop.
-   3. **Re-derive the timing number** from `labelled_at` once there are more rows, and
-      overwrite § *the stopwatch reading*. n=4 intervals is not a rate.
+   1. **Get the second labeller. Ask for about twenty minutes — not half an hour, and not
+      ten minutes.** Ten `overlap` rows at the re-derived **93 s** is **~16 min**
+      (§ *the stopwatch reading*). This is not merely still the cheapest unblock in the
+      task: **the owner has now finished all ten `overlap` rows**, so those ten rows are
+      the last input `labels.inter_annotator()` needs and `evals label report` prints the
+      moment they land. It is the difference between *"the model disagrees with Builders"*
+      and *"the model disagrees with Eric"*, which `consensus()` cannot currently tell
+      apart. **Set their `--prior-domain` when you add them.** That flag stopped being a
+      nicety today: the recall finding's second caveat is a `prior_domain` confound that
+      **cannot be decomposed at n=1** (§ *How many to label*), and a second labeller from a
+      *different* background is the only instrument that touches it.
+   2. **Then label to ~60**, which is **1.6 h** at the re-derived rate — not the 2.6 h this
+      list said — and is where an observed 85% starts excluding 0.94. Stop wherever —
+      § *How many to label* verified 2026-07-30 that the strata are interleaved, so **any
+      prefix is a proportional miniature of the whole set** and there is no wrong place to
+      stop. 31 of the 200 are done.
+   3. ~~**Re-derive the timing number** from `labelled_at` once there are more rows, and
+      overwrite § *the stopwatch reading*. n=4 intervals is not a rate.~~ **DONE
+      2026-07-31 at n=29, and it overturned the section.** `tools/label-findings.py
+      --timing` is now the instrument; re-run it, don't re-quote it.
+   4. **NEW — decide whether the recall question buys the back half.** It is earned on this
+      file's own stated trigger: two `gate_rejected` postings and one `below_floor` one
+      turned out to be roles the labeller would apply to (Ramp, Twilio, Brex —
+      § *How many to label*). 200 postings is **5.2 h** for one person at 93 s. **The
+      decision is the repo owner's and the evidence for it is a trigger, not a rate** — the
+      three strata's Wilson intervals overlap almost completely at n=31.
+   5. **NEW — do NOT apply the `revenue_commercial` archetype while labelling is open**,
+      however good the corpus evidence looks (23.1% of the v3 `other` bucket from one
+      value, against 47 rows from the fourteen task 11 adopted). It is a `FACTS_VERSION`
+      bump, and a bump re-extracts the model answers these labels exist to be compared
+      against, mid-collection, on a set that cannot be redrawn. Full proposal and its gate:
+      § *Pending follow-ups*.
 
    **What NOT to do:** compute model-vs-human agreement and write it down. `evals label
    report` exits 2 at one labeller by design and there is deliberately no `--force`; a
@@ -2754,8 +3015,20 @@ one `STEPS` already has — shared files get a single owner, named in advance.
 
 ## Pending follow-ups with no task of their own
 
-- **The per-posting labelling time is MEASURED, and the twenty-minute budget is out by
-  ~2.5x.** Added 2026-07-31; this is the *"stopwatch reading"* § *How many to label* asks
+- **The per-posting labelling time is MEASURED at 93 s (n=29), and the twenty-minute budget
+  is out by ~1.5x in the CHEAP direction.** Re-derived 2026-07-31 with
+  `python3 backend/tools/label-findings.py --timing`, over all 31 postings labelled by
+  `u_090b0ad12e99` in `2026-07-31T02:56:05`–`05:25:27` UTC, one 5,765 s break excluded at
+  `--break-secs 600`. Median **93 s**, mean **110 s**; including the break, median 97 s /
+  mean 299 s (n=30). First 7 intervals mean **137 s**, last 7 mean **83 s** — there is a
+  warm-up curve, and the n=4 figure below is its first four intervals. Budgets: ten
+  `overlap` rows **16 min**, twenty minutes **13 postings**, 60 postings **1.6 h**, 100
+  postings **2.6 h**, 200 postings **5.2 h**. § *the stopwatch reading* carries the raw
+  interval list and the irony.
+
+  > ~~**The per-posting labelling time is MEASURED, and the twenty-minute budget is out by
+  > ~2.5x.**~~ **SUPERSEDED 2026-07-31, kept because the run planned against it for a day.**
+  > Added 2026-07-31; this is the *"stopwatch reading"* § *How many to label* asks
   the next session to bring back. Derived from `eval_labels.labelled_at` over the first five
   labelled postings — successive `min(labelled_at)` per `job_id` — giving submit-to-submit
   intervals of **87 / 170 / 247 / 110 s**: **median 170 s, mean 154 s**. So **twenty minutes
@@ -2794,6 +3067,125 @@ one `STEPS` already has — shared files get a single owner, named in advance.
   > a ranking nuisance, it is a deletion. **The posting is not in `pursuit-v1` and can never
   > be added** now that the redraw window has closed, so this session cannot settle it.
   > `tranche_five/29-labelling-session.md` § *Findings, 2026-07-31*, A.
+
+  > **THE SIDE LIST IS NO LONGER ONE ENTRY. All 17, added 2026-07-31**, reproducible with
+  > `python3 backend/tools/label-findings.py --side-list`. Population: the 31 postings
+  > labelled by one labeller on 2026-07-31; these are the ones where the human answered
+  > `role_track = no_track_fits` **or** `role_archetype = other`. **The model's own answers
+  > are shown beside each — this is a side-by-side for reading the SHAPE of the gap, and it
+  > is NOT a scored comparison.** There is no free-text field on the form, so this table is
+  > the only place the content of *"none of these fit"* can live.
+  >
+  > | stratum | employer / title | human `track` / `arch` / apply | model `track` / `arch` / `ai` |
+  > |---|---|---|---|
+  > | `below_floor` | DEPT OF YOUTH & COMM D — *Operations Analyst* | `business_operations` / `other` / no | `business_analysis` / `other` / `none` |
+  > | `below_floor` | SynergisticIT — *Junior Level/Entry Level Software Engineer* | `no_track_fits` / `other` / no | `software_engineering` / `fullstack` / `none` |
+  > | `gate_rejected` | Finix — *Senior Technical Recruiter* | `no_track_fits` / `other` / no | — (no `job_facts`) |
+  > | `gate_rejected` | NewYork-Presbyterian — *Senior Technologist Laboratory – Microbiology* | `no_track_fits` / `other` / no | — (no `job_facts`) |
+  > | `gate_rejected` | NewYork-Presbyterian — *Licensed Engineer – 1 License – Rotating Shift* | `no_track_fits` / `other` / no | — (no `job_facts`) |
+  > | `gate_rejected` | Shield AI — *Senior Mechanical Engineer, Systems Integration* | `no_track_fits` / `other` / no | NULL / `other` / `none` |
+  > | `gate_rejected` | Wells Fargo — *Branch Operations Coordinator, Borough Park* | `business_operations` / `other` / no | — (no `job_facts`) |
+  > | `surfaced` | Carta — *Finance and Equity Analyst – Rotational Program* | `no_track_fits` / `other` / no | `data_and_analytics` / `data` / `uses_ai_tools` |
+  > | `surfaced` | Cohere — *Data Annotation Specialist, Arabic* | `no_track_fits` / `other` / no | `data_and_analytics` / `other` / `uses_ai_tools` |
+  > | `surfaced` | Coinbase — *Specialist, Market Operations* | `no_track_fits` / `other` / no | `technical_support` / `support_ops` / `uses_ai_tools` |
+  > | `surfaced` | EliseAI — *Product Solutions Analyst \| Housing* | `product_and_marketing` / `other` / no | `technical_support` / `support_ops` / `uses_ai_tools` |
+  > | `surfaced` | Gemini — *Predictions Partnerships Marketing Coordinator* | `no_track_fits` / `other` / no | `product_and_marketing` / `marketing_ops` / `none` |
+  > | `surfaced` | Gusto — *Future Opportunities: Retirement Implementation* | `no_track_fits` / `other` / no | `solutions_and_implementation` / `implementation_analyst` / `uses_ai_tools` |
+  > | `surfaced` | Notion — *People Analytics & Operations (Rotational Program)* | `no_track_fits` / `other` / **yes** | `data_and_analytics` / `data` / `uses_ai_tools` |
+  > | `surfaced` | Notion — *Commercial Solutions Consultant, Japan* | `no_track_fits` / `other` / no | `solutions_and_implementation` / `solutions` / `uses_ai_tools` |
+  > | `surfaced` | Notion — *Commercial Solutions Consultant, San Francisco* | `no_track_fits` / `other` / no | `solutions_and_implementation` / `solutions` / `uses_ai_tools` |
+  > | `surfaced` | Vanta — *AI Optimization Specialist, Support* | `software_engineering` / `other` / **yes** | `technical_support` / `ai_operations` / `uses_ai_tools` |
+  >
+  > **What the table says that the 2026-07-30 entry did not.** Only **2 of the 17 are
+  > commercial/sales**, they are the two non-NYC variants of the role the entry above
+  > names, and the owner said `would_apply = no` to both — location is an uncontrolled
+  > confound and the NYC variant is not in `pursuit-v1`. **The bulk of the list is
+  > something else**: rotational and analyst programmes (Carta, Notion), ops specialists
+  > (Coinbase, Wells Fargo, DEPT OF YOUTH & COMM D), non-software engineering (Shield AI
+  > mechanical, NewYork-Presbyterian laboratory and building), recruiting (Finix), and data
+  > annotation (Cohere). **Five of the 17 carry no `job_facts` row at all**, so for those
+  > the gap is not the vocabulary — nothing was ever extracted. The commercial finding is
+  > corroborated at *corpus* scale instead; see the next entry.
+
+- **A vocabulary proposal: ONE new archetype, `revenue_commercial`. PROPOSED 2026-07-31 and
+  deliberately NOT APPLIED.** Instrument: `python3 backend/tools/derive-role-tracks.py
+  --archetypes`, population `facts_version = 3` (the header of every run now prints it —
+  `'other' population: facts_version 3, 294 rows`; see § *findings later tasks must not
+  inherit* for why that line exists).
+
+  **Where the `other` mass actually is.** 294 of the 940 `facts_version = 3` rows are
+  `role_archetype = other` — **31.3%**. Of those 294:
+
+  - **182 (62%) also carry `role_track` NULL.** *Neither* vocabulary has a word for them, so
+    a new archetype does not reach them and the gap there is extraction or coverage, not
+    naming.
+  - **112 (38%) DO get a coherent track** — 36 `business_operations`, **35
+    `revenue_operations`**, 18 `product_and_marketing`, 11 `business_analysis`, and 12
+    across four others. **These are the rows the proposal is about**: the coarse vocabulary
+    has a word and the fine one does not.
+  - **57 of the 294 are ONE employer** — Sailor Health, a telehealth clinical-psychologist
+    role posted once per US state — which is **19.4% of the bucket** and is a hiring spree,
+    not a role family. The raw 31.3% does not dedup it.
+
+  **The comparison figure, with both populations attached, because it is routinely quoted
+  without them:** `other` is **8.0%** at `facts_version = 2` (402 of 5,024 — the author's
+  tech corpus under the TWELVE-value vocabulary) and **31.3%** at `facts_version = 3` (294
+  of 940 — the pursuit-eligible corpus under twenty-six). **Those two rates differ by
+  vocabulary AND by corpus, so "12 → 26 made `other` worse" conflates two changes** and
+  cannot be read off this pair. Task 12's own 31.1% is the v3 figure and is the one that
+  reproduces.
+
+  **The candidate, measured** (`dedup` collapses one employer's repeated posting of one
+  role; `emp` is distinct employers — read `emp` first):
+
+  | candidate | cohort raw / dedup / emp | `other` raw / dedup / emp | verdict |
+  |---|---|---|---|
+  | **`revenue_commercial`** | 148 / **91** / **31** | 68 / **48** / **23** | **recommended** |
+  | `finance_accounting` | 28 / 27 / 19 | 22 / 21 / 16 | dropped |
+  | `strategy_bizops` | 31 / 25 / 19 | 26 / 22 / 17 | dropped |
+  | `people_recruiting` | 13 / 12 / 10 | 8 / 7 / 7 | dropped |
+  | `clinical_care` | 58 / **11** / **3** | 56 / **9** / **1** | dropped — *one employer* |
+
+  `clinical_care` is the employer-spread rule doing its job: 56 raw `other` matches collapse
+  to **9 dedup at 1 employer.** That is Sailor Health again, and a vocabulary value for it
+  would name a hiring spree.
+
+  **Union reclaim, distinct rows, not a column sum** (the patterns overlap and
+  `role_archetype` is single-valued): `revenue_commercial` alone reclaims **68 of 294 =
+  23.1%** of the v3 `other` bucket. **The fourteen values task 11 actually adopted reclaim
+  47 between them** — ops 38 (12.9%) plus tech 9 (3.1%). **One value reclaims more than
+  fourteen.**
+
+  **The structural argument matters more than the count.** `ROLE_TRACK` already has
+  `revenue_operations` — 35 of the 294 `other` rows are on it — while `ARCHETYPE` has no
+  commercial value at all; its own first line is the admission, *"The original twelve. All
+  software engineering."* (`extract.ARCHETYPE`, the comment immediately above the tuple). So
+  a Deal Desk Analyst gets a coherent track and **can only be `other` at the finer grain.**
+  Two vocabularies meant to be one space at two grains, and on commercial work they are not
+  one space.
+
+  **Why one value and not five.** The 12 → 26 expansion is the move that has already been
+  tried and did not shrink `other`. Adding five at once repeats it, and the dropped four are
+  kept above *with their evidence* precisely so that the next person does not re-derive them
+  from scratch — the evidence AGAINST a value is the part a later reader cannot reconstruct.
+
+  **Why it is NOT applied, and the objection is not cost.** Both constants are interpolated
+  into `_INSTRUCTIONS`, the cache-keyed fixed prefix, whose own comment asks for exactly
+  this: *"any change here invalidates the cache for the whole corpus and should come with a
+  `schema.FACTS_VERSION` bump if it changes the meaning of an answer"* (`extract.py`,
+  immediately above `_INSTRUCTIONS`). So adding a value is a `FACTS_VERSION` bump. **Task 12
+  priced that bump: 863 calls, 28m31s, ~$0.33 — cost is not the objection.** The objection
+  is that **`pursuit-v1` is being labelled right now.** Re-extraction changes the model
+  answers the human labels exist to be compared against, mid-collection, on a set that can
+  no longer be redrawn. It also needs a weight in **both** `config/criteria.json` and
+  `config/pursuit-criteria.json` (`tests/test_match.py:484-485` asserts *"archetypes must
+  price `extract.ARCHETYPE` exactly"*) and a count update at `tests/test_extract.py:720-721`,
+  which pins `len(extract.ARCHETYPE) == 26`.
+
+  **Follow the precedent already stated in the repo:** `config/extraction-policy.json`'s
+  `_not_a_version_note` — *"task 12 owns the next bump and carries this change with it, so
+  that one re-extraction pays for both."* **Land the vocabulary and the rationale, do not
+  bump, and note that the next bump carries this too.**
 
 - **There is no loader from `eval_labels` into anything that can re-tune the weights, and
   no task owns building one.** Added 2026-07-30. `backend/tools/calibrate-match.py` is what
