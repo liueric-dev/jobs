@@ -1,9 +1,22 @@
 # Handoff — the `docs/tasks/refactor/` run
 
-Written 2026-07-28, and rolling — last updated after **task 29 stopped being blocked.**
+Written 2026-07-28, and rolling — last updated after **the first labels were collected and
+the twenty-minute budget turned out to be wrong.**
+
+**LABELLING HAS STARTED. 30 rows, 5 postings, one labeller, 2026-07-30 evening
+(`2026-07-31T02:56–03:06` UTC).** Three consequences, and the third is the one that changes
+plans: **the redraw window is CLOSED** — `redraw_refusal()` now refuses every redraw of
+`pursuit-v1`, identical digest included, so the drawn set is permanent; **`consensus()`
+promoting a majority of size one is happening now**, not hypothetically; and **the
+per-posting rate is measured at ~154 s, so twenty minutes is ~8 postings rather than ~20**
+and the "one second person, ten minutes" unblock is **~26 minutes**. See § *the stopwatch
+reading* below. The job is still to label — there is just less of it per sitting than every
+estimate in this file assumed.
+
+~~last updated after **task 29 stopped being blocked.**~~
 The OAuth credentials are in, `.env` is correct, the owner's account is on `pursuit`, and
-the sign-in chain was verified end to end without a browser. **The next session's job is
-to label.** See § *task 29 is UNBLOCKED* immediately below. Before that: **the
+the sign-in chain was verified end to end without a browser. ~~**The next session's job is
+to label.**~~ See § *task 29 is UNBLOCKED* immediately below. Before that: **the
 intra-annotator ceiling was made reachable at all, `role_track` went on the form, and a
 paired bootstrap landed in `evals/metrics.py`** (suite 1070 → 1107 → **1166**). Before that: **task 29 was unblocked: four
 defects fixed in the sampler, the label tables created, and the 200-row set drawn, redrawn
@@ -28,11 +41,19 @@ Task 29 is still the whole of a fresh session's job, but nothing is blocked: sig
 label. § *task 29 is UNBLOCKED* is the operational entry point and `LABELLING-NIGHT.md`
 § *Case A* is the command list.
 
-## Orientation — there are six "READ THIS FIRST" sections, in this order
+## Orientation — there are seven "READ THIS FIRST" sections, in this order
 
-That is five too many, and the file has earned each one. **The sixth is the newest and it
+That is six too many, and the file has earned each one. ~~**The sixth is the newest and it
 is the only one that is an instruction rather than a warning**: the pre-flight is done and
-the next session labels. If you read nothing else:
+the next session labels.~~ **The seventh is the newest and it is a correction to an
+estimate this whole file plans against** — § *the stopwatch reading*. If you read nothing
+else:
+
+0. **Labelling has started and the drawn set is now permanent.** 30 rows, 5 postings, one
+   labeller. `redraw_refusal()` refuses every redraw of `pursuit-v1` from here on, so
+   nothing can be added to or removed from it — including postings later found to be
+   exactly the hard case worth labelling. **And a sitting is ~8 postings, not ~20**
+   (§ *the stopwatch reading*).
 
 1. **Task 29 is the whole critical path** (§ *what is blocked*), and **its schema, its
    sampler and its 200-row set are now DONE** (§ *task 29's "two mechanical minutes"*).
@@ -113,6 +134,46 @@ the digits are a convenience with a shelf life.** That is not a caveat added for
 is the fourth time this file has recorded the same failure. The `fastapi` claim needed a different instrument again —
 **ask which interpreter the observation was made with**, because "it fails to import" is a
 fact about an environment, not about a repo.
+
+## READ THIS FIRST: the stopwatch reading, and the budget is out by 2.5x
+
+**Added 2026-07-31.** This file has asked three times for the one number nobody had
+measured, and warned each time against inventing a correction factor for it. **It is now
+measured, and it is worse than every estimate built on it.**
+
+Instrument: `eval_labels.labelled_at`, successive `min(labelled_at)` per `job_id`, over the
+first five labelled postings. **No stopwatch was needed — the rows carry it.** Intervals:
+**87 s, 170 s, 247 s, 110 s. Median 170 s, mean 154 s.**
+
+| what this file says | at 154 s/posting |
+|---|---|
+| *"Twenty minutes, in person, in one sitting"* → ~20 postings (`29` § *Logistics*) | **~8 postings** |
+| *"one second person and ten minutes"*, the ten `overlap` rows | **~26 minutes** |
+| *"~28 items each"* at five labellers, to reach ≥100 | **~72 minutes each** |
+| ≥100 postings, one person (the DoD) | **~4.3 hours** |
+
+**The recommendation in § *How many to label* survives and gets cheaper to state.** That
+section already says ~60 in the first sitting and 110 as the target across two or three,
+and that 200 is bought almost entirely for the recall question. At this rate **60 postings
+is ~2.6 hours**, which is not one sitting — so *"across two or three"* was right and the
+per-sitting figure inside it was not.
+
+**What this changes about asking people.** The second labeller's ten rows are the cheapest
+unblock in task 29 and that is unchanged — they still turn every refused field into a
+printable one, they still never see the other 190, and they should still be arranged
+**before** a long solo sitting. **But it is not a ten-minute favour.** Asking for it as one
+and then keeping somebody for half an hour is how the second labeller does not become a
+third. Ask for half an hour.
+
+**Caveats, because this is n=4 intervals and the file's own rule is to state them beside
+the number**: one labeller; submit-to-submit includes reading; **the first posting's own
+reading time is not in the figure at all**, so the true rate is *higher* than 154 s rather
+than lower; and the fastest interval is the first, which is the opposite of a warm-up curve
+and is the thing to re-check as the count grows. **Re-derive it, do not re-quote it** — the
+query is four lines and this file has now gone stale on eight numbers it quoted.
+
+This is a measurement of the **six**-question form, not a factor applied to a five-question
+one. Full working: `tranche_five/29-labelling-session.md` § *Findings, 2026-07-31*, E.
 
 ## READ THIS FIRST: task 29 is UNBLOCKED, and the next session labels
 
@@ -1154,10 +1215,20 @@ number you have measured.
 **And it happened again, exactly as that paragraph predicts. Both counts in this section
 were re-measured on 2026-07-30 and both were low:**
 
-| suite | command | this file said | re-measured 2026-07-30 | after the solo-labelling work |
-|---|---|---:|---:|---:|
-| main | `python3 -m unittest discover -s backend/tests` (repo root, system `python3`) | 1107 | 1160 | **`Ran 1166 tests` … `OK`** |
-| webapp | `.venv/bin/python -m unittest discover -s tests -t .` (from `backend/webapp/`) | 55 | 61 | **`Ran 75 tests` … `OK`** |
+| suite | command | this file said | re-measured 2026-07-30 | after the solo-labelling work | re-run 2026-07-31 |
+|---|---|---:|---:|---:|---:|
+| main | `python3 -m unittest discover -s backend/tests` (repo root, system `python3`) | 1107 | 1160 | `Ran 1166 tests` … `OK` | **1166, `OK`** |
+| webapp | `.venv/bin/python -m unittest discover -s tests -t .` (from `backend/webapp/`) | 55 | 61 | `Ran 75 tests` … `OK` | **93, `OK`** |
+
+**The fifth column is 2026-07-31 and is the first time one of these was quoted and then
+held.** 1166 reproduced exactly; webapp went 75 → **93** because `prior_domain` added 18
+(the vocabulary, the generated CHECK, the CLI-vs-database agreement, and the join). Same
+direction as every other movement in this table: **the suites grew and nothing broke.**
+
+**Task 34 should know that `CLAUDE.md` still says *"It was at 263 tests; it should not go
+down."*** The measured figure is **1166**. That instruction is stale by roughly 900 and any
+agent following it literally is checking against a number nine times too small to catch a
+regression.
 
 **Both moved in the safe direction: the suites GREW and nothing broke.** 1107 and 55 were
 each correct when they were written — this is drift, not a regression, and it is now the
@@ -1228,10 +1299,15 @@ Thirteen tasks committed, one experiment, plus the two conversational decisions:
 | 29 | **round 2 made reachable at all — the intra-annotator ceiling had no code path** | this session |
 | 29 | **`role_track` a 6th question, `NO_TRACK_FITS`; `FIELD_KINDS` drift found** | this session |
 | 30 | **paired bootstrap into `evals/metrics.py` — degenerate resamples no longer scored 0.0** | this session |
-| 29 | **OAuth credentials in, `.env` origins fixed, owner's account moved to `pursuit`** | UNCOMMITTED |
-| 29 | **`manage_app_users.py set-profile` — moving a user between profiles had no path** | UNCOMMITTED |
-| 29 | **`redraw_refusal()` — a pinned set could be silently re-drawn; now refused** | UNCOMMITTED |
-| — | **doc sweep: 5 stale `Status:` lines, `label.py` citations, both suite counts** | UNCOMMITTED |
+| 29 | **OAuth credentials in, `.env` origins fixed, owner's account moved to `pursuit`** | ~~UNCOMMITTED~~ `4374ede` (`.env` gitignored) |
+| 29 | **`manage_app_users.py set-profile` — moving a user between profiles had no path** | ~~UNCOMMITTED~~ `4374ede` |
+| 29 | **`redraw_refusal()` — a pinned set could be silently re-drawn; now refused** | ~~UNCOMMITTED~~ `4374ede` |
+| — | **doc sweep: 5 stale `Status:` lines, `label.py` citations, both suite counts** | ~~UNCOMMITTED~~ `4374ede` |
+| 29 | **the first 30 labels — 5 postings, one labeller** | no commit — a database write |
+| 29 | **the per-posting rate MEASURED at ~154 s; the 20-minute budget is out by 2.5x** | `127c7c0` |
+| 29 | **`app_users.prior_domain` — Axis B disagreement was undecomposable by background** | `127c7c0` |
+| 29 | **a design session's 4 findings verified: 1 did not reproduce, 1 premise was wrong** | `127c7c0` |
+| — | **`extract.py` does NOT fan out per profile — `manage_app_users.py`'s header corrected** | `127c7c0` |
 
 01 and 02 were already committed before this run (`28f1d0e`, `36d83f5`).
 
@@ -2319,6 +2395,13 @@ is two asks of the repo owner** — OAuth credentials and ten Builders.~~ **Both
 is the sitting itself.** Everything else in this list needs credentials (15, 20) or a
 re-scope (21).
 
+> **AMENDED 2026-07-31. The sitting has started, and the single highest-value action is no
+> longer "label more" — it is "get one more person for half an hour."** 30 labels exist
+> from one labeller. Every field in the report is refused for want of a *second*
+> `labeller_id` on the same item, not for want of volume, so **the tenth row from a second
+> person is worth more than the hundredth row from the first.** The ask is ~26 minutes at
+> the measured rate, not the ten minutes this file says three times.
+
 0. ~~**Fix the relevance gate.**~~ **DONE 2026-07-29** — `4eefb7e`, `e8f3b72`, `9dab9e6`
    and a database write. Mock gate recall 48.3% → 89.7%, live tier ≤2 869 → 880,
    `extract.remaining` 2 → 13, suite 1030 → 1058. See § *the gate fix LANDED*.
@@ -2347,8 +2430,35 @@ re-scope (21).
    found after the set was committed**. § *task 29's "two mechanical minutes"* is the
    record.
 
-   **Do not redraw this set.** It can only be redrawn while `eval_labels` is empty, and
-   the first submitted label closes that window.
+   ~~**Do not redraw this set.** It can only be redrawn while `eval_labels` is empty, and
+   the first submitted label closes that window.~~ **MOOT 2026-07-31: the window is closed.**
+   30 labels exist, so `redraw_refusal()` refuses every redraw including an identical-digest
+   one. This is no longer an instruction to follow — it is a property of the system, and
+   the set is what it is. **The cost is already visible:** a mid-level bridge role that is
+   exactly the hard case worth a label (Notion `8ba8616b7c91d2a1b5112cdc`,
+   § *Pending follow-ups*) is not in the set and cannot be added.
+
+   **What to do next, in order, and the first one is not labelling.**
+
+   1. **Get the second labeller. Ask for half an hour, not ten minutes.** Ten `overlap`
+      rows at the measured 154 s/posting is ~26 minutes (§ *the stopwatch reading*). This
+      is still the cheapest unblock in the task by a wide margin — it turns every refused
+      field into a printable one and it is the difference between *"the model disagrees
+      with Builders"* and *"the model disagrees with Eric"*, which `consensus()` cannot
+      currently tell apart. **It buys more than a second hundred postings of the owner's
+      own would.** Set their `--prior-domain` when you add them; it costs one flag and it
+      is the only chance to record it before the labels land.
+   2. **Then label to ~60**, which is ~2.6 hours at the measured rate and is where an
+      observed 85% starts excluding 0.94. Stop wherever — § *How many to label* verified
+      2026-07-30 that the strata are interleaved, so **any prefix is a proportional
+      miniature of the whole set** and there is no wrong place to stop.
+   3. **Re-derive the timing number** from `labelled_at` once there are more rows, and
+      overwrite § *the stopwatch reading*. n=4 intervals is not a rate.
+
+   **What NOT to do:** compute model-vs-human agreement and write it down. `evals label
+   report` exits 2 at one labeller by design and there is deliberately no `--force`; a
+   number computed around that refusal and pasted into a document has no exit code to
+   protect the next reader. Get the second labeller and the report prints by itself.
 
    **29 blocks 30, and ONLY 30.** `29-labelling-session.md:3` said *"Blocks: 30, 31"*;
    corrected 2026-07-30. `tranche_six/31-dismiss-demotion.md:3` reads *"Depends on: 27,
