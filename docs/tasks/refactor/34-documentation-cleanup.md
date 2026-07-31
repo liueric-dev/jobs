@@ -245,13 +245,23 @@ unchanged."*
 - **The product/API phase** (24–28, 31, 32) and the two scoping calls the owner holds
   (21's broken premise, 23 → 25).
 
-## Definition of done
+## Definition of done — checked 2026-07-31
 
-- Every relative link under `docs/tasks/refactor/` resolves; the audit script is committed.
-- The `docs/ingest/` frontmatter question is decided once and applied to all fourteen.
-- A CLAUDE.md diff is **proposed** in this file, not applied.
-- `HANDOFF.md`'s finished sections are moved to `CLAUDE_UPDATES.md`, with stubs left behind.
-- Every confirmed bug in §B is fixed or has a written reason it was not.
-- **Both suites green and not smaller: main ≥1178, webapp ≥93.**
-- Each stale claim retired is reported with *what the re-check found*, not merely that it
-  was retired.
+| | item | outcome |
+|---|---|---|
+| ✅ | Every relative link under `docs/tasks/refactor/` resolves; the audit script is committed | **Exceeded.** All of `docs/` resolves, not just this subtree — the narrower scope was hiding five. `backend/tools/audit-doc-links.py`, exits non-zero, reports the correct target rather than the absence |
+| ✅ | The `docs/ingest/` frontmatter question is decided once and applied to all fourteen | **Decided: drop the claim.** No generator was ever written, so *"never hand-edit"* was unfollowable. All fourteen carry `generator: none`; `.claude/CLAUDE.md`'s rule amended in the same commit |
+| ⚠️ | A CLAUDE.md diff is **proposed** in this file, not applied | **Deliberately not met — the owner directed that it be applied.** See rule 3 above, struck and explained. Applied in `3c4cee0` |
+| ⚠️ | `HANDOFF.md`'s finished sections are moved to `CLAUDE_UPDATES.md`, with stubs left behind | **Met with the destination changed**, on the owner's call: sections went to **`docs/archive/`**, not `CLAUDE_UPDATES.md`. That log is an append-only *dated* record; pasting six finished narratives into it would have dated them all to today and destroyed the sequence that makes it readable. Stubs and links left behind as specified; 3,481 → 2,690 lines |
+| ✅ | Every confirmed bug in §B is fixed or has a written reason it was not | 11 fixed, 6 re-marked **open, UNBLOCKED** (their blocker landed three tranches ago), 3 left open with reasons in the register (D31 needs a decision, D33's consumer is task 25, D34 is a live-DB DELETE) |
+| ✅ | **Both suites green and not smaller: main ≥1178, webapp ≥93** | main **1182**, webapp **93**, both green. And both *run* — every count in this run before today was a `grep 'def test_'`, which cannot see a skip |
+| ✅ | Each stale claim retired is reported with *what the re-check found* | Nine, listed in `CLAUDE_UPDATES.md`'s entry for this session. The four most useful are in §A above |
+
+**Two items were met differently than written and both are marked ⚠️ rather than ✅**, because
+a Definition of done that gets edited to match what happened is not a Definition of done.
+
+**The one thing this task did not do:** §D dispositions `backend/docs/SCORING.md` and the
+remainder of `backend/docs/HANDOFF-match-quality.md` for the archive. Neither moved. Both
+are live citations from several documents, so relocating them is its own change with its
+own link sweep, and doing it in the same commit as the `HANDOFF.md` split would have made
+that split unreviewable. Recorded in `docs/archive/README.md` § *Still to archive*.

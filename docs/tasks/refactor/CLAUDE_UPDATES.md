@@ -2393,3 +2393,96 @@ failure 5, but it is still the only evidence for the wrap, and stays in
 - **Nothing here was a measurement, and no model-vs-human agreement number was computed.**
   `evals label report` still exits 2 at one labeller, that is still by design, and no
   document produced in this session routes around it.
+
+---
+
+## 2026-07-31 — 34 landed: cleanup, bugfixes and documentation, in six commits
+
+`3383f9a` `3f42e2d` `3c4cee0` `46a5be4` `bcf5fc6` `99fbdb1`. Suite 1178 → **1182**
+(main) and 93 (webapp), both run rather than statically counted. 0 broken doc links.
+
+**This entry exists because the last thing this file recorded about itself is that it had
+silently stopped being written for four sessions.** The convention is that all four
+documents move in the same turn as the commits; that failed once and would have failed
+again here — six commits landed before this entry was written.
+
+### The task file written to fix stale documentation was itself stale in five places
+
+Task 34's own §§A1–A5 were re-verified against the code before any of them was acted on,
+which is what §*The rule this task runs under* asks for. Five did not survive contact:
+
+- **Its founding premise was false.** *"This file did not exist until 2026-07-31 … it is
+  specimen #1 of what this task is for."* It existed — `tranche_six/34-…`, tracked since
+  `28f1d0e`. `README.md:102` linked to it **without the `tranche_six/` prefix**, the
+  identical defect §A1's own table records three rows above it for the six `tranche_one/`
+  links. A broken link was read as a missing file, and the remedy wrote a *second* task 34
+  at the un-prefixed path — which then went on asserting the very `docs/ingest/` claim §A2
+  exists to retire. It is still specimen #1, of something sharper.
+- **§A1's count was wrong in both directions.** Sixteen was a pre-fix number; fourteen
+  remained. But the audit was scoped to the directory already under suspicion, which hid
+  **five more of the identical class** in `docs/tasks/README.md`. Nineteen total.
+  §A1's *"same depth error"* grouping also prescribed the wrong fix for three of them.
+- **§A2 says "ten" and lists eleven.** Eleven files carried `generated:`. The three
+  "converted" files used **three different formats**, so "the established pattern" it
+  points at did not exist.
+- **§A5 named two stale docstring sites; there are three** — and the same false sentence
+  is inside the committed cassette's own `note`, which the prescribed fix ("restate the
+  docstring; do not re-record") structurally cannot reach. It also misquotes the refusal
+  guard and misses a second one.
+
+### The defect register was advertising finished work
+
+**D45's body has said `### D45 — fixed` since task 16's follow-up landed, while its index
+row said "open — needs a task".** The index is the part anyone scans. **D27's five unused
+imports are all absent from `ats.py`**, verified name by name, and it too was listed as
+owed to this task.
+
+**Nine defects were dispositioned *"fix with harness — task 09"*, and task 09 landed three
+tranches ago.** Nothing rescheduled them, so they were neither open-with-an-owner nor
+closed. Three are now fixed, six re-marked **open, UNBLOCKED**.
+
+**D17 was the cheapest confirmed bug in the repo and had been waiting on two lines.** A
+paid Apify actor run that came back `SUCCEEDED` immediately skipped the poll loop and read
+a name that was never bound — the results were never collected and it reported as one
+failed query. The reproduction was already committed, asserting the `UnboundLocalError` on
+purpose, with a note saying whoever fixes it flips the assertion. Flipped.
+
+**Three recorded counts understated the defect** (D28 is 5 unused imports, not 4; D30's
+`timezone` IS used and a sweep would have removed it; §A5's two sites are three). Counted
+by AST binding-vs-use, because grep cannot tell an import from the word in a comment —
+which is how they were miscounted originally.
+
+### Three CLAUDE.md paths did not exist, and one rule was stale
+
+Applied rather than proposed, on the owner's instruction — the standing rule is
+propose-only, and it was wrong for a file whose instructions could not be followed at all.
+`tools/relevance-report.py` → `backend/tools/`; **`tools/lib-parity.sh` has never
+existed** and `lib/` is this repo's own code now; `76%/94%` → `85.2%/94.8%` at n=115;
+`263 tests` → 1178/93 **with the caveat to read `Ran N tests` rather than count `def
+test_`**; and the version-keys line promised three column names (`persona_version`,
+`features_version`, `model_version`) that exist nowhere.
+
+**`docs/MEASUREMENT-TRAPS.md` did not exist**, while `.claude/CLAUDE.md` ordered every
+session to read it. Nor did `docs/archive/`. Both were dispositions recorded as though
+already done. Both now exist.
+
+### One environment claim was wrong, and it is the recurring shape
+
+A survey concluded ~80 DB-gated tests silently skip here, from `env | grep DATABASE_URL`
+returning nothing. **They run.** Each such module calls `envfile.load(backend/.env)` at
+import *before* evaluating `scratchdb.available()`. `test_scratchdb` alone runs 12 and
+passes. This is the same shape as the `fastapi` claim this run already recorded: *"it
+fails to import" is a fact about an environment, not about a repo* — and the fix is to ask
+which interpreter, and which loader, the observation was made with.
+
+### The split, and the trap in it
+
+HANDOFF.md 3,481 → 2,690 lines; seven "READ THIS FIRST" sections → three. The file
+disagreed with itself about the count (`:5` said eight, `:200` said seven). Cutting on
+`^## ` **outside fenced blocks** was load-bearing: two lines in that file are bash
+comments inside the owner's runnable command blocks, and a naive `^#` splitter slices both
+in half. Two operational subsections were deliberately kept out of the archive —
+`FRONTEND_ORIGIN` and the `app_users` schema are configuration, not narrative.
+
+`AUDIT.md` is new: one page, every figure with the command that produced it. The named
+risk is that it becomes an eighth "READ THIS FIRST", so it indexes and does not restate.
