@@ -24,6 +24,7 @@ scratch schema is used for a connection and nothing else.
 
 import json
 import os
+import re
 import sys
 import unittest
 
@@ -204,6 +205,81 @@ class TestNormalization(unittest.TestCase):
                                  "/job/New York/Data Scientist_1")
         self.assertNotIn(" ", url)
         self.assertTrue(url.endswith("/job/New%20York/Data%20Scientist_1"))
+
+
+class TestTheGateSuppliesEveryColumnTierSqlCanReference(unittest.TestCase):
+    """The regression guard for the three nights this gate spent broken.
+
+    `platform_exclude` landed in 7d94bb1; `tier_sql` started emitting
+    `{alias}.platform` (relevance.py:270-272) and `_GATE_TEXT_COLUMNS` was not
+    updated, so `_tiers` built a derived table without that column and the
+    nightly `ingest/workday.py` died on `UndefinedColumn` from 2026-07-29 to
+    2026-07-31 while the other eleven steps reported success.
+
+    NO DATABASE, DELIBERATELY. The gate tests below are gated on
+    `scratchdb.available()`, and a check that can skip is no guard at all
+    against a failure whose whole character is that nothing spoke up. This one
+    reads the compiled SQL as a string, so it runs everywhere the suite does.
+
+    The maximal config is derived from `relevance.DISABLED` rather than written
+    out here, because a hardcoded one would have to be remembered -- which is
+    the exact thing that already failed once. A new rule key added to that dict
+    is exercised by this test the moment it exists.
+    """
+
+    def _maximal_cfg(self):
+        """Every rule in `relevance.DISABLED` turned on at once."""
+        cfg = {}
+        for key, default in relevance.DISABLED.items():
+            if key == "location_columns":
+                cfg[key] = ["location_is_nyc", "location_is_remote"]
+            elif isinstance(default, list):
+                # A pattern that compiles and matches nothing in particular;
+                # this test is about which COLUMNS are named, not which rows
+                # survive. Postgres dialect, so `\y` and never `\b`.
+                cfg[key] = ["\\yzzzz\\y"]
+            else:
+                cfg[key] = default
+        return relevance.load(cfg=cfg)
+
+    def test_every_rule_key_in_DISABLED_is_covered_by_the_maximal_config(self):
+        """Guards the guard: if this drifts, the test below stops proving
+        anything while still passing."""
+        cfg = self._maximal_cfg()
+        self.assertEqual(set(cfg), set(relevance.DISABLED))
+        for key, default in relevance.DISABLED.items():
+            if isinstance(default, list):
+                self.assertTrue(cfg[key], f"{key} left empty; rule not exercised")
+
+    def test_tier_sql_names_no_column_the_gate_does_not_build(self):
+        cfg = self._maximal_cfg()
+        expr, _ = relevance.tier_sql(cfg, table_alias="c", param_prefix="rel0")
+
+        referenced = set(re.findall(r"\bc\.([a-z_][a-z0-9_]*)", expr))
+        supplied = set(workday._GATE_TEXT_COLUMNS) | set(cfg["location_columns"])
+
+        self.assertTrue(referenced, "no c.<column> references found -- the "
+                                    "regex or tier_sql's alias handling moved")
+        missing = referenced - supplied
+        self.assertEqual(
+            missing, set(),
+            f"relevance.tier_sql references {sorted(missing)} but "
+            f"ingest/workday.py:_tiers builds only {sorted(supplied)}. Add the "
+            f"column to _GATE_TEXT_COLUMNS and make sure normalize_listing() "
+            f"populates it, or the nightly Workday run dies on UndefinedColumn.")
+
+    def test_normalize_listing_populates_every_gate_column(self):
+        """Supplying the column is half of it -- `_tiers` reads each one off
+        the record with `.get`, so a column the listing never sets would bind
+        an all-NULL array and silently change the predicate rather than error.
+        `description_text` is None here by construction (it arrives with the
+        detail fetch), so it is exempt; the rest must be present."""
+        rec = listing("Operations Coordinator")
+        for col in workday._GATE_TEXT_COLUMNS:
+            with self.subTest(column=col):
+                self.assertIn(col, rec)
+                if col != "description_text":
+                    self.assertIsNotNone(rec[col], f"{col} is None in a listing")
 
 
 @requires_db

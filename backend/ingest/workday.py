@@ -758,9 +758,19 @@ def apply_detail(rec, detail, listing=None):
 #: title_exclude with it.
 ANY_TITLE = "."
 
-#: Columns the gate rows carry besides the configured location columns. These
-#: are the three `tier_sql` can reference (relevance.py:211, :240, :245).
-_GATE_TEXT_COLUMNS = ("title", "company_name", "description_text")
+#: Columns the gate rows carry besides the configured location columns -- every
+#: non-location column `tier_sql` can reference: `title` (relevance.py:216, :233),
+#: `description_text` (:220, :276), `company_name` (:268) and `platform` (:271).
+#:
+#: THIS LIST IS A CONTRACT WITH relevance.py, AND IT HAS BEEN BROKEN ONCE.
+#: `platform_exclude` landed in 7d94bb1 and `tier_sql` began emitting
+#: `c.platform` for any profile that set it; this tuple was not updated, and the
+#: nightly run died on `UndefinedColumn: column c.platform does not exist` for
+#: three nights. Nothing caught it because the gate is the ONLY caller that does
+#: not run against the `jobs` table, where all four columns exist for free --
+#: every other caller of `tier_sql` was fine. `tests/test_workday_ingest.py`
+#: pins this against relevance.py so the next added column fails in the suite.
+_GATE_TEXT_COLUMNS = ("title", "company_name", "description_text", "platform")
 
 
 def _loose_cfg(cfg):
