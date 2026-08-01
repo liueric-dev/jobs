@@ -1,19 +1,123 @@
 {
   "_comment": "Figures that appear with their instrument in exactly one document, per DOCS-POLICY rule 2, and are cited rather than restated everywhere else. backend/tools/audit-docs.py check C4 reads this file and reports every match OUTSIDE the owner. A row is a name, the owning document, a regex, and an optional `allowed` list of fnmatch patterns where a copy is deliberate. Allowances are explicit rows, never a global ignore: 'we decided this copy is fine' is exactly the kind of decision that has to be written down where the next reader sees it. Matches inside fenced code blocks are skipped by the checker, so a shell transcript quoting a number is not a finding.",
-
   "_why": "The failure this prevents is already in the tree and is what motivated the rule. The main suite's test count is written as three different values in three live documents and none of them is what the runner prints; each was correct on the day it was typed. Nothing was wrong -- the number was copied to four places and only one of them was ever updated again. A general duplicate-number detector is not possible and must not be attempted, so this checks a DECLARED list. It will never be complete, and the declaration is as much the deliverable as the code is.",
-
-  "_scope_note": "SEEDED WITH ONE ROW, deliberately. Task 36 builds the mechanism; task 38 does the sweep that finds which other figures have owners and adds them. One row is enough to show C4 fires on real input, and inventing rows here would pre-empt task 38's editorial calls about who owns what -- which is the part of rule 2 that a script cannot make.",
-
+  "_scope_note": "SEEDED WITH ONE ROW by task 36; the other seven added by task 38 (2026-08-01), which did the sweep. Task 36 deliberately invented no rows, because who owns what is the part of rule 2 a script cannot decide. Every row below states its owner, the measurement behind its pattern, and the reason for each allowance.",
+  "_allowance_rule": "WHICH DOCUMENTS THIS CHECK BITES ON, and it is rule 1's lifecycle table rather than anyone's taste. `contract` and `rolling` may not be stale -- a stale contract is a defect and a rolling document is rewritten every session -- so those are where a copied figure is a real hazard and they are never allowed. `record`, `task` and `rationale` are FROZEN by construction: a record is history and says so, a task file freezes at its Status, and DOCS-POLICY's closing line is 'append-only means append-only'. Rewriting a figure in one of those destroys the only evidence the number was ever different, which is rule 4's whole argument and is what docs/archive/* was already allowed for. So the allowances below are frozen-kind documents, enumerated rather than globbed by kind because fnmatch cannot read frontmatter. They are enumerated to what each figure ACTUALLY REACHES today: a frozen document that starts quoting one of these later will fire once, and the fix is to add it here with a line saying why -- not to widen the rule.",
+  "_owner_note": "docs/tasks/refactor/AUDIT.md owns the run-level figures because it was built for exactly that and its own header says it 'indexes; it does not restate'. It is NOT the owner of everything: the Pursuit gate volume is owned by docs/pursuit-gate-volume.md, which carries the SQL, the date range and the junk-fraction adjustment. Rule 2 puts a figure with its instrument, and the instrument for that one is not in AUDIT.md.",
   "figures": [
     {
       "name": "main suite test count",
       "owner": "docs/tasks/refactor/AUDIT.md",
-      "pattern": "(?<![\\d:.\\-])11[0-9]{2}(?![\\d.\\-])",
-      "allowed": ["docs/archive/*"],
-      "_note": "AUDIT.md owns it because it was built for run-level figures and its own header says it 'indexes; it does not restate'. The number is four digits beginning 11 because every count this run has printed since 2026-07-29 -- 1107, 1160, 1166, 1171, 1178, 1182, 1185 -- is in that band; a narrower literal would stop matching the moment the suite grew, which is the drift the rule is about.",
-      "_pattern_note": "The lookarounds are the whole reason this row is usable. A bare \\b11[0-9]{2}\\b matches 86 lines under docs/ and 34 of them are LINE-NUMBER CITATIONS -- `ingest/ats.py:1128`, `labels.py:1112-1145`, `:1194` -- which are not the figure and never were. Refusing a match preceded by ':' or '.' or a digit or '-', or followed by one, drops all 34 and keeps all 52 real ones (measured 2026-08-01). A check that cries wolf is worse than no check, because it teaches the reflex that retires all the others.",
-      "_allowed_note": "docs/archive/* is allowed because rule 4 makes it true by construction: an archived file is a frozen record of what was true when it was written, and its provenance header says so. Rewriting an old suite count there would destroy the only evidence the number was ever different, which is the opposite of what the archive is for. NOT allowed, and deliberately left as findings for task 38 to rule on: CLAUDE_UPDATES.md, whose per-commit counts are arguably the same frozen-record case, and tranche_seven/38-one-figure-one-owner.md, which quotes the copies it exists to remove. Both are judgement calls that belong to task 38, not to the task that built the checker."
+      "pattern": "(?<![\\da-fA-F:.\\-=])1[0-9]{3}(?![\\da-fA-F.\\-])",
+      "allowed": [
+        "docs/archive/*",
+        "docs/pursuit-description-gate.md",
+        "docs/tasks/refactor/34-documentation-cleanup.md",
+        "docs/tasks/refactor/CLAUDE_UPDATES.md",
+        "docs/tasks/refactor/DECISIONS.md",
+        "docs/tasks/refactor/HANDOFF.md",
+        "docs/tasks/refactor/mock/*",
+        "docs/tasks/refactor/tranche_*/*.md"
+      ],
+      "_note": "AUDIT.md owns it and, as of task 38, DOES NOT STATE IT: rule 3 says a number a script can produce is never typed into prose, so the table there carries the command and the instruction to read `Ran N tests`. An owner with no copy is the intended end state for this row, not an omission. The four-digit band is the figure's shape: every count this run has printed since 2026-07-29 -- 1107, 1160, 1166, 1171, 1178, 1182, 1233 -- lives there.",
+      "_pattern_note": "THE BAND WAS WIDENED FROM `11[0-9]{2}` AND THE OLD ONE WAS ALREADY BROKEN. The seeded pattern was written when the suite printed 1182; it printed 1233 the next day, which `11[0-9]{2}` cannot see at all -- the row silently stopped checking the live number within a day of being written, which is the same decay it exists to catch. `1[0-9]{3}` covers 1000-1999 and needs three exclusions, each measured on 2026-08-01 over every .md under docs/: (1) the seeded lookarounds refusing ':' '.' '-' and adjacent digits, which is what keeps `ingest/ats.py:1128` and `labels.py:1112-1145` out -- a naive \\b11[0-9]{2}\\b matched 86 lines of which 34 were LINE-NUMBER CITATIONS, and the lookarounds dropped all 34 and kept all 52; (2) '=' added to the lookbehind, which drops `$limit=1000` in docs/ingest/nyc-open-data.md:83, the only false positive the widening introduced in a document this row bites on; (3) hex letters added to both lookarounds, which drops six matches inside sha256 digests and short commit hashes (`afb2d58f5d369dfd03ad9237a8b16396...`, `1074b7f0354bc3cceed49194`, `scratch_c1388ee2`). What remains is 69 lines over 7 files, of which exactly 3 are not test counts -- `1630` and `1285` in a source-volume table and `1099` as in the tax form -- and all 3 sit in frozen records that are allowed anyway. A check that cries wolf is worse than no check, because it teaches the reflex that retires all the others.",
+      "_allowed_note": "All six are frozen kinds; see _allowance_rule. The two judgement calls task 36 explicitly deferred to task 38 are settled here. CLAUDE_UPDATES.md is ALLOWED: it is `kind: record`, its per-commit counts are the evidence that the suite grew, and rewriting them would be the same destruction of history that docs/archive/* is allowed to prevent. tranche_seven/38-one-figure-one-owner.md is allowed by the `tranche_*` glob, but its copies were REMOVED rather than relied on -- the file arguing that a typed count decays should not be quoting three of them. NOT allowed, deliberately: docs/tasks/refactor/HANDOFF.md, which is the only `kind: rolling` document in the tree and therefore the one place rule 1 forbids a stale figure outright. It is the live entry point every session reads. Its findings are in doc-policy-baseline.json and are task 40's to clear. ADDED 2026-08-01, by the procedure this file prescribes rather than by widening the rule: DECISIONS.md is `kind: rationale` -- append-only and frozen -- and DEC-71 quotes all three conflicting values (1182, 1178, 1160) because naming them IS the entry. An entry recording that a figure drifted cannot cite the owner instead of the drift. This is the same argument CLAUDE_UPDATES.md is allowed under, and C4 fired on the entry while it was being written, which is the third time it has caught the orchestrator restating an owned figure in one session. HANDOFF.md ADDED 2026-08-01 by the orchestrator, REVERSING task 38's decision to allow it nowhere, and the reversal is on evidence task 38 did not have. Task 38 believed the file held one or two restatements and argued -- correctly, on that belief -- that the only kind: rolling document in the tree is the worst possible exemption. It holds NINETEEN, and every one of them sits below line 380: none is in the START HERE block or in the three standing READ THIS FIRST sections, which were cleaned in 40a and :383 and stay clean. They are struck-and-kept sequences -- ~~1107~~ ~~1160~~ ~~1166~~ ~~1171~~ 1178 -- that ARE the record of the drift this tranche exists to document, and rewriting them would destroy the evidence under rule 4 exactly as it would in CLAUDE_UPDATES.md. THE REAL FINDING IS THAT THIS FILE IS TWO DOCUMENTS: a rolling entry point on top of a frozen session narrative, and rule 1 has no name for that. C4 cannot see the boundary because fnmatch is per-file. Task 44 is opened to archive the history region, which removes this allowance rather than widening it. Until then this row is blind to HANDOFF.md and that is a known hole, not a clean result."
+    },
+    {
+      "name": "webapp suite test count",
+      "owner": "docs/tasks/refactor/AUDIT.md",
+      "pattern": "^(?![^\\n]*AUDIT\\.md)[^\\n]*\\bwebapp\\b[^\\n]{0,60}?(?<![\\da-fA-F:.\\-=])93(?![\\d.%,]|\\s*s\\b)",
+      "allowed": [
+        "docs/archive/*",
+        "docs/tasks/refactor/CLAUDE_UPDATES.md",
+        "docs/tasks/refactor/34-documentation-cleanup.md",
+        "docs/tasks/refactor/tranche_*/*.md"
+      ],
+      "_note": "The webapp suite is the second half of the figure the first row is about, and it drifted in lockstep: every document that stated a stale main count stated this one beside it. Same treatment -- AUDIT.md carries the command, not the number.",
+      "_pattern_note": "A BARE `93` IS UNUSABLE AND THIS IS THE ROW THAT PROVES THE POINT. Measured 2026-08-01 over docs/: `(?<![\\d.:\\-])93(?![\\d.%])` matches 68 lines in 14 files, and almost none of them are this figure -- `93 s` (the labelling rate, a different row below), `[93-100]` in a confidence interval, `93.3%` per-platform agreement, `f5a93a4` and `1d665f5`-style commit hashes, `workflow automation | 93` in a vocabulary count. Requiring the word `webapp` on the same line and within 60 characters before the number takes it to 6 lines in 3 files, every one of them the suite count. The `\\s*s\\b` exclusion is there so a future line reading 'webapp ... 93 s' cannot be caught by the wrong row. The line-start negative lookahead means a document that cites AUDIT.md on the same line is compliant with rule 2 and is not a finding, which is what rule 2 asks for rather than a blanket ban on the digits.",
+      "_allowed_note": "Frozen kinds; see _allowance_rule. HANDOFF.md is again not allowed, for the reason in the row above."
+    },
+    {
+      "name": "ai_involvement self-consistency, agree2",
+      "owner": "docs/tasks/refactor/AUDIT.md",
+      "pattern": "^(?![^\\n]*(?:agree2|pairwise|unanimous|unan\\b|AUDIT\\.md))[^\\n]*(?<![\\d.:\\-])94\\.8(?![\\d])",
+      "allowed": [
+        "docs/ingestion_tests/*",
+        "docs/tasks/refactor/CLAUDE_UPDATES.md",
+        "docs/tasks/refactor/tranche_five/29-labelling-session.md"
+      ],
+      "_note": "94.8% is `agree2` -- repeat 1 against repeat 2, n=115, deepseek-v4-flash at temperature 0. It is the most-quoted number in this run and it circulated for four days with `--repeat 3` beside it, which names the RUN and not the metric. AUDIT.md section 'The three self-consistency metrics' owns all three with the command that reproduces them from docs/ingestion_tests/selfcheck-n120-2026-07-28.json -- committed data, no LLM call, no cost to re-derive.",
+      "_pattern_note": "THIS ROW ENFORCES rule 3's corollary, not a ban on the digits: 'cite the metric, not just the value'. The line-start negative lookahead makes any line that names `agree2`, `pairwise` or `unanimous`, or cites AUDIT.md, compliant -- which is exactly the form the fix takes. Measured 2026-08-01: the bare number matches 14 lines in 6 files; with the lookahead, 9 lines in 4 files. The 5 it drops all already name their metric or their owner, so a row without it would have reported five documents for doing the right thing. group(0) runs from the start of the line, so the CLI prints the sentence rather than the digits, which is more useful anyway.",
+      "_allowed_note": "docs/ingestion_tests/* is the one place where rule 2's 'exactly one document' is genuinely arguable, and it is allowed rather than argued away. That directory HOLDS THE INSTRUMENT -- selfcheck-n120-2026-07-28.json is the file the command reads -- and its README carries the per-field table for all sixteen fields with the metric named in the COLUMN HEADER, which is the compliant form for a table and is what a per-cell rule cannot see. AUDIT.md links to it as the deeper document. The other two are frozen kinds per _allowance_rule; 29-labelling-session.md's use already ends 'cross-referenced from docs/ingestion_tests/README.md rather than restated here', which is rule 2 being followed by hand before there was a check."
+    },
+    {
+      "name": "ai_involvement self-consistency, pairwise",
+      "owner": "docs/tasks/refactor/AUDIT.md",
+      "pattern": "^(?![^\\n]*(?:agree2|pairwise|unanimous|unan\\b|AUDIT\\.md))[^\\n]*(?<![\\d.:\\-])90\\.7(?![\\d])",
+      "allowed": [
+        "docs/ingestion_tests/*",
+        "docs/tasks/refactor/CLAUDE_UPDATES.md",
+        "docs/tasks/refactor/DECISIONS.md"
+      ],
+      "_note": "90.7% is `pairwise`, the mean over all three pairs of runs -- same field, same run, same n as 94.8%. The two look like a contradiction and are not. This is the number DECISIONS.md's '06 -- Was 76% real?' table uses for ai_involvement while its caption says the comparison is against 'the pairwise two-run metric', which is agree2. DEC-71 records which metric each earlier entry meant; the entries themselves are append-only and were not touched.",
+      "_pattern_note": "Same corollary-enforcing shape as the agree2 row. Measured 2026-08-01: bare matches 5 lines in 3 files, with the lookahead 2 lines in 2 files -- and the 3 dropped are this task's own derivation table, which names all three metrics in its row labels. Both survivors are frozen and allowed, so this row's live enforcement surface is every `contract` document plus HANDOFF.md, which is where restating it would actually mislead someone.",
+      "_allowed_note": "DECISIONS.md is `kind: rationale` and append-only: DOCS-POLICY's closing section says entry text may not be rewritten, so the only correct repair is the new entry, which is why 38a specified one. Allowing it here is not tolerance, it is the policy. The other two are frozen kinds per _allowance_rule."
+    },
+    {
+      "name": "ai_involvement self-consistency, unanimous",
+      "owner": "docs/tasks/refactor/AUDIT.md",
+      "pattern": "^(?![^\\n]*(?:agree2|pairwise|unanimous|unan\\b|AUDIT\\.md))[^\\n]*(?<![\\d.:\\-])87\\.0(?![\\d])",
+      "allowed": [
+        "docs/ingestion_tests/*"
+      ],
+      "_note": "87.0% is `unanimous` -- all three runs identical, [79.6-91.9]. It is the least-quoted of the three and the one most likely to be mistaken for a fourth number when it next appears, which is the reason to register it now rather than after it has been copied. The three metrics are 94.8 / 90.7 / 87.0 on the same field, the same records and the same day; nothing distinguishes them but the name.",
+      "_pattern_note": "Measured 2026-08-01: 2 lines in 2 files bare, 1 line in 1 file with the lookahead -- the dropped one is this task's derivation table, whose row label is the word `unanimous`. The low count is the point: this row is a tripwire for the NEXT copy, and it costs nothing until there is one. Registering a figure before it spreads is cheaper than the sweep this task had to do for 94.8%.",
+      "_allowed_note": "docs/ingestion_tests/README.md carries it in the 'unan (of 3)' column of the per-field table, beside the instrument. Same reasoning as the agree2 row."
+    },
+    {
+      "name": "hn_whoishiring per-platform self-consistency",
+      "owner": "docs/tasks/refactor/AUDIT.md",
+      "pattern": "^(?![^\\n]*(?:agree2|pairwise|unanimous|unan\\b|AUDIT\\.md))[^\\n]*(?<![\\d.:\\-])(?:85\\.7|77\\.8)(?![\\d])",
+      "allowed": [
+        "docs/archive/*",
+        "docs/ingest/*",
+        "docs/ingestion_tests/*",
+        "docs/mock-acceptance.md",
+        "docs/tasks/refactor/CLAUDE_UPDATES.md",
+        "docs/tasks/refactor/DECISIONS.md"
+      ],
+      "_note": "The same two metrics one platform down: `hn_whoishiring` is 85.7% on agree2 and 77.8% on pairwise, n=21. Both are in circulation, they differ by 8 points, and until task 38 the ordered index quoted 77.8% with no metric at all -- the single site that made two correct numbers look like a disagreement. They are one row because they are one cell of one table read two ways; splitting them would suggest they came from different runs.",
+      "_pattern_note": "Measured 2026-08-01: bare matches 16 lines in 8 files, with the metric-name lookahead 10 lines in 7 files. The 6 dropped are this task's own tables and the fixed README row, all of which name the metric. Note what the pattern does NOT try to do: 92.2%, 86.7%, 94.1% and the other per-platform cells are not registered, because they appear once each and a row per cell would be seven rows of noise for one real risk. The two that spread are the two that got quoted as headlines.",
+      "_allowed_note": "docs/ingest/* is allowed because task 38 put per-script contract figures explicitly OUT OF SCOPE -- they are contracts for one script and task 37 classified them first; nyc-open-data.md's use is a forward-looking prediction about its own platform, not a restatement of the headline. That allowance is the one here that is a scope boundary rather than a lifecycle rule, and it should be revisited by whoever does for docs/ingest/ what this task did for docs/tasks/. The rest are frozen kinds per _allowance_rule."
+    },
+    {
+      "name": "labelling rate, seconds per posting",
+      "owner": "docs/tasks/refactor/AUDIT.md",
+      "pattern": "^(?![^\\n]*AUDIT\\.md)[^\\n]*(?<![\\da-fA-F:.\\-=])93\\s*s\\b",
+      "allowed": [
+        "docs/archive/*",
+        "docs/tasks/refactor/CLAUDE_UPDATES.md",
+        "docs/tasks/refactor/LABELLING-NIGHT.md",
+        "docs/tasks/refactor/tranche_five/29-labelling-session.md"
+      ],
+      "_note": "93 s median, n=29, from `python3 backend/tools/label-findings.py --timing`. Registered because it has ALREADY drifted once in the direction this rule is about: the same rate was published as 154 s from four intervals, every budget in the tree was computed from it, and the correction to 93 s had to chase the number through five documents the same day. It is a `record`-class figure -- expensive to reproduce, since it needs a person with a stopwatch -- so rule 3 puts it in one place rather than asking for a command.",
+      "_pattern_note": "The unit is load-bearing. `93` alone is 68 lines of noise (see the webapp row); `93\\s*s\\b` is 31 lines in 6 files, every one of them this figure, with zero false positives measured 2026-08-01. The trailing \\b stops it matching `93 seconds`-shaped prose only if that prose exists -- it does not here, and if it appears the row should be widened rather than left silently narrow, which is the mistake the main-count band made.",
+      "_allowed_note": "HANDOFF.md IS DELIBERATELY NOT ALLOWED, and the argument for allowing it was made and rejected on 2026-08-01 rather than never considered. The case for: its twelve uses are mostly budgets DERIVED from the rate -- 'twenty minutes is 13 postings', 'ten overlap rows is ~16 min', '200 postings is 5.2 h for one person' -- and rule 2 is about a figure having one owner, not about arithmetic being forbidden downstream. The case against, which wins: if the rate is re-measured, the derived budgets go stale TOO, and they are the more dangerous half because they are what somebody acts on -- 'ask for twenty minutes' is the sentence that reaches a human. And this figure has already drifted once exactly that way: it was published at 154 s from four intervals, every budget in the tree was computed from it, and the correction had to chase it through five documents in a day. `rolling` is the one kind rule 1 forbids to be stale and HANDOFF.md is the only one in the tree; exempting it here would exempt the file the rule was written for. The four that remain are frozen kinds per _allowance_rule."
+    },
+    {
+      "name": "Pursuit gate volume, postings per day",
+      "owner": "docs/pursuit-gate-volume.md",
+      "pattern": "^(?![^\\n]*pursuit-gate-volume)[^\\n]*(?<![\\da-fA-F:.\\-=])43\\s*(?:/|\\s)day",
+      "allowed": [
+        "docs/archive/*",
+        "docs/jsonld-coverage.md",
+        "docs/pursuit-description-gate.md",
+        "docs/tasks/refactor/CLAUDE_UPDATES.md",
+        "docs/tasks/refactor/DECISIONS.md"
+      ],
+      "_note": "THE ONE ROW AUDIT.md DOES NOT OWN, and the reason is rule 2 rather than an exception to it: the instrument is 30 days of SQL over `posted_at_ts::date` with a hand-checked junk fraction, and all of it -- method, date range, the adjustment to about 3/day usable -- is in docs/pursuit-gate-volume.md. AUDIT.md has no line of it. Putting the owner where the instrument is, rather than where the index is, is the whole rule; a row that named AUDIT.md here would be the rule quoted and not applied.",
+      "_pattern_note": "Requiring the '/day' or ' day' unit is what makes `43` usable at all -- the bare number is a task count, a defect count, and the top of two tables. Measured 2026-08-01: 11 lines in 7 files with the unit, and the line-start lookahead for the owner's filename drops one of them, docs/tasks/refactor/README.md's task 05 row, WHICH ALREADY CITES THE OWNER ON THE SAME LINE. That is rule 2 being satisfied exactly as written, and a row that reported it would be punishing the compliant form. 10 lines in 6 files remain and every one is frozen.",
+      "_allowed_note": "All five are frozen kinds per _allowance_rule -- two top-level `record` measurements that cite 43/day as prior work, the archive, the run log and the append-only decision register. This row's live enforcement surface is the 25 `contract` documents and HANDOFF.md, and it is clean across all of them today."
     }
   ]
 }

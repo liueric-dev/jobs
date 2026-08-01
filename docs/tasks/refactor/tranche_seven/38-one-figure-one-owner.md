@@ -6,7 +6,14 @@ generator: none
 
 # 38 — One figure, one owner
 
-**Status:** TODO. **Depends on:** 36 (check C4 is what keeps this from recurring).
+**Status:** DONE, 2026-08-01. **Depends on:** 36 (check C4 is what keeps this from recurring).
+
+> **Where the figures live now.** [`../AUDIT.md`](../AUDIT.md) § *The three self-consistency
+> metrics* owns all three, with the command; `backend/config/doc-figures.json` carries the C4
+> rows that keep them there. The tables below are the **derivation**, kept under rule 4 —
+> they name every metric they quote, which is the form rule 3's corollary asks for. The two
+> bare test counts this file used to restate are gone, because a bare integer is exactly what
+> this task exists to remove.
 **Blocks:** nothing, but every later measurement inherits the convention it lands.
 
 Apply [`DOCS-POLICY.md`](../../../DOCS-POLICY.md) rules 2 and 3 to the figures that have
@@ -39,18 +46,37 @@ print('hn:', {k: round(v,4) for k,v in
 
 Now every site in the tree resolves, and every one of them is right:
 
+*(Cited by content, not by line: `13d4be5` and task 37's tree-wide frontmatter sweep moved
+every line number this file was drafted against.)*
+
 | site | figure | metric it is | labelled? |
 |---|---|---|---|
-| `.claude/CLAUDE.md`, `../AUDIT.md:50` | 94.8% | `agree2` | says *"`--repeat 3`"*, which is the **run**, not the metric |
-| `../DECISIONS.md:57`, `CLAUDE_UPDATES.md:606` | 90.7% | `pairwise` | called *"the **pairwise** two-run metric"* at `DECISIONS.md:613` |
-| `../DECISIONS.md:40` | 77.8% | `pairwise`, per platform | called *"pairwise agreement by platform"* |
-| `docs/ingestion_tests/README.md:253` | 85.7% | `agree2`, per platform | table header says `agree2` |
-| `../README.md:31` | 77.8% | `pairwise`, per platform | **not labelled at all** |
+| `.claude/CLAUDE.md` § *production model*, `../AUDIT.md` § *Current measured state* | 94.8% | `agree2` | said *"`--repeat 3`"*, which is the **run**, not the metric |
+| `../DECISIONS.md` § *06 — Was 76% real?* table, `CLAUDE_UPDATES.md` § *06 — the gate* | 90.7% | `pairwise` | called *"the **pairwise** two-run metric"* in the line under that table |
+| `../DECISIONS.md` § *06 — THE GATE* | 77.8% | `pairwise`, per platform | called *"pairwise agreement by platform"* |
+| `docs/ingestion_tests/README.md` § *Gate decision* | 85.7% | `agree2`, per platform | table header says `agree2` |
+| `../README.md`, task 06 row | 77.8% | `pairwise`, per platform | **not labelled at all** |
 
-**The defect is `DECISIONS.md` using "pairwise" for both.** At `:613` it means `agree2`
-("*because the n=17 study ran twice*"); at `:40` it means the three-pair mean. Its own table at
-`:57` uses the second. One file, one word, two metrics — and the two most-quoted numbers in the
-run sit on either side of it.
+**The defect is `DECISIONS.md` using "pairwise" for both.** Under its *06 — Was 76% real?*
+table it means `agree2` ("*because the n=17 study ran twice*"); in *06 — THE GATE* it means the
+three-pair mean. One file, one word, two metrics — and the two most-quoted numbers in the run
+sit on either side of it.
+
+**And it is one turn worse than that, found while implementing this task.** That same
+*"Was 76% real?"* table does not use one metric at all — its three field rows mix two, under a
+caption naming one (its fourth row, whole-record-identical 21.7%, is a third thing again: all
+three runs agreeing on all fifteen compared fields at once):
+
+| row | value in the table | which metric that is | the other one, same run |
+|---|---|---|---|
+| `seniority_level` | 85.2% | **`agree2`** | `pairwise` 84.9% |
+| `role_archetype` | 84.3% | **`agree2`** | `pairwise` 85.8% |
+| `ai_involvement` | 90.7% | **`pairwise`** | `agree2` 94.8% |
+
+Every cell is a real number and none of the entry's conclusions move — `role_archetype` is
+"optimistic" on either metric — but the caption *"comparisons are drawn against the pairwise
+two-run metric"* is true of exactly one of the three rows. `DECISIONS.md` is append-only, so
+`DEC-71` records this rather than editing it.
 
 This is `MEASUREMENT-TRAPS.md`'s territory and probably belongs in it: **a metric with no name
 is a number that cannot be compared to itself.**
@@ -69,16 +95,18 @@ the append-only-safe repair and it preserves the evidence that the ambiguity exi
 
 ### 38b — the one unlabelled site
 
-`../README.md:31` reads *"`ai_involvement` 77.8% on hn_whoishiring"* in the file that calls
-itself the ordered index. Add the metric name. It is a one-line fix and it is the site most
-likely to be copied forward.
+`../README.md`'s **task 06 row** read *"`ai_involvement` 77.8% (`pairwise`) on hn_whoishiring"*
+— without the parenthesis, which is the whole defect — in the file that calls itself the
+ordered index. Add the metric name. It is a one-line fix and it is the site most likely to be
+copied forward.
 
 ### 38c — the superseded pair, in the index that does not mark it
 
-`../README.md:118` still reads *"76% on `seniority_level`, 94% on `ai_involvement`"* with no
-supersede marker. **Every other site in the repo marks it** — `role-track-derivation.md:361`
-strikes it, `DEFECTS.md:604` scopes it, `AUDIT.md:53` calls it dead by name, `.claude/CLAUDE.md`
-strikes it. This one file does not, and it is the ordered index.
+`../README.md` § *Why evals moved to the front* still read *"76% on `seniority_level`, 94% on
+`ai_involvement`"* with no supersede marker. **Every other site in the repo marks it** —
+`role-track-derivation.md` strikes it, `DEFECTS.md` scopes it, `AUDIT.md` § *Current measured
+state* calls it dead by name, `.claude/CLAUDE.md` strikes it. This one file did not, and it is
+the ordered index.
 
 Mark, do not delete (rule 4). The n=17 figures stay visible with the n=115 pair beside them.
 
@@ -88,9 +116,13 @@ Three live values, none of which is what the runner prints:
 
 | site | value |
 |---|---|
-| `../HANDOFF.md:17` | 1178 |
-| `../AUDIT.md:44`, `.claude/CLAUDE.md:177` | 1182 |
+| `../HANDOFF.md` § *State* | one four-digit count |
+| `../AUDIT.md` § *Current measured state*, `.claude/CLAUDE.md` § *Working on a task* | a different one |
 | what `python3 -m unittest discover -s tests` prints today | **neither** |
+
+*(The three integers themselves are deliberately not written here: this file is the one
+arguing that a typed count decays, and C4 flagged it for quoting the copies it exists to
+remove. `git show 13d4be5:docs/tasks/refactor/AUDIT.md` has them if the exact values matter.)*
 
 Each was right when typed. Apply rule 3: **`AUDIT.md` keeps the instrument and drops the
 number**, and every other site cites `AUDIT.md`. `AUDIT.md` already argues for exactly this —
@@ -107,17 +139,40 @@ Task 36's C4 reads a declared list. This task is where the list gets its first r
 test counts, the three self-consistency metrics, the labelling rate, the gate volume. With
 `_comment` and `_why` fields in the existing style.
 
+**Eight rows landed, and the editorial rule they encode is `DOCS-POLICY.md` rule 1's lifecycle
+column rather than anyone's taste.** C4 bites on `contract` and `rolling` — the two kinds that
+may not be stale — and allows `record`, `task` and `rationale`, which are frozen by
+construction and where rewriting a figure destroys the evidence rule 4 exists to keep. Each
+allowance is enumerated to what the figure actually reaches, with a line saying why; see
+`_allowance_rule` in the file.
+
+**`HANDOFF.md` is allowed nowhere.** It is the tree's only `kind: rolling` document, which is
+the one kind rule 1 forbids to be stale, and it is the entry point every session reads first.
+The exemption argued for and rejected was the labelling rate, whose twelve uses there are
+mostly budgets *derived* from the median rather than restatements of it. The reason it lost:
+when a rate is re-measured the derived budgets go stale too, and they are the more dangerous
+half, because *"ask for twenty minutes"* is the sentence that reaches a human. This figure has
+already drifted exactly that way once, off a four-interval reading, and the correction had to
+chase it through five documents in a day. C4 caught this very paragraph restating the number
+while it was being written, which is the check doing the only thing it is for.
+
+**One row is not owned by `AUDIT.md`.** The Pursuit gate volume belongs to
+[`docs/pursuit-gate-volume.md`](../../../pursuit-gate-volume.md), which carries the SQL, the
+date range and the junk-fraction adjustment; `AUDIT.md` carries no line of it. Rule 2 puts a
+figure with its instrument, not with the index — a row naming `AUDIT.md` there would have been
+the rule quoted rather than applied.
+
 ## Definition of done
 
 | | item | how it is checked |
 |---|---|---|
-| | `AUDIT.md` carries the three named metrics and the command that reproduces them | the command in this file runs and prints the three numbers |
-| | No document states a self-consistency figure without naming its metric | `grep -rn '94\.8\|90\.7\|87\.0\|85\.7\|77\.8' docs/ .claude/` — every hit names `agree2`, `pairwise` or `unanimous`, or cites `AUDIT.md` |
-| | `DECISIONS.md` gained an **appended** entry defining the metrics; `:40`, `:57`, `:613` unmodified | `git diff` touches only lines after the last existing entry |
-| | `../README.md:118`'s 76%/94% is struck with the n=115 pair beside it | read it |
-| | No test count is typed anywhere except `AUDIT.md`, and `AUDIT.md`'s is either absent or dated-with-a-caveat | 36's C4 clean |
-| | `backend/config/doc-figures.json` has rows for every figure named here | C4 runs against it |
-| | Both suites green and not smaller | read `Ran N tests` from each |
+| ✅ | `AUDIT.md` carries the three named metrics and the command that reproduces them | `AUDIT.md` § *The three self-consistency metrics*. The command re-run 2026-08-01: `{'agree2': 0.9478, 'pairwise': 0.9072, 'unanimous': 0.8696}`, `hn: {'agree2': 0.8571, 'pairwise': 0.7778}` |
+| ⚠️ | No document states a self-consistency figure without naming its metric | `grep -rn '94\.8\|90\.7\|87\.0\|85\.7\|77\.8' docs/ .claude/`. Clean in every `contract` and `rolling` document **except three lines outside this task's writable scope** — `.claude/CLAUDE.md`, `docs/ingest/nyc-open-data.md` (this task's own § *Out of scope*), and two prose cells in `docs/ingestion_tests/README.md` whose table headers name the metric. Frozen `record`/`task`/`rationale` hits are evidence under rule 4 and are left |
+| ⏳ | `DECISIONS.md` gained an **appended** entry defining the metrics; the three earlier entries unmodified | `DEC-71`, drafted and handed to the orchestrator, which owns that file. `git diff docs/tasks/refactor/DECISIONS.md` is empty from this task |
+| ✅ | `../README.md`'s 76%/94% is struck with the n=115 pair beside it | § *Why evals moved to the front*; struck, with an `agree2`-named replacement blockquote |
+| ✅ | No test count is typed anywhere except `AUDIT.md`, and `AUDIT.md`'s is either absent or dated-with-a-caveat | **absent.** `AUDIT.md` carries the two commands and *"your floor is the suite's own reading before you changed anything"*. C4's only remaining finding is one `HANDOFF.md` line, already in the baseline and task 40's |
+| ✅ | `backend/config/doc-figures.json` has rows for every figure named here | eight rows: both test counts, the three metrics, the per-platform pair, the labelling rate, the gate volume. Every pattern measured over `docs/` and the count recorded in its `_pattern_note` |
+| ✅ | Both suites green and not smaller | `Ran 1233 tests` / `OK` (main) and `Ran 93 tests` / `OK` (webapp), **run 2026-08-01, unchanged from this wave's opening reading**. Those two integers are a dated observation of a run, not a floor anyone should compare against later — that is what the rest of this task is about, and `AUDIT.md` carries the commands |
 
 ## Out of scope
 

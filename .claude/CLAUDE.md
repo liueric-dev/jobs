@@ -119,8 +119,12 @@ volume, not errors.
 
 **`deepseek-v4-flash` is the production model.** It does not agree with itself at
 temperature 0 — **85.2% [77.6–90.6] on `seniority_level`, 94.8% [89.1–97.6] on
-`ai_involvement`**, n=115, `--repeat 3` (task 06). Any measurement without that floor
-beside it is uninterpretable. ~~76% / 94%~~ were the provisional **n=17** figures and
+`ai_involvement`**, n=115, both **`agree2`** (task 06). Any measurement without that floor
+beside it is uninterpretable. **Name the metric whenever you quote one of these.** The same
+run yields `agree2` 94.8%, `pairwise` 90.7% and `unanimous` 87.0% for `ai_involvement`, all
+correct and all in circulation; `--repeat 3` is the *run*, not the metric. `AUDIT.md`
+§ *The three self-consistency metrics* owns all three and carries the command that
+reproduces them from committed data (`DEC-71`). ~~76% / 94%~~ were the provisional **n=17** figures and
 are superseded; `DECISIONS.md` § *06 — Was 76% real?* answers no. They are still quoted
 in older documents, so check the n before reusing either pair.
 
@@ -182,8 +186,12 @@ throughout and it is why they are trustworthy.
    wrong given what the code actually says.
 4. Implement.
 5. Run the suite; it should not go down.
-   `cd backend && python3 -m unittest discover -s tests` — **1182** as of 2026-07-31.
-   `cd backend/webapp && .venv/bin/python -m unittest discover -s tests` — **93**.
+   **Run it BEFORE you change anything — that reading is your floor.** Not a number
+   written here: ~~**1182** as of 2026-07-31~~ was correct the day it was typed, and on
+   2026-08-01 this file, `AUDIT.md` and `HANDOFF.md` held three different values and none
+   of them was what the runner printed (`DEC-71`).
+   `cd backend && python3 -m unittest discover -s tests`
+   `cd backend/webapp && .venv/bin/python -m unittest discover -s tests`
    `pytest` is installed in no interpreter here; `unittest` is stdlib and works.
    ~~It was at 263 tests~~ — that figure predated Phase 1 and was nine times too small
    to catch a regression. **Read the `Ran N tests` line, not a static count**: several

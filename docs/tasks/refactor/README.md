@@ -34,7 +34,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | 03 | [Stop discarding upsert errors](tranche_one/03-fix-silent-upsert-errors.md) | `UpsertResult.errors` read in every ingest path — all 8 sites | done |
 | 04 | [Quota and wall-clock baseline](tranche_one/04-quota-baseline.md) | `cost-test.py` measuring requests and seconds, not dollars — **the binding constraint is `EXTRACT_BATCH_SIZE=40`, not quota** | done |
 | 05 | [Corpus volume under a widened gate](tranche_one/05-widened-gate-volume.md) | a number: how many rows a Pursuit gate would admit — **N = 43/day**, [`docs/pursuit-gate-volume.md`](../../pursuit-gate-volume.md) | done |
-| 06 | [Re-run self-consistency at n=120](tranche_one/06-self-consistency-n120.md) | whether the 76% figure is real — **no; and the gate says STOP**, `ai_involvement` 77.8% on hn_whoishiring | done |
+| 06 | [Re-run self-consistency at n=120](tranche_one/06-self-consistency-n120.md) | whether the 76% figure is real — **no; and the gate says STOP**, `ai_involvement` **77.8% (`pairwise`)** on `hn_whoishiring`. The three metrics and the command that reproduces them are owned by [`AUDIT.md`](AUDIT.md) § *The three self-consistency metrics* | done |
 | — | Extraction policy — the two conversational decisions (`943d899`) | `config/extraction-policy.json`, `extract.vote_facts()`, `drain_loop()` — **selective majority-of-3 at +4.2% of calls, and the 40/day ceiling lifted**. No task file; see [`HANDOFF.md`](HANDOFF.md) | done |
 
 ## Phase 1 — Finish the evals harness
@@ -126,7 +126,7 @@ these seven tasks execute — read it first; each task file cites a rule from it
 |---|---|---|---|
 | 36 | [Make the doc policy enforceable](tranche_seven/36-enforce-doc-policy.md) | `backend/tools/audit-docs.py` — six checks, `audit-doc-links.py`'s contract, wired into the suite. **Lands red on purpose**: check C5 has real failures in the tree today | todo |
 | 37 | [Classify every document](tranche_seven/37-classify-every-doc.md) | `kind:` frontmatter tree-wide; the `docs/README.md` index that has never existed, which is what makes orphan detection possible at all. **C1 and C2 both clean, zero orphans.** Ten false statements found in seven per-script contracts — six still said upsert errors were discarded four days after `e353e3e` fixed all eight sites | done |
-| 38 | [One figure, one owner](tranche_seven/38-one-figure-one-owner.md) | **No self-consistency number here is wrong — one word is overloaded.** `agree2` 94.8%, `pairwise` 90.7%, `unanimous` 87.0%, all n=115, all in circulation, one of them ever named. Resolved from committed data 2026-08-01; nothing needs re-measuring | todo |
+| 38 | [One figure, one owner](tranche_seven/38-one-figure-one-owner.md) | **No self-consistency number here is wrong — one word is overloaded.** Three metrics — `agree2`, `pairwise`, `unanimous` — all n=115, all in circulation, one of them ever named. [`AUDIT.md`](AUDIT.md) § *The three self-consistency metrics* now owns all three with the command; no test count is typed anywhere. Resolved from committed data 2026-08-01; nothing needed re-measuring | done |
 | 39 | [Split the `D<n>` namespace](tranche_seven/39-split-the-d-namespace.md) | `D` = defects, `DEC` = decisions, one allocator each, declared in both headers. **The twenty decision entries re-prefixed to `DEC-46`–`DEC-65`** — numbers preserved, `<a id="dNN">` anchors left behind so inbound `#d46` citations still land. `ats-discover.py`'s dozen `D45` citations mean the **defect**, were verified one by one and deliberately not swept; `CLAUDE_UPDATES.md` and `docs/archive/` are `kind: record` and are exempt | done |
 | 40 | [Roll the handoff forward](tranche_seven/40-roll-the-handoff-and-clear-the-archive.md) | `HANDOFF.md`'s entry point still sends every session to do task 34, justified by a premise task 34 **struck as wrong**. Plus `docs/WORKING-METHOD.md`, promoted; plus § *Still to archive*, cleared | todo |
 | 41 | [Git and repo hygiene](tranche_seven/41-git-and-repo-hygiene.md) | **41a is a live production bug sitting uncommitted** — the Workday gate dies on `UndefinedColumn` because `platform_exclude` landed in `7d94bb1` and `_GATE_TEXT_COLUMNS` did not follow. Commit it first and alone | **next** |
@@ -137,8 +137,18 @@ these seven tasks execute — read it first; each task file cites a rule from it
 ## Why evals moved to the front
 
 [`docs/ingestion_tests/README.md`](../../ingestion_tests/README.md) records that
-`deepseek-v4-flash` does not agree with itself at temperature 0 — 76% on
-`seniority_level`, 94% on `ai_involvement`, whole-record identical 0 of 17.
+`deepseek-v4-flash` does not agree with itself at temperature 0 — ~~76% on
+`seniority_level`, 94% on `ai_involvement`, whole-record identical 0 of 17~~.
+
+> **Superseded, marked not deleted (`DOCS-POLICY.md` rule 4).** That pair is the
+> provisional **n=17** measurement of 2026-07-27, and task 06 re-ran it at n=115: the
+> live figures are `seniority_level` **85.2% (`agree2`)** and `ai_involvement` **94.8%
+> (`agree2`)**, whole-record identical 25 of 115. Both are owned by
+> [`AUDIT.md`](AUDIT.md) § *The three self-consistency metrics*, which also names the
+> other two metrics the same run reports. The pair is left visible because published
+> text still cites it — check the **n** before reusing either number. The conclusion
+> below does not move: the finding was that the model disagrees with itself at all,
+> and at n=115 it still does.
 
 Two facts make that decisive for this refactor rather than merely interesting.
 

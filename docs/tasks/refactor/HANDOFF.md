@@ -57,7 +57,8 @@ the documentation rules it wrote *checkable* rather than merely written.
 | **36** enforce the doc policy | **done** — `57c34a5` |
 | **37** classify every document | **done** — `89f7a3f` |
 | **39** split the `D` namespace | **done** — `0110473`, `b64d7a6` |
-| **41a/41b** git and repo hygiene | **done** — `7d839f5` (the Workday gate fix), `9b7bb5e` |
+| **41a** the nightly-run bugfix that lived only in the working tree | **done** — `7d839f5` |
+| **41b** `scripts/` ignored, the tranche-two launcher untracked | **done** — `183b4dc`, `9b7bb5e` |
 | **42** close the UNBLOCKED defects | **done** — `2a94f3d` |
 | **38** one figure, one owner | landing now |
 | **40** roll this file, clear the archive | landing now (this edit) |
@@ -141,7 +142,7 @@ in writing and is the clearest confirmation of that prediction available:
 
 | | before (5 postings) | after (31) |
 |---|---|---|
-| per-posting rate | 154 s, n=4 | **93 s median, n=29** — and the n=4 sample sat entirely inside a warm-up curve |
+| per-posting rate | 154 s, n=4 | **93 s median, n=29** ([`AUDIT.md`](AUDIT.md) owns the rate) — and the n=4 sample sat entirely inside a warm-up curve |
 | the recall question | unearned | **earned** — 3 non-surfaced postings the labeller would apply to |
 | the vocabulary gap | n=1 anecdote, "commercial/sales" | **13 postings**, and a corpus re-derivation that inverted its own instrument |
 | floor / ceiling / measured | none | **still none** |
@@ -197,7 +198,7 @@ drawn set is permanent. (2) **`consensus()` promoting a majority of size one is 
 now**, not hypothetically. (3) ~~**the per-posting rate is measured at ~154 s, so twenty
 minutes is ~8 postings rather than ~20** and the "one second person, ten minutes" unblock
 is **~26 minutes**~~ **— WRONG, and the correction goes the *cheap* way. At n=29 intervals
-the median is 93 s**: twenty minutes is **13 postings**, the ten `overlap` rows are
+the median is 93 s** ([`AUDIT.md`](AUDIT.md)): twenty minutes is **13 postings**, the ten `overlap` rows are
 **~16 minutes**, and the DoD's ≥100 postings is **~2.6 hours**. See § *the stopwatch
 reading*. (4) **The recall question is earned.** Three postings the pipeline did *not*
 surface are ones the labeller says they would apply to, two of them `gate_rejected` —
@@ -282,7 +283,7 @@ unmet on purpose, and the cost lever in the profiles table. If you read nothing 
    got both cheaper and more valuable in the same update.** The overlap block being
    complete means the second labeller's ten rows are the *last* input the ceiling needs —
    they do not have to be preceded by anything, and `evals label report` prints the moment
-   they land. At the re-derived 93 s that ask is **~16 minutes**, not the ~26 this file
+   they land. At the re-derived rate that ask is **~16 minutes**, not the ~26 this file
    said yesterday and not the ten it said three times before that.
 
 1. **Task 29 is the whole critical path** (§ *what is blocked*), and **its schema, its
@@ -367,7 +368,7 @@ fact about an environment, not about a repo.
 
 ## ARCHIVED: the stopwatch reading, measured at n=4 and re-derived at n=29
 
-> **MOVED 2026-07-31 → [`docs/archive/handoff-stopwatch-reading.md`](../../archive/handoff-stopwatch-reading.md).** Measured the per-posting labelling rate, 2026-07-31. The n=4 reading (154 s) and its same-day correction at n=29 (93 s median). Superseded as a *narrative* by the single entry in HANDOFF.md's § Pending follow-ups, which carries the live number.
+> **MOVED 2026-07-31 → [`docs/archive/handoff-stopwatch-reading.md`](../../archive/handoff-stopwatch-reading.md).** Measured the per-posting labelling rate, 2026-07-31. The n=4 reading (154 s) and its same-day correction at n=29, which more than halved it. Superseded as a *narrative* by the single entry in HANDOFF.md's § Pending follow-ups; the rate itself is owned by [`AUDIT.md`](AUDIT.md).
 
 ## READ THIS FIRST: task 29 is UNBLOCKED ~~, and the next session labels~~
 
@@ -379,7 +380,8 @@ fact about an environment, not about a repo.
 > this session's assignment.
 
 **Done 2026-07-30. Nothing is committed — the working tree carries all of it.** Suite
-1160 → **1166** (main) and 61 → **75** (webapp). For the first time in this run **there is
+**+6 main, +14 webapp** on that date — the deltas are what this sentence was saying, and
+the absolute counts belong to [`AUDIT.md`](AUDIT.md) (rule 2). For the first time in this run **there is
 no blocker on task 29 at all**: no credential, no code, no person. The remaining work is
 someone reading postings and answering six questions.
 
@@ -620,13 +622,13 @@ over the 31 postings labelled 2026-07-31 by one labeller, Wilson intervals from
    does.
 
 **What it changes:** 200 is now on the table on its own stated terms, at **5.2 h** for one
-person at the re-derived 93 s (§ *the stopwatch reading*) rather than the ~8.5 h the 154 s
+person at the re-derived rate (§ *the stopwatch reading*) rather than the ~8.5 h the 154 s
 figure implied. It does **not** license touching the gate — see § *the first finding
 arrived BEFORE the first label* for why n=1 is not a licence.
 
 ~~**THE DELIVERABLE THE NEXT SESSION SHOULD ACTUALLY BRING BACK IS A STOPWATCH READING.**~~
-**DELIVERED 2026-07-31 — twice, and the second reading corrected the first.** 93 s median,
-n=29, `tools/label-findings.py --timing`; § *the stopwatch reading*. The paragraph is kept
+**DELIVERED 2026-07-31 — twice, and the second reading corrected the first.** 93 s median at n=29 ([`AUDIT.md`](AUDIT.md) owns it),
+`tools/label-findings.py --timing`; § *the stopwatch reading*. The paragraph is kept
 because it is the request that produced the number and because its warning against
 inventing a correction factor is what made the re-derivation legible when it arrived.
 
@@ -1102,7 +1104,7 @@ Thirteen tasks committed, one experiment, plus the two conversational decisions:
 | — | **`extract.py` does NOT fan out per profile — `manage_app_users.py`'s header corrected** | `127c7c0` |
 | 29 | **the sitting ran to 186 rows / 31 postings; ALL TEN `overlap` rows done** | no commit — a database write |
 | 29 | **`tools/label-findings.py` — the re-derivation this file asked for three times, as a command** (+5 tests, suite → **1171**) | this session |
-| 29 | **the per-posting rate RE-DERIVED at 93 s, n=29 — the 154 s reading was a warm-up curve, and the correction is CHEAPER** | this session |
+| 29 | **the per-posting rate RE-DERIVED at n=29 — the 154 s reading was a warm-up curve, and the correction is CHEAPER** | this session |
 | 29 | **the recall question EARNED — 3 postings the pipeline did not surface, 2 of them `gate_rejected`, that the labeller would apply to** | this session |
 | 11 | **`derive-role-tracks.py` had NO `facts_version` filter — 58% of its `other` population was the twelve-value vocabulary; the "26 values are unused" reading inverts** | this session |
 | 11 | **`revenue_commercial` proposed — 23.1% of the v3 `other` bucket from ONE value; deliberately NOT applied, no `FACTS_VERSION` bump while `pursuit-v1` is open** | this session |
@@ -2114,7 +2116,7 @@ re-scope (21).
 > still refused for want of a *second* `labeller_id` on the same item, not for want of
 > volume — so **the tenth row from a second person is worth more than the hundredth row
 > from the first**, and it is now the *last* thing the ceiling needs rather than the first.
-> The ask is **~16 minutes** at the re-derived 93 s (§ *the stopwatch reading*), not the
+> The ask is **~16 minutes** at the re-derived rate (§ *the stopwatch reading*), not the
 > ~26 written above and not the ten written three times before that.
 
 0. ~~**Fix the relevance gate.**~~ **DONE 2026-07-29** — `4eefb7e`, `e8f3b72`, `9dab9e6`
@@ -2158,7 +2160,7 @@ re-scope (21).
    done or cheaper, and a step has been added at the end that did not exist yesterday.**
 
    1. **Get the second labeller. Ask for about twenty minutes — not half an hour, and not
-      ten minutes.** Ten `overlap` rows at the re-derived **93 s** is **~16 min**
+      ten minutes.** Ten `overlap` rows at the re-derived rate is **~16 min**
       (§ *the stopwatch reading*). This is not merely still the cheapest unblock in the
       task: **the owner has now finished all ten `overlap` rows**, so those ten rows are
       the last input `labels.inter_annotator()` needs and `evals label report` prints the
@@ -2180,7 +2182,8 @@ re-scope (21).
    4. **NEW — decide whether the recall question buys the back half.** It is earned on this
       file's own stated trigger: two `gate_rejected` postings and one `below_floor` one
       turned out to be roles the labeller would apply to (Ramp, Twilio, Brex —
-      § *How many to label*). 200 postings is **5.2 h** for one person at 93 s. **The
+      § *How many to label*). 200 postings is **5.2 h** for one person at the measured
+      rate. **The
       decision is the repo owner's and the evidence for it is a trigger, not a rate** — the
       three strata's Wilson intervals overlap almost completely at n=31.
    5. **NEW — do NOT apply the `revenue_commercial` archetype while labelling is open**,
@@ -2387,11 +2390,11 @@ re-scope (21).
 
 ## Pending follow-ups with no task of their own
 
-- **The per-posting labelling time is MEASURED at 93 s (n=29), and the twenty-minute budget
-  is out by ~1.5x in the CHEAP direction.** Re-derived 2026-07-31 with
+- **The per-posting labelling time is MEASURED at 93 s, n=29 ([`AUDIT.md`](AUDIT.md) owns it; stated here with its method),
+  and the twenty-minute budget is out by ~1.5x in the CHEAP direction.** Re-derived 2026-07-31 with
   `python3 backend/tools/label-findings.py --timing`, over all 31 postings labelled by
   `u_090b0ad12e99` in `2026-07-31T02:56:05`–`05:25:27` UTC, one 5,765 s break excluded at
-  `--break-secs 600`. Median **93 s**, mean **110 s**; including the break, median 97 s /
+  `--break-secs 600` ([`AUDIT.md`](AUDIT.md)). Median **93 s**, mean **110 s**; including the break, median 97 s /
   mean 299 s (n=30). First 7 intervals mean **137 s**, last 7 mean **83 s** — there is a
   warm-up curve, and the n=4 figure below is its first four intervals. Budgets: ten
   `overlap` rows **16 min**, twenty minutes **13 postings**, 60 postings **1.6 h**, 100

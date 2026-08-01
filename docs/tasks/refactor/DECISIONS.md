@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-73`.** Allocated `DEC-46`–`DEC-72`. `DEC-71` is task 38's. The count starts at 46 rather than at
+**Next free: `DEC-73`.** Allocated `DEC-46`–`DEC-72`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -2355,3 +2355,61 @@ empty, and rule 4 makes the next retirement an event with a cause rather than a 
 
 Reversible: yes. Nothing was deleted and the § D text is struck and kept, so archiving it
 later needs only the move and a link sweep — the same change this one declined to make.
+
+---
+
+<a id="dec-71"></a>
+
+## DEC-71 — the three self-consistency metrics are named, and no test count is typed into prose
+
+**2026-08-01, task 38.**
+
+**No self-consistency number in this repo was wrong. One word was overloaded.**
+`docs/ingestion_tests/selfcheck-n120-2026-07-28.json` carries three distinct agreement
+metrics per field, all three circulate, and only one of them was ever named. So two correct
+numbers looked like a contradiction.
+
+| metric | what it is | `ai_involvement`, n=115 |
+|---|---|---|
+| `agree2` | repeat 1 against repeat 2 — the two-run protocol, the only one comparable to the superseded n=17 study | **94.8%** |
+| `pairwise` | the mean over all three pairs of runs | **90.7%** |
+| `unanimous` | all three runs identical | **87.0%** |
+
+**Decided:** `AUDIT.md` § *The three self-consistency metrics* owns all three, with the
+command that reproduces them from committed data and no LLM call. Every other site cites
+that section **and names its metric** — `94.8% (agree2)` — rather than restating a bare
+number. `--repeat 3` is the **run**, not the metric, and had been standing in for one.
+
+**`DECISIONS.md` is append-only, so `DEC-46`-era entries at `:40`, `:57` and `:613` were not
+rewritten.** They use "pairwise" for two different metrics — at one site meaning `agree2`,
+at another the three-pair mean. This entry defines the names and states which each earlier
+entry meant; that is the append-only-safe repair, and it preserves the evidence that the
+ambiguity existed. Rewriting them would have hidden the defect this entry is about.
+
+**The test count: `AUDIT.md` keeps the instrument and drops the number.** On 2026-08-01
+`.claude/CLAUDE.md`, `AUDIT.md` and `HANDOFF.md` held three different values — 1182, 1178
+and 1160 — and none was what the runner printed. Each was right when typed.
+
+**Decided for `.claude/CLAUDE.md`: no floor is written down. The floor is the suite's own
+reading taken before you change anything.** *"It should not go down"* needs something to
+compare against, and the only reading that cannot be stale is the one you just took.
+
+**Rejected: a dated floor with a "verify before trusting" note.** It is the option the task
+file offered first and it reproduces the defect one caveat later — a typed integer in the
+file every session reads first, going stale on the next commit, with a note asking the
+reader to do the thing the number was there to save them. This run has already produced
+eight numbers that went stale behind exactly that kind of hedge.
+
+**Rejected: exempting `HANDOFF.md` from check C4.** It is the tree's only `kind: rolling`
+document — the one kind rule 1 forbids to be stale — and it is the live entry point. It is
+allowed nowhere in `doc-figures.json`, and the allowances that do exist are `record`, `task`
+and `rationale` files, which are frozen by construction and where rewriting a figure would
+destroy the evidence rule 4 exists to keep.
+
+**One row is deliberately not owned by `AUDIT.md`.** The Pursuit gate volume belongs to
+`docs/pursuit-gate-volume.md`, which carries the SQL, the date range and the junk-fraction
+adjustment. Rule 2 puts a figure with its **instrument**, not with the index — pointing it
+at `AUDIT.md` would have been the rule quoted rather than applied.
+
+Reversible: yes. The metric names are additive and the figures themselves are unchanged;
+nothing was re-measured and task 06's gate decision is untouched.
