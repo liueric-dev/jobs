@@ -51,6 +51,29 @@ fold into task 34).
 safely — do not fix blind against production), or **won't-fix** (reason
 given).
 
+## Allocator — this register owns the `D` prefix
+
+Per [`DOCS-POLICY.md`](../DOCS-POLICY.md) rule 6, one allocator per register and no
+register issues an identifier in another's space. **This file owns `D<n>` and nothing
+else does.** Decisions are `DEC-<n>` and live in
+[`DECISIONS.md`](../tasks/refactor/DECISIONS.md); task numbers live in
+[`tasks/refactor/README.md`](../tasks/refactor/README.md).
+
+**Next free: `D66`.** Allocated `D01`–`D45`; **`D46`–`D65` are burnt and must never be
+issued.** They are not defects and never were — `DECISIONS.md` continued this register's
+count when it started allocating decision IDs mid-file, so those twenty numbers circulate
+in eighty-odd places meaning *decisions*. Task 39 re-prefixed the live sites to `DEC-46`–
+`DEC-65`, but `CLAUDE_UPDATES.md` and `docs/archive/` are `kind: record` and are
+deliberately left unswept, so the old spelling survives in the tree on purpose. Issuing a
+defect `D52` would make it ambiguous against those, which is the exact failure rule 6
+exists to prevent. Skipping twenty integers is cheap; a number that resolves two ways is
+not.
+
+**Cross-register references are written out** — *"defect D45"*, *"decision DEC-52"* —
+because a bare `D45` in a code comment cannot be resolved by a reader who does not already
+know which file it came from. `backend/tools/ats-discover.py` is the worked example: its
+dozen citations all read *"defect D45"* and all mean this register.
+
 ---
 
 ## Task 34's pass over this register, 2026-07-31
