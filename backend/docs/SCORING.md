@@ -267,7 +267,19 @@ including its `long_title`, `no_description` and `tombstoned` pathology rows.
 One narrative response on the first run parsed but omitted a required field
 and would have been tombstoned; the same prompt succeeded on re-run, which is
 the temperature-0 non-determinism `deepseek-v4-flash` is already known for
-(76% self-agreement on `seniority_level`).
+(~~76% self-agreement on `seniority_level`~~).
+
+> **SUPERSEDED 2026-08-01 by task 06 — the struck figure is the provisional
+> `n=17` reading and must not be re-quoted.** Task 06 re-ran it with
+> `python3 -m evals selfcheck --repeat 3` at `n=115` and the current pair,
+> with its confidence intervals, is owned by
+> [`docs/tasks/refactor/AUDIT.md`](../../docs/tasks/refactor/AUDIT.md) — cited
+> here rather than restated, per `docs/DOCS-POLICY.md` rule 2, so that this
+> file cannot be the place a fourth copy goes stale.
+> `docs/tasks/refactor/DECISIONS.md` § *06 — Was 76% real?* is why the answer
+> is no. **Check the `n` before reusing either pair**; the direction of the
+> point below is unaffected — the model still does not agree with itself at
+> temperature 0, which is the only property this paragraph relies on.
 
 ### The provider's limits, in the repo rather than in someone's memory
 
@@ -341,9 +353,27 @@ rewards.
 ## What it costs in dollars (secondary)
 
 Kept because it is still the input to any future paid tier, and demoted
-because the section above is what actually binds. **The `latency` and
+because the section above is what actually binds. ~~**The `latency` and
 `% cached` columns in this table are superseded by the 2026-07-28
-measurement above** — they were taken at `workers=1` against a live corpus.
+measurement above**~~ — they were taken at `workers=1` against a live corpus.
+
+> **SUPERSEDED IN FULL 2026-08-01, not in two columns — corrected by task 40.**
+> The note above named `latency` and `% cached`, which understates it: task 04
+> re-measured this table's stage on a **frozen** corpus at the pipeline's own
+> concurrency, and **every cell of the extraction row moved.** § *The
+> measurement* above is the live pair, and it is the one to quote:
+>
+> | | this table (2026-07-26, live corpus, `workers=1`) | § *The measurement* (2026-07-28, `corpus-v1`, task 04) |
+> |---|---|---|
+> | extraction $/call | ~~$0.000385~~ | see § *The measurement* |
+> | extraction input tok | ~~1,363 (94% cached)~~ | see § *The measurement* — and the cache figure is a **range**, not a number; 94% was the top of it |
+> | extraction latency | ~~9.3s~~ | see § *The measurement*, at `EXTRACT_MAX_WORKERS=3` |
+>
+> Kept, not deleted, because the **dollar-comparison table below depends on it**
+> and because a superseded cost is the only evidence of how the cost was once
+> read. **The three `$/month` rows below are unaffected in their ordering**,
+> which is the only thing that table was ever used for — see the `250/day`
+> note under it, which was separately 6x high.
 
 Measured with `tools/cost-test.py` against `deepseek-v4-flash` on real
 postings, at the production `temperature=0`. Prices `0.14 / 0.0028 / 0.28` per

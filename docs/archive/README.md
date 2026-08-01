@@ -45,15 +45,36 @@ every case.
 | [`handoff-ceiling-and-preflight.md`](handoff-ceiling-and-preflight.md) | why the inter-annotator ceiling was unreachable, and the two pre-flight values that were wrong and produced no error | fixed and verified 2026-07-30. **The two operational subsections stayed in `HANDOFF.md`** — `FRONTEND_ORIGIN` and the `app_users` schema are configuration, not narrative |
 | [`handoff-gate-fix.md`](handoff-gate-fix.md) | step 0's relevance-gate fix: mock recall 48.3% → 89.7%, live tier ≤2 869 → 880 | its own first line reads *"What follows is the record, not a plan."* The four forbidden phrase families are now guarded by a test rather than by this prose |
 | [`handoff-owner-decisions.md`](handoff-owner-decisions.md) | the two extraction decisions taken in conversation — selective majority-of-3, and the 40/day ceiling | landed in `943d899`; the rationale lives in `DECISIONS.md` under EXTRACT |
+| [`handoff-match-quality.md`](handoff-match-quality.md) | how well `match.py` ranked for profile `tech` — the repo author's own software-engineer search — over 917 already-LLM-scored postings, 2026-07-26 | the persona is not the Pursuit cohort. § 4 is promoted to [`docs/MEASUREMENT-TRAPS.md`](../MEASUREMENT-TRAPS.md); **its 12.7/20 is imitation fidelity against a non-target persona and is relabelled as such in the file.** A stub and link remain at `backend/docs/HANDOFF-match-quality.md` |
 | [`handoff-session-measurements.md`](handoff-session-measurements.md) | session-by-session narrative of what was measured through 2026-07-31 | live figures are in `HANDOFF.md` § *State at handoff* and in `AUDIT.md` |
-| [`handoff-session-method.md`](handoff-session-method.md) | method notes from those sessions | the durable half is promoted to `HANDOFF.md` § *How this run works* |
+| [`handoff-session-method.md`](handoff-session-method.md) | method notes from those sessions | the durable half was promoted to `HANDOFF.md` § *How this run works*, and ~~that~~ **is now [`docs/WORKING-METHOD.md`](../WORKING-METHOD.md)** — promoted again 2026-08-01 by task 40 under rule 5, leaving a stub in `HANDOFF.md`. This row pointed at what became that stub for the length of one commit; it is the inbound citation rule 4 exists for |
 
-## Still to archive
+## Still to archive — ~~two files~~ **NOTHING. Cleared 2026-08-01 by task 40**
 
-These were dispositioned for the archive by task 34 § D and have **not** been moved:
-`backend/docs/SCORING.md` (superseded by `docs/scoring.md`; two hand-written scoring docs
-is drift) and the persona-bound remainder of `backend/docs/HANDOFF-match-quality.md`
-(its § 4 was promoted to [`docs/MEASUREMENT-TRAPS.md`](../MEASUREMENT-TRAPS.md); the rest
-measures a non-target persona and its 12.7/20 must be relabelled as imitation fidelity
-before anyone quotes it). Both are live citations today, so moving them is a separate
-change with its own link sweep.
+> ~~These were dispositioned for the archive by task 34 § D and have **not** been moved:
+> `backend/docs/SCORING.md` … and the persona-bound remainder of
+> `backend/docs/HANDOFF-match-quality.md` … Both are live citations today, so moving them
+> is a separate change with its own link sweep.~~
+>
+> **That was the correct deferral and this is the change it deferred to.** Struck and kept
+> per rule 4, because the two files did not get the same answer:
+
+| file | task 34 § D said | decided 2026-08-01 |
+|---|---|---|
+| `backend/docs/HANDOFF-match-quality.md` | archive the persona-bound remainder | **archived** → [`handoff-match-quality.md`](handoff-match-quality.md), stub and link left at the original path, **12.7/20 relabelled** as imitation fidelity against a non-target persona |
+| `backend/docs/SCORING.md` | *"Archive. Superseded by `docs/scoring.md`; two hand-written scoring docs is drift."* | **kept, and § D's disposition retired — decision `DEC-72`.** Not drift: a deliberate split, and each file declares the split in its own opening paragraph |
+
+**Why `SCORING.md` stays.** `docs/scoring.md:15-21` calls it *"the design argument — why
+the work is split into four stages and what each one costs"*; `SCORING.md:9-13` calls
+`docs/scoring.md` *"the contract"* and points at it for what a score means and where every
+weight came from. Two documents that each declare a different job in their own first
+paragraph is what `DOCS-POLICY.md` rule 1 asks for, not the duplication § D read them as.
+§ D was written from the file list rather than from the openings. **The real finding is
+underneath it and was addressed instead:** `SCORING.md` carried a cost table task 04
+superseded and a `76% self-agreement` line task 06 superseded, and both are now marked at
+the figure, citing the owning document rather than restating the current number.
+
+**The archive backlog is empty.** If a file is dispositioned for this directory again, it
+is moved in the commit that decides it — rule 4 makes retirement an event with a cause,
+and a standing *"still to archive"* list is exactly the schedule with no owner that
+`DOCS-POLICY.md` § *Choosing between contract and record* warns about.

@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-71`.** Allocated `DEC-46`–`DEC-70`. The count starts at 46 rather than at
+**Next free: `DEC-73`.** Allocated `DEC-46`–`DEC-72`. `DEC-71` is task 38's. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -2317,3 +2317,41 @@ already acts on: every citation of it today is a citation of the contract half.
 
 Reversible: yes, and cheaply, because nothing is being deleted. If the split turns out not
 to be worth two files, the record half is appended back and the `kind:` reverts.
+
+---
+
+<a id="dec-72"></a>
+
+## DEC-72 — both scoring documents stay, and task 34 § D's archive disposition is retired
+
+**2026-08-01, task 40.**
+
+Task 34 § D dispositioned `backend/docs/SCORING.md` for the archive: *"Superseded by
+`docs/scoring.md`; two hand-written scoring docs is drift."* Task 40 was the change that
+disposition deferred to, and reading the two files rather than the file list reverses it.
+
+**Decided: keep both, and retire the disposition.** `docs/scoring.md:15-21` calls
+`SCORING.md` *"the design argument — why the work is split into four stages and what each
+one costs"*; `SCORING.md:9-13` calls `docs/scoring.md` *"the contract"* and points at it for
+what a score means and where every weight came from. **Two documents that each declare a
+different job in their own opening paragraph is what `DOCS-POLICY.md` rule 1 asks for**, not
+the duplication § D read them as.
+
+**Rejected: archiving it per § D and folding the design argument into `docs/scoring.md`.**
+That is the tidier file tree and it would have merged a cost-and-design essay into a document
+already carrying two lifecycles — the exact problem `DEC-70` opened task 43 to fix. Merging
+into it first would have made that split harder, not easier.
+
+**§ D was written from the file list, not from the openings**, and that is the transferable
+part: *"two documents about X"* is a shape, not a finding. The real defect was underneath it
+and is what actually got fixed — `SCORING.md` carried a cost table task 04 superseded and a
+`76% self-agreement` line task 06 superseded. Both are now marked at the figure, citing the
+document that owns the current number rather than restating it, so this file cannot become
+the place a fourth copy goes stale.
+
+`docs/archive/README.md` § *Still to archive* is updated to say this, rather than continuing
+to say the file was "not moved" when the decision was to keep it. The archive backlog is now
+empty, and rule 4 makes the next retirement an event with a cause rather than a standing list.
+
+Reversible: yes. Nothing was deleted and the § D text is struck and kept, so archiving it
+later needs only the move and a link sweep — the same change this one declined to make.

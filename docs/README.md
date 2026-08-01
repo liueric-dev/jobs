@@ -137,8 +137,12 @@ and with their status:
 ## Not in this tree
 
 - **`backend/docs/`** — `DEVELOPER.md`, `OVERVIEW.md`, `SCORING.md` and two
-  `HANDOFF-*.md` files. Out of scope for `audit-docs.py`, which starts at `docs/`;
-  widening it is a later call (task 37, *Out of scope*).
+  `HANDOFF-*.md` files, one of which (`HANDOFF-match-quality.md`) is now a stub
+  pointing at [`archive/handoff-match-quality.md`](archive/handoff-match-quality.md).
+  Out of scope for `audit-docs.py`, which starts at `docs/`; widening it is a later
+  call (task 37, *Out of scope*). **`SCORING.md` stays where it is and is not a
+  duplicate of [`scoring.md`](scoring.md)** — the two declare different jobs in their
+  own opening paragraphs (`DEC-72`): design argument and cost, against contract.
 - **`_comment` fields in `backend/config/*.json`** — rationale that lives in the
   config file rather than here, deliberately, and stays there.
 - **The repo root [`README.md`](../README.md)** — what the project is and how to run it.
