@@ -2029,3 +2029,55 @@ per-family rows. A hardcoded list beside a data structure that already knows the
 the same defect twice.
 
 Reversible: yes, and cheaply — the flag makes every prior figure re-derivable.
+
+---
+
+## DEC-66 — documentation kinds are declared in the file, and every rule gets a script
+
+**2026-08-01.** A review of the whole tree found four documents that had drifted out from
+under task 34 § D's disposition rule — which is *correct*, and which nothing could be checked
+against because it lived inside one task file. The entry point in `HANDOFF.md` was still
+sending every fresh session to do task 34, justified by a premise task 34's own file had
+struck as **WRONG**; `D45` had come to mean three different things, one of them inside
+`backend/tools/ats-discover.py`; and the main suite's test count was written three ways in
+three live documents, none of them what the runner prints.
+
+**Decided:** [`docs/DOCS-POLICY.md`](../../DOCS-POLICY.md), seven rules. The two that carry
+the weight:
+
+**Every document declares its `kind:` in frontmatter** — one of `contract`, `rationale`,
+`record`, `rolling`, `task`, each with exactly one lifecycle. This is not a new taxonomy. It
+is a *name* for what the tree already does: `DECISIONS.md` is append-only rationale and its
+header says so, `CLAUDE_UPDATES.md` is a dated record, `HANDOFF.md` is rolling. The kinds
+were always there. Nothing could check them because nothing declared them.
+
+**A rule with no check is a suggestion.** Stated as an empirical claim about this repository
+rather than a principle, because the evidence is here: two documentation rules were written
+by careful people in the same task, `audit-doc-links.py` got a script and holds at zero
+today, § D did not and four documents drifted. The claim is not that prose rules are useless
+— § D's rule is the one this whole tranche is built on — but that **a correct rule with no
+check decays at the speed of the surrounding work**, and this run has now measured that
+speed twice.
+
+**Rejected: a schedule.** "Review the docs at each phase boundary" is what § D already
+implies and it is the thing that did not happen. A calendar cannot tell you *which*
+document went wrong, and the failure mode being fixed is precisely that a stale document
+looks exactly like a current one.
+
+**Rejected: deleting the stale material.** Rule 4 keeps *mark, do not delete*. What is added
+is the missing trigger — a `rolling` document whose subject has landed is archived **in the
+same commit that lands it**, because the reason `HANDOFF.md`'s entry point survived task 34
+is that nothing ever gave it a reason to stop.
+
+**Rejected: checking prose accuracy.** Named in the policy as explicitly unenforced. No
+script can check whether a sentence is true, and a green tick that implies otherwise is
+worse than no tick — `AUDIT.md` § *How to audit this run in an hour* exists for that reason
+and is not replaced by any of this.
+
+**This entry uses the `DEC-` prefix that rule 6 establishes**; entries D46–D65 above still
+carry the old bare `D`, and task 39 brings them into line. Using the target form from the
+commit that lands the policy is deliberate — a convention whose own founding entry does not
+follow it is a convention with a footnote.
+
+Reversible: yes. The frontmatter is additive, and `audit-docs.py` is a new script that
+nothing else imports.

@@ -36,6 +36,13 @@ once**: `CLAUDE_UPDATES.md` silently stopped being written for four sessions, an
 was red, because a document that stops being written looks exactly like a document with
 nothing to say.
 
+**The lifecycle rules for these four, and for every other document in the tree, are now in
+[`../../DOCS-POLICY.md`](../../DOCS-POLICY.md)** (`DEC-66`, 2026-08-01). Each of the four
+is one of its five declared kinds — `README.md` and this file are `contract`, `HANDOFF.md`
+is `rolling`, `DECISIONS.md` is `rationale`, `CLAUDE_UPDATES.md` is `record`. **This file
+is the owner of the figures below under policy rule 2**: they appear here with their
+instrument, and every other document cites this one rather than restating them.
+
 ## Current measured state, with the instrument for each
 
 | | value | instrument |
@@ -102,3 +109,8 @@ decision rather than a fix, D33's consumer is task 25, D34 is a live-database DE
 - **Documentation goes stale without going red.** This run's clearest single lesson, and
   the reason task 34 exists. See [`34-documentation-cleanup.md`](34-documentation-cleanup.md)
   for what a pass over it found — including that its own founding premise was false.
+  **Task 34 paid this down by hand and it drifted again within a day** — the entry point in
+  `HANDOFF.md` still sends every session to do task 34. Phase 9 (tasks 36–42) is the attempt
+  to make it *checkable* rather than to pay it down a second time; see
+  [`../../DOCS-POLICY.md`](../../DOCS-POLICY.md) rule 7 for the argument, which is that the
+  only doc rule that has held here is the one with a script attached.

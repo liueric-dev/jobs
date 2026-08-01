@@ -109,6 +109,23 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | — | `lib/text.strip_html()` — no task file; [`HANDOFF.md`](HANDOFF.md) step 3 | superset-by-construction regex, stdlib only; **6 greenhouse rows whose descriptions had been replaced by CSS restored from `raw_json`; markup rows above threshold 5 → 0** | done |
 | — | The `pursuit` relevance gate — no task file; [`HANDOFF.md`](HANDOFF.md) step 0. Fixes a defect in task 10 | gate out of a migration that refuses to run and into `config/pursuit-relevance.json` (proven no-op); entry-level vocabulary split into title nouns and description phrases; `customer success` narrowed to manager-and-above — **mock gate recall 48.3% → 89.7%, on a corpus built to contain that failure mode. Live tier ≤ 2 869 → 880, which is +1.3% and moves GATE 2 not at all** | done |
 
+## Phase 9 — Hygiene
+
+**The system, then the sweep.** Task 34 paid down the debt it could find by hand; this tranche
+makes the same work *checkable*, because the one documentation rule that has held in this repo
+is the one with a script attached. [`docs/DOCS-POLICY.md`](../../DOCS-POLICY.md) is the system
+these seven tasks execute — read it first; each task file cites a rule from it by number.
+
+| | Task | Lands | |
+|---|---|---|---|
+| 36 | [Make the doc policy enforceable](tranche_seven/36-enforce-doc-policy.md) | `backend/tools/audit-docs.py` — six checks, `audit-doc-links.py`'s contract, wired into the suite. **Lands red on purpose**: check C5 has real failures in the tree today | todo |
+| 37 | [Classify every document](tranche_seven/37-classify-every-doc.md) | `kind:` frontmatter tree-wide; the `docs/README.md` index that has never existed, which is what makes orphan detection possible at all | todo |
+| 38 | [One figure, one owner](tranche_seven/38-one-figure-one-owner.md) | **No self-consistency number here is wrong — one word is overloaded.** `agree2` 94.8%, `pairwise` 90.7%, `unanimous` 87.0%, all n=115, all in circulation, one of them ever named. Resolved from committed data 2026-08-01; nothing needs re-measuring | todo |
+| 39 | [Split the `D<n>` namespace](tranche_seven/39-split-the-d-namespace.md) | `D` = defects, `DEC` = decisions. **`D45` resolves three ways today and the ambiguity has reached the code** — but `ats-discover.py`'s dozen citations are already correct and must not be swept | todo |
+| 40 | [Roll the handoff forward](tranche_seven/40-roll-the-handoff-and-clear-the-archive.md) | `HANDOFF.md`'s entry point still sends every session to do task 34, justified by a premise task 34 **struck as wrong**. Plus `docs/WORKING-METHOD.md`, promoted; plus § *Still to archive*, cleared | todo |
+| 41 | [Git and repo hygiene](tranche_seven/41-git-and-repo-hygiene.md) | **41a is a live production bug sitting uncommitted** — the Workday gate dies on `UndefinedColumn` because `platform_exclude` landed in `7d94bb1` and `_GATE_TEXT_COLUMNS` did not follow. Commit it first and alone | **next** |
+| 42 | [Close the six UNBLOCKED defects](tranche_seven/42-close-the-unblocked-defects.md) | D02, D03, D05, D11, D13, D23 — dispositioned *"fix with harness"*, task 09 landed three tranches ago, nothing rescheduled them. **D13 was never blocked at all** | todo |
+
 ---
 
 ## Why evals moved to the front
