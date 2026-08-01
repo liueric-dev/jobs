@@ -6,8 +6,29 @@ generator: none
 
 # 43 — Split `docs/scoring.md` into a contract and a dated record
 
-**Status:** TODO. **Depends on:** nothing — `DEC-70` already made the decision this task
-executes. **Blocks:** nothing.
+**Status:** DONE, 2026-08-01. **Depends on:** nothing — `DEC-70` already made the decision
+this task executes. **Blocks:** nothing.
+
+> **The contract kept the path**, because every live citation of `docs/scoring.md` in the
+> repo — eight of them, read one by one — means the contract half. The measured half is
+> [`docs/scoring-measured-2026-07-27.md`](../../../scoring-measured-2026-07-27.md),
+> `kind: record`, frozen, maintained by nobody.
+>
+> **§ *The work* describes a contract half and a record half as though the file had two
+> halves. It does not, and that shaped the split.** The dated figures are interleaved into
+> almost every section — the funnel, the per-profile scale tables, the tier block, the
+> tombstone counts, `fit_score`'s observed range, the `staff` demotion — so there was no line
+> to cut at. What was extracted is every figure the file *owned*; figures it already cited to
+> another document (`SCORING.md`'s Spearman, the tie block, the learned-ranker avg-precision
+> pair) were left where they were, because a cited figure is already rule 2 being followed.
+>
+> **Two findings worth the next reader's time.** `backend/config/criteria.json:43` cited
+> `docs/scoring.md:374`, which was **already off by seven lines before this task ran** — the
+> 1-in-20 sentence is at `:381` — and the split moved it again; it now cites a section
+> anchor, which cannot drift. And the contract quoted the learned-ranker probe's 12.7/20 in
+> three places with none of the caveat its owner attaches: `docs/archive/README.md` relabels
+> it as **imitation fidelity against a non-target persona, not a quality score**, and says
+> *"do not quote them forward."* The record half carries the relabel beside the figure.
 
 `docs/scoring.md` opens *"Every figure below was measured against the live database on
 2026-07-27"* and then serves as the scoring **contract** the whole repo cites. Under

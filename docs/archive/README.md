@@ -66,7 +66,9 @@ every case.
 | `backend/docs/HANDOFF-match-quality.md` | archive the persona-bound remainder | **archived** → [`handoff-match-quality.md`](handoff-match-quality.md), stub and link left at the original path, **12.7/20 relabelled** as imitation fidelity against a non-target persona |
 | `backend/docs/SCORING.md` | *"Archive. Superseded by `docs/scoring.md`; two hand-written scoring docs is drift."* | **kept, and § D's disposition retired — decision `DEC-72`.** Not drift: a deliberate split, and each file declares the split in its own opening paragraph |
 
-**Why `SCORING.md` stays.** `docs/scoring.md:15-21` calls it *"the design argument — why
+**Why `SCORING.md` stays.** `docs/scoring.md` § *Scope* (~~`:15-21`~~ — line numbers into a
+live contract drift, and this one did when task 43 split the file on 2026-08-01) calls it
+*"the design argument — why
 the work is split into four stages and what each one costs"*; `SCORING.md:9-13` calls
 `docs/scoring.md` *"the contract"* and points at it for what a score means and where every
 weight came from. Two documents that each declare a different job in their own first

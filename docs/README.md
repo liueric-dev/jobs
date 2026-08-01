@@ -35,7 +35,7 @@ Per rule 3, nothing here counts anything. To count the documents, run
 | [`DOCS-POLICY.md`](DOCS-POLICY.md) | What is each document for, how long does it stay true, and what retires it? |
 | [`MEASUREMENT-TRAPS.md`](MEASUREMENT-TRAPS.md) | What has already invalidated a measurement in this repo, and how do I not repeat it? |
 | [`WORKING-METHOD.md`](WORKING-METHOD.md) | How is work verified here — who commits, what is checked before implementing, and what a green suite does not tell you? |
-| [`scoring.md`](scoring.md) | What does a score mean, are two of them comparable, and where did every weight come from? **Part contract, part dated measurement — see DEC-70 and task 43.** |
+| [`scoring.md`](scoring.md) | What does a score mean, are two of them comparable, and where did every weight come from? ~~Part contract, part dated measurement~~ **split 2026-08-01 by task 43 (`DEC-70`); the measured half is [`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md), below.** |
 | [`tasks/refactor/AUDIT.md`](tasks/refactor/AUDIT.md) | What is the state of the run, and which instrument produced each figure? |
 | [`tasks/refactor/API-CONTRACT-v1.md`](tasks/refactor/API-CONTRACT-v1.md) | What must `/v1` return for a frontend to be built against it, and how far is the shipped service from that? |
 
@@ -89,6 +89,7 @@ because you cannot tell which is current.
 
 | document | the question it answered |
 |---|---|
+| [`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md) | What did the four stages actually do on 2026-07-27 — the funnel, the two profiles' scales, and what the `staff` fix deleted? The measured half of [`scoring.md`](scoring.md), split out by `DEC-70`. |
 | [`pursuit-gate-volume.md`](pursuit-gate-volume.md) | How many postings a day would a widened Pursuit gate admit? |
 | [`pursuit-description-gate.md`](pursuit-description-gate.md) | What does the description-first cohort gate keep and drop? |
 | [`score-validation.md`](score-validation.md) | Does the scoring stage produce well-shaped output, and where does it fail? |

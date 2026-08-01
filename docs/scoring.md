@@ -2,14 +2,22 @@
 kind: contract
 written: 2026-07-27
 generator: none
-note: part contract, part dated measurement. DEC-70 decided the split -- extract the contract half, freeze the measured half as a record. Task 43 executes it.
 ---
 
 # The jobs scoring system — contract, components, and failure behavior
 
 Covers all four stages: `relevance.py` → `extract.py` → `match.py` →
-`score.py`. Every figure below was measured against the live database on
-2026-07-27 (11,517 job rows, 2 active profiles) or cited to a line of source.
+`score.py`. Every claim below is cited to a line of source.
+
+> **The measured half of this document is now
+> [`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md)**, frozen at its date
+> and maintained by nobody — split out 2026-08-01 by task 43, executing `DEC-70`. This file
+> opened by saying every figure in it had been measured against the live database on
+> 2026-07-27, and then served as the contract the whole repo cites. Under
+> [`DOCS-POLICY.md`](DOCS-POLICY.md) rule 1 it could not be both: a contract may not be
+> stale, a measurement is frozen at its date. **What stays here is what the code does; every
+> count went to the record.** The rejected alternative — keep one file and re-derive the
+> figures on a schedule — is named in `DEC-70`, and it fails on the schedule having no owner.
 
 **Scope.** This document is the cross-cutting contract: what a score means,
 whether two of them are comparable, where every weight came from, and what
@@ -32,7 +40,7 @@ restated in three separate files (`schema.py:86-89`, `match.py:17-22`,
 
 ```mermaid
 flowchart LR
-    F[("job_facts<br/>one row per posting<br/>5,288 rows")]
+    F[("job_facts<br/>one row per posting")]
     C[("profiles.criteria_json<br/>one row per user")]
 
     F --> SJ["score_job()<br/>pure arithmetic<br/>no network, no clock"]
@@ -67,7 +75,11 @@ property the four-stage split removes.
 | Range | nominally 0–100, **unvalidated on write** | `score.py:361` |
 | Direction | higher is better | `config/persona.json:34` |
 | Determinism | none — LLM output, though `temperature=0` | `llm.py:59` |
-| Observed | min 0, max 95, mean 48.2 over 1,200 non-null rows | live |
+
+The range is nominal and **not enforced on write** — see § *`fit_score` is written
+unvalidated*. For what the column actually held on 2026-07-27, see
+[`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md) § *`fit_score` as
+observed*.
 
 ### Is a 70 for user A comparable to a 70 for user B?
 
@@ -77,50 +89,33 @@ profile's result set*, and the code makes that true rather than incidental.
 Every term in `match_score` is read from that profile's own `criteria_json`
 (`match.py:86, 97, 122, 133, 139, 149, 163, 173`). Nothing is shared across
 profiles — not the base, not the archetype table, not even the *shape* of the
-seniority rules. So the attainable range differs per profile:
+seniority rules. So the attainable range differs per profile — and the sum of a
+profile's positive terms is arithmetic on its own `criteria_json`, not a
+measurement:
 
-| profile | `base` | best archetype | tech cap | best AI | positive flags | **theoretical max** | observed max |
-|---|---|---|---|---|---|---|---|
-| `tech` | 35 | +30 | +26 | +12 | +18 | **121 → clamps to 100** | 100 (16 rows) |
-| `frontend` | 30 | +32 | +22 | 0 | 0 | **84** | 83 |
+| profile | `base` | best archetype | tech cap | best AI | positive flags | **theoretical max** |
+|---|---|---|---|---|---|---|
+| `tech` | 35 | +30 | +26 | +12 | +18 | **121 → clamps to 100** |
+| `frontend` | 30 | +32 | +22 | 0 | 0 | **84** |
 
-Three consequences, all live today:
+Three consequences:
 
 1. **`frontend` can never score above 84.** It has no positive `flags` and no
    positive `ai_involvement` entry — its best AI value is the *absence* of one.
-   A `frontend` 80 is a near-perfect match; a `tech` 80 is its 90th percentile.
+   A `frontend` 80 is a near-perfect match; a `tech` 80 is high in its range.
 2. **`tech` saturates.** Its terms sum to 121, so `_clamp` discards up to 21
-   points and 16 rows sit at exactly 100 with no way to distinguish them.
+   points and rows pile up at exactly 100 with no way to distinguish them.
 3. **`MATCH_FLOOR` is a single global number applied to both scales.**
    `schema.py:165` — `int(os.environ.get("JOBS_MATCH_FLOOR", "40"))`. That is
-   40% of `tech`'s usable range and 48% of `frontend`'s. It is part of why
-   `frontend` has 295 stored matches against `tech`'s 3,077 — a 10×
-   difference across the same 5,288 extracted postings.
+   40% of `tech`'s usable range and 48% of `frontend`'s, so the same cutoff is a
+   different demand on each profile and the two stored-match counts are not
+   comparable either.
 
-| profile | stored matches | min | median | mean | max |
-|---|---|---|---|---|---|
-| `tech` | 3,077 | 40 | 62 | 62.5 | 100 |
-| `frontend` | 295 | 40 | 54 | 55.5 | 83 |
-
-The two scales drawn against the one cutoff they share:
-
-```
-points    0         20        40        60        80        100       120
-          ├─────────┼─────────┼─────────┼─────────┼─────────┼─────────┤
-                              ┊
-        MATCH_FLOOR = 40 ─────┤  one global number, both profiles
-                              ┊
-tech      ░░░░░░░░░░░░░░░░░░░░███████████████████████████████▒▒▒▒▒▒▒▒▒▒
-          never stored        stored · 3,077 rows · med 62   ↑ clamp discards
-                              ┊                                21 points
-                              ┊
-frontend  ░░░░░░░░░░░░░░░░░░░░██████████████████████┤ 84
-          never stored        stored · 295 rows      ↑ unreachable ceiling
-                              ┊   med 54
-                              ┊
-                    40 = 40% of tech's usable range
-                       = 48% of frontend's
-```
+**What that produced when it was measured** — observed maxima, stored-match counts and the
+two scales drawn against the one floor they share — is
+[`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md) § *The two scales, and
+why a 70 is not a 70*. It is the worked example for this section and the reason the
+argument is concrete rather than asserted.
 
 `fit_score` is not comparable across profiles either, for a different reason:
 the prompt is built from that profile's persona (`score.py:282-331`), so the
@@ -231,26 +226,26 @@ mostly noise with a missingness indicator attached (`SCORING.md`).
 ```mermaid
 flowchart TB
     subgraph S1["stage 1 — eligibility · FREE · relevance.py"]
-        A[("jobs<br/>11,332 open")] --> T{"tier ≤ max_tier_to_score<br/>currently 2"}
-        T -->|"5,158"| OK1["eligible"]
-        T -->|"6,174 · 54.5%"| SKIP["tier 3 — not deleted.<br/>Raise the cap and they<br/>backfill with no re-ingest"]
+        A[("jobs<br/>open postings")] --> T{"tier ≤ max_tier_to_score<br/>currently 2"}
+        T --> OK1["eligible"]
+        T --> SKIP["tier 3 — not deleted.<br/>Raise the cap and they<br/>backfill with no re-ingest"]
     end
 
     subgraph S2["stage 2 — extract · LLM · extract.py"]
         OK1 --> E["one call per posting, EVER<br/>$0.000385 · 9.3s · 94% cached prefix"]
-        E --> FACTS[("job_facts<br/>5,288 rows<br/>7 tombstoned")]
+        E --> FACTS[("job_facts")]
     end
 
     subgraph S3["stage 3 — match · FREE · match.py"]
-        FACTS --> X["5,281 usable × 2 profiles<br/>= 10,562 evaluations<br/>~40 integer ops each"]
+        FACTS --> X["usable facts × active profiles<br/>~40 integer ops each"]
         X --> FL{"score ≥ MATCH_FLOOR 40"}
-        FL -->|"3,372"| M[("job_matches")]
+        FL --> M[("job_matches")]
         FL -->|"below"| DROP["never written.<br/>Rows that used to clear it<br/>are DELETED — a demotion"]
     end
 
     subgraph S4["stage 4 — narrative · LLM · score.py"]
         M --> SEL["top daily_narrative_budget = 20<br/>per profile, ORDER BY match_score DESC"]
-        SEL --> SC[("job_scores<br/>1,254 rows<br/>57 tombstoned")]
+        SEL --> SC[("job_scores")]
     end
 ```
 
@@ -258,32 +253,20 @@ flowchart TB
 architecture: a regex decides what earns an extraction, and free arithmetic
 decides what earns a narrative.
 
-Live funnel, 2026-07-27:
-
-| # | Stage | Candidates in | Candidates out | Cost per candidate | Cutoff |
-|---|---|---|---|---|---|
-| 1 | **Eligibility** `relevance.py` | 11,332 open | 5,158 tier ≤ 2 | free (SQL, in the same query) | `max_tier_to_score = 2` |
-| 2 | **Extract** `extract.py` | 5,158 eligible | 5,288 `job_facts` (7 tombstoned) | ~$0.000385, 9.3s | `FACTS_VERSION = 2` — never re-run |
-| 3 | **Match** `match.py` | 5,281 × 2 profiles = 10,562 | 3,372 `job_matches` | ~40 integer ops, no network | `MATCH_FLOOR = 40` |
-| 4 | **Narrative** `score.py` | top of each profile's ranking | 1,254 `job_scores` (57 tombstoned) | ~$0.000288, 6.5s | `daily_narrative_budget = 20` |
-
-`job_facts` (5,288) slightly exceeds current eligibility (5,158) because facts
-are never deleted when config later narrows — that is the gap `load_facts`
-closes by re-applying the union at read time.
+**The funnel with its candidate counts, the per-tier distribution and the tombstone counts**
+are [`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md) § *The live funnel*.
+One shape it records is a property of the design rather than of that day: `job_facts`
+slightly exceeds current eligibility, because facts are never deleted when config later
+narrows — that is the gap `load_facts` closes by re-applying the union at read time.
 
 ### Where each cutoff lives
 
 **Stage 1 gates stage 2.** A regex in Postgres decides what earns an LLM call.
 The cutoff is `max_tier_to_score` in `config/relevance.json:113`, currently
 `2`, read by `relevance.max_tier()` (`relevance.py:195`) and applied by
-`union_sql` (`relevance.py:223`). It removes 6,174 of 11,332 open postings —
-**55% of the corpus never reaches a model.** Tier distribution:
-
-```
-tier 1  2,866  (25.3%)  title matches AND location acceptable   SCORED
-tier 2  2,292  (20.2%)  title matches, location unknown         SCORED
-tier 3  6,174  (54.5%)  everything else                         SKIPPED
-```
+`union_sql` (`relevance.py:223`). **It is the largest single cutoff in the system** — over
+half the open corpus never reaches a model. The tier distribution when it was measured is in
+[`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md) § *Tier distribution*.
 
 The gate is a **union across all active profiles**, not one profile's filter,
 because extraction is shared (`relevance.py:202-210`). An empty profile list
@@ -391,24 +374,15 @@ in `target` → **no delta and no reason recorded** ("silence is the signal",
 > (`match.py:110-119`) — where `penalty_per_level` was *also* absent and
 > `.get(..., 0)` made the penalty exactly zero. `add()` skips a falsy delta
 > (`match.py:91`), so the posting scored as on-target **and recorded no
-> reason for it.** Measured against otherwise-identical facts:
->
-> ```
->                  before          after
->   new_grad         21              21
->   junior           49              49
->   mid  (target)    61              61
->   senior           56              56
->   staff          → 61  ← free    → 41    seniority:staff  -20
->   principal        26              26
-> ```
+> reason for it.**
 >
 > A Staff posting scored identically to a Mid one while Senior — a *closer*
 > level — cost 5 points. Non-monotonic, and contradicting `persona.json:19`
-> ("not senior/staff/principal"). 783 of 5,146 eligible postings (15.2%)
-> are `staff`; 452 of them were in the ranking, and **250 dropped below
-> `MATCH_FLOOR` and were deleted** when the fix was applied. The top 20 did
-> not change — the effect was entirely in the middle of the list.
+> ("not senior/staff/principal"). **The before/after ladder, the share of the
+> corpus affected and the rows the fix deleted** are in
+> [`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md) § *The
+> `staff` fix, measured* — including the part worth carrying forward, that the
+> fix deleted hundreds of rows and moved the top 20 not at all.
 >
 > The general trap is the wider lesson: **any level a profile does not name
 > is silently free** unless `penalty_per_level` is set. That is why the fix
@@ -568,8 +542,8 @@ flowchart LR
 
     API --> UI["frontend/<br/><i>.gitkeep only —<br/>nothing renders yet</i>"]
 
-    UI -.->|"POST /v1/events"| EV[("job_events<br/><b>0 rows</b><br/>snapshots BOTH scores<br/>server-side at impression")]
-    EV -.->|"future training labels"| LR["learned ranker<br/>measured 12.7/20 vs<br/>the rules' 8.0/20<br/><i>not shipped</i>"]
+    UI -.->|"POST /v1/events"| EV[("job_events<br/>snapshots BOTH scores<br/>server-side at impression")]
+    EV -.->|"future training labels"| LR["learned ranker<br/><i>probed, not shipped</i>"]
 ```
 
 ### Ranking — the only consumer that matters
@@ -619,10 +593,13 @@ server-side and never accepted from the client (`jobs.py:299-311`). That is the
 load-bearing part: without them you cannot reconstruct what the user was
 reacting to once weights change (`SCORING.md`).
 
-`job_events` currently holds **0 rows** — the writer landed 2026-07-26 and
-nothing has driven traffic through it yet. It is the training-label store for
-the learned ranker that `tools/learned-ranker-probe.py` measures at 12.7/20
-precision@20 against the hand-tuned rules' 8.0.
+`job_events` is the training-label store for the learned ranker that
+`tools/learned-ranker-probe.py` measures against the hand-tuned rules. **Its row count and
+that probe's figures** are in
+[`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md) § *`job_events`, and the
+learned-ranker probe* — read there with the caveat its owner attaches: the probe is
+imitation fidelity against a non-target persona, not a quality score
+([`archive/handoff-match-quality.md`](archive/handoff-match-quality.md)).
 
 ---
 
@@ -664,7 +641,8 @@ Both LLM stages classify every attempt as one of three outcomes
 > the posting — and the default model rate-limits hard enough that a batch can
 > be mostly 429s.
 
-Live: 7 of 5,288 fact rows and 57 of 1,254 score rows are tombstones.
+Both tables carry tombstones; the counts when they were taken are in
+[`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md) § *Tombstones*.
 
 Tombstones are stored at the **current** `FACTS_VERSION`, not a sentinel, so a
 future version bump gives every tombstoned posting one more attempt under the
@@ -738,8 +716,10 @@ any other profile's.
 `result.get("fit_score")` goes straight into an `INTEGER` column
 (`score.py:361`); `has_fields` checks presence only (`llm.py:262-263`). A model
 returning `150` would be stored as 150; a model returning `"high"` would raise
-a psycopg error inside the worker thread. Observed range across 1,200 rows is
-0–95, so neither has occurred.
+a psycopg error inside the worker thread. Neither had occurred in the sample measured on
+2026-07-27 ([`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md) §
+*`fit_score` as observed*) — **which is a property of that sample, not a guarantee.**
+Nothing in the code prevents either.
 
 ### Operational failure
 
@@ -761,7 +741,9 @@ a psycopg error inside the worker thread. Observed range across 1,200 rows is
    A floor expressed as a fraction of each profile's attainable range would
    be comparable; an absolute one is not.
 2. **`tech` saturates the clamp** — 121 points of headroom into a 100-point
-   ceiling, 16 rows tied at exactly 100 with no way to order them.
+   ceiling, with rows tied at exactly 100 and no way to order them. The tie count when it
+   was measured is in
+   [`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md).
 3. **The login trigger is documented but not wired.** `score.py:455` and
    `SCORING.md` both describe `run_for_profile` being called on sign-in — the
    property that makes narrative cost track engagement rather than
@@ -772,15 +754,18 @@ a psycopg error inside the worker thread. Observed range across 1,200 rows is
    retroactively, so every day without a frontend is training data for the
    learned ranker that is permanently lost.
 5. **No weight in the system was fit to data.** See the Tally above. The
-   learned-ranker probe measures 12.7/20 precision@20 against the hand-tuned
-   rules' 8.0/20 using *exactly* the features that already exist — the
-   measured business case for replacing the weighting function, not the
-   feature set.
+   learned-ranker probe beats the hand-tuned rules on precision@20 using *exactly* the
+   features that already exist — the measured business case for replacing the weighting
+   function, not the feature set. Both figures, and the caveat that they are imitation
+   fidelity against a non-target persona rather than a quality score, are in
+   [`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md).
 
 ### Closed
 
 - **`staff` scored as on-target for `tech`** — fixed 2026-07-27, see the
-  Seniority section. 250 rows demoted below the floor; top 20 unchanged.
+  Seniority section. Rows were demoted below the floor and the top 20 did not change;
+  the counts are in
+  [`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md).
 - **Four measurement tools could not run** — fixed 2026-07-27.
   `tools/calibrate-match.py` and `tools/learned-ranker-probe.py` called
   `match.load_facts(conn)`, which has taken `(conn, cfgs)` since the relevance

@@ -62,7 +62,9 @@ the documentation rules it wrote *checkable* rather than merely written.
 | **42** close the UNBLOCKED defects | **done** — `2a94f3d` |
 | **38** one figure, one owner | landing now |
 | **40** roll this file, clear the archive | landing now (this edit) |
-| **41c/41d**, **43** the `docs/scoring.md` split (DEC-70) | open |
+| **43** the `docs/scoring.md` split (DEC-70) | **done** — the measured half is [`docs/scoring-measured-2026-07-27.md`](../../scoring-measured-2026-07-27.md) |
+| **44** archive `HANDOFF.md`'s frozen half | **done** — this file is `rolling` throughout now, and C4 enforces on it |
+| **41c/41d** the three branch decisions | open — the owner's, not a session's |
 
 **For the state of the run in one page with an instrument beside every number, read
 [`AUDIT.md`](AUDIT.md)** — which now *owns* the run-level figures rather than
