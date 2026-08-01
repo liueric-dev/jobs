@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 03 — Stop discarding upsert errors
 
 **Status:** DONE, `e353e3e`. **Depends on:** 02 (for the register entry). **Blocks:** all of

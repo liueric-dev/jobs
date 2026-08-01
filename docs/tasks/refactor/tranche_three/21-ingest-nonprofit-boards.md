@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 21 — Nonprofit and civic boards
 
 **Status:** todo. **Depends on:** 19. **Blocks:** nothing.

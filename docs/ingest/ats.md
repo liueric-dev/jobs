@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/ingest/ats.py
 written: 2026-07-28
 generator: none

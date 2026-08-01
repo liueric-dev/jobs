@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 02 — Triage the ingest audit defects
 
 **Status:** DONE, `36d83f5`. **Depends on:** nothing. **Blocks:** all of Phase 3.

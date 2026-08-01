@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 29 — Two-axis labelling session
 
 **Status:** todo. **Depends on:** 07, 12, 26. **Blocks:** 30. ~~30, 31.~~

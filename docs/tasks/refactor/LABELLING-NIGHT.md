@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-30
+generator: none
+---
+
 # Labelling night — pre-flight
 
 Hand-written. Not generated, no `script:` frontmatter, do not regenerate.

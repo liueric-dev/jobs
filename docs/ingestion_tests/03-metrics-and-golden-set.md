@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-27
+generator: none
+---
+
 # 03 — Metrics and the golden set
 
 **Status:** next. **Depends on:** 02. **Blocks:** 04.

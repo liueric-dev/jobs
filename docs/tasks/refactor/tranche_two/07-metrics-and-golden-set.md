@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 07 — Metrics and the golden set
 
 **Status:** DONE, `3a8b42c`. **Depends on:** 06. **Blocks:** 12, 29, 30.

@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # Deriving the archetype superset and the `role_track` vocabulary
 
 **Task:** `docs/tasks/refactor/tranche_two/11-archetype-superset-role-track.md`, sections 1 and 2.

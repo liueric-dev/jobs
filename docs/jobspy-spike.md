@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # JobSpy spike — does a self-hosted scraper work from the home IP?
 
 **Task:** `docs/tasks/refactor/tranche_four/22-jobspy-spike.md`

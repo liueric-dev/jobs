@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-27
+generator: none
+---
+
 # 05 — Tests and docs
 
 **Depends on:** 04.

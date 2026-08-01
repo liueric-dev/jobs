@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 17 — Retarget `ats.py`
 
 **Status:** DONE, `597662b`. **Depends on:** 16. **Blocks:** nothing.

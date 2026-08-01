@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/ingest/google-apify.py
 written: 2026-07-27
 code_at: dd49a27
@@ -132,7 +133,7 @@ flowchart TD
     QERR --> RLOOP
 
     ITEMS --> NORM["google_jobs.normalize_job(j, mode)<br/>apify.py:231"]
-    NORM --> UPSERT["lib.upsert · google_spec<br/>STICKY posted_at, posted_at_ts<br/>apify.py:232 · errors DISCARDED"]
+    NORM --> UPSERT["lib.upsert.upsert_checked · google_spec<br/>STICKY posted_at, posted_at_ts<br/>apify.py:243 · errors LOGGED<br/>raises above the rate threshold"]
     UPSERT --> OK["state.mark_success<br/>watermark + claim clear, one statement<br/>apify.py:238"]
     OK --> STATS["log_query_stats<br/>apify.py:240 · read by nothing"]
     STATS --> RLOOP
@@ -331,7 +332,7 @@ propagate; in practice it uses `.get()` throughout
 | Abandoned actor run after a timeout | **nothing** — the `run_id` is not recorded anywhere (`:188` embeds it in the exception message, which is only printed under `DEBUG_PRINT_KEYS`) |
 | Lost claim race | **nothing** (`:159-160`) |
 | Nothing claimable | **nothing** — silent exit 0 |
-| **Per-record upsert failure** | **discarded.** `:232` unpacks the three-tuple and never reads `.errors` (`backend/lib/upsert.py:157-162`) |
+| **Per-record upsert failure** | **no longer discarded.** `upsert_checked` (`:243`) logs `upsert-summary: … errors=N` on every call and raises above the rate threshold. ~~*Was:* discarded — `:232` unpacked the three-tuple and never read `.errors`; fixed 2026-07-28, `e353e3e`, defect D01~~ |
 | Per-query result counts | stderr **only** if `DEBUG_PRINT_KEYS` (`:242-244`) |
 | Quiet run | silent — guarded by `if total_new or total_updated or closed_count or query_errors` (`:257`) |
 

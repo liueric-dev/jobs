@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # Run log — `docs/tasks/refactor/`
 
 Progress updates from the agent run through tasks 03–34, appended as work lands.

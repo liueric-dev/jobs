@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-31
+generator: none
+---
+
 # Task 29's "two mechanical minutes" were four defects
 
 > **Archived from `docs/tasks/refactor/HANDOFF.md` on 2026-07-31**, when that file was split.

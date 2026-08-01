@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 19 — JSON-LD parser
 
 **Status:** ~~todo.~~ **DROPPED on the evidence, `2fecec5`.** **Depends on:** 09, 16.

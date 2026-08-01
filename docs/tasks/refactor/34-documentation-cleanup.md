@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-31
+generator: none
+---
+
 # 34 — Cleanup, bugfixes and documentation
 
 **Status:** NEXT. **Depends on:** nothing. **Blocks:** the product/API phase (24–28, 31, 32)

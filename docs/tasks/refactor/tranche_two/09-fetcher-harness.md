@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 09 — Fetcher harness
 
 **Status:** DONE, `68f026f`. **Depends on:** 02. **Blocks:** all of Phase 3 — see below.

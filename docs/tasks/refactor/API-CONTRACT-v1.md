@@ -1,3 +1,9 @@
+---
+kind: contract
+written: 2026-07-28
+generator: none
+---
+
 # API CONTRACT v1 — frozen for frontend development
 
 **Written** 2026-07-28. **Status:** target contract, not current implementation.

@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/match.py
 written: 2026-07-27
 code_at: dd49a27
@@ -339,12 +340,16 @@ isolation protects against is narrower.
 | Event | Where it goes |
 |---|---|
 | Per-profile written / demoted / orphaned / skipped counts | printed **unconditionally**, with zero-valued parts omitted (`:363-369`) |
-| Which jobs were demoted or orphaned | **nothing** — only counts (`:298`, `:274`) |
+| Which jobs were demoted or orphaned | the ids, to stderr, **only** under `DEBUG_PRINT_KEYS` (`:454-470`); the counts unconditionally. ~~*Was:* **nothing** — only counts (`:298`, `:274`) — D11, fixed 2026-08-01~~ |
 | Per-job score and reasons | stored in `match_reasons` (`:293`), never printed |
 | `tech_stack` JSON parse failure | **silently** coerced to `[]` (`:237-240`) |
 | Hard exclusions | recorded in `match_reasons` for rows that are written; a hard-excluded job scores 0, falls below the floor, and its reasons are discarded |
 
-`DEBUG_PRINT_KEYS` is not read by this module at all.
+~~`DEBUG_PRINT_KEYS` is not read by this module at all.~~ **Fixed 2026-08-01
+(defect D11, task 42, `2a94f3d`, decision DEC-69).** `match.py` reads it at
+`:63` and logs the ids of demoted and orphaned rows at that verbosity
+(`:454-470`). The orphan ids come from `DELETE … RETURNING job_id` (`:446`)
+rather than a separate `SELECT` that could disagree with what was deleted.
 
 ### Exit codes
 
@@ -378,10 +383,15 @@ isolation protects against is narrower.
 - **`tech_stack` is a JSON array of lowercase strings**, which is
   `extract.py`'s contract (`backend/extract.py:258-261`, `:283`), not a
   database constraint — the column is TEXT (`backend/schema.py:350`).
-- **`SENIORITY_ORDER` (`:65-66`) must stay a superset of `extract.py`'s
-  `SENIORITY` vocabulary** (`backend/extract.py:82-83`) for the
-  distance fallback to work. Nothing asserts this; a level present in one and
-  absent from the other silently scores as free (`:116`).
+- **`SENIORITY_ORDER` (`:74-75`) must stay a superset of `extract.py`'s
+  `SENIORITY` vocabulary** for the distance fallback to work.
+  ~~Nothing asserts this; a level present in one and absent from the other
+  silently scores as free (`:116`).~~ **Asserted since 2026-08-01 (defect D13,
+  task 42, `2a94f3d`):** `match.py` imports `extract` (`:50`) and
+  `check_seniority_vocabulary()` (`:97-121`) runs at import time, raising if
+  `extract.SENIORITY` grows a level `SENIORITY_ORDER` cannot place. A superset,
+  not equality. `score_job()` is untouched and still pure. The old cite
+  `backend/extract.py:82-83` had drifted and is not where `SENIORITY` lives.
 - **`MATCH_FLOOR` is read once at import** (`backend/schema.py:165`), so
   changing `JOBS_MATCH_FLOOR` between runs changes which rows are written but
   does **not** retroactively demote rows written under the old floor unless

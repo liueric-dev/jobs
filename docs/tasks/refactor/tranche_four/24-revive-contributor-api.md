@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 24 — Revive the contributor API
 
 **Status:** todo. **Depends on:** 23, 33 (tunnel). **Blocks:** 25.

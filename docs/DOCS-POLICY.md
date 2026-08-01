@@ -170,9 +170,21 @@ nobody read.
 | when | what happens | enforced by |
 |---|---|---|
 | **at decision time** | append to `DECISIONS.md`. The reasoning cannot be reconstructed later — `relevance.json`'s rejected-alternative note is information that existed for about an hour | convention |
-| **at land time** | the commit that changes behaviour edits the `contract` document describing it, in the same commit | `audit-docs.py` |
+| **at land time** | the commit that changes behaviour edits the `contract` document describing it, in the same commit | ~~`audit-docs.py`~~ **convention — unenforced, corrected 2026-08-01. See below** |
 | **at session end** | append to `CLAUDE_UPDATES.md`; **roll forward or retire** the `rolling` document | `audit-docs.py` staleness check |
 | **at phase boundary** | run `audit-docs.py` and `audit-doc-links.py`; archive what they flag | both suites |
+
+**The "at land time" row claimed an enforcement that does not exist, and task 37 found it by
+being caught by it.** No check compares a `contract`'s last-modified commit against its
+subject's. C3 does exactly that comparison and does it **only for `kind: rolling`**. Rule 7
+allows a rule to be unenforced; it does not allow one to *claim* a checker it does not have,
+which is the same failure as a stale contract and in the file that defines the term.
+
+The cost was immediate and measurable: **six per-script contracts still said upsert errors
+were discarded four days after `e353e3e` moved all eight sites to `upsert_checked`** — in the
+*"Logged vs. swallowed"* table, which is exactly where a reader goes to ask *"would I find
+out?"*. Generalising C3 from `rolling` to every `contract` with a declared subject is the
+obvious next check and is not yet written.
 
 The convention that all of these move in the same commit as the code is older than this file.
 **It has failed once**, and the failure is instructive: `CLAUDE_UPDATES.md` silently stopped

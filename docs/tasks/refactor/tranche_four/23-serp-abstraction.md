@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 23 — SERP abstraction
 
 **Status:** todo. **Depends on:** 22, 09. **Blocks:** 24, 25.

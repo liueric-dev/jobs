@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 32 — Frontend
 
 **Status:** todo. **Depends on:** 26, 27, 28, 30, 31. **Blocks:** nothing.

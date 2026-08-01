@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 28 — Anonymous cohort aggregation
 
 **Status:** todo. **Depends on:** 27. **Blocks:** 32.

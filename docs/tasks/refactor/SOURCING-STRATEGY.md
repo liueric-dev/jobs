@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # SOURCING STRATEGY — service-to-target assignment
 
 **Written** 2026-07-28. Companion to `MASTER-PLAN-pursuit.md` §5.

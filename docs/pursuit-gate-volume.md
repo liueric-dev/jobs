@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # Corpus volume under a widened gate
 
 **Task:** `docs/tasks/refactor/tranche_one/05-widened-gate-volume.md`

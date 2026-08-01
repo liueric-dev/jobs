@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 15 — USAJobs and Adzuna ingest
 
 **Status:** todo. **Depends on:** 09, 10. **Blocks:** nothing.

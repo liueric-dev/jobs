@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/api/app.py
 written: 2026-07-27
 code_at: dd49a27
@@ -388,7 +389,7 @@ hand-rolled predecessor did:
 | Over-cap submit | `submission_log` row with `reason='too many jobs'` **before** the 400 (`:308-316`) |
 | Release | `submission_log` row with the caller's reason, truncated to 500 chars (`:373-380`) |
 | Per-job rejection | counted in `rejected`, returned in the response and stored — but **which** job and **why** is not recorded (`:329`, `:334`) |
-| **Per-record upsert failure** | **discarded.** `qc.upsert` returns `UpsertResult` and its own docstring says it "also carries `.errors`, which the caller may report" (`backend/api/query_claims.py:441-442`) — but `backend/api/app.py:336` unpacks `new, updated, unchanged` and never reads it. `_lib_upsert` is also called without `debug=` (`:445`), so there is no stderr fallback either |
+| **Per-record upsert failure** | **no longer discarded.** `backend/api/app.py:343` reads `len(result.errors)` into `dropped`, which goes into the response **and** into `submission_log` — a contributor whose rows silently vanished has no other way to find out (`:338-342`). It is kept distinct from `rejected`, which counts payload entries refused before reaching the database. ~~*Was:* discarded — `app.py:336` unpacked `new, updated, unchanged` and never read `.errors`; fixed 2026-07-28, `e353e3e`, defect D01~~ |
 | Auth failures | HTTP status only; no log |
 
 The audit trail is the strongest of any component here — and the upsert-error

@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 25 — Search queries
 
 **Status:** todo. **Depends on:** 23, 24, 11. **Blocks:** 28, 32.

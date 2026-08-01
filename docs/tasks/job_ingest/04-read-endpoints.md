@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-27
+generator: none
+---
+
 # 04 — Read endpoints
 
 The minimum surface a frontend needs: a ranked list, one job in full, and a

@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 33 — Deployment
 
 **Status:** todo. **Depends on:** 24, 32. **Blocks:** nothing.

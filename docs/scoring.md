@@ -1,3 +1,10 @@
+---
+kind: contract
+written: 2026-07-27
+generator: none
+note: part contract, part dated measurement. DEC-70 decided the split -- extract the contract half, freeze the measured half as a record. Task 43 executes it.
+---
+
 # The jobs scoring system — contract, components, and failure behavior
 
 Covers all four stages: `relevance.py` → `extract.py` → `match.py` →

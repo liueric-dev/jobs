@@ -1,3 +1,9 @@
+---
+kind: contract
+written: 2026-07-31
+generator: none
+---
+
 # docs/archive/
 
 **Everything in this directory was true when it was written and is not the current

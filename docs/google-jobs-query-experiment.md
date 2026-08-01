@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # Does Google Jobs yield Pursuit-relevant postings when it is actually asked for them?
 
 **Run:** 2026-07-28, at commit `66c9d18`, from the home connection.

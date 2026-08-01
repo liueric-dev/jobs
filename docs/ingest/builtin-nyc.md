@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/ingest/builtin-nyc.py
 written: 2026-07-27
 code_at: dd49a27
@@ -109,8 +110,8 @@ flowchart TD
     FETCH -->|"URLError · HTTPError<br/>TimeoutError · OSError"| PERR["append to page_errors<br/>continue → next page<br/>builtin.py:384-388"]
     FETCH -->|"html"| PARSE["parse_page · regex<br/>builtin.py:315-370"]
 
-    PARSE --> ZIP["titles[] and companies[]<br/>zipped POSITIONALLY by index i<br/>builtin.py:316-331"]
-    ZIP -->|"no company at index i"| DROPC["continue · card dropped<br/>builtin.py:332-333"]
+    PARSE --> ZIP["titles[] and companies[]<br/>paired by CONTAINMENT · last anchor<br/>in this card's span<br/>builtin.py:362-376"]
+    ZIP -->|"no anchor in this card's span"| DROPC["stats['no_company_anchor'] += 1<br/>continue · this card only<br/>builtin.py:377-380"]
     ZIP --> CARD["window = this title → next title<br/>last card = +3000 chars<br/>builtin.py:321-322"]
     CARD --> REC["6 sub-regexes per card<br/>work_type · geo · salary ·<br/>seniority · posted<br/>builtin.py:336-340"]
     REC --> ACC["append · description_text = None<br/>builtin.py:345-369"]
@@ -120,7 +121,7 @@ flowchart TD
 
     P1 -->|"pages done"| GATE{"not all_records?<br/>builtin.py:398"}
     GATE -->|"empty"| EXIT["print FAILED · sys.exit(1)<br/>builtin.py:399-402"]
-    GATE -->|"non-empty"| UPSERT["lib.upsert.upsert · ONE batch<br/>builtin.py:404 · errors DISCARDED"]
+    GATE -->|"non-empty"| UPSERT["lib.upsert.upsert_checked · ONE batch<br/>builtin.py:457 · errors LOGGED<br/>raises above the rate threshold"]
 
     UPSERT --> P2["PHASE 2 · fill_descriptions<br/>builtin.py:408 · budget = 60"]
     P2 --> SEL["SELECT id, job_url FROM jobs<br/>WHERE platform='builtin' AND open<br/>AND description_text = ''<br/>ORDER BY first_seen ASC LIMIT 60<br/>builtin.py:278-286"]
@@ -316,7 +317,7 @@ None. Both phases fetch unauthenticated with a browser-like User-Agent
 | Input | Behavior |
 |---|---|
 | Listing page with no `job-card-title` matches | `parse_page` returns `[]`; if all three pages do, the `:398` gate exits 1 |
-| Card with a title but no company at the same index | `continue`, card dropped silently (`:332-333`) |
+| Card with a title but no company anchor **in its own span** | `continue`, this card only; counted in `stats["no_company_anchor"]` (`:377-380`) and reported at every verbosity in the summary (`:478-483`). ~~*Was:* dropped silently, and shifted every later pairing — D02, fixed 2026-08-01~~ |
 | Card missing salary / seniority / geo / posted | `extract_field` returns `None` (`:186-188`); the row is kept with nulls |
 | Detail page with no `ld+json` script | `extract_description` returns `None` → counted `failed` (`:309`), row stays eligible |
 | One malformed JSON-LD block | `continue` to the next block (`:202-203`) |
@@ -346,7 +347,7 @@ abandons the pass (`:293-301`).
 | Sub-field regex miss | **nothing** — `extract_field` returns `None` (`:188`) |
 | Detail fetch failure | `failed` counter, reported in the summary (`:420`); the specific error to stderr **only** if `DEBUG_PRINT_KEYS` (`:246-247`, `:250-251`) |
 | Rate limiting | **printed to stdout unconditionally**, with remediation (`:298-300`). The only unconditional error output in this script |
-| **Per-record upsert failure** | **discarded.** `:404` unpacks the three-tuple via `UpsertResult.__iter__` (`backend/lib/upsert.py:164-166`) and never reads `.errors`. Same defect as `ingest/ats.py:337` |
+| **Per-record upsert failure** | **no longer discarded.** `upsert_checked` (`:457`) logs `upsert-summary: … errors=N` on every call and raises above the rate threshold. ~~*Was:* discarded — `:404` unpacked the three-tuple via `UpsertResult.__iter__` and never read `.errors`; fixed 2026-07-28, `e353e3e`, defect D01~~ |
 | Quiet run | silent — summary guarded by `if new_count or updated_count or closed_count or page_errors` (`:417`) |
 
 Note `desc_fetched` and `desc_failed` do **not** appear in that guard
@@ -378,21 +379,33 @@ which is the correct signal for a scraper whose selectors can silently rot.
 
 ### Undocumented assumptions about response shape
 
-- **Titles and companies are zipped by position, not by containment.**
+- ~~**Titles and companies are zipped by position, not by containment.**
   `parse_page` runs two independent `finditer` passes and pairs them by index
   `i` (`:316-317`, `:329-331`). Nothing verifies the company anchor at index
   `i` belongs to the card at index `i`. A card rendering a title without a
   company link — or an extra `data-id="company-title"` anywhere earlier in the
   page — shifts every subsequent pairing by one, attaching wrong companies to
   wrong titles with no error. The guard at `:332-333` only catches
-  `i >= len(companies)`.
+  `i >= len(companies)`.~~ **Fixed 2026-08-01 (defect D02, task 42, `2a94f3d`).**
+  Pairing is now by **containment**: a card's company is the last
+  `data-id="company-title"` anchor after the previous title and before this one
+  (`:370-376`), so an anchor outside every card span is ignored rather than
+  consumed, and a card with no anchor in its own span drops **only itself**,
+  counted in `stats["no_company_anchor"]` (`:377-380`) and reported in the
+  summary line (`:478-483`). The reasoning is in the `parse_page` docstring at
+  `:332-355`.
 - **The last card's window is 3,000 characters** (`:321`), a magic number with
   no comment. A card longer than that loses its trailing fields; a shorter one
   may pull fields from whatever markup follows.
-- **`SALARY_PATTERN` is not scoped to a salary element.** It matches
+- ~~**`SALARY_PATTERN` is not scoped to a salary element.** It matches
   `[0-9]{1,3}K-[0-9]{1,3}K` anywhere in the card window (`:148`), so any
   "100K-150K"-shaped text in the card is captured as salary. 135 of 351 live
-  rows have a non-empty `salary_text`.
+  rows have a non-empty `salary_text`.~~ **Fixed 2026-08-01 (defect D03, task
+  42, `2a94f3d`).** `SALARY_PATTERN` now reads Built In's own `fa-sack-dollar`
+  element (`:147-162`), the same way the `fa-location-dot` and
+  `fa-house-building` fields either side of it are read. The row count quoted
+  above is superseded; the current one is in
+  [`DEFECTS.md`](DEFECTS.md) under D03, with the query that produced it.
 - **The MIME type is HTML-escaped as `ld&#x2B;json`.** Documented at `:26-34`
   and handled at `:156-158`. The docstring records the cost: 187 unusable
   rows, every `builtin` row with `description_text = ''` while other sources
@@ -439,10 +452,14 @@ measurable churn in practice depends on how often the script runs per day,
 which I did not measure. Live data confirms the format: `posted_at` values
 include `"Reposted Yesterday"`, `"5 Hours Ago"` and `"Reposted An Hour Ago"`.
 
-**Whether the positional title/company zip has ever desynced is unknown.**
+~~**Whether the positional title/company zip has ever desynced is unknown.**
 There is no assertion, no counter and no stored `raw_json` (`:367`) to audit
 against. Detecting past occurrences would mean re-fetching the live pages and
-re-parsing, which I did not do.
+re-parsing, which I did not do.~~ **Still unknown for rows already written, and
+no longer possible going forward (2026-08-01, D02).** The positional zip is
+gone and there is now a counter (`stats["no_company_anchor"]`), so a future
+desync is visible in the summary line. Rows written before `2a94f3d` cannot be
+audited — `raw_json` is still `None` on this source.
 
 **The description backlog's steady state is unclear.** 24 of 351 open
 `builtin` rows currently have an empty `description_text` (`SELECT count(*)

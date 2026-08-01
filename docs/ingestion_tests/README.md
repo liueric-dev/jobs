@@ -1,3 +1,9 @@
+---
+kind: contract
+written: 2026-07-27
+generator: none
+---
+
 # docs/ingestion_tests/
 
 Work breakdown for `backend/evals/` — the harness that makes model, prompt and

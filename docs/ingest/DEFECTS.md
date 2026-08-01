@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: none -- this is a register over every ingest path, not a per-script reference
 written: 2026-07-28
 code_at: dd49a27 (audit base) + 28f1d0e (current HEAD, webapp-service)

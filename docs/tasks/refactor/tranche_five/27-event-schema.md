@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 27 — Event schema
 
 **Status:** todo. **Depends on:** 26. **Blocks:** 28, 30, 31.

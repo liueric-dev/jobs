@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # MASTER PLAN — retargeting `jobs` at the Pursuit AI-Native cohort
 
 **Written** 2026-07-28, against `webapp-service` @ `dd49a27`.

@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 08 — Score validation
 
 **Status:** ~~todo.~~ **DONE, `e1cdf7b`.** **Depends on:** 07. **Blocks:** nothing, but

@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 13 — Cohort criteria profile
 
 **Status:** ~~todo.~~ **DONE, `fa2d7a7`.** **Depends on:** 11, 12. **Blocks:** 26, 29, 30.

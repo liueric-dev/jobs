@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 05 — Corpus volume under a widened gate
 
 **Status:** DONE, `e4bddd3`. **Depends on:** nothing. **Blocks:** 04's projection, 10, 12.

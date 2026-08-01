@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/ingest/nyc-open-data.py
 written: 2026-07-28
 generator: none

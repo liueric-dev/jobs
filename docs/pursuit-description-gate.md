@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # The description-first cohort gate
 
 **Task:** `docs/tasks/refactor/tranche_two/10-description-first-gate.md`

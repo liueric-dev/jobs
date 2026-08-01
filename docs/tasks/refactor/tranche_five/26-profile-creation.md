@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 26 — Profile creation
 
 **Status:** todo. **Depends on:** 13. **Blocks:** 28, 29, 32.

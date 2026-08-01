@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-27
+generator: none
+---
+
 # 01 — Per-call model handles in `llm.py`
 
 **Status:** done, 2026-07-27, `fb733df`.

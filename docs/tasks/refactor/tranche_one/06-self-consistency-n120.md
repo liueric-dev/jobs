@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 06 — Re-run self-consistency at n=120
 
 **Status:** DONE, `5092568`. **Depends on:** 01. **Blocks:** 07, 11, 12, 13.

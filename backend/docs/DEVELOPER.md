@@ -6,13 +6,34 @@ Internal documentation for the job-discovery automation pipeline. If you're look
 
 ## Open Questions / TODOs
 
+> **This section is a `record`, not a contract — read it with its dates.**
+> Marked 2026-08-01 (task 37). Everything below was written at a point in time,
+> most of it on 2026-07-24, and the rest of this file describes the pipeline as it
+> is. This list does not: it is a snapshot of what was open on the day each item was
+> typed, and later work has closed some of it without coming back here. Struck text
+> is superseded and kept, per the run's *mark, do not delete* convention — deleting
+> it would remove the only evidence the item was ever open.
+>
+> Verified 2026-08-01, item by item:
+> - The **surfacing layer** entry is still accurate. `frontend/` is still empty.
+> - **Script distribution** is done and is struck below.
+> - **Quota pacing** is still accurate: `grep -rn daily_allowance backend/` finds
+>   nothing, so it remains designed and not built. It is not superseded, only old.
+> - The **`posted_at` slide**, the **backend-reliability** and **adaptive cadence**
+>   questions, and the **ruled-out pagination strategy** were re-read and none has
+>   been overtaken by later work.
+>
+> Everything in it that is a live *defect* rather than a note belongs in
+> [`docs/ingest/DEFECTS.md`](../../docs/ingest/DEFECTS.md), which is the register
+> that gets triaged. This list is not triaged and never was.
+
 **Highest priority:**
 - **Surfacing layer: backend built 2026-07-26, no frontend yet.** `score.py` scores every ingested job and nothing yet *presents* the results to a human — that is still true and the gap is not closed. What now exists is the half below the UI: `backend/webapp/`, a FastAPI service with Google SSO (email allowlist, opaque session cookies), `GET /v1/jobs` reading the `jobs_app` view, and `POST /v1/events` finally writing `job_events` — the table `SCORING.md` has always listed as "written by the surfacing layer" and which nothing had ever written. It connects as a new `jobs_web` role that can read the corpus and append engagement and rewrite nothing. See `backend/webapp/README.md`, and `docs/tasks/` at the repo root for the work breakdown and the decisions behind it. **What remains is `frontend/`**, still empty: nothing renders any of this.
 
 **Needs infrastructure work, not code:**
 - Multi-machine networking isn't set up yet — the claim-based scheduler (see below) is built and tested, but running it from a second physical machine requires: (1) making the home-PC Postgres instance reachable over a private network (Tailscale recommended over exposing it to the open internet), and (2) replacing the checked-in default DB password (`nyc_events_password`) once the instance is reachable beyond localhost — that default was only ever reasonable under a "this is genuinely localhost-only" assumption.
 - Each additional machine just needs its own `SERPAPI_API_KEY` in its own `./.env` and a synced copy of `config/google-queries.json`.
-- **Script distribution (decided 2026-07-24, not yet done): git, pull-before-run.** The plan for running from the laptops: make `~/apps/jobs` a git repo (bare repo hosted on the server over Tailscale/SSH, or a private GitHub repo — either works), and each worker machine runs `git pull --ff-only && python3 run-daily.py` as its entry point. This beats ad-hoc copying/`scp`-ing from the server because every machine states exactly which version it ran, updates are atomic, and a broken edit on one machine can't silently propagate. Phones: technically runnable (Termux on Android can do Python+psycopg over Tailscale) but not worth the upkeep — the min-interval guard means extra machines add resilience and quota, not coverage, so two laptops + server is already plenty.
+- ~~**Script distribution (decided 2026-07-24, not yet done): git, pull-before-run.** The plan for running from the laptops: make `~/apps/jobs` a git repo (bare repo hosted on the server over Tailscale/SSH, or a private GitHub repo — either works), and each worker machine runs `git pull --ff-only && python3 run-daily.py` as its entry point.~~ **Done, and it was already done when this was written: `~/apps/jobs` has been a git repo since its own initial commit on 2026-07-24** (`git log --reverse --date=short`). The private-GitHub option named here is the one that was taken — `git remote -v` resolves `origin` to a GitHub repository — so the distribution mechanism this item asked for exists. What was never checked is whether a second machine has ever actually pulled and run from it. The rest of the paragraph is the still-standing reasoning for why git and not `scp`. This beats ad-hoc copying/`scp`-ing from the server because every machine states exactly which version it ran, updates are atomic, and a broken edit on one machine can't silently propagate. Phones: technically runnable (Termux on Android can do Python+psycopg over Tailscale) but not worth the upkeep — the min-interval guard means extra machines add resilience and quota, not coverage, so two laptops + server is already plenty.
 
 **Quota management (designed 2026-07-24, not yet built):**
 - **Pace to the monthly cycle instead of a fixed 8/day.** SerpApi's account endpoint (`GET https://serpapi.com/account?api_key=…`) returns searches used/remaining for the current cycle. Planned logic: at the start of a run, compute `daily_allowance = floor(remaining_quota / days_left_in_cycle)` and use that (scaled across the buckets in their existing ratios) instead of the static `daily_budget` sum. This one formula solves both directions: overspending early in the month automatically lowers the allowance for the rest of the cycle (a *hard* daily cap, but self-correcting rather than a hard monthly stop that would go dark for a week), and a surplus near refresh automatically gets spent down (allowance grows as `days_left` shrinks) — no separate "burn it before it expires" mechanism needed. Multi-user note if this ever grows users: hard-cap per day at the formula, warn (don't block) when someone's trajectory would exhaust early, and hold back ~10% of quota as reserve.

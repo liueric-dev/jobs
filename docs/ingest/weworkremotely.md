@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/ingest/weworkremotely.py
 written: 2026-07-27
 code_at: dd49a27
@@ -108,7 +109,7 @@ flowchart TD
 
     LOOP -->|"loop done"| GATE{"not all_records<br/>AND category_errors?<br/>wwr.py:219"}
     GATE -->|"yes"| EXIT2["print FAILED · sys.exit(1)<br/>wwr.py:220-223"]
-    GATE -->|"no"| UPSERT["lib.upsert.upsert · ONE batch<br/>wwr.py:225 · SAVEPOINT per record<br/>errors DISCARDED"]
+    GATE -->|"no"| UPSERT["lib.upsert.upsert_checked · ONE batch<br/>wwr.py:267 · SAVEPOINT per record<br/>errors LOGGED · raises above threshold"]
     UPSERT --> CLOSE["close_stale('weworkremotely', 21)<br/>wwr.py:226"]
     CLOSE --> WM["state.set_watermark('weworkremotely')<br/>wwr.py:227"]
     WM --> REPORT["print summary if any counter<br/>non-zero · else silent<br/>wwr.py:234-238"]
@@ -309,16 +310,19 @@ the try block; here parsing is inside it.
 | Event | Where it goes |
 |---|---|
 | Per-category fetch/parse failure | appended to `category_errors` (`:201`); printed to stderr **only** if `DEBUG_PRINT_KEYS` (`:202-203`, `:231-232`); the count reaches stdout in the summary (`:237-238`) |
-| Item skipped — no colon, blocklisted, or no `source_id` | **nothing.** No counter, no log, at any verbosity (`:149`, `:151`, `:161`). The summary reports `len(all_records)` parsed but never how many items were seen and dropped |
-| Cross-listed duplicate dropped | **nothing** (`:209`) |
-| **Per-record upsert failure** | **discarded.** `:225` unpacks the three-tuple via `UpsertResult.__iter__` (`backend/lib/upsert.py:164-166`) and never reads `.errors`. Same defect as `ingest/ats.py:337` |
+| Item skipped — no colon, blocklisted, or no `source_id` | three named counters, `no_company_or_title` / `non_tech_excluded` / `no_source_id` (`:150`, `:175`, `:178`, `:189`), summed and broken out in the summary **at every verbosity** (`:284-291`). ~~*Was:* **nothing.** No counter, no log, at any verbosity — D05, fixed 2026-08-01~~ |
+| Cross-listed duplicate dropped | counted as `cross_listed` (`:246`) and reported **apart from** the drops (`:292`) — it is a correct outcome and normally nonzero, so folding it into a dropped total would give that total a noisy floor a regression could hide in (`:143-149`). ~~*Was:* **nothing** (`:209`)~~ |
+| **Per-record upsert failure** | **no longer discarded.** `upsert_checked` (`:267`) logs `upsert-summary: … errors=N` on every call and raises above the rate threshold. ~~*Was:* discarded — `:225` unpacked the three-tuple via `UpsertResult.__iter__` and never read `.errors`; fixed 2026-07-28, `e353e3e`, defect D01~~ |
 | Per-category parsed count | stderr **only** if `DEBUG_PRINT_KEYS` (`:213-214`) |
 | Quiet run | silent — the summary is guarded by `if new_count or updated_count or closed_count or category_errors` (`:234`) |
 
-The silent-drop path is the widest here: three separate `continue` statements
+~~The silent-drop path is the widest here: three separate `continue` statements
 discard items with no record anywhere. A regex change to
 `NON_TECH_EXCLUDE_PATTERN` (`:110-118`) that started matching legitimate
-engineering titles would produce no signal at all.
+engineering titles would produce no signal at all.~~ **Fixed 2026-08-01 (defect
+D05, task 42, `2a94f3d`).** Each drop reason is now a named counter in
+`DROP_REASONS` (`:150`) and the breakdown prints at every verbosity, so that
+regex change now moves `non_tech_excluded` in the summary line.
 
 ### Exit codes
 
@@ -396,12 +400,13 @@ every row (`:181`), so unlike the ATS sources there is no stored payload to
 sample, and the code names only the seven elements it reads. Determining what
 is discarded would require fetching a live feed, which I did not do.
 
-**How many items are dropped per run is unmeasurable from the output.** Three
+~~**How many items are dropped per run is unmeasurable from the output.** Three
 `continue` paths (`:149`, `:151`, `:161`) plus the cross-category dedup
 (`:209`) discard items with no counter. The summary reports only
-`len(all_records)` (`:237`). Whether `NON_TECH_EXCLUDE_PATTERN` currently
-drops any legitimate engineering title cannot be answered without
-instrumenting the parse.
+`len(all_records)` (`:237`).~~ **Answered 2026-08-01 (D05):** the summary now
+prints the drop total, the per-reason breakdown and the cross-listed count
+(`:284-292`). Whether `NON_TECH_EXCLUDE_PATTERN` currently drops any legitimate
+engineering title is still not answered — the counter says how many, not which.
 
 **Whether `slugify`-derived tokens have already produced duplicate rows was
 not checked.** Live counts show 249 rows across 88 distinct `company_token`

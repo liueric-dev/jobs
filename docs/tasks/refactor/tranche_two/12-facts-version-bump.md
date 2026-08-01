@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 12 — `FACTS_VERSION` bump and re-extract
 
 **Status:** ~~todo.~~ **DONE, `c4a8ff5` and `2b4dba2`.** **Depends on:** 04, 07, 11.

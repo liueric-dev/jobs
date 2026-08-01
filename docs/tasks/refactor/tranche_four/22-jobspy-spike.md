@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 22 — JobSpy spike
 
 **Status:** DONE, `66c9d18`. **Depends on:** nothing. **Blocks:** 23.

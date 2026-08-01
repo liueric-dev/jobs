@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 14 — NYC Open Data ingest
 
 **Status:** DONE, `7221620`. **Depends on:** 09, 10. **Blocks:** nothing.

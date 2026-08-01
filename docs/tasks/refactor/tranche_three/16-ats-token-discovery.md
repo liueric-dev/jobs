@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 16 — ATS token discovery
 
 **Status:** DONE, `49d51bf`. **Depends on:** nothing. **Blocks:** 17, 18, 20.

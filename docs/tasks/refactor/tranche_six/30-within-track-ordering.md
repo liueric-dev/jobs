@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 30 — Within-track ordering and display
 
 **Status:** todo. **Depends on:** 11, 13, 29. **Blocks:** 32.

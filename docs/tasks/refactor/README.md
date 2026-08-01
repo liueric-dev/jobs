@@ -1,3 +1,9 @@
+---
+kind: contract
+written: 2026-07-28
+generator: none
+---
+
 # docs/tasks/refactor/
 
 *(This tree was called `pursuit/` while it was being planned and is `refactor/` on disk. The old name survives in `MASTER-PLAN-pursuit.md` and a few task files, which are left as written.)*
@@ -119,7 +125,7 @@ these seven tasks execute — read it first; each task file cites a rule from it
 | | Task | Lands | |
 |---|---|---|---|
 | 36 | [Make the doc policy enforceable](tranche_seven/36-enforce-doc-policy.md) | `backend/tools/audit-docs.py` — six checks, `audit-doc-links.py`'s contract, wired into the suite. **Lands red on purpose**: check C5 has real failures in the tree today | todo |
-| 37 | [Classify every document](tranche_seven/37-classify-every-doc.md) | `kind:` frontmatter tree-wide; the `docs/README.md` index that has never existed, which is what makes orphan detection possible at all | todo |
+| 37 | [Classify every document](tranche_seven/37-classify-every-doc.md) | `kind:` frontmatter tree-wide; the `docs/README.md` index that has never existed, which is what makes orphan detection possible at all. **C1 and C2 both clean, zero orphans.** Ten false statements found in seven per-script contracts — six still said upsert errors were discarded four days after `e353e3e` fixed all eight sites | done |
 | 38 | [One figure, one owner](tranche_seven/38-one-figure-one-owner.md) | **No self-consistency number here is wrong — one word is overloaded.** `agree2` 94.8%, `pairwise` 90.7%, `unanimous` 87.0%, all n=115, all in circulation, one of them ever named. Resolved from committed data 2026-08-01; nothing needs re-measuring | todo |
 | 39 | [Split the `D<n>` namespace](tranche_seven/39-split-the-d-namespace.md) | `D` = defects, `DEC` = decisions, one allocator each, declared in both headers. **The twenty decision entries re-prefixed to `DEC-46`–`DEC-65`** — numbers preserved, `<a id="dNN">` anchors left behind so inbound `#d46` citations still land. `ats-discover.py`'s dozen `D45` citations mean the **defect**, were verified one by one and deliberately not swept; `CLAUDE_UPDATES.md` and `docs/archive/` are `kind: record` and are exempt | done |
 | 40 | [Roll the handoff forward](tranche_seven/40-roll-the-handoff-and-clear-the-archive.md) | `HANDOFF.md`'s entry point still sends every session to do task 34, justified by a premise task 34 **struck as wrong**. Plus `docs/WORKING-METHOD.md`, promoted; plus § *Still to archive*, cleared | todo |

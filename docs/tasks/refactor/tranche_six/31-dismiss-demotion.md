@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 31 — Dismiss demotion
 
 **Status:** todo. **Depends on:** 27, 26. **Blocks:** nothing.

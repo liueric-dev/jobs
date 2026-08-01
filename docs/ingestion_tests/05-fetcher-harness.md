@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-27
+generator: none
+---
+
 # 05 — A harness for the six non-LLM fetchers
 
 **Status:** done 2026-07-28. **Depends on:** 02.

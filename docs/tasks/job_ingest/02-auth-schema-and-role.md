@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-27
+generator: none
+---
+
 # 02 — Auth schema, the `jobs_web` role, and the admin CLI
 
 Three new tables, a Postgres role that can touch almost nothing, a startup

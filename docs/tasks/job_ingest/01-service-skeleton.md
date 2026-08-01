@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-27
+generator: none
+---
+
 # 01 — Service skeleton
 
 Stand up `backend/webapp/` as a real, runnable service with nothing in it but

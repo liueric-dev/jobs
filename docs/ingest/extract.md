@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/extract.py
 written: 2026-07-27
 generator: none

@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-27
+generator: none
+---
+
 # 04 — Score validation, and a `score` task
 
 **Status:** todo. **Depends on:** 03. **Blocks:** nothing.

@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 01 — Pin the production model
 
 **Status:** DONE, `28f1d0e`. **Depends on:** nothing. **Blocks:** 04, 06, and every cost or

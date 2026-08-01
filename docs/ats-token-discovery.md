@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # ATS token discovery — what NYC employers actually run
 
 **Task:** `docs/tasks/refactor/tranche_three/16-ats-token-discovery.md`

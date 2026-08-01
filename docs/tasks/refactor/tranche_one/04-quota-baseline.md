@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 04 — Quota and wall-clock baseline
 
 **Status:** DONE, `c3275be`. **Depends on:** 01. **Blocks:** 12 (the `FACTS_VERSION` bump), and

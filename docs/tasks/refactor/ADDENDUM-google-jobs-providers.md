@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # ADDENDUM — Google Jobs providers and the SERP abstraction
 
 **Written** 2026-07-28. Extends `SOURCING-STRATEGY.md` §3.

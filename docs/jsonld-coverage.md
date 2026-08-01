@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # JSON-LD coverage on the long tail
 
 **Task:** `docs/tasks/refactor/tranche_three/19-jsonld-parser.md`

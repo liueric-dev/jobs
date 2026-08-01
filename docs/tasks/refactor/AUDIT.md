@@ -1,3 +1,9 @@
+---
+kind: contract
+written: 2026-07-31
+generator: none
+---
+
 # AUDIT — the state of the refactor, and where every claim comes from
 
 **Written 2026-07-31 (task 34).** One page. It **indexes**; it does not restate. Anything

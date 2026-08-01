@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 10 — Description-first relevance gate
 
 **Status:** DONE, `7d94bb1`. **Depends on:** 05. **Blocks:** 12, 13, all of Phase 3.

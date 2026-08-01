@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/ingest/hn-hiring.py
 written: 2026-07-27
 code_at: dd49a27
@@ -132,8 +133,8 @@ flowchart TD
     FERR --> CLOOP
     NULLC --> CLOOP
 
-    CLOOP -->|"loop done"| COMMIT["conn.commit · ledger<br/>hn.py:422"]
-    COMMIT --> UPSERT["upsert(...).new ONLY<br/>hn.py:426-427<br/>updated/unchanged/errors DISCARDED"]
+    CLOOP -->|"loop done"| COMMIT["NO COMMIT · ledger stays open<br/>in this transaction · D23<br/>hn.py:471-473"]
+    COMMIT --> UPSERT["upsert_checked · ONE commit<br/>lands ledger AND rows<br/>hn.py:483 · errors RAISE above threshold"]
     UPSERT --> RETIRE{"--reparse AND declined?<br/>hn.py:441"}
     RETIRE -->|"yes"| CLOSE1["UPDATE status='closed'<br/>WHERE source_id = ANY(declined)<br/>hn.py:442-448"]
     RETIRE -->|"no"| CLOSE2
@@ -284,13 +285,18 @@ Two write scopes with different commit points:
 
 | Scope | Commit | Crash behavior |
 |---|---|---|
-| Ledger inserts | once, after the whole comment loop (`:422`) | **every ledger insert is lost** — those comments are re-fetched next run |
-| `jobs` upsert | once, end of batch (`backend/lib/upsert.py:235`) | all row writes lost |
+| Ledger inserts | **none of its own.** `read_comments` commits nothing (`:342-343`, `:471-473`); the inserts stay open in the caller's transaction | rolled back with everything else — those comments are re-fetched next run |
+| `jobs` upsert | once, end of batch (`backend/lib/upsert.py:235`) — **this single commit lands both halves** | all row writes lost, and the ledger with them |
 
-Because the ledger commit at `:422` happens **after** the loop but **before**
+~~Because the ledger commit at `:422` happens **after** the loop but **before**
 the upsert at `:426`, a crash between them leaves comments marked seen with no
 `jobs` row — and since the ledger is what gates re-fetching, those comments
-would never be re-read without `--reparse`. See Open Questions.
+would never be re-read without `--reparse`.~~ **Fixed 2026-08-01 (defect D23,
+task 42, `2a94f3d`).** There is deliberately no commit between the comment loop
+and the upsert (`:471-473`), so a crash rolls back both halves and the comments
+are re-fetched — one wasted request each against HN's free API, versus a posting
+lost for the life of the thread. Reordering does not fix it; it only chooses
+which failure you get (`:362-363`).
 
 A fetch failure inside the loop is handled correctly for retry: it `continue`s
 **before** the ledger insert (`:405-408`), with the comment "transient failure
@@ -355,8 +361,8 @@ An exception inside `parse_comment` that is not anticipated — the call at
 | Comment declined by the parser | counted indirectly as `skipped = len(new_kid_ids) - len(records) - fetch_errors` (`:457`), reported in the summary (`:466`). **Which** comments and **why** is never logged at any verbosity |
 | Null comment item | silently `continue`s (`:409-410`) — counted in `skipped`, indistinguishable from a parse decline |
 | Retirement under `--reparse` | printed unconditionally (`:449-450`) |
-| **`updated` and `unchanged` counts** | **discarded.** `:426-427` reads `.new` only, on the stated grounds that the source is insert-only (`:424-425`) |
-| **Per-record upsert failure** | **discarded.** Reading `.new` never touches `.errors` (`backend/lib/upsert.py:157-162`) |
+| **`updated` and `unchanged` counts** | **discarded**, on the stated grounds that the source is insert-only (`:475-476`) |
+| **Per-record upsert failure** | **no longer discarded.** `upsert_checked` (`:483`) logs `upsert-summary: … errors=N` on every call and raises above the rate threshold — and the module comment records why `.new` alone was not enough: a comment whose row failed to write is already marked seen, so it is never retried (`:477-480`). ~~*Was:* discarded — reading `.new` never touched `.errors`; fixed 2026-07-28, `e353e3e`, defect D01~~ |
 | Thread/ledger diagnostics | stderr **only** if `DEBUG_PRINT_KEYS` (`:458-462`) |
 | Quiet run | silent — guarded by `if new_count or closed_count or fetch_errors` (`:464`) |
 
@@ -443,13 +449,17 @@ It leaves no marker — no watermark, no ledger column, no log line persisted.
 uses `ON CONFLICT DO NOTHING` (`:414`), so a re-parse does **not** update the
 timestamp and the column cannot distinguish a first fetch from a re-read.
 
-**A crash between the ledger commit and the upsert would strand comments.**
+~~**A crash between the ledger commit and the upsert would strand comments.**
 The ledger commits at `:422`; the `jobs` upsert commits at
 `backend/lib/upsert.py:235`. A crash in between marks comments as seen with no
 row written, and because the ledger gates re-fetching (`:392`), a subsequent
 normal run would skip them permanently — only `--reparse` would recover them.
 I found no test covering this and no evidence it has occurred. Whether the
-ordering is deliberate is not recorded.
+ordering is deliberate is not recorded.~~ **Answered and fixed 2026-08-01
+(defect D23, task 42, `2a94f3d`).** The window is gone: `read_comments` commits
+nothing, so there is one commit for both halves. The ordering was *not*
+deliberate. Whether the old window ever fired is still not determinable —
+`ON CONFLICT DO NOTHING` on the ledger leaves no evidence either way.
 
 **Null comment items are re-fetched forever.** `if not comment: continue`
 (`:409-410`) returns before the ledger insert at `:412`, so an id that HN

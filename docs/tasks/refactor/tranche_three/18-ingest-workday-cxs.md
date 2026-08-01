@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 18 — Workday CXS ingest, and upstream gating
 
 **Status:** DONE, `fabe381`. **Depends on:** 09, 16, 10. **Blocks:** nothing.

@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # `job_facts` version 2 → version 3: the field-by-field diff
 
 **Date:** 2026-07-28. **Task:** `docs/tasks/refactor/tranche_two/12-facts-version-bump.md`.

@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-28
+generator: none
+---
+
 # Score validation
 
 **Task:** `docs/tasks/refactor/tranche_two/08-score-validation.md`, which is

@@ -1,3 +1,9 @@
+---
+kind: rolling
+written: 2026-07-31
+generator: none
+---
+
 # Handoff — the `docs/tasks/refactor/` run
 
 ## START HERE — a fresh session's sixty seconds, 2026-07-31

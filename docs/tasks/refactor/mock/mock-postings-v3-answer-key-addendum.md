@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-29
+generator: none
+---
+
 # Answer key addendum — mock_041 through mock_055
 
 For entries 001–040, see mock-postings-v2-answer-key.md. This covers only the new

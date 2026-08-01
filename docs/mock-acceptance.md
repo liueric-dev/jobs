@@ -1,3 +1,9 @@
+---
+kind: record
+written: 2026-07-29
+generator: none
+---
+
 # Mock acceptance run — a specification test, 2026-07-29
 
 **What this is:** 55 synthetic postings with a quote-backed answer key, run through

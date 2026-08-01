@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 11 — Archetype superset, `role_track`, and missingness
 
 **Status:** DONE, `da4942c`. **Depends on:** 06, 10.

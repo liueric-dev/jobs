@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/score.py
 written: 2026-07-27
 code_at: dd49a27

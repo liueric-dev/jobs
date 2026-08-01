@@ -1,4 +1,5 @@
 ---
+kind: contract
 script: backend/ingest/google-serpapi.py
 written: 2026-07-27
 code_at: dd49a27
@@ -148,7 +149,7 @@ flowchart TD
     QERR --> RLOOP
     FETCH -->|"jobs_results"| NORM["google_jobs.normalize_job(j, mode)<br/>source_id = ids.google_source_id<br/>NOT the raw job_id"]
 
-    NORM --> UPSERT["lib.upsert · google_spec<br/>STICKY posted_at, posted_at_ts<br/>serpapi.py:325 · errors DISCARDED"]
+    NORM --> UPSERT["lib.upsert.upsert_checked · google_spec<br/>STICKY posted_at, posted_at_ts<br/>serpapi.py:337 · errors LOGGED<br/>raises above the rate threshold"]
     UPSERT --> OK["state.mark_success<br/>advances watermark AND clears claim<br/>in ONE statement · serpapi.py:332"]
     OK --> STATS["log_query_stats → google_jobs_query_stats<br/>serpapi.py:334 · read by nothing"]
     STATS --> RLOOP
@@ -368,7 +369,7 @@ Upsert isolates per record with a SAVEPOINT
 | Query fetch failure | `query_errors` (`:318`); claim released (`:319`); stderr **only** if `DEBUG_PRINT_KEYS` (`:320-321`, `:349-350`); count in the summary (`:355`) |
 | Lost claim race | **nothing** (`:238`). No counter distinguishes "another machine has it" from "nothing was stale" |
 | Bucket skipped for recency | **nothing** (`:227-233`) |
-| **Per-record upsert failure** | **discarded.** `:325` unpacks the three-tuple and never reads `.errors` (`backend/lib/upsert.py:157-162`). Same defect as `ingest/ats.py:337` |
+| **Per-record upsert failure** | **no longer discarded.** `upsert_checked` (`:337`) logs `upsert-summary: … errors=N` on every call and raises above the rate threshold. ~~*Was:* discarded — `:325` unpacked the three-tuple and never read `.errors`; fixed 2026-07-28, `e353e3e`, defect D01~~ |
 | Per-query result counts | stderr **only** if `DEBUG_PRINT_KEYS` (`:336-339`) |
 | Query stats | written to `google_jobs_query_stats` (`:334`), which **nothing reads** (`:181-183`) |
 | Quiet run | silent — guarded by `if total_new or total_updated or closed_count or query_errors` (`:352`) |

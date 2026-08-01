@@ -1,3 +1,9 @@
+---
+kind: contract
+written: 2026-07-31
+generator: none
+---
+
 # Measurement traps
 
 **Promoted 2026-07-31 from `backend/docs/HANDOFF-match-quality.md` § 4**, which is

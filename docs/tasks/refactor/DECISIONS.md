@@ -1,3 +1,9 @@
+---
+kind: rationale
+written: 2026-07-28
+generator: none
+---
+
 # Decisions taken while running `docs/tasks/refactor/`
 
 Hand-written, not generated — there is no `script:` frontmatter here and this file is
@@ -20,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-70`.** Allocated `DEC-46`–`DEC-69`. The count starts at 46 rather than at
+**Next free: `DEC-71`.** Allocated `DEC-46`–`DEC-70`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -2278,3 +2284,36 @@ Reversible: yes. Nothing persists and no schema changed; deleting the two call s
 restores the previous behaviour exactly. The table remains available later if the ids ever
 need to outlive a terminal — this decision does not foreclose it, it declines to pay for
 it now.
+
+---
+
+<a id="dec-70"></a>
+
+## DEC-70 — `docs/scoring.md` splits: the contract half is extracted, the measured half is frozen
+
+**2026-08-01, task 37.**
+
+`docs/scoring.md` opens *"Every figure below was measured against the live database on
+2026-07-27"* and then serves as the scoring **contract** the whole repo cites. Under
+rule 1 it is two documents wearing one name, and that is why it has been read as a
+contract while carrying figures nobody is re-deriving.
+
+**Decided: extract the contract half — what a score means, whether two are comparable,
+where each weight comes from — and freeze the measured half as a dated `record`.**
+
+**Rejected: make the whole file a `contract` and re-derive every figure on a schedule.**
+It is the option that keeps one file, and it fails on the same thing every time: the
+schedule has no owner. `DOCS-POLICY.md` § *Choosing between contract and record* names
+this exact trap — *"writing a measurement as a contract is what makes a document need
+continuous rewriting"* — and this run has already produced eight numbers that went stale
+because someone intended to keep them current.
+
+**Execution is deferred to task 43**, deliberately. This task's Definition of done asks
+that the choice be *made and recorded*, not performed; pulling a contract out of a dated
+measurement is content work, and doing it inside a tree-wide frontmatter sweep would make
+both unreviewable — task 34's stated reason for deferring the `SCORING.md` archive, applied
+again. The file stays `kind: contract` in the meantime, which is the reading the repo
+already acts on: every citation of it today is a citation of the contract half.
+
+Reversible: yes, and cheaply, because nothing is being deleted. If the split turns out not
+to be worth two files, the record half is appended back and the `kind:` reverts.

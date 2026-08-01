@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-27
+generator: none
+---
+
 # 03 — Google SSO and sessions
 
 The only way into this application. Google authenticates; the `app_users`

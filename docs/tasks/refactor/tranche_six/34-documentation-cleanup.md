@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 34 — Documentation cleanup — MOVED
 
 **This file's content is now [`../34-documentation-cleanup.md`](../34-documentation-cleanup.md) § D.**

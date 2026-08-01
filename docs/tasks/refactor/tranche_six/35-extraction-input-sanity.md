@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 35 — Extraction input sanity
 
 **Status:** DONE, `303f7b9` (implemented with this file). **Depends on:** nothing.

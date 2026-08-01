@@ -1,3 +1,9 @@
+---
+kind: contract
+written: 2026-07-27
+generator: none
+---
+
 # docs/tasks/
 
 Work breakdown for closing the gap named at the top of

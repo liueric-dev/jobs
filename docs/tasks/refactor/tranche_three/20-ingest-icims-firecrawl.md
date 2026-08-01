@@ -1,3 +1,9 @@
+---
+kind: task
+written: 2026-07-28
+generator: none
+---
+
 # 20 — iCIMS via Firecrawl
 
 **Status:** todo. **Depends on:** 16, 19. **Blocks:** nothing.
