@@ -20,7 +20,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-68`.** Allocated `DEC-46`–`DEC-67`. The count starts at 46 rather than at
+**Next free: `DEC-69`.** Allocated `DEC-46`–`DEC-68`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -2190,3 +2190,48 @@ precisely so that a citation does not depend on a renderer's goodwill.
 
 Reversible: yes, mechanically. The prefix carries no information the number does not, and the
 anchors mean the old citation form never stopped working.
+
+---
+
+<a id="dec-68"></a>
+
+## DEC-68 — the doc checker lands red in the CLI and green in the suite, against a declared baseline
+
+**2026-08-01, task 36.** The task asks for two things that conflict once the checker is
+wired into `unittest discover`, which is the whole point of wiring it in: **it must land
+red** — *"a checker whose first run is green has been tested against nothing"*, and C5 had
+22 real failures — **and both suites must stay green**, because that is the gate every
+later wave of this tranche runs against.
+
+**Decided:** `backend/tools/audit-docs.py` exits non-zero on the tree as it stands, which
+is what the Definition of done actually checks. `backend/tests/test_docs_policy.py` gates
+on **regression** instead of on zero: the current finding set must be a **subset** of
+`backend/config/doc-policy-baseline.json`. Clearing a finding keeps the suite green; a
+**new** finding turns it red. The baseline was written by the checker's own first run —
+93 C1, 95 C2, 5 C4, 22 C5 — so it is evidence the checks fired against real input rather
+than a hand-written list of things somebody tolerated. Every check in it names **the task
+that clears it**, and a test asserts that naming, so a tolerated finding cannot become
+anonymous. Tasks 37–40 prune it; phase 9 exits when it is empty.
+
+**Rejected: `@unittest.expectedFailure`.** It would have satisfied both sentences literally
+and hidden the findings behind a passing dot. The suite would then have gone red when the
+documents were *fixed*, which is precisely backwards.
+
+**Rejected: leaving the suite red through waves 1–3.** Honest, and it would have destroyed
+the wave gate — *"both suites green and not smaller"* cannot detect a regression in tasks 37,
+38 or 42 if it is already failing for a reason everyone has agreed to ignore. That is rule
+7's own warning about a check that cries wolf, applied to the check being built.
+
+**Rejected: an exact-match assertion rather than a subset.** It catches a stale allowance,
+which the subset form does not, but it turns every single frontmatter line task 37 adds into
+a red suite until the baseline is regenerated — which trains exactly the reflex of
+regenerating the baseline to make the suite quiet. The stale-allowance hole is real and is
+closed by hand in wave 4, where the baseline is pruned to empty and the emptiness is the
+phase-exit gate.
+
+**A non-empty baseline is a temporary state with an owner, and this is the risk to watch.**
+If tranche seven closes and that file still has findings in it, the mechanism has become the
+thing it was built to prevent. The module docstring says so in those words.
+
+Reversible: yes. Delete the baseline file and change the assertion to `assertEqual([], found)`
+once the tree is clean; nothing else depends on it.

@@ -1,0 +1,19 @@
+{
+  "_comment": "Figures that appear with their instrument in exactly one document, per DOCS-POLICY rule 2, and are cited rather than restated everywhere else. backend/tools/audit-docs.py check C4 reads this file and reports every match OUTSIDE the owner. A row is a name, the owning document, a regex, and an optional `allowed` list of fnmatch patterns where a copy is deliberate. Allowances are explicit rows, never a global ignore: 'we decided this copy is fine' is exactly the kind of decision that has to be written down where the next reader sees it. Matches inside fenced code blocks are skipped by the checker, so a shell transcript quoting a number is not a finding.",
+
+  "_why": "The failure this prevents is already in the tree and is what motivated the rule. The main suite's test count is written as three different values in three live documents and none of them is what the runner prints; each was correct on the day it was typed. Nothing was wrong -- the number was copied to four places and only one of them was ever updated again. A general duplicate-number detector is not possible and must not be attempted, so this checks a DECLARED list. It will never be complete, and the declaration is as much the deliverable as the code is.",
+
+  "_scope_note": "SEEDED WITH ONE ROW, deliberately. Task 36 builds the mechanism; task 38 does the sweep that finds which other figures have owners and adds them. One row is enough to show C4 fires on real input, and inventing rows here would pre-empt task 38's editorial calls about who owns what -- which is the part of rule 2 that a script cannot make.",
+
+  "figures": [
+    {
+      "name": "main suite test count",
+      "owner": "docs/tasks/refactor/AUDIT.md",
+      "pattern": "(?<![\\d:.\\-])11[0-9]{2}(?![\\d.\\-])",
+      "allowed": ["docs/archive/*"],
+      "_note": "AUDIT.md owns it because it was built for run-level figures and its own header says it 'indexes; it does not restate'. The number is four digits beginning 11 because every count this run has printed since 2026-07-29 -- 1107, 1160, 1166, 1171, 1178, 1182, 1185 -- is in that band; a narrower literal would stop matching the moment the suite grew, which is the drift the rule is about.",
+      "_pattern_note": "The lookarounds are the whole reason this row is usable. A bare \\b11[0-9]{2}\\b matches 86 lines under docs/ and 34 of them are LINE-NUMBER CITATIONS -- `ingest/ats.py:1128`, `labels.py:1112-1145`, `:1194` -- which are not the figure and never were. Refusing a match preceded by ':' or '.' or a digit or '-', or followed by one, drops all 34 and keeps all 52 real ones (measured 2026-08-01). A check that cries wolf is worse than no check, because it teaches the reflex that retires all the others.",
+      "_allowed_note": "docs/archive/* is allowed because rule 4 makes it true by construction: an archived file is a frozen record of what was true when it was written, and its provenance header says so. Rewriting an old suite count there would destroy the only evidence the number was ever different, which is the opposite of what the archive is for. NOT allowed, and deliberately left as findings for task 38 to rule on: CLAUDE_UPDATES.md, whose per-commit counts are arguably the same frozen-record case, and tranche_seven/38-one-figure-one-owner.md, which quotes the copies it exists to remove. Both are judgement calls that belong to task 38, not to the task that built the checker."
+    }
+  ]
+}

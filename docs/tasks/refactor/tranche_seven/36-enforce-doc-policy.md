@@ -6,7 +6,7 @@ generator: none
 
 # 36 — Make the documentation policy enforceable
 
-**Status:** NEXT. **Depends on:** [`docs/DOCS-POLICY.md`](../../../DOCS-POLICY.md), written.
+**Status:** DONE 2026-08-01. **Depends on:** [`docs/DOCS-POLICY.md`](../../../DOCS-POLICY.md), written.
 **Blocks:** 37, 38, 40 — each of those executes a rule this task makes checkable, and doing
 them first would mean hand-verifying work a script is about to verify anyway.
 
