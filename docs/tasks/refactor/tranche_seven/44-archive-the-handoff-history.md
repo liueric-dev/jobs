@@ -6,9 +6,30 @@ generator: none
 
 # 44 — `HANDOFF.md` is two documents; archive the frozen half
 
-**Status:** TODO. **Depends on:** 40, done (`6b74e0b`, `8e9e343`, `6b6ae71`) — the entry
-point is already rolled forward and the method already promoted. **Blocks:** nothing, but
-one declared allowance in `backend/config/doc-figures.json` exists only until this lands.
+**Status:** DONE, 2026-08-01. **Depends on:** 40, done (`6b74e0b`, `8e9e343`, `6b6ae71`) —
+the entry point is already rolled forward and the method already promoted. **Blocks:**
+nothing, but one declared allowance in `backend/config/doc-figures.json` existed only until
+this landed, and it is now removed.
+
+> **One premise of this file was wrong, and it changed the work.** § *How it surfaced* says
+> the nineteen restatements are all *"below line 380"* and § *The work* says that a red C4
+> after the move means *"something that should have been archived was not"*. Seventeen of the
+> nineteen behaved that way. **The other two sat in live `rolling` sections** — a
+> `suite 1030 → 1058` delta inside the next-steps list and a `Suite 1171 → 1178` delta inside
+> an open follow-up — where archiving them would have archived current content. Both became
+> **citations of a document that already carried the pair** (`docs/archive/handoff-gate-fix.md`
+> and `CLAUDE_UPDATES.md`), which is rule 2's fix rather than rule 4's move, and no figure was
+> lost. **A figure inside a rolling document is not evidence that the section around it is
+> history.**
+>
+> **What landed:** § *State at handoff* and § *What 08, 12 and 19 changed about the plan* →
+> [`docs/archive/handoff-state-2026-07-31.md`](../../../archive/handoff-state-2026-07-31.md).
+> § *Nothing is in flight* → [`docs/archive/handoff-tree-state.md`](../../../archive/handoff-tree-state.md),
+> **minus two parts**: its FAQ is standing guidance and stayed, and its four cross-stream
+> lessons were promoted to [`docs/MEASUREMENT-TRAPS.md`](../../../MEASUREMENT-TRAPS.md) under
+> rule 5 — they are about a shared database and a pinned set, not about this cohort or model.
+> The one edit to the moved text was repointing four `](AUDIT.md)` links, which are relative
+> and stopped resolving one directory over; `audit-doc-links.py` named the fix.
 
 ## The finding, and it came from a check rather than from a reading
 

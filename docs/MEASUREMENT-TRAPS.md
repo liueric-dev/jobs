@@ -36,6 +36,35 @@ Section numbering is kept as `4.1`–`4.7` so that every existing citation still
   labelling-rate reading said "re-check this as the count grows"; the re-check at n=29
   overturned it and halved the budget. A caveat with a command attached gets run.
 
+**Promoted 2026-08-01 from `docs/tasks/refactor/HANDOFF.md` § *Nothing is in flight*** by
+task 44, under `DOCS-POLICY.md` rule 5 — both would still be true for a different cohort,
+model or product. The dated narrative they were extracted from is at
+[`archive/handoff-tree-state.md`](archive/handoff-tree-state.md).
+
+- **File ownership does not isolate database state — take the baseline, then attribute every
+  delta.** Three instances here, and none of them was a mistake anyone made. Agents running
+  on strictly *disjoint files* still interact, because the database is shared: task 35's
+  remediation deleted rows from the corpus task 13 was scoring, so 13's frozen eval fixture
+  had to be re-pinned 863 → 859 and another profile's `job_matches` digest changed for a
+  reason that had nothing to do with 13. Then a count moved mid-session with two agents on
+  disjoint files and **neither did it** — the nightly `run-daily.py` timer fired at 04:08 and
+  closed a posting. **The other agent in the room is the cron job.** All three were isolated
+  only because a snapshot was taken first. And take a **content digest** — `md5` over
+  `string_agg` of the columns at issue, in a pinned row order — not a row count: a count
+  cannot see an overwrite, and *"the counts match"* is exactly the reassuring sentence a
+  silent re-score would produce.
+- **A pin on set membership buys nothing about the derived facts.** An eval set pinned by
+  sorted `job_id` cannot drift and its `sha256` proves it — **but the facts underneath its
+  rows can, and did.** One posting acquired a `role_track` overnight, taking the set's NULL
+  rate 27.7% → 28.5% inside a single working session, after the first figure had already been
+  handed to a writer. The two earlier instances above moved *counts of rows*; this one moved
+  a *rate about a frozen sample*, which is the version that looks safe to quote. **Any figure
+  computed from a derived table about a pinned set carries the date it was taken, and one
+  quoted without a date is unverified.** Second-order: the superseded rate and an unrelated
+  document's rate rounded to the same 27.7% from different denominators — which is precisely
+  the shape in which one measurement gets quoted as corroborating another. If you meet a bare
+  rate, establish its population first.
+
 ---
 
 ## 4. Measurement traps — all seven of these bit on this codebase
