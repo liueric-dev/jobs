@@ -79,7 +79,7 @@ envfile.load(os.path.join(
 #: role_track values, `other` a verdict on the twenty-six archetypes -- and
 #: they are counted separately for that reason. Neither is an abstention;
 #: `labels.validate()` stores an abstention as NULL and both of these as
-#: themselves, which is the distinction D60 exists to preserve.
+#: themselves, which is the distinction that decision DEC-60 exists to preserve.
 NO_TRACK_FITS = "no_track_fits"
 ARCHETYPE_OTHER = "other"
 

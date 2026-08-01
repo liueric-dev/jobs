@@ -33,7 +33,7 @@ both, and labels the unions as such.
 > **Superseded as a description of the CURRENT vocabulary, 2026-07-31 — and correct
 > when taken.** Every figure in this Headline, and in *(a) The archetype superset* below,
 > is over the **427 `other` rows at `facts_version = 2`**, which was the current version
-> on 2026-07-28. The tool that produced them had **no version filter at all** (D65), so
+> on 2026-07-28. The tool that produced them had **no version filter at all** (DEC-65), so
 > re-running it after task 12's bump kept answering a question about the twelve-value
 > vocabulary. At `facts_version = 3` the nine tech values reclaim **9 of 294**, not 203 of
 > 427. The tech gap was real and is largely closed; what is left is a different bucket.
@@ -493,7 +493,7 @@ values is a separate decision and still open.
 
 **One value is proposed — `revenue_commercial` — and it is NOT applied.** The vocabulary
 and this rationale land; `extract.ARCHETYPE` is untouched at 26 values and
-`schema.FACTS_VERSION` is untouched at 3. The reason is DECISIONS.md **D64**: `pursuit-v1`
+`schema.FACTS_VERSION` is untouched at 3. The reason is DECISIONS.md **DEC-64**: `pursuit-v1`
 is being labelled right now, and re-extraction rewrites the model answers those labels
 exist to be read against, mid-collection, on a set whose redraw window has closed.
 
@@ -541,7 +541,7 @@ all versions and reproduces every historical figure above. The population is pri
 header of every run. Two smaller fixes travelled with it: `_families()` derived its family
 list from two hardcoded `("ops", "tech")` tuples while `CANDIDATES` had grown a third, so
 **the commercial family was probed, counted and never printed** — it and the union-reclaim
-table now both derive the list from `CANDIDATES`. D65 has the reasoning.
+table now both derive the list from `CANDIDATES`. DEC-65 has the reasoning.
 
 ### The corpus, restated at `facts_version = 3`
 
@@ -610,7 +610,7 @@ labeller** — 19 `surfaced`, 9 `gate_rejected`, 3 `below_floor`.
 **This is not an agreement figure and must not be written as one.** It is what the humans
 said, on its own; `label-findings.py` deliberately prints no model-vs-human comparison,
 because with one labeller there is no inter-annotator ceiling to denominate a model score
-against (D57, D61). **And the population is different from every corpus figure above** — a
+against (DEC-57, DEC-61). **And the population is different from every corpus figure above** — a
 stratified 200-row eval set, not the cohort corpus. The 55% and the 31.3% are two
 populations, not a confirmation.
 

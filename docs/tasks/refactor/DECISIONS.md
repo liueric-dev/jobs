@@ -12,6 +12,33 @@ implementation detail — the commit shows that.
 reversible. The reversibility field is there so this can be skimmed for the entries
 that actually constrain later work.
 
+## Allocator — this register owns the `DEC` prefix
+
+Per [`DOCS-POLICY.md`](../../DOCS-POLICY.md) rule 6, one allocator per register and no
+register issues an identifier in another's space. **This file owns `DEC-<n>` and nothing
+else does.** Defects are `D<n>` and live in
+[`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
+[`README.md`](README.md).
+
+**Next free: `DEC-68`.** Allocated `DEC-46`–`DEC-67`. The count starts at 46 rather than at
+1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
+count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
+citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
+so the two registers can never collide on them. Each re-prefixed heading carries an
+`<a id="dNN"></a>` anchor so an inbound `#d46` still lands (rule 4), and `CLAUDE_UPDATES.md`
+and `docs/archive/` are `kind: record`, frozen at write time, and keep the old spelling on
+purpose.
+
+**Cross-register references are written out** — *"defect D45"*, *"decision DEC-52"* — because
+a bare identifier in a code comment cannot be resolved by a reader who does not already know
+which file it came from. `backend/tools/label-findings.py:82` is the worked example on this
+side; `backend/tools/ats-discover.py` is the one on the defect side.
+
+**The entries before `DEC-46` are not identifiers and do not become any.** `### 00 — Scope of
+this run`, `### 06 — THE GATE`, `### SCORE-VERSIONS — …` and the two `### Defect D45 — …`
+entries are **topic** headings: they name the task or the defect a decision was taken under,
+not the decision. Allocation starts where it actually started, at 46.
+
 Run started 2026-07-28, from `36d83f5`, on branch `webapp-service`. Tasks 01 and 02
 were already committed (`28f1d0e`, `36d83f5`).
 
@@ -1060,7 +1087,7 @@ class names is worse than the defect. Tombstoning the facts alone was rejected
 because the poisoned bytes would survive to be re-extracted at the next
 `FACTS_VERSION`.
 
-### D45 — One durability boundary, on the iteration axis
+### Defect D45 — one durability boundary, on the iteration axis
 
 The two tables were committed on cadences measured on **different axes** —
 `ats_seed` every 20 iterations, `company_ats` every 50 records — so no choice of
@@ -1073,7 +1100,7 @@ tested rather than argued**: the test kills a pass at every one of 60 indices an
 asserts set equality between the tables. Reading the loop is what let the original
 defect through review, so the test does not read it.
 
-### D45 — `company_ats` holds every negative, and the column now falsifies itself
+### Defect D45 — `company_ats` holds every negative, and the column now falsifies itself
 
 The design question D45 declined to decide, answered yes: `tools/jsonld-probe.py`
 and tasks 16/17 read the column as their **population**, and a partial column
@@ -1189,7 +1216,9 @@ safe only by the accident of `None or 0` being 0. And `--stale-report` is handle
 
 ---
 
-## D46 — the mock corpus is a specification test, and is never a label
+<a id="d46"></a>
+
+## DEC-46 — the mock corpus is a specification test, and is never a label
 
 **2026-07-29.** 55 synthetic postings arrived for "task 29". Task 29 is the human
 labelling session and `HANDOFF.md` calls it the one thing in the plan an agent cannot
@@ -1213,7 +1242,9 @@ verified — 605/605 — by a validator written by a different agent than the ke
 turns 40 derived entries from an agent's opinion into evidence a human can audit in
 twenty minutes. It does not make them independent, and the doc says so.
 
-## D47 — location flags are loader output, not extraction output
+<a id="d47"></a>
+
+## DEC-47 — location flags are loader output, not extraction output
 
 **2026-07-29.** The answer key initially scored `location_is_nyc` / `location_is_remote`
 as extraction fields. They are not `job_facts` columns: `match.py:281` reads them as
@@ -1235,7 +1266,9 @@ wrong `_location_flags()`. They are just in a different denominator.
 **The general rule this session earned:** a measurement's denominator deserves an
 adversarial reader who cannot see how the numerator was built.
 
-## D48 — `strip_html` fixed by a superset regex, not by a parser
+<a id="d48"></a>
+
+## DEC-48 — `strip_html` fixed by a superset regex, not by a parser
 
 **2026-07-29.** `lib/text.py` is on every ingest path, which is why HANDOFF scoped this
 out once already on blast radius.
@@ -1264,7 +1297,9 @@ posting replaced by Tailwind class soup, not appended to. Remediation ran before
 rewrite, deliberately: the reverse order leaves clean text with soup-derived facts
 under it.
 
-## D49 — the pursuit gate lives in a file, and the harness reads that file
+<a id="d49"></a>
+
+## DEC-49 — the pursuit gate lives in a file, and the harness reads that file
 
 **2026-07-29.** The gate was a Python dict literal, `COHORT_RELEVANCE`, at
 `migrations/migrate_pursuit_profile.py:147-386` — inside a script that **cannot run**.
@@ -1300,7 +1335,9 @@ read time (`relevance.py:88-97`) — so the rationale for every list survives in
 database. That asymmetry with `criteria_json` is now pinned by test rather than by
 convention.
 
-## D50 — the entry-level vocabulary is split by field, and the description list is a superset by construction
+<a id="d50"></a>
+
+## DEC-50 — the entry-level vocabulary is split by field, and the description list is a superset by construction
 
 **2026-07-29.** The gate is conjunctive: one AI term **and** one entry-level term, in
 the *same* field (`migrate_pursuit_profile.py:216,229`). Task 10 built the
@@ -1313,7 +1350,7 @@ neither `\yno experience\y` nor `\ywill train\y`.
 
 **Decided:** `description_include`'s entry group opens with the same eleven nouns byte
 for byte, then adds three phrases. The title path therefore *cannot* change and the
-description path can only gain rows — the same superset-by-construction argument D48
+description path can only gain rows — the same superset-by-construction argument DEC-48
 used. Live over 13,447 open rows: gate 869 → 873 (tier 1 450 → 453, tier 2 419 → 420).
 Mock: good_admitted 14 → 25, recall 48.3% → 86.2%, bad_admitted **unchanged at 10 — the
 same ten ids**, not merely the same count. Raw live description matches for the three
@@ -1343,7 +1380,9 @@ wearing a trenchcoat.
 standing as `\yattorney\y` under `config/relevance.json`'s `_dead_patterns_note`:
 verified against mock_012, a working pattern waiting for its first live posting.
 
-## D51 — a synthetic corpus can measure recall but cannot price precision
+<a id="d51"></a>
+
+## DEC-51 — a synthetic corpus can measure recall but cannot price precision
 
 **2026-07-29.** Four further phrase families were compiled through `relevance.tier_sql`
 against 13,447 open postings before being rejected. Live rows each admits:
@@ -1358,7 +1397,7 @@ On the mock corpus all four add **zero** false positives, because every intended
 mock posting carrying that phrasing has no AI vocabulary at all, so the conjunction
 rejects it on the other half. That is a property of a corpus written to a specification,
 not of the world — CLAUDE.md's "fixtures written from a specification test the
-specification" firing on the very deliverable that introduced the rule (D46).
+specification" firing on the very deliverable that introduced the rule (DEC-46).
 
 **Decided:** refused, at mock recall 89.7% rather than 100%, to avoid ~136 live junk
 rows — and the refusal is *recorded* rather than silently omitted, in
@@ -1371,7 +1410,9 @@ wrote its positives, so it can bound recall and cannot price precision. Any voca
 decision taken on the mock harness alone is untrusted; compile the candidate through
 `relevance.tier_sql` against the live table before shipping it.
 
-## D52 — `title_exclude` narrowed to manager-and-above, and `executive assistant` kept on a census
+<a id="d52"></a>
+
+## DEC-52 — `title_exclude` narrowed to manager-and-above, and `executive assistant` kept on a census
 
 **2026-07-29.** `title_exclude` gates **both** paths — a title-only regex ANDed onto an
 already-OR'd `row_ok` (`relevance.py:232-234`), deliberate and documented at `:227-231`,
@@ -1410,17 +1451,19 @@ checked afterwards rather than argued: live tier ≤ 2 880 (t1 456 / t2 424),
 (`c98c4bbceed1b77d82979e83dfad70cc`, 3,521 rows), `md5(persona_json)` and
 `md5(criteria_json)` unchanged, `criteria_version` still 2.
 
-## D53 — the gate is data, and the suite only tested code
+<a id="d53"></a>
+
+## DEC-53 — the gate is data, and the suite only tested code
 
 **2026-07-29.** At 1,030 tests, **nothing** asserted on the AI vocabulary, the
 entry-level vocabulary, or the pursuit `title_exclude`. That is exactly how a defect
-costing half the gate's recall (D50) sat green: every test was about the code that
+costing half the gate's recall (DEC-50) sat green: every test was about the code that
 compiles the gate, and the gate is a JSON document.
 
 **Decided:** `backend/tests/test_pursuit_gate.py`, suite 1,030 → 1,058, structured
 around the defect classes rather than the current values — the superset invariant, the
 Postgres dialect, the recovered postings, the rejected families, the narrowed excludes,
-and the harness-reads-the-same-file check from D49. Its defect-class tests fail 8
+and the harness-reads-the-same-file check from DEC-49. Its defect-class tests fail 8
 subtests against the previous gate. **A test that cannot fail on the code it was written
 for is documentation, not a test**, so that was checked by running it against the old
 gate rather than reasoned about.
@@ -1432,7 +1475,9 @@ but a fixture built with NULLs reports every row rejected, and every "expected r
 assertion then passes for the wrong reason. Pinned by a test rather than worked around,
 because the failure mode is a green suite.
 
-## D54 — the eval sampler resolves the gate per profile, and has no default that can be wrong
+<a id="d54"></a>
+
+## DEC-54 — the eval sampler resolves the gate per profile, and has no default that can be wrong
 
 **2026-07-29.** `pool_query()` and `pool()` (`labels.py:440`, `:498`) took a **profile**
 as the argument naming their population and defaulted `cfg` to `relevance.load()` — the
@@ -1463,7 +1508,9 @@ misclassify precisely the stratum the query exists to populate.
 constraint — "draw the sample **AFTER** the gate fix" — which bought nothing at all while
 the sampler was reading a different gate than the one that had been fixed.
 
-## D55 — the pool window is the whole table, and a starved stratum is a refusal
+<a id="d55"></a>
+
+## DEC-55 — the pool window is the whole table, and a starved stratum is a refusal
 
 **2026-07-29.** `--per-platform` defaulted to 400 newest-per-platform. Measured: that
 window held **29 of `pursuit`'s 144 surfaced postings** (greenhouse 6/65, ashby 13/52,
@@ -1489,7 +1536,9 @@ set drawn today would have been correct and the next person draws with the defau
 silence, and a warning printed above a successful `wrote …` line is silence with extra
 steps.
 
-## D56 — labellers are spaced by rank, not by name, and the number came from a measurement not from the formula
+<a id="d56"></a>
+
+## DEC-56 — labellers are spaced by rank, not by name, and the number came from a measurement not from the formula
 
 **2026-07-29.** `next_item()` served **every** labeller the identical order — `overlap
 DESC, position ASC` — so distinct coverage could never exceed what *one* labeller
@@ -1530,7 +1579,9 @@ workers would seat the same labeller differently.
 measurement.** The plan's 110 and the shipped code's 84 differed by an assumption nobody
 had written down.
 
-## D57 — task 29's five strata were reconciled to three rather than built
+<a id="d57"></a>
+
+## DEC-57 — task 29's five strata were reconciled to three rather than built
 
 **2026-07-29.** The task file specified five buckets. Three of them are sub-slices of
 `surfaced`, which is one stratum with one quota (`labels.py:425`, `:433`), and two of
@@ -1563,7 +1614,9 @@ overlapped" becomes 10** (`29-labelling-session.md:164`) — and 10 rows still g
 annotator pairs per field. Recorded here rather than quietly satisfied: at the DoD's own
 five-labeller fallback, ≥100 distinct needs ~28 items each, not 20.
 
-## D58 — round 2 is the overlap block, and nothing else
+<a id="d58"></a>
+
+## DEC-58 — round 2 is the overlap block, and nothing else
 
 **2026-07-30.** The intra-annotator ceiling was **unreachable from production**, and had
 been since task 07 shipped. `webapp/label.py` never passed `round_no` to
@@ -1608,7 +1661,9 @@ collapses them. Reversible; both functions are pure of each other.
 rows long reads as an eight-hour evening and is the single most likely reason someone
 closes the tab. The queue and the denominator have to be the same population.
 
-## D59 — the seven-day delay is the measurement, not a politeness setting
+<a id="d59"></a>
+
+## DEC-59 — the seven-day delay is the measurement, not a politeness setting
 
 **2026-07-30.** `labels.ROUND_TWO_DELAY_DAYS = 7` (`labels.py:1007`), and it is recorded
 here because it looks exactly like a tunable and is not one.
@@ -1637,7 +1692,9 @@ a judgement about people donating their time and it belongs to the repo owner on
 night. Both paths are implemented; the round-2 link is simply not sent unless someone
 chooses to send it. See `LABELLING-NIGHT.md`.
 
-## D60 — `NO_TRACK_FITS` is a stored value, not a `validate()`-time fold
+<a id="d60"></a>
+
+## DEC-60 — `NO_TRACK_FITS` is a stored value, not a `validate()`-time fold
 
 **2026-07-30.** `extract.py:338` tells the model *"Use null if none of the listed tracks
 clearly describes the role. Do not force a value"* — so **the model's NULL on
@@ -1672,7 +1729,9 @@ field needs this and the function says so.
 `NO_TRACK_FITS` can ever match is a model null. Reversible: storage is faithful, so a
 different comparison rule can be written later against the same rows.
 
-## D61 — `role_track` is on the form despite having NO task 06 self-consistency floor
+<a id="d61"></a>
+
+## DEC-61 — `role_track` is on the form despite having NO task 06 self-consistency floor
 
 **2026-07-30.** This is the entry that most looks like an inconsistency, so it is
 recorded rather than left to be rediscovered. The other four axis-A fields are on the
@@ -1720,7 +1779,7 @@ the label that diagnoses it.
 
 **Cost, recorded rather than hidden: the form is now six questions per posting, not
 five.** Every budget figure computed against five — including the "≥100 distinct needs
-~28 items each at 5 labellers" in D57 and `HANDOFF.md` — was computed for a shorter form.
+~28 items each at 5 labellers" in DEC-57 and `HANDOFF.md` — was computed for a shorter form.
 Re-check the arithmetic before the night. Reversible: removing a question is a one-line
 change to `AXIS_A_FIELDS`, and it costs nothing already collected.
 
@@ -1730,7 +1789,9 @@ drift that file's own comment warns about. It was caught by an **existing** test
 moment the field went on the form, which is the test earning its keep rather than a new
 one being needed.
 
-## D62 — an existing guard test was deliberately widened to admit `round_no`
+<a id="d62"></a>
+
+## DEC-62 — an existing guard test was deliberately widened to admit `round_no`
 
 **2026-07-30.** `test_the_stratum_is_never_handed_to_the_renderer`
 (`backend/tests/test_labels.py:1036`) asserts `_render_form`'s parameter list **exactly**,
@@ -1760,7 +1821,9 @@ that rule:
 exact-list form is what makes an *addition* visible; a membership test would let a future
 `match_score` or `tier` argument through silently, and those carry verdicts too.
 
-## D63 — the paired bootstrap refuses to score a degenerate resample as 0.0
+<a id="d63"></a>
+
+## DEC-63 — the paired bootstrap refuses to score a degenerate resample as 0.0
 
 **2026-07-30.** `bootstrap_delta()` was lifted into `backend/evals/metrics.py:705` from
 `tools/learned-ranker-probe.py`, and **rejecting one line of the original is the
@@ -1892,10 +1955,12 @@ table, and any change to a number in `pursuit-criteria.json`.
 Reversible — it is a direction with no code behind it. The one thing that is not free to
 reverse is risk 6, which is why it is called out with a deadline.
 
-## D64 — the commercial gap in `ARCHETYPE` is recorded as a proposal, not applied
+<a id="d64"></a>
+
+## DEC-64 — the commercial gap in `ARCHETYPE` is recorded as a proposal, not applied
 
 **2026-07-31.** `derive-role-tracks.py --archetypes` was re-run against the population it
-is now correct about (D65) and re-derives the archetype vocabulary at `facts_version = 3`
+is now correct about (DEC-65) and re-derives the archetype vocabulary at `facts_version = 3`
 for the first time since task 12 made 3 current. It recommends **one** new value,
 `revenue_commercial`. **Nothing was applied**: `extract.ARCHETYPE` is still 26 values and
 `schema.FACTS_VERSION` is still 3. The evidence, the four candidates dropped and the
@@ -1921,7 +1986,7 @@ irreversible rather than merely awkward.** `job_facts`' primary key is `job_id` 
 answers the first 31 postings were labelled beside; they are not kept at the old version.
 And `eval_labels` records `labelled_at`, `round_no` and `labeller_id` but **no
 `facts_version`** (`evals/labels.py`, `eval_labels` DDL), so nothing marks which extraction
-a label was formed against. This is D61's *"membership is pinned; the extraction under it
+a label was formed against. This is DEC-61's *"membership is pinned; the extraction under it
 is not"* done deliberately, across every axis-A field at once, instead of one row at a
 time by the cron job.
 
@@ -1935,7 +2000,7 @@ asserts `set(extract.ARCHETYPE)` equals the priced set *exactly*, so a new value
 suite until both are edited — and the count at `tests/test_extract.py:720`, 26 → 27.
 
 **Rejected: bumping `FACTS_VERSION` now and treating the labels already collected as a
-separate round.** `round_no` means *this labeller saw this posting before* (D58, D62); it
+separate round.** `round_no` means *this labeller saw this posting before* (DEC-58, DEC-62); it
 does not and cannot mean *these labels sit beside a different extraction*. With the old
 facts overwritten and nothing recording which version a label met, the pre-bump rows would
 be neither comparable to the post-bump rows nor separable from them. The vocabulary gain
@@ -1960,16 +2025,18 @@ spread: 56 of its 56 `other` matches are one employer.
 `role_archetype = other` on **17 of 31 = 55%** of labelled postings drawn from a stratified
 200-row eval set. **Two different populations, and neither is an agreement figure.**
 `tools/label-findings.py` prints them side by side and deliberately prints no
-model-vs-human comparison, for the reason D57 and D61 give: one labeller, no
+model-vs-human comparison, for the reason DEC-57 and DEC-61 give: one labeller, no
 inter-annotator ceiling. The two also disagree in *emphasis* — only **2 of the 13** human
 `no_track_fits` rows are commercial (both Notion *Commercial Solutions Consultant*), while
 the corpus is where the commercial mass is. Treating either as corroboration of the other
-would be the false-corroboration shape D61 already records at 27.7%.
+would be the false-corroboration shape DEC-61 already records at 27.7%.
 
 Reversible: completely — two documents changed and no code. The bump is the part that
 would not have been.
 
-## D65 — `load_other()` probes the CURRENT `facts_version` by default
+<a id="d65"></a>
+
+## DEC-65 — `load_other()` probes the CURRENT `facts_version` by default
 
 **2026-07-31.** `tools/derive-role-tracks.py`'s `load_other()` had **no `facts_version`
 filter**. Its docstring said it returned every `job_facts` row *the current vocabulary*
@@ -2074,10 +2141,52 @@ script can check whether a sentence is true, and a green tick that implies other
 worse than no tick — `AUDIT.md` § *How to audit this run in an hour* exists for that reason
 and is not replaced by any of this.
 
-**This entry uses the `DEC-` prefix that rule 6 establishes**; entries D46–D65 above still
-carry the old bare `D`, and task 39 brings them into line. Using the target form from the
+**This entry uses the `DEC-` prefix that rule 6 establishes**; ~~entries D46–D65 above still
+carry the old bare `D`, and task 39 brings them into line~~ — **task 39 landed 2026-08-01;
+they now read `DEC-46`–`DEC-65`, numbers preserved, each with an `<a id="dNN"></a>` anchor so
+an inbound `#d46` still lands.** Using the target form from the
 commit that lands the policy is deliberate — a convention whose own founding entry does not
 follow it is a convention with a footnote.
 
 Reversible: yes. The frontmatter is additive, and `audit-docs.py` is a new script that
 nothing else imports.
+
+---
+
+<a id="dec-67"></a>
+
+## DEC-67 — the `D` namespace is split by prefix, and the two record histories are left unswept
+
+**2026-08-01, task 39.** `D45` resolved three ways — one defect and two decision entries —
+and the ambiguity had already reached `backend/tools/ats-discover.py`. `DOCS-POLICY.md`
+rule 6 gives each register one allocator; this applies it.
+
+**Decided:** `D46`–`D65` become `DEC-46`–`DEC-65`, **numbers preserved**, each heading
+carrying an `<a id="dNN"></a>` anchor so an inbound `#d46` still lands. The two `### D45`
+entries are retitled `### Defect D45 — …`: they were never identifiers. They are topic
+headings and the topic is the defect, exactly as `### 06 —` means "decisions taken while
+doing task 06" — and the second entry's own first sentence says so.
+
+**Rejected: renumbering to `DEC-01`–`DEC-20`.** Starting the register's count where the
+register starts is tidier, and it would have invalidated every inbound citation *silently* —
+the precise failure mode this tranche exists to close. Twenty integers burnt in `DEFECTS.md`
+is the cheaper price, and that register now says so in its header.
+
+**Rejected: a regex sweep.** The identifier to be changed and the identifier to be left
+alone are the same string; only the surrounding sentence separates them. Every `D45` in the
+tree was resolved by reading it, and the dozen in `ats-discover.py` and
+`test_ats_discovery.py` all mean the defect and were not touched. `sed` would have corrupted
+them and the suite would have stayed green while it did.
+
+**Rejected: sweeping the historical logs.** `CLAUDE_UPDATES.md` and `docs/archive/` are
+`kind: record`, frozen by rule 1, and keep the old spelling. This is only safe because of the
+anchors above and because `DEFECTS.md`'s allocator names the exemption — a surviving `D58` in
+a session log can never be re-read as a defect if no defect can ever be issued at 58.
+
+**The anchor sits on its own line with a blank line under it**, not immediately above the
+heading. An anchor pressed against an ATX heading is the kind of markdown that renders
+correctly in most parsers and not in all of them, and the anchor being added here exists
+precisely so that a citation does not depend on a renderer's goodwill.
+
+Reversible: yes, mechanically. The prefix carries no information the number does not, and the
+anchors mean the old citation form never stopped working.

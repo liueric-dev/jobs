@@ -6,8 +6,8 @@ generator: none
 
 # 39 — Split the `D<n>` namespace
 
-**Status:** TODO. **Depends on:** nothing — this is independent of 36–38 and can run first or in
-parallel. **Blocks:** nothing, but 36's check C5 stays red until it lands.
+**Status:** DONE 2026-08-01. **Depends on:** nothing — this is independent of 36–38 and can run
+first or in parallel. **Blocks:** nothing, but 36's check C5 stays red until it lands.
 
 `D45` currently resolves to three different things, and the ambiguity has already reached the
 code. Give each register its own prefix, per [`DOCS-POLICY.md`](../../../DOCS-POLICY.md) rule 6.
@@ -94,6 +94,21 @@ handled by hand.
 rewriting an entry** — but say so in the commit message, because the diff will look like a
 violation to anyone who does not know why. If that is too fine a distinction, the fallback is to
 leave historical logs alone and sweep only the live documents; **decide, and record the choice.**
+
+**Decided 2026-08-01: sweep live documents and code; exempt the two `kind: record` histories.**
+`docs/tasks/refactor/CLAUDE_UPDATES.md` and everything under `docs/archive/` keep the old bare
+`D46`–`D65` spelling. Rule 1 freezes a `record` at write time, and both earn the freeze: the
+session log is what task 38 cites for dated run figures, and every archive file carries a
+provenance header linked from `archive/README.md`. The exemption is only safe **because** 39b
+leaves an `<a id="dNN"></a>` beside each re-prefixed heading, so an inbound `#d46` from either
+still lands — rule 4. `DEFECTS.md`'s allocator header names the same exemption, which is what
+stops the surviving spelling from ever being read as a defect.
+
+Three further sites keep the old form because they are **quoting** it, not citing it: this file
+throughout (it is the description of the rename), `36-enforce-doc-policy.md:149` and `:170` (the
+red baseline C5 was measured against, dated 2026-08-01), and `DECISIONS.md`'s `DEC-66` sentence
+*"entries D46–D65 above still carry the old bare `D`"*, which is an append-only entry recording
+the state that this task changed.
 
 ### 39d — declare the allocators
 

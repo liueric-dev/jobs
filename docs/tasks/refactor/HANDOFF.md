@@ -104,7 +104,7 @@ in writing and is the clearest confirmation of that prediction available:
 paragraph: do not compute model-vs-human agreement and write it down (`evals label report`
 exits 2 by design; there is no `--force` and none may be added); do not redraw `pursuit-v1`
 (`redraw_refusal()` refuses, and the window closed with the first label); do not bump
-`FACTS_VERSION` to apply `revenue_commercial` without reading **D64** first — it would
+`FACTS_VERSION` to apply `revenue_commercial` without reading **DEC-64** first — it would
 overwrite the model answers the existing labels were formed beside, mid-collection.
 
 **AND FIVE MORE THAT APPLY SPECIFICALLY TO A CLEANUP SESSION**, because the failure mode of
@@ -412,7 +412,7 @@ quantity and `interpretable()` was deliberately **not** changed to accept it as 
 ceiling; it renders as a footnote.
 
 > **ASKED AND SETTLED 2026-07-31: shortening the delay was proposed, examined, and NOT
-> done.** Recorded here so the next session does not re-open it. **The reason is not D59 —
+> done.** Recorded here so the next session does not re-open it. **The reason is not DEC-59 —
 > it is that the change buys nothing.** `_three_quantity_report()` passes
 > `ceiling=inter["fields"]` into `interpretable()` (`evals/__main__.py:485-487`) and hands
 > `intra` to `report.render_labels()` on a separate argument, where it prints as a footnote
@@ -1255,7 +1255,7 @@ exist**, invented to a specification, with `source = 'mock'` on every one and
 `generated_by ∈ {human, claude, gpt, glm}`. Nexora AI, Aurelian Intelligence and Vireo
 Cognitive Systems are not companies.
 
-They are a **specification test** (D46). They measure agreement with an author's intent,
+They are a **specification test** (DEC-46). They measure agreement with an author's intent,
 which is why an agent could produce them at all — and it is precisely why they are not
 labels. Writing them into `eval_labels` would reproduce `claude-bench.py:417`'s defect
 inside the tool built to detect it. ~~and `tests/test_labels.py:423` forbids it
@@ -1533,7 +1533,7 @@ column (`match.py:281`), so the model never produces it and scoring it would hav
 compared the loader's own mapping against the key's reading of the same twenty
 characters. Two of eleven "extraction accuracy" fields would have been a field agreeing
 with itself. **One reader reviewing both files would not have caught it**; the refusal
-came from the boundary, not from care. Design the boundary in on purpose. **D47.**
+came from the boundary, not from care. Design the boundary in on purpose. **DEC-47.**
 
 **Re-verify a function after you change it, including when you were the one who
 changed it.** The orchestrator brute-force-verified `average_precision`'s tie handling
@@ -2251,7 +2251,7 @@ re-scope (21).
    each** — know that before the night, not during it.
 
    **AMENDED 2026-07-30: both figures were computed against a FIVE-question form, and the
-   form now asks SIX.** `role_track` was added (D61), so ~20 items and ~28 items are each a
+   form now asks SIX.** `role_track` was added (DEC-61), so ~20 items and ~28 items are each a
    larger sitting than when those numbers were set. **No replacement number is asserted
    here** — the per-posting time was never measured, only assumed, and inventing a
    correction factor would be the same mistake as the 110-vs-84 formula. **Re-check the

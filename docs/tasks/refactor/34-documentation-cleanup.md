@@ -239,7 +239,7 @@ unchanged."*
 
 - **Task 29.** A second labeller is the owner's to arrange. Nothing here touches
   `eval_labels`, `labels.py` or `webapp/label.py`.
-- **Applying `revenue_commercial` / bumping `FACTS_VERSION`.** D64: land the vocabulary, do
+- **Applying `revenue_commercial` / bumping `FACTS_VERSION`.** DEC-64: land the vocabulary, do
   not bump, while labelling is open.
 - **Re-tuning task 13's weights.** Only task 29 licenses that.
 - **The product/API phase** (24–28, 31, 32) and the two scoping calls the owner holds
