@@ -6,7 +6,7 @@ generator: none
 
 # Handoff — the `docs/tasks/refactor/` run
 
-## START HERE — a fresh session's sixty seconds, 2026-07-31
+## START HERE — a fresh session's sixty seconds, ~~2026-07-31~~ **2026-08-01**
 
 *This file had eight "READ THIS FIRST" sections and now has three — the four that
 described finished work were archived on 2026-07-31 (task 34, § Orientation), and this
@@ -21,32 +21,65 @@ on it — the instrument is named in each case.*
 | labellers | **ONE** (`u_090b0ad12e99`), round 1 only |
 | `overlap` block | **all ten answered** — positions 0–30 contiguous |
 | `evals label report` | **exits 2, correctly.** Zero of task 29's three quantities exist |
-| suites | main **1178**, webapp **93** (main was 1171 until the `prefix_assumed()` fix, 2026-07-31) |
+| suites | ~~a number was typed here~~ **read [`AUDIT.md`](AUDIT.md), which owns the figure** — per `DOCS-POLICY.md` rule 2, and per rule 3 the reproducible answer is the `Ran N tests` line of `cd backend && python3 -m unittest discover -s tests` |
 
-### THE NEXT SESSION IS CLEANUP, BUGFIXES AND DOCUMENTATION — decided 2026-07-31
+### THE CURRENT SESSION IS PHASE 9 DOC AND REPO HYGIENE — rolled forward 2026-08-01
 
-**It is not the labelling session, and it is not the product/API phase.** Phases 1–3 are
-built and measured: 20 of 35 tasks are done or deliberately dropped. Before tasks 24–28 /
-31 / 32 open a new surface, the run pays down what it has accumulated. **Task 34 is the
-next session's task**, and its file did not exist until this decision — `README.md` linked
-to `34-documentation-cleanup.md` and nothing was there. That broken link is itself a
-specimen of the debt the session is for.
+> ~~**THE NEXT SESSION IS CLEANUP, BUGFIXES AND DOCUMENTATION — decided 2026-07-31.**
+> … **Task 34 is the next session's task**, and its file did not exist until this
+> decision — `README.md` linked to `34-documentation-cleanup.md` and nothing was
+> there. That broken link is itself a specimen of the debt the session is for.~~
+>
+> **Struck 2026-08-01 by task 40, kept per `DOCS-POLICY.md` rule 4 so a reader who
+> acted on it can see what they had. Both halves were false, and the second was
+> already false when it was written:**
+>
+> | claim | reality |
+> |---|---|
+> | task 34 is next | it is **done** — [`README.md`](README.md) row 34, checked off item by item |
+> | its file did not exist | **it existed**, tracked since `28f1d0e`. [`34-documentation-cleanup.md`](34-documentation-cleanup.md)`:14` strikes this exact sentence as *"WRONG, AND CORRECTED"* |
+>
+> **This block is rule 4's specimen.** A `rolling` document with no retirement
+> trigger went on sending every fresh session to a finished task, repeating as its
+> justification a premise the linked file had itself retracted, and nothing was red
+> for a day. `backend/tools/audit-docs.py` check C3 exists because of it, and it is the
+> worked example in [`../../DOCS-POLICY.md`](../../DOCS-POLICY.md) rule 4 — *"the document
+> was simply never given a reason to stop"*. **Rolling this block forward is what keeps C3
+> at 0; retiring it on a trigger is what stops it recurring.**
+
+**It is still not the labelling session, and still not the product/API phase.** Phases
+1–3 are built and measured. **Task 34 landed** (`99fbdb1`, `3c4cee0`, `46a5be4`,
+`3f42e2d`) and phase 9 — tranche seven, tasks **36–42** — is the current work: making
+the documentation rules it wrote *checkable* rather than merely written.
+
+| tranche seven | state, 2026-08-01 |
+|---|---|
+| **36** enforce the doc policy | **done** — `57c34a5` |
+| **37** classify every document | **done** — `89f7a3f` |
+| **39** split the `D` namespace | **done** — `0110473`, `b64d7a6` |
+| **41a/41b** git and repo hygiene | **done** — `7d839f5` (the Workday gate fix), `9b7bb5e` |
+| **42** close the UNBLOCKED defects | **done** — `2a94f3d` |
+| **38** one figure, one owner | landing now |
+| **40** roll this file, clear the archive | landing now (this edit) |
+| **41c/41d**, **43** the `docs/scoring.md` split (DEC-70) | open |
 
 **For the state of the run in one page with an instrument beside every number, read
-[`AUDIT.md`](AUDIT.md).** For this task's backlog, read
-**[`34-documentation-cleanup.md`](34-documentation-cleanup.md).** It carries the
-verified backlog, in priority order, with the evidence for each item. **Everything in it
-was re-checked against the code on 2026-07-31** rather than inherited from a document —
-because the single clearest lesson of the previous session is that this run's follow-ups go
-stale silently: one had been marked *"still owed"* in two files for three days after it
+[`AUDIT.md`](AUDIT.md)** — which now *owns* the run-level figures rather than
+restating them, per `DOCS-POLICY.md` rule 2. For what phase 9 is doing and why, read
+[`../../DOCS-POLICY.md`](../../DOCS-POLICY.md); for how to work on any of it, read
+[`../../WORKING-METHOD.md`](../../WORKING-METHOD.md). ~~For this task's backlog, read
+[`34-documentation-cleanup.md`](34-documentation-cleanup.md).~~ **That file is now
+finished history — read it for what the cleanup found, not for what to do next.** It
+still carries the lesson that produced this whole phase: this run's follow-ups go stale
+silently, one had been marked *"still owed"* in two files for three days after it
 landed, and re-checking it turned up a number nobody had (79 postings, not 88).
 
 **TWO TRACKS, AND ONLY ONE OF THEM IS THE SESSION'S.**
 
 | | who | state |
 |---|---|---|
-| cleanup / bugfix / docs (**34**) | **the next session** | the whole of its job |
-| a second labeller, ten `overlap` rows (**29**) | **the owner** — no agent can do it | open, unchanged, ~16 min |
+| ~~cleanup / bugfix / docs (**34**)~~ **doc and repo hygiene (36–42)** | **the current session** | the whole of its job; 34 itself is **done** |
+| a second labeller, ten `overlap` rows (**29**) | **the owner** — no agent can do it | **open, unchanged**, ~16 min |
 
 **The labelling ask has not gone away and nothing below supersedes it.** Every field of
 `evals label report` is still refused for want of a *second* `labeller_id` on the same
@@ -55,6 +88,13 @@ the **last** input `labels.inter_annotator()` needs and the report prints the mo
 land. The tenth row from a second person is still worth more than the hundredth from the
 first, and **29 still gates 30, 13's weights and 12's next bump.** It is simply not
 something a session can do, which is why it is no longer the entry point.
+
+**[`LABELLING-NIGHT.md`](LABELLING-NIGHT.md) is task 29's operational annex, not a second
+entry point.** It is the ordered command list for the night itself — § *Case A* is solo on
+localhost, § *Case B* is ten Builders behind a tunnel — and it freezes once the night
+happens, which is why task 37 classified it `kind: task` rather than `rolling`. **This file
+stays the only `rolling` document.** Read the annex when you are running the sitting; read
+this block to find out whether you should be.
 
 ```bash
 # The owner's track, when a second person is available:
@@ -168,7 +208,9 @@ The OAuth credentials are in, `.env` is correct, the owner's account is on `purs
 the sign-in chain was verified end to end without a browser. ~~**The next session's job is
 to label.**~~ See § *task 29 is UNBLOCKED* immediately below. Before that: **the
 intra-annotator ceiling was made reachable at all, `role_track` went on the form, and a
-paired bootstrap landed in `evals/metrics.py`** (suite 1070 → 1107 → 1166 → **1171**). Before that: **task 29 was unblocked: four
+paired bootstrap landed in `evals/metrics.py`** (the suite grew at each of those four
+steps; the readings are in § *the tree is NOT clean* and the current figure is
+[`AUDIT.md`](AUDIT.md)'s). Before that: **task 29 was unblocked: four
 defects fixed in the sampler, the label tables created, and the 200-row set drawn, redrawn
 and pinned** (`c65d34b`, `2f64e08`, `90170d1`). Before that: **step 0, the gate fix**, implemented and
 written to the database (mock gate recall 48.3% → 89.7%, live tier ≤2 869 → 880); the
@@ -218,8 +260,11 @@ label. § *task 29 is UNBLOCKED* is the operational entry point and `LABELLING-N
 > `app_users` schema are how the service is configured, not the story of how it was fixed.
 >
 > The file went 3,481 → ~2,690 lines. The three that remain are all *standing*: one open
-> track, and two prohibitions. **If a fifth ever appears, check first whether it is
-> describing something that already happened.**
+> track, and two prohibitions. **If a ~~fifth~~ *fourth* ever appears, check first whether
+> it is describing something that already happened.** *(Off by one when written, corrected
+> 2026-08-01 by task 40: three remain, so the next one added is the fourth. Nothing checks
+> this — it is the rule the file states about itself and `audit-docs.py` has no check for,
+> which is `DOCS-POLICY.md` rule 7's "documented as unenforced".)*
 
 The three are: task 29's labelling surface (open, the owner's), the ranking DoD that is
 unmet on purpose, and the cost lever in the profiles table. If you read nothing else:
@@ -502,14 +547,21 @@ said so.
 | 200 | [0.79, 0.89] | 50 | **7%** |
 
 **Read the middle column against task 06's floors — ~~76% on `seniority_level`, 94% on
-`ai_involvement`~~ 85.2% and 94.8% — because that is what makes it legible:**
+`ai_involvement`~~ 85.2% and 94.8%, both `agree2` — because that is what makes it
+legible:**
 
 > **FIGURES CORRECTED 2026-07-31, and the pair that was here is the superseded one.**
 > 76% / 94% are the **provisional n=17** figures from 2026-07-27.
 > `docs/ingestion_tests/README.md` carries them under a heading that reads *"Superseded"*,
 > and `DECISIONS.md` § *06 — Was 76% real?* answers its own question with **no**. The live
-> measurements are **`seniority_level` 85.2% [77.6–90.6]** and **`ai_involvement` 94.8%
-> [89.1–97.6]**, n=115, `--repeat 3`, `deepseek-v4-flash` at temperature 0. This file
+> measurements, both `agree2`, are **`seniority_level` 85.2% [77.6–90.6]** and
+> **`ai_involvement` 94.8% [89.1–97.6]** (`agree2`, [`AUDIT.md`](AUDIT.md) § *The three
+> self-consistency metrics*), n=115, `--repeat 3`, `deepseek-v4-flash` at
+> temperature 0. **Naming the metric is not decoration** — `ai_involvement`
+> self-consistency circulates here as three different percentages, all correct, because
+> `agree2`, the pairwise two-run metric and a per-platform cell are three different
+> questions; [`AUDIT.md`](AUDIT.md) § *The three self-consistency metrics* owns all three
+> with the command that reproduces them. This file
 > quoting the dead pair is the exact thing that README predicted would happen — *"retained
 > because published text still cites them"* — and it is corrected rather than deleted so
 > the next reader can see which number they may have been working from. **The bullets below
@@ -940,18 +992,27 @@ were re-measured on 2026-07-30 and both were low:**
 
 | suite | command | this file said | re-measured 2026-07-30 | after the solo-labelling work | re-run 2026-07-31 | after `label-findings.py` |
 |---|---|---:|---:|---:|---:|---:|
-| main | `python3 -m unittest discover -s backend/tests` (repo root, system `python3`) | 1107 | 1160 | `Ran 1166 tests` … `OK` | 1166, `OK` | **`Ran 1171 tests` … `OK`** |
-| webapp | `.venv/bin/python -m unittest discover -s tests -t .` (from `backend/webapp/`) | 55 | 61 | `Ran 75 tests` … `OK` | **93, `OK`** | 93, untouched |
+| main | `python3 -m unittest discover -s backend/tests` (repo root, system `python3`) | 1107 | 1160 | `Ran 1166 tests` … `OK` | 1166, `OK` | **`Ran 1171 tests` … `OK`** — for the current figure see [`AUDIT.md`](AUDIT.md) |
+| webapp | `.venv/bin/python -m unittest discover -s tests -t .` (from `backend/webapp/`) | 55 | 61 | `Ran 75 tests` … `OK` | **93, `OK`** | untouched — for the current figure see [`AUDIT.md`](AUDIT.md) |
+
+> **Every number in this table is a DATED READING, not a current figure**, and that is the
+> only reason they are still here: the table *is* the evidence of the drift the section
+> argues about, so rewriting the cells would destroy the thing being demonstrated
+> (`DOCS-POLICY.md` rule 4). **[`AUDIT.md`](AUDIT.md) owns both current counts, and per rule
+> 3 it does not state either — it names the command that prints them.** Marked 2026-08-01,
+> task 40, at task 38's request.
 
 **The fifth column is 2026-07-31 and is the first time one of these was quoted and then
-held.** 1166 reproduced exactly; webapp went 75 → **93** because `prior_domain` added 18
-(the vocabulary, the generated CHECK, the CLI-vs-database agreement, and the join). Same
-direction as every other movement in this table: **the suites grew and nothing broke.**
+held.** The main suite reproduced exactly; the webapp suite grew by 18 — `prior_domain`
+added the vocabulary, the generated CHECK, the CLI-vs-database agreement, and the join.
+Same direction as every other movement in this table: **the suites grew and nothing
+broke.**
 
 **The sixth column is later on 2026-07-31.** 1166 → **1171**: five tests in
 `backend/tests/test_label_findings.py`, covering the break-exclusion threshold, the
 warm-up split, and the Wilson-interval formatting. The webapp suite was not touched by this
-session and is still 93. **Ninth instance of the same drift, and the same direction again.**
+session and is unchanged. **Ninth instance of the same drift, and the same direction
+again.**
 
 **Task 34 should know that `CLAUDE.md` still says *"It was at 263 tests; it should not go
 down."*** The measured figure is **1171**. That instruction is stale by roughly 900 and any
@@ -961,7 +1022,9 @@ regression.
 **Both moved in the safe direction: the suites GREW and nothing broke.** 1107 and 55 were
 each correct when they were written — this is drift, not a regression, and it is now the
 sixth and seventh instance of it recorded in this file. ~~**1166 and 75 are the floors
-now.**~~ **1171 and 93 are the floors now** (2026-07-31).
+now.**~~ ~~**1171 and 93 are the floors now** (2026-07-31).~~ **A floor typed into prose is
+the drift this section is about, one level up — [`AUDIT.md`](AUDIT.md) owns both, and the
+floor is whatever the two commands print today.**
 Neither is a number you have measured until you re-run it; that is the whole point of the
 paragraph above, which was written before this update and correctly anticipated it.
 
@@ -2413,7 +2476,7 @@ re-scope (21).
 
 ## How these sessions ran it, and what worked
 
-> **MOVED 2026-07-31 → [`docs/archive/handoff-session-method.md`](../../archive/handoff-session-method.md).** Method notes from the same sessions. The durable half is promoted to HANDOFF.md § How this run works.
+> **MOVED 2026-07-31 → [`docs/archive/handoff-session-method.md`](../../archive/handoff-session-method.md).** Method notes from the same sessions. The durable half was promoted to HANDOFF.md § How this run works, and **promoted again 2026-08-01 to [`docs/WORKING-METHOD.md`](../../WORKING-METHOD.md)**, which is now the copy to read.
 
 ## Pending follow-ups with no task of their own
 
