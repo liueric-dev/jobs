@@ -24,15 +24,33 @@ on it — the instrument is named in each case.*
 | suites | ~~a number was typed here~~ **read [`AUDIT.md`](AUDIT.md), which owns the figure** — per `DOCS-POLICY.md` rule 2, and per rule 3 the reproducible answer is the `Ran N tests` line of `cd backend && python3 -m unittest discover -s tests` |
 
 ### ~~THE CURRENT SESSION IS PHASE 9~~ — **PHASE 9 IS CLOSED. Rolled forward 2026-08-01.**
+### **THE PRODUCT / API TRACK IS OPEN AND TASK 27 HAS LANDED. Rolled forward 2026-08-01.**
 
-**Tranche seven is complete: tasks 36–44, ending `b8c2943`.** Nothing in `docs/` is the
-next session's work. **What is next is a choice between two tracks, and it is the repo
-owner's**, because the cheaper one cannot be started by a session at all:
+**Tranche seven is complete: tasks 36–44, ending `b8c2943`.** ~~Nothing in `docs/` is the
+next session's work.~~ **The owner chose the product/API track, and task 27 — the position
+instrumentation — is done.** It was the right first move for a reason worth keeping: it is
+the only work in the plan that **cannot be backfilled**, because `rank` and `request_id`
+describe a render that is over the moment it happens.
 
 | track | tasks | what it needs |
 |---|---|---|
 | **the labelling night** | 30, then 13's weights and 12's next bump | **a second labeller for about twenty minutes.** `evals label report` exits 2 by design at one labeller — there is no inter-annotator ceiling to denominate a model score against. All ten `overlap` rows are already answered on the owner's side, so a second person's ten are the **last** input needed, not the first. No session can do this |
-| **the product / API surface** | 24, 25, 26, 27, 28, 31, 32, 33 | nothing — not blocked, not started. **Audit the premises first:** they were checked on 2026-07-31 and several were stale; the corrections are in the task files and in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), **which is a specification and not a description of the shipped API** |
+| **the product / API surface** | ~~24, 25, 26, 27,~~ 24, 25, 26, 28, 31, 32, 33 | **27 is done.** The rest is unblocked apart from ordering. **Audit the premises first:** they were checked on 2026-07-31 and several were stale, and **27's own dependency line was backwards** — it declared *"Depends on: 26"* while 26's Definition of done needs 27's `visibility` column. Corrections are in the task files and in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), **which is a specification and not a description of the shipped API** |
+
+**Two things a session picking up this track next must not re-derive.**
+
+1. **`bucket` gates the rest of the list payload, and `bucket` is task 30, which is gated on
+   the labelling night.** `API-CONTRACT-v1.md`'s *"No 0–100 score appears anywhere"* cannot
+   be honoured until then — removing `match_score`/`fit_score`/`min_score` first would leave
+   the API unable to express relevance at all. **It is a deferral with a named blocker, not
+   an open question**, and it is recorded as such in the contract.
+2. **One decision is genuinely open and it is the owner's**: the impression dedup is keyed
+   `(profile, job_id)` and not `(profile, job_id, request_id)`, so a second render of the
+   same list inside 24 hours writes no impressions — and skips derive from impressions.
+   **Skips are a first-render-per-day signal.** The fix is one line; the cost is changing
+   the documented meaning of *"a list re-render is not new information"*. Recorded in
+   `27-event-schema.md` § *What the work turned up*, the contract, and
+   `docs/ingest/engagement-events.md`.
 
 **Read [`README.md`](README.md)'s status column for what is done — do not trust a count.**
 Task 23 reads `todo` and its own row says descoped; that row is worth correcting before

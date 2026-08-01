@@ -77,6 +77,26 @@ REQUIRED_SEQUENCES = {
     "job_events_id_seq": ("USAGE", "SELECT"),
 }
 
+#: Columns this service WRITES that were added after the table shipped, and
+#: which therefore exist only where ../schema.py's ensure_schema() has run.
+#:
+#: WHY A COLUMN CHECK AT ALL, when the table check above already passes. The
+#: two processes migrate on different schedules: ensure_schema() is called by
+#: the pipeline (extract.py, match.py, score.py), and this service holds no DDL
+#: rights by design. So a deploy that ships webapp/ ahead of a nightly run finds
+#: a job_events that exists, is granted correctly, and is missing six columns
+#: the INSERT names -- which is a 500 on a real user's first click, the exact
+#: failure verify_schema()'s docstring exists to convert into a startup error.
+#: It is the same argument the sequence grant above is annotated with, and api/
+#: is cited there as having learned it the expensive way.
+#:
+#: Only WRITTEN columns are listed. Reads go through the jobs_app view, whose
+#: shape is that view's problem.
+REQUIRED_COLUMNS = {
+    "job_events": ("request_id", "rank", "dwell_ms", "reason", "visibility",
+                   "criteria_version"),
+}
+
 #: eval_labels.id is BIGSERIAL for the same reason and needs the same grant.
 REQUIRED_SEQUENCES.update(_labels.WEB_SEQUENCES)
 
@@ -291,6 +311,19 @@ def verify_schema(conn):
         ]
         if lacking:
             problems.append(f"{qualified}: no {', '.join(lacking)}")
+
+    for table, columns in REQUIRED_COLUMNS.items():
+        if conn.execute("SELECT to_regclass(%s)", (f"public.{table}",)
+                        ).fetchone()[0] is None:
+            continue        # already reported as missing above
+        present = {r[0] for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = %s", (table,)).fetchall()}
+        absent = [c for c in columns if c not in present]
+        if absent:
+            problems.append(
+                f"public.{table}: missing column(s) {', '.join(absent)} -- run the "
+                f"pipeline's schema migration")
 
     if problems:
         raise RuntimeError(

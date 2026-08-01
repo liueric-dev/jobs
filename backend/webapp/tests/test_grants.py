@@ -145,6 +145,59 @@ class TestGrantsCoverTheSQL(unittest.TestCase):
         # 500 rather than a startup error unless it is checked.
         self.assertIn("job_events_id_seq", schema_web.REQUIRED_SEQUENCES)
 
+    def test_every_written_column_added_after_ship_is_verified_at_startup(self):
+        # The two processes migrate on different schedules: ensure_schema() is
+        # the pipeline's, and this service holds no DDL rights. A deploy that
+        # ships webapp/ ahead of a nightly run finds a job_events that exists,
+        # is granted correctly, and is missing the columns the INSERT names --
+        # a 500 on a real user's first click, which is precisely what
+        # verify_schema() exists to convert into a refusal to start.
+        self.assertEqual(
+            set(schema_web.REQUIRED_COLUMNS["job_events"]),
+            {"request_id", "rank", "dwell_ms", "reason", "visibility",
+             "criteria_version"})
+
+    def test_the_declared_columns_are_the_ones_the_writers_name(self):
+        # The drift this guards: adding a column to an INSERT and forgetting the
+        # declaration re-opens the hole the test above closed, and nothing would
+        # go red until a deploy raced a migration.
+        #
+        # THE UNION OF ALL WRITERS, NOT ONE OF THEM. jobs.py has two -- the
+        # client path in record_events and the derived path in derive_skips --
+        # and their column lists differ legitimately: a skip has no dwell_ms and
+        # no reason, because nobody dwelt on it and nobody gave a reason. An
+        # earlier version of this test read only the first statement it found
+        # and failed on exactly that difference, which is the test doing its job
+        # about itself.
+        import re
+
+        import jobs
+        with open(jobs.__file__, encoding="utf-8") as fh:
+            source = fh.read()
+        statements = re.findall(r"INSERT INTO job_events\s*\(([^)]*)\)", source)
+        self.assertEqual(len(statements), 2,
+                         "expected exactly two writers: the client path and the "
+                         "skip derivation")
+        named = {c.strip() for s in statements for c in s.split(",")}
+        for column in schema_web.REQUIRED_COLUMNS["job_events"]:
+            self.assertIn(column, named,
+                          f"{column} is declared required but no writer names it")
+
+    def test_the_event_grant_is_table_level_and_covers_new_columns(self):
+        # WHY THIS IS WORTH A TEST rather than an assumption. Postgres supports
+        # COLUMN-level grants, and under one of those, adding a column silently
+        # produces a column the grantee cannot write -- an INSERT naming it
+        # fails at runtime, on a user's click, long after the migration looked
+        # like it worked. Task 27 added six columns to job_events on that
+        # assumption, so the assumption is pinned: the declaration here is a
+        # bare privilege list with no column list anywhere in it, which is what
+        # makes a table-level GRANT the thing schema_web emits and checks.
+        privileges = schema_web.REQUIRED_TABLES["job_events"]
+        self.assertEqual(privileges, ("SELECT", "INSERT"))
+        for privilege in privileges:
+            self.assertNotIn("(", privilege,
+                             "a column-list grant would not cover a new column")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -85,6 +85,12 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(jobs.router)
+# API-CONTRACT-v1.md specifies one error shape -- {"error": {code, message,
+# request_id}} -- and FastAPI's default handler produces {"detail": ...}.
+# Registered for jobs.ContractError alone rather than for HTTPException, so
+# auth.py's and label.py's existing 4xx bodies keep the shape their own tests
+# and the browser redirect flow already depend on.
+app.add_exception_handler(jobs.ContractError, jobs.contract_error_handler)
 # The golden-set labelling surface. Server-rendered HTML rather than JSON,
 # because the people it exists for are ~10 Builder volunteers and frontend/
 # holds one file called .gitkeep -- see label.py.

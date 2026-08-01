@@ -589,6 +589,69 @@ def ensure_schema(conn):
         ("criteria_version", "INTEGER"),
     ])
 
+    # The position-bias instrumentation (tranche_five/27). job_events shipped
+    # able to say WHAT a user did and not WHERE in the list they did it, and
+    # that half cannot be recovered afterwards: rank and request_id describe the
+    # state of the list at the moment it was rendered, and the render is over.
+    # Position bias is the best-documented failure mode in implicit-feedback
+    # ranking -- a model trained on uncorrected logs learns the previous
+    # ranker's ordering back -- so an impression without a rank is not weak
+    # training data, it is unusable training data.
+    #
+    #   request_id -- groups one rendered list. Minted by webapp/jobs.py's
+    #     list endpoint, echoed by the client on every event from that render.
+    #   rank       -- 1-based position within that render, global across pages
+    #     rather than per-track: the ordering the user actually saw.
+    #   dwell_ms   -- 'open' only, and LOGGED RATHER THAN BELIEVED. A short
+    #     dwell can mean disinterest or prior familiarity; a long one can mean
+    #     an abandoned tab. It is a weak positive gate, never a label.
+    #   reason     -- the dismiss enum (jobs.DISMISS_REASONS). A closed set,
+    #     not free text, because 'wrong_level' is evidence about the seniority
+    #     weight rather than about one posting -- which is what task 31 reads.
+    #   visibility -- 'private' | 'cohort_anon', set server-side by event type.
+    #     Only a save is ever cohort-visible; an application is private, because
+    #     in a cohort competing for the same entry-level roles, seeing who else
+    #     applied is discouraging at best.
+    #   criteria_version -- which weight generation ordered the list. See the
+    #     SCORES_TABLE block above, which added the same column for the same
+    #     reason and states it directly: L2 analysis of job_events must know
+    #     which generation ordered the list a user saw. Task 27 sketched a
+    #     `model_version` here; that name is one of three .claude/CLAUDE.md
+    #     records as "planned and never built", and criteria_version is the
+    #     provenance that actually exists and is already read server-side from
+    #     job_matches beside match_score.
+    #
+    # NULLABLE, AND NOTHING BACKFILLS THEM -- the same treatment as the block
+    # above, for a sharper reason. CLAUDE.md's "do not backfill rank on existing
+    # job_events rows: a guessed rank is worse than a missing one" makes NOT
+    # NULL unsatisfiable here without a sentinel, and a sentinel is a guessed
+    # value wearing a different name. NULL means "written before instrumentation
+    # existed", which is true, legible, and already covered by the analysis
+    # exclusion task 27 requires for rank. The writer enforces what the schema
+    # cannot: webapp/jobs.py rejects a batch missing request_id or an impression
+    # missing rank with a 400.
+    #
+    # visibility is the one exception and takes a DEFAULT, because it is the one
+    # column whose value for an old row is knowable rather than guessed: every
+    # pre-instrumentation row was written under a system that shared nothing.
+    dbconn.add_missing_columns(conn, EVENTS_TABLE, [
+        ("request_id", "TEXT"),
+        ("rank", "INTEGER"),
+        ("dwell_ms", "INTEGER"),
+        ("reason", "TEXT"),
+        ("visibility", "TEXT DEFAULT 'private'"),
+        ("criteria_version", "INTEGER"),
+    ])
+    # The skip derivation's only query: "un-actioned impressions before rank k
+    # in this render". Without it, deriving skips on an open is a sequential
+    # scan over a table whose whole purpose is to grow forever. Partial, because
+    # every row this index exists to find has a request_id and the rows that do
+    # not are precisely the pre-instrumentation ones no derivation may touch.
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_job_events_request "
+                 f"ON {EVENTS_TABLE}(profile, request_id, rank) "
+                 f"WHERE request_id IS NOT NULL")
+    conn.commit()
+
     for name, col in (("idx_jobs_company", "company_token"),
                       ("idx_jobs_status", "status"),
                       ("idx_jobs_seniority", "seniority_guess"),

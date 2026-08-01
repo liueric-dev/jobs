@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-73`.** Allocated `DEC-46`–`DEC-72`. The count starts at 46 rather than at
+**Next free: `DEC-75`.** Allocated `DEC-46`–`DEC-74`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -2413,3 +2413,68 @@ at `AUDIT.md` would have been the rule quoted rather than applied.
 
 Reversible: yes. The metric names are additive and the figures themselves are unchanged;
 nothing was re-measured and task 06's gate decision is untouched.
+
+## DEC-73 — the application event stays `applied`; the contract moves
+
+**2026-08-01, task 27.**
+
+`API-CONTRACT-v1.md` § *POST /v1/events* names the application event **`apply`**.
+`webapp/jobs.py` has shipped **`applied`** since the read endpoints landed, and
+`_EVENT_STATE_JOIN` reads `e.event = 'applied'` to compute the per-row `applied` flag.
+**A client written to the frozen contract gets a 400 today.** The divergence sat in both
+documents for three days and task 34 found it by diffing them; nobody had to choose until
+something was built, and task 27 is that something.
+
+**Decided: the code is right and the contract is amended.** `job_events` is append-only
+evidence — `schema_web.py:63`, *"A label is evidence"*, and the same rule governs this
+table, which is granted `SELECT, INSERT` and nothing else. Renaming the stored value has
+exactly two implementations: rewrite history, which the grant forbids and which
+`.claude/CLAUDE.md` forbids for `rank` on the same table for the same reason; or accept
+both spellings forever, which means every future reader of this table has to know that two
+strings mean one thing. The existing rows are the tiebreak — they say `applied`, and they
+are the only part of this that cannot be edited.
+
+**Rejected: accept `apply` as an alias and store `applied`.** It is the friendly option and
+it is the one that decays. An alias is invisible in the schema, so the next person to write
+a query against `job_events` sees a closed vocabulary that does not explain itself, and the
+alias survives in the API long after anyone remembers why. `CLIENT_EVENT_NAMES` is pinned
+literally by a test precisely so that adding a name is a deliberate act.
+
+**Rejected: rename in code and backfill.** The cheapest-looking option and the one that
+destroys the record. It is the same move `HANDOFF.md`'s cleanup rule 1 forbids — *"mark, do
+not delete"* — applied to rows instead of prose.
+
+**What actually changed:** one line of `API-CONTRACT-v1.md`, struck and kept so a reader
+working from the old text can see what they had.
+
+Reversible: yes, and cheaply, since nothing has been built against either spelling —
+`frontend/` still holds one `.gitkeep`. It stops being reversible the moment a client ships.
+
+## DEC-74 — `job_events` records `criteria_version`, not the `model_version` task 27 sketched
+
+**2026-08-01, task 27.**
+
+`27-event-schema.md:45` sketches `model_version TEXT -- which ranker produced the order`.
+**That name is one of three `.claude/CLAUDE.md` records as planned and never built** — *"There
+is no `persona_version`, `features_version` or `model_version`"* — so adding it would have
+resurrected a name the repo had already decided against, for a column whose meaning is
+already carried by something that exists.
+
+**Decided: record `criteria_version`, read server-side from `job_matches` beside
+`match_score`.** The argument is not mine and it is already written down: `schema.py`'s
+`job_scores` block says that column is stored there because *"L2 analysis of `job_events`
+must know which weight generation ordered the list a user saw."* That sentence is about
+this table. `match.py` writes `criteria_version` on every `job_matches` row, so the value
+is free at INSERT time and arrives by the same server-side path as the scores — which is
+the property `docs/SCORING.md` calls load-bearing.
+
+**Rejected: both columns.** `model_version` would have no writer. The ranker is
+`score_job()` plus a weights file; there is no model artefact to version, and a column that
+is always NULL teaches the next reader that the question has an answer somewhere.
+
+**A consequence worth stating:** `criteria_version` is annotated in `schema.py` as
+*"recorded for provenance and deliberately NOT a cache key"* on `job_scores`. The same is
+true here and more obviously so — nothing recomputes an event.
+
+Reversible: yes. Adding a differently-named column later costs one `add_missing_columns`
+entry; nothing reads this one yet, by design (*"instrument now, consume later"*).

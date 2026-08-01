@@ -2,7 +2,7 @@
 kind: contract
 script: backend/webapp/jobs.py
 written: 2026-07-27
-code_at: dd49a27
+code_at: 421f35a
 generator: none
 ---
 
@@ -13,6 +13,41 @@ generator: none
 > The claim was dropped across all fourteen files on 2026-07-31; see
 > [`34-documentation-cleanup.md`](../tasks/refactor/34-documentation-cleanup.md) §A2.
 > These files are hand-written and are maintained by hand.
+
+> **AMENDED 2026-08-01 BY TASK 27 — the position instrumentation. Read this block before
+> the line citations below.** `job_events` could say *what* a user did and not *where in
+> the list they did it*, and that half cannot be recovered afterwards: `rank` and
+> `request_id` describe the state of the list at the moment it was rendered, and the render
+> is over. Six columns, one derived event, and a validation layer were added.
+>
+> | | added |
+> |---|---|
+> | columns on `job_events` | `request_id`, `rank`, `dwell_ms`, `reason`, `visibility`, `criteria_version` — all nullable, `visibility DEFAULT 'private'` (`backend/schema.py`, `add_missing_columns` on `EVENTS_TABLE`) |
+> | issued by `GET /v1/jobs` | a top-level `request_id` and a per-row `rank`, both carried across pages in the opaque cursor |
+> | derived, never accepted | **`skip`** — an `open` at rank *k* makes every un-actioned impression above it in that render a skip. `jobs.derive_skips()` |
+> | vocabularies | `CLIENT_EVENT_NAMES` / `SERVER_EVENT_NAMES` split; `DISMISS_REASONS`; `VISIBILITY_PRIVATE` / `VISIBILITY_COHORT` |
+> | errors | `jobs.ContractError` → `{"error": {code, message, request_id}}`, registered in `app.py` for that type alone |
+>
+> **`EVENT_NAMES` still exists and its meaning changed** — it is now the union, *"everything
+> storable"*, and it is **not** what the request validator reads. A client may send only
+> `CLIENT_EVENT_NAMES`. Anything below that says `EVENT_NAMES` gates the request is
+> describing the pre-2026-08-01 endpoint.
+>
+> **Line citations below this block are from `dd49a27` and most of them have moved.** They
+> are deliberately **not** swept: rewriting every number is how a document acquires
+> citations nobody checked (`HANDOFF.md` § *Verify before you trust*). The symbol names are
+> the durable pointers — `grep -n` is the instrument. The tables in § *Field Mapping* and
+> § *Environment variables* below **are** brought current, because those are the document's
+> factual claims rather than its pointers.
+>
+> **One limit worth knowing, and it is an interaction rather than a bug.** The 24-hour
+> impression dedup is keyed `(profile, job_id)`, **not** `(profile, job_id, request_id)`.
+> So a second render of the same list inside that window writes no impression rows — and
+> the skip derivation, which reads impressions, finds nothing to skip in it. **Skips are a
+> first-render-per-day signal.** Narrowing the dedup key would change the documented
+> behaviour in § *Impression dedup is the one exception* (*"a list re-render is not new
+> information"*) for a different task's benefit, so it is recorded rather than changed in
+> passing. **It is an open decision, not a settled one.**
 
 ## Purpose
 
@@ -69,11 +104,21 @@ anonymous access.
 Read by `backend/webapp/config.py`, not by this module. `jobs.py` reads no
 environment variable directly; its two tunables are module constants:
 
-| Constant | Value | Line |
-|---|---|---|
-| `EVENT_NAMES` | `("impression", "open", "save", "unsave", "dismiss", "applied")` | `:43` |
-| `IMPRESSION_DEDUP_HOURS` | `24` | `:48` |
-| `DEFAULT_LIMIT` / `MAX_LIMIT` | `25` / `100` (read endpoints) | `:36-37` |
+| Constant | Value |
+|---|---|
+| `CLIENT_EVENT_NAMES` | `("impression", "open", "save", "unsave", "dismiss", "applied")` — what a client may send |
+| `SERVER_EVENT_NAMES` | `("skip",)` — derived, rejected from a client with code `server_derived_event` |
+| `EVENT_NAMES` | the union of the two: everything storable in `job_events.event` |
+| `DISMISS_REASONS` | `("wrong_level", "wrong_role", "wrong_location", "bad_company", "stale_posting", "other")` |
+| `RANK_REQUIRED_EVENTS` | `("impression", "open")` — see § *Field Mapping* for why this is narrower than the contract's *"any rank"* |
+| `COHORT_VISIBLE_EVENTS` | `("save",)` — everything else, **including `applied`**, is `private` |
+| `IMPRESSION_DEDUP_HOURS` | `24` |
+| `CURSOR_VERSION` | `2` — bumped by task 27; a v1 cursor is a 400, not an upgrade |
+| `DEFAULT_LIMIT` / `MAX_LIMIT` | `25` / `100` (read endpoints) |
+
+*(Line numbers dropped from this table on 2026-08-01 rather than re-typed: every one of
+them moved, and a constant's name is the durable pointer. `grep -n` in
+`backend/webapp/jobs.py`.)*
 
 The service connects as its own Postgres role, `jobs_web`, distinct from both
 the pipeline's and `api/`'s (`backend/webapp/app.py:10-19`).
@@ -138,28 +183,83 @@ flowchart TD
 
 ## Field Mapping
 
-The client sends only two fields per event. Everything else is derived
-server-side.
+~~The client sends only two fields per event.~~ **Five, as of task 27** — and the ratio is
+still the point: everything that could be falsified is derived server-side.
 
-### Client input (`Event`, `:246-250`; `EventBatch`, `:253-255`)
+### Client input (`Event`, `EventBatch`)
 
 | Client field | Type | Validation |
 |---|---|---|
-| `job_id` | string | must appear in this profile's `job_matches` (`:289-296`) |
-| `event` | string | must be in `EVENT_NAMES` (`:270-274`) |
-| *(batch)* `events` | list | `max_length=200` (`:255`) |
+| `job_id` | string | must appear in this profile's `job_matches` |
+| `event` | string | must be in `CLIENT_EVENT_NAMES`; a `skip` gets its own error code |
+| `rank` | int ≥ 1 | **required** on `impression` and `open`; optional elsewhere |
+| `dwell_ms` | int ≥ 0 | `open` only — rejected on any other event |
+| `reason` | string | `dismiss` only, and must be in `DISMISS_REASONS` |
+| *(batch)* `request_id` | string | **required**; echo the one `GET /v1/jobs` returned |
+| *(batch)* `events` | list | `max_length=200` |
+
+**Every one of these fails the WHOLE batch, not the offending event.** That is the
+contract's instruction — *"fail loudly; silence is this system's default failure mode"* —
+and it has a specific justification here: a partially-accepted impression batch leaves the
+render's rank sequence with holes indistinguishable from items the user never scrolled to.
+
+**`rank` is required more narrowly than `API-CONTRACT-v1.md` asks, deliberately.** The
+contract says *"reject a batch missing `request_id` or any `rank`"*; the implementation
+requires it only where position is the meaning. The reason is the contract's own — it says
+a detail-page request *"is not an impression"*, so a `save` or `applied` raised from
+`GET /v1/jobs/{id}` has no position in any render, and demanding one would force a client
+to invent a value. That is the sentinel task 27 refused in the schema, wearing different
+clothes. The deviation is recorded in the contract and pinned by
+`webapp/tests/test_events.py::test_a_rankless_save_is_allowed`.
 
 ### Written to `job_events`
 
 | Column | Source | Client-controllable? |
 |---|---|---|
-| `profile` | `m.profile` — from `job_matches`, matched on the **session's** profile (`:301`, `:306`) | **no** |
-| `job_id` | `m.job_id` — from `job_matches`, not echoed from the request (`:301`) | no |
-| `event` | the client's string, after allowlist check (`:301`) | yes, from a closed set |
-| **`match_score`** | `m.match_score` — read from `job_matches` in the same statement (`:301`) | **no** |
-| **`fit_score`** | correlated subquery on `job_scores` for the same (job, profile) (`:302-303`) | **no** |
-| `occurred_at` | `utc_now_str()` computed once for the batch (`:279`, `:304`) | no |
-| `id` | `BIGSERIAL` (`backend/schema.py:391`) | no |
+| `profile` | `m.profile` — from `job_matches`, matched on the **session's** profile | **no** |
+| `job_id` | `m.job_id` — from `job_matches`, not echoed from the request | no |
+| `event` | the client's string, after allowlist check | yes, from a closed set |
+| **`match_score`** | `m.match_score` — read from `job_matches` in the same statement | **no** |
+| **`fit_score`** | correlated subquery on `job_scores` for the same (job, profile) | **no** |
+| **`criteria_version`** | `m.criteria_version` — same statement, same principle as the scores | **no** |
+| **`visibility`** | `jobs.visibility_for(event)` — `cohort_anon` for `save`, `private` for everything else | **no** |
+| `request_id` | the batch's, after the required-check | yes |
+| `rank` | the event's | yes |
+| `dwell_ms` | the event's, `open` only | yes |
+| `reason` | the event's, `dismiss` only, from a closed set | yes, from a closed set |
+| `occurred_at` | `utc_now_str()` computed once for the batch | no |
+| `id` | `BIGSERIAL` | no |
+
+**`visibility` is a privacy control, and a privacy control a client can set is not one.**
+It is not a field on `Event` at all — there is nothing to ignore — because a field the
+server silently overwrites is one a client author can reasonably believe works. Only a
+`save` is ever cohort-visible; **an application is `private`**, which is a product decision
+rather than an oversight: in a cohort competing for the same entry-level roles, seeing who
+else applied is discouraging at best.
+
+**`criteria_version` names the weight generation that produced the order the user reacted
+to.** Task 27 sketched a `model_version` for this; `DEC-74` replaced it, because that name
+is one of three `.claude/CLAUDE.md` records as planned and never built, and because
+`backend/schema.py`'s `job_scores` block already gives the argument for the column that
+does exist — it is stored *"because L2 analysis of `job_events` must know which weight
+generation ordered the list a user saw."*
+
+### The derived event: `skip`
+
+`jobs.derive_skips()`. When an `open` arrives at rank *k*, every impression in the same
+`request_id` at rank < *k* **with no other event on that job in that render** becomes a
+`skip` row, inheriting the impression's `rank`, `match_score`, `fit_score` and
+`criteria_version`. It runs after the `open`'s own insert and inside the same transaction,
+so the opened item is excluded and a reader can never see an open without the skips it
+implies.
+
+**"No other event" rather than "no open" is what makes it idempotent**, and the distinction
+is load-bearing: a `skip` is itself a non-impression event, so a second `open` further down
+the same render skips only what the first did not. A `save` above the open is likewise not
+a skip — counting it as passed-over would feed the ranker a negative for its best outcome.
+
+Replayed against real Postgres in `backend/webapp/tests/test_event_replay.py`: 20
+impressions, `open` at rank 7, six `skip` rows at ranks 1–6 sharing one `request_id`.
 
 The two score columns are the point of the table. `:262-268` quotes
 `docs/SCORING.md`:
@@ -179,10 +279,23 @@ the write and makes a missing match row a no-op rather than a bad row.
 ### Why the event vocabulary is closed
 
 `job_events.event` is free `TEXT` (`backend/schema.py:394`), so the
-`EVENT_NAMES` allowlist "is the only thing keeping the table analysable a year
-from now, when the learned ranker in docs/SCORING.md wants to read it. A
+~~`EVENT_NAMES`~~ **`CLIENT_EVENT_NAMES`** allowlist "is the only thing keeping the table
+analysable a year from now, when the learned ranker in docs/SCORING.md wants to read it. A
 typo'd event name is worse than a rejected one: it is silently unusable
-training data" (`:39-42`).
+training data".
+
+**Task 27 split it into two tuples, and the split is the point.** `skip` must be
+**rejected** from a client and **accepted** into the table — one set cannot be both, and
+collapsing them is how a server-derived event quietly becomes client-assertable. The
+validator reads `CLIENT_EVENT_NAMES`; anything asking "may this be stored" reads
+`EVENT_NAMES`. A client that sends `skip` gets code `server_derived_event` rather than
+`unknown_event`, because the mistake is a category error and a message saying "unknown"
+would send a client author looking for a typo.
+
+**The application event is `applied`, not `apply`** — `DEC-73`, which resolved a
+three-day-old break between this endpoint and `API-CONTRACT-v1.md`. The existing rows are
+the tiebreak: this table is granted `SELECT, INSERT` and nothing else, so they cannot be
+rewritten, and they say `applied`.
 
 ### Read back
 

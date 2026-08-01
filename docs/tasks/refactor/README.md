@@ -81,7 +81,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | | Task | Lands | |
 |---|---|---|---|
 | 26 | [Profile creation API](tranche_five/26-profile-creation.md) | the gap `migrate_profiles.py` fills by hand | todo |
-| 27 | [Event schema](tranche_five/27-event-schema.md) | `rank`, `request_id`, `dwell_ms`, `reason`, `visibility`, derived `skip` | todo |
+| 27 | [Event schema](tranche_five/27-event-schema.md) | `rank`, `request_id`, `dwell_ms`, `reason`, `visibility`, derived `skip` — **and `criteria_version` in place of the `model_version` the task sketched, which is a name `.claude/CLAUDE.md` records as never built (`DEC-74`). Its declared dependency on 26 was backwards**: nothing here reads anything 26 builds, and 26's own DoD needs this task's `visibility` column. Settled `apply` vs `applied` in favour of the shipped spelling, because the rows cannot be rewritten (`DEC-73`) | **done** |
 | 28 | [Anonymous cohort aggregation](tranche_five/28-cohort-aggregation.md) | "4 Builders saved this" without attribution | todo |
 
 ## Phase 6 — Ground truth

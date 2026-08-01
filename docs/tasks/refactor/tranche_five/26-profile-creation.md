@@ -6,7 +6,18 @@ generator: none
 
 # 26 — Profile creation
 
-**Status:** todo. **Depends on:** 13. **Blocks:** 28, 29, 32.
+**Status:** todo. **Depends on:** 13, ~~and 27 declared itself dependent on this~~ **and 27,
+which is DONE.** **Blocks:** 28, 29, 32.
+
+> **THE 26/27 ARROW WAS BACKWARDS AND IS CORRECTED, 2026-08-01.**
+> `27-event-schema.md` declared *"Depends on: 26"*. Nothing in 27 read anything 26 builds,
+> and this file's own Definition of done — *"Seed judgements write real `job_events` rows
+> with the correct `visibility`"* — names **27's** column. So the real order is 27 then 26,
+> and 27 has landed: `visibility`, `request_id`, `rank` and the `skip` derivation all
+> exist, so the seed-judgement step has somewhere correct to write.
+>
+> **What this task still needs and does not have is a screen**, which is task 32, and
+> `frontend/` holds one `.gitkeep`. That is the real blocker on 26 and it always was.
 
 Close the last gap between "a Builder can sign in" and "a Builder has a ranked list."
 

@@ -2674,3 +2674,88 @@ scanned by no other check, C4 included — and both carry figures. Widening `doc
 include the declared roots is the obvious next check and is unwritten. Phase 9 made the
 documentation checkable; it did not make **all** of it checkable, and saying so is what rule
 7 asks for.
+
+## 2026-08-01 — task 27, the event schema: the product/API track opens
+
+**The owner chose the product/API track over the labelling night, and 27 is where it
+starts** — not by preference but because it is the only work in the plan that cannot be
+backfilled. `rank` and `request_id` describe the state of a list at the moment it was
+rendered, and the render is over as soon as it happens; every other task on the track can
+be redone later.
+
+**Suite before: main 1233, webapp 93, both OK.** That reading is the floor, taken before
+anything changed, per `.claude/CLAUDE.md`. **After: main 1233, webapp 129.** The main suite
+is unmoved by design — nothing here is pipeline code except six `add_missing_columns`
+entries and an index.
+
+### What landed
+
+| | |
+|---|---|
+| `backend/schema.py` | six nullable columns on `job_events` — `request_id`, `rank`, `dwell_ms`, `reason`, `visibility DEFAULT 'private'`, `criteria_version` — plus a partial `idx_job_events_request` for the derivation's only query |
+| `backend/webapp/jobs.py` | `GET /v1/jobs` issues a `request_id` and a per-row `rank`; `POST /v1/events` validates and stores the new fields; `derive_skips()`; `ContractError` and the contract's error envelope; the `CLIENT_EVENT_NAMES` / `SERVER_EVENT_NAMES` split |
+| `backend/webapp/schema_web.py` | `REQUIRED_COLUMNS`, checked at startup |
+| `backend/webapp/app.py` | the exception handler, registered for `ContractError` alone |
+| tests | `test_event_replay.py` (new, 11 tests, real Postgres), plus `test_events.py`, `test_sessions.py`, `test_grants.py` |
+
+### Four findings, and the first one changed what the session did
+
+**1. Task 27's declared dependency was backwards, and it had the expensive orientation.**
+`27-event-schema.md:9` read *"Depends on: 26"*. Nothing in 27 touches anything 26 builds;
+**26's own Definition of done needs 27's `visibility` column**. And 26 needs onboarding
+screens, which is task 32, which needs a `frontend/` that holds one `.gitkeep`. So the
+declared order put the one un-backfillable task in this plan behind the one that most
+obviously can be redone later. Corrected in both files.
+
+**2. `model_version` was a name this repo had already decided against.** The task file
+sketched it; `.claude/CLAUDE.md` lists it as one of three names *"planned and never built"*.
+`criteria_version` is the provenance that actually exists, and **`schema.py`'s `job_scores`
+block had already written the argument for it** — that column is stored there *"because L2
+analysis of `job_events` must know which weight generation ordered the list a user saw."*
+That sentence is about this table. `DEC-74`.
+
+**3. `apply` vs `applied` could not be deferred any further.** It had to be settled to write
+the validator at all. The code wins and the contract moves, and the tiebreak is that
+`job_events` is granted `SELECT, INSERT` and nothing else — the existing rows say `applied`
+and are the only part of the disagreement that cannot be edited. `DEC-73`.
+
+**4. The webapp could have started against a database missing the columns it writes.**
+`verify_schema()` checked tables and privileges, not columns. The two processes migrate on
+different schedules — `ensure_schema()` is the pipeline's, and this service holds no DDL
+rights by design — so a deploy ahead of a nightly run would have produced a 500 on a real
+user's first click. That is the precise failure `verify_schema()`'s own docstring exists to
+convert into a refusal to start, and the sequence grant beside it is annotated with `api/`
+having learned it the expensive way. `REQUIRED_COLUMNS` closes it.
+
+### One limit, recorded rather than fixed, and it is the owner's call
+
+**Skips are a first-render-per-day signal.** `IMPRESSION_DEDUP_HOURS` is keyed
+`(profile, job_id)`, not `(profile, job_id, request_id)`, so a second render of the same
+list inside 24 hours writes no impression rows — and `derive_skips()` reads impressions.
+The fix is one line. The cost is changing the documented meaning of *"a list re-render is
+not new information"*, which is an existing behaviour with its own reasoning, for a
+different task's benefit. **Left alone and written down in three places** rather than
+changed in passing.
+
+### Method notes worth keeping
+
+**A test caught its own premise.** `test_the_declared_columns_are_the_ones_the_writers_name`
+was first written to read the first `INSERT INTO job_events` in the file and assert every
+declared column appeared in it. It failed on `dwell_ms` — because there are now **two**
+writers, and a `skip` legitimately has no dwell and no reason. The assertion is over the
+union, and the episode is left in the test's comment: the failure was the test working.
+
+**The replay test needed a credential the service does not have.** `scratchdb` calls
+`schema.ensure_schema()`, which issues `CREATE SCHEMA`; `webapp/config.py` has already
+loaded `webapp/.env` by then, so `DATABASE_URL` is `jobs_web`, which holds CREATE on
+nothing. Every test in the file died with *"permission denied for database jobs"* rather
+than skipping — **a gate that cannot tell "no database" from "wrong role" reports the wrong
+one.** Resolved by publishing `backend/.env`'s pipeline URL as `JOBS_SCRATCH_DATABASE_URL`,
+the escape hatch `scratchdb.scratch_url()` already documents, and deliberately **not** by
+merging `backend/.env` over this service's own credential inside its own test suite.
+
+**Two orphaned scratch schemas are sitting in the `jobs` database** — `scratch_5ce56323`
+and `scratch_cafb8b05`, both with the pre-27 seven-column `job_events`, so both predate
+this session. Noted, not dropped: `scratchdb` will only ever drop a name it could have
+created and it checks that immediately before the DROP, so removing them is a deliberate
+act rather than a tidy-up, and it is the owner's.
