@@ -127,10 +127,33 @@ deliverable list item by item; the suite only tells you the code you wrote works
   its output for the numbers the prose asserts.**
 - Test counts drift while other agents work concurrently, so a count quoted by one agent
   may include another's in-flight tests.
+- **Phase 9 ran five agents and two never reported**, including one whose work had to be
+  split across three commits — the split was derived from the diff instead. **Two reports
+  that did arrive were resends of content already applied**, because the orchestrator had
+  reconstructed it from the code and the inline comments while waiting. None of this cost
+  anything, and the reason is the rule above it: verification went against the files from
+  the start, so a missing report was a missing convenience rather than a missing input.
+  **Design the run so that a report is corroboration, never the only copy.**
 
 **Give each subagent an explicit do-not-touch file list.** Parallel agents collide
 otherwise. Three ran concurrently for most of the first session on that basis, and task
 11's three had zero collisions across six files.
+
+**A fence is only as good as the route around it.** In phase 9 one agent needed two lines
+changed in a file its brief fenced off; it stopped, reported the exact edit, and the
+orchestrator routed it to the agent that owned the file in under a minute. A second agent
+in the same wave simply edited a fenced file. Nothing was lost — the owner had already
+committed — but *"it turned out fine"* is not *"it was safe"*. **Tell every agent what to
+do when it needs a fenced file, not only that it may not touch it**; an agent with no route
+around a fence will eventually climb it. And when one asks, answer fast: the cost of the
+detour is what makes the rule followable.
+
+**The orchestrator should own the shared registers, and take the agents' text rather than
+their edits.** Phase 9 had two files every task wanted to write — a defect register and a
+decision log — and the orchestrator wrote both, from text the agents supplied in their
+reports. That is what let two waves run three-wide and two-wide at all. It also meant that
+when a report never arrived, the register entry could still be written from the code and the
+inline comments, which is exactly what happened twice.
 
 **When a number disagrees, make the tool print both rather than picking one.** Task 11's
 doc said the ops archetypes reclaim 54 rows; the orchestrator's independent recount said

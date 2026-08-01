@@ -20,7 +20,13 @@ Start at [`backend/README.md`](backend/README.md) for setup and operation, or
 [`backend/docs/`](backend/docs/) for architecture and design history.
 [`docs/scoring.md`](docs/scoring.md) is the scoring contract — what a score
 means and where every weight came from; [`docs/ingest/`](docs/ingest/) is the
-per-script reference for all eleven entry points.
+per-script reference for the ingestion and scoring entry points.
+
+**[`docs/README.md`](docs/README.md) indexes every document in the tree**, grouped
+by what it is for, with one line each saying the question it answers. It replaces
+the count that used to sit in the sentence above — it said *"all eleven entry
+points"* and there were fourteen files, which is `docs/DOCS-POLICY.md` rule 3's
+case in one line: a number a command can produce should never be typed into prose.
 
 ```bash
 cd backend

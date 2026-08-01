@@ -192,6 +192,46 @@ being written for four sessions and nothing was red, *because a document that st
 written looks exactly like a document with nothing to say.* That is the specific hole rule 7 is
 cut to fit.
 
+## Cassette staleness — an age is not a trigger, and re-recording is not the fix
+
+The suite prints a cassette manifest with an age on every run. They are recorded fixtures
+for the six non-LLM sources and they drift from the live APIs **silently**, which is this
+system's failure mode wearing a test's clothes.
+
+**No age makes a cassette stale, and that is deliberate.** A four-day-old recording of an
+endpoint that has not changed is perfect; a one-day-old recording of an endpoint that
+changed this morning is worthless. Age is a prompt to look, never a verdict — a numeric
+threshold here would be a schedule with no owner, which is the failure § *Choosing between
+`contract` and `record`* describes.
+
+**What makes a cassette stale is a reconciliation failure**, and those already raise:
+collected counts against the `total` the API returned (`.claude/CLAUDE.md`, *"a throttled
+page is not the end of a list"*), a parser finding zero of a field it used to find, or a
+live run whose volume diverges from the recording's shape. **Alert on volume, not on age.**
+
+**Who decides: the owner, never a session.** Re-recording is not a refresh — it is the
+destruction of evidence.
+
+> **`record_workday_cxs()`'s refusal guard is the worked example and must be read before
+> anyone argues with it.** That cassette holds a **recorded failure mode**: the list page
+> does not return `startDate` or `jobRequisitionLocation`, contradicting
+> `docs/ingest/18-ingest-workday-cxs.md:27-30`. Re-recording it would erase the only
+> evidence that discrepancy exists. `record_cassettes.py`'s own docstring already disagrees
+> with what its cassette holds — four pages over 79 postings, not five over 88 — and the
+> cassette is right.
+
+**If a cassette cannot express a case, add a fixture beside it.** Task 42 did exactly this
+for defect D02: the recorded page holds 23 titles and 23 company anchors interleaved one for
+one, so it cannot show a desync at all. `backend/evals/fixtures/builtin-nyc-desync.html` is
+a four-card slice of that recording with one anchor deleted, and a test asserts the
+remainder is still a byte-for-byte substring of the cassette so it cannot rot into a
+hand-written copy. That is the pattern: **derive from the recorded bytes, never re-record to
+manufacture a case.**
+
+**Unenforced.** No check compares a cassette against its live endpoint — doing so would need
+the network, and `audit-docs.py` is offline by contract so it can never be a flake. This
+section is convention, and rule 7 requires saying so rather than implying a checker exists.
+
 ## What this policy deliberately does not change
 
 - **No linter, no formatter.** There is none configured and that is intentional. Do not add one

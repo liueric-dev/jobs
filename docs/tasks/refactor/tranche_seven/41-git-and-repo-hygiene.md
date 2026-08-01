@@ -6,7 +6,7 @@ generator: none
 
 # 41 — Git and repo hygiene
 
-**Status:** NEXT — 41a should land before anything else in this tranche. **Depends on:**
+**Status:** DONE 2026-08-01 — 41a `7d839f5`, 41b `9b7bb5e`, 41c/41d in § *Outcome* below. **Depends on:**
 nothing. **Blocks:** nothing, but every other task's "both suites green" check is measured
 against whatever baseline 41a establishes.
 
@@ -129,3 +129,50 @@ reason rather than a number everyone reads past.
 - **Re-recording any cassette.** See 41d and task 34's rule 4.
 - **Deleting `scripts/tranche-two-launcher.sh`.** `183b4dc` decided not to; ignoring it is not
   reversing that.
+
+---
+
+## Outcome — 2026-08-01
+
+**41a — DONE, `7d839f5`.** Committed alone, before any cleanup edit, so its diff reads
+against a clean base. Two files. The three new tests still run without a database.
+
+**41b — DONE, `9b7bb5e`.** `scripts/` ignored with the why-comment. **And the owner
+decided `.claude/CLAUDE.md` should stop being ignored**, so the rule is now `.claude/*`
+with `!.claude/CLAUDE.md`: the brief every session reads first is tracked, and
+`settings.local.json` — this machine's permission state, meaningless on another — is not.
+That decision unblocked tasks 38 and 40, both of which needed to edit `CLAUDE.md` and
+neither of which could have committed the edit before it.
+
+**41c — branch state, verified 2026-08-01. Three facts, and all three are the owner's.**
+
+```bash
+git log --oneline origin/main..main | wc -l          # 24 unpushed
+git symbolic-ref refs/remotes/origin/HEAD            # refs/remotes/origin/jobs-app-readiness
+git log --oneline main..webapp-service | wc -l       # 0 — fully contained in main
+```
+
+| fact | measured | why it matters |
+|---|---|---|
+| `main` has **24 unpushed commits** | `origin/main` is behind 24 | `backend/docs/DEVELOPER.md` records the intended workflow as *"each worker machine runs `git pull --ff-only && python3 run-daily.py`"*. Unpushed commits defeat it silently: a second machine runs older code and says nothing |
+| `origin/HEAD` points at **`origin/jobs-app-readiness`**, which is **behind 100** | every remote branch is **ahead 0** | nothing anywhere holds work `main` does not. A fresh clone gets a hundred-commit-old default branch |
+| local `webapp-service` is **ahead 0** | contained in `main` | safe to delete; `origin/webapp-service` keeps the ref either way |
+
+**This task does not take any of them, by design.** Pushing publishes; moving a default
+branch changes what a fresh clone gets; deleting a branch is not this task's to do. The
+commands, for whoever decides:
+
+```bash
+git push origin main
+git remote set-head origin main        # local view only
+git branch -d webapp-service           # ahead 0, safe
+# moving the REAL default branch is a host-side setting, not a git command
+```
+
+**Recorded as deferred, per this task's own Definition of done** — the owner was asked and
+these three were not among the decisions taken. They stay open and visible here rather than
+being decided by silence.
+
+**41d — DONE.** The cassette staleness policy is in
+[`DOCS-POLICY.md`](../../../DOCS-POLICY.md) § *Cassette staleness*. No cassette was
+re-recorded.

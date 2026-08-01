@@ -2492,3 +2492,94 @@ in half. Two operational subsections were deliberately kept out of the archive �
 
 `AUDIT.md` is new: one page, every figure with the command that produced it. The named
 risk is that it becomes an eighth "READ THIS FIRST", so it indexes and does not restate.
+
+---
+
+## 2026-08-01 — Phase 9, tranche seven: tasks 36–44
+
+**Nine commits. The tranche's own thesis got demonstrated on it three times while it was
+being written.**
+
+`9b7bb5e` **41b** — `scripts/` ignored with a why-comment, making `183b4dc`'s decision
+durable instead of dependent on nobody typing `git add -A`. **And `.claude/CLAUDE.md`
+stopped being ignored**, by the owner's decision: it is the brief every session reads
+first, and while it was ignored a correction to it could be made and could not be
+committed. Landing it early is what let tasks 38 and 40 commit their edits to that file
+at all.
+
+`0110473`, `b64d7a6` **39** — `D` is defects, `DEC` is decisions, one allocator declared in
+each register's header. The twenty `D46`–`D65` entries became `DEC-46`–`DEC-65` with
+numbers preserved and `<a id="dNN">` anchors left behind. **`D46`–`D65` are burnt in the
+defect register and next free is `D66`**, because those numbers still circulate as decision
+IDs in the two `kind: record` histories that were deliberately left unswept. The trap was
+that the identifier to change and the identifier to leave alone are the same string:
+`ats-discover.py`'s dozen `D45` citations all mean the defect, were read one by one, and
+`git diff` on it is empty. `sed` would have corrupted them and the suite would have stayed
+green while it did.
+
+`57c34a5` **36** — `backend/tools/audit-docs.py`, six checks, wired into the suite as the
+repo's first doc test. It lands **red in the CLI and green in the suite** against a declared
+baseline, which `DEC-68` records with `expectedFailure` and exact-match both rejected. C5
+went 22 → 0 when 39 landed. C3's threshold is derived from this repo's commit-per-day
+distribution, not picked. C4's first row cost the most care: a naive `\b11[0-9]{2}\b`
+matches 86 lines under `docs/` and **34 of them are line-number citations**.
+
+`2a94f3d` **42** — the six UNBLOCKED defects closed, 21 tests, each verified by deleting the
+fix and watching it fail. **Every count the register quoted for them was wrong**: D03's
+"135 of 351" is 421 of 678 and none are malformed; D05 had five `continue` sites, not four;
+D13's cite was 138 lines off. **Three of the six were never blocked** — a disposition
+written for a batch, applied to members that did not need it, which is D17's shape again.
+`DEFECTS.md` now requires `BLOCKED-BY: <thing>` so the question is one grep.
+
+`89f7a3f` **37** — every document declares a `kind:`, and `docs/README.md` exists, which is
+what made orphan detection possible at all. The label was the smaller half: **six per-script
+contracts still said upsert errors were discarded four days after `e353e3e` fixed all eight
+sites**, in the *"Logged vs. swallowed"* table. That exposed a defect in the policy itself —
+`DOCS-POLICY.md` claimed `audit-docs.py` enforced the same-commit rule and **nothing did**;
+the row now reads unenforced.
+
+`6b74e0b`, `8e9e343`, `6b6ae71` **40** — the entry point stopped sending every session to a
+finished task, struck and kept. § *How this run works* promoted to `docs/WORKING-METHOD.md`.
+The archive backlog cleared, and **one of its two dispositions reversed**: `DEC-72` keeps
+`backend/docs/SCORING.md`, because § D read "two scoring documents" as drift from the file
+list while the two files declare different jobs in their own opening paragraphs.
+
+`d323546` **38** — no self-consistency number here was wrong; one **word** was overloaded.
+`agree2` 94.8%, `pairwise` 90.7%, `unanimous` 87.0%, all n=115, now named and owned by
+`AUDIT.md` with the command that reproduces them from committed data. No test count is typed
+anywhere: **the floor is the reading you take before you change anything.**
+
+### What the run learned about its own instruments
+
+**C4 fired three times on the people building this tranche** — on `DEFECTS.md`, on task 38's
+own file, and on `DEC-71` as it was being written. Each time the document was fixed and the
+check left alone. A checker that catches its authors within the hour is the strongest
+evidence available that it reads the tree rather than a fixture.
+
+**Two agents of five never sent a report**, and one edited a file its brief fenced off. No
+work was lost — the fence had already been vacated — but the orchestrator verified every
+Definition of done against the files rather than against a report, which is the only reason
+that was survivable. `WORKING-METHOD.md` § *verify, do not trust the report* now says this
+where the next run will read it.
+
+**One allowance reverses a subagent's decision on evidence it did not have.** Task 38 allowed
+`HANDOFF.md` nowhere. C4 then found nineteen restatements there, **all below line 380 and none
+in the entry point**. They are struck-and-kept sequences that *are* the record of the drift.
+The real finding is that `HANDOFF.md` is two documents — a `rolling` entry point on a frozen
+narrative — and rule 1 has no name for that. **Task 44** archives the frozen half and removes
+the allowance rather than widening it.
+
+**Tasks 43 and 44 are open and are this tranche's output, not its leftovers.** 43 executes
+`DEC-70`'s already-taken decision to split `docs/scoring.md`; 44 is above. Both exist because
+a check found something a reading had not.
+
+### Left to the owner, and not decided by silence
+
+`main` has 24 unpushed commits; `origin/HEAD` points at `origin/jobs-app-readiness`, which is
+100 behind; local `webapp-service` is contained in `main` and safe to delete. Every remote
+branch is ahead 0, so nothing anywhere holds work `main` does not. **Task 41 surfaced all
+three and took none of them** — pushing publishes and moving a default branch changes what a
+fresh clone gets. The commands are in `41-git-and-repo-hygiene.md` § *Outcome*.
+
+**A second labeller for about twenty minutes still gates tasks 30, 13's weights and 12's next
+bump.** Unchanged by anything in this tranche.

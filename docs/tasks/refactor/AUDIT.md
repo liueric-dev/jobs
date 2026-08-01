@@ -53,10 +53,11 @@ instrument, and every other document cites this one rather than restating them.
 
 | | value | instrument |
 |---|---|---|
-| tasks done or dropped | 20 of 35 | [`README.md`](README.md) status column |
+| tasks done or dropped | ~~20 of 35~~ **read the status column** — the count moved five times on 2026-08-01 alone, and two tasks were added | `grep -c '| done |' docs/tasks/refactor/README.md`, against `grep -c '| todo |'` |
 | test suite, main | **green.** The count is whatever `Ran N tests` prints — see the note under this table | `cd backend && python3 -m unittest discover -s tests` |
 | test suite, webapp | **green.** Same: run it, read the line | `cd backend/webapp && .venv/bin/python -m unittest discover -s tests` |
 | broken doc links | **0** | `python3 backend/tools/audit-doc-links.py` |
+| documentation policy | **all six checks 0**, and the baseline is empty — that emptiness is phase 9's exit gate | `python3 backend/tools/audit-docs.py`; wired into `backend/tests/test_docs_policy.py` |
 | defect register | 45 entries, `D01`–`D45` | [`../../ingest/DEFECTS.md`](../../ingest/DEFECTS.md) |
 | human labels | 186 rows / 31 postings / **one** labeller | `python3 backend/tools/label-findings.py` |
 | labelling rate | 93 s median (n=29) | `python3 backend/tools/label-findings.py --timing` |
