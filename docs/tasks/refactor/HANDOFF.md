@@ -52,7 +52,20 @@ describe a render that is over the moment it happens.
    `27-event-schema.md` § *What the work turned up*, the contract, and
    `docs/ingest/engagement-events.md`.
 
-**Read [`README.md`](README.md)'s status column for what is done — do not trust a count.**
+**Where a fresh session on this track should look first, and it is a suggestion rather than
+a finding.** Task **31** (dismiss demotion) declares `Depends on: 27, 26`; **27 is now
+done**, and it was the half that mattered — 31 consumes the `reason` enum 27 added. Whether
+it truly needs 26 is **unverified**: `builder_job_state` is keyed `app_user_id`, and
+`app_users.id` already exists without anything 26 builds, so the 26 half may be as spurious
+as 27's was. **Check it before planning on it** — one dependency arrow in this tranche has
+already been found backwards, which is a reason to check the others and not a reason to
+assume they are all wrong. Tasks 24, 25, 28 and 32 are the rest; 32 is the one everything
+user-facing is actually waiting on, and `frontend/` still holds one `.gitkeep`.
+
+**Read [`README.md`](README.md)'s status column for what is done — do not trust a count,
+including a count you just ran.** The instrument [`AUDIT.md`](AUDIT.md) names for it was
+itself wrong until 2026-08-01: `grep -c '| done |'` misses the two rows that spell it
+`| **done** |`, so it reported 29 where the file holds 31. Corrected there.
 Task 23 reads `todo` and its own row says descoped; that row is worth correcting before
 anyone plans against it.
 
@@ -120,9 +133,15 @@ landed, and re-checking it turned up a number nobody had (79 postings, not 88).
 
 **TWO TRACKS, AND ONLY ONE OF THEM IS THE SESSION'S.**
 
+> **ROLLED FORWARD 2026-08-01. Both rows below describe finished sessions.** Phase 9's
+> hygiene tranche closed at `b8c2943`, and the session after it took task 27 off the
+> product/API track (`2687bc0`). The live version of this table is the one in § *START
+> HERE* at the top of this file; this one is kept because the labelling row in it has never
+> changed and is the point.
+
 | | who | state |
 |---|---|---|
-| ~~cleanup / bugfix / docs (**34**)~~ **doc and repo hygiene (36–42)** | **the current session** | the whole of its job; 34 itself is **done** |
+| ~~cleanup / bugfix / docs (**34**)~~ **doc and repo hygiene (36–42)** | ~~**the current session**~~ **a finished one** | the whole of its job; 34 itself is **done** |
 | a second labeller, ten `overlap` rows (**29**) | **the owner** — no agent can do it | **open, unchanged**, ~16 min |
 
 **The labelling ask has not gone away and nothing below supersedes it.** Every field of

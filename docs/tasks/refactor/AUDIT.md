@@ -53,7 +53,7 @@ instrument, and every other document cites this one rather than restating them.
 
 | | value | instrument |
 |---|---|---|
-| tasks done or dropped | ~~20 of 35~~ **read the status column** — the count moved five times on 2026-08-01 alone, and two tasks were added | `grep -c '| done |' docs/tasks/refactor/README.md`, against `grep -c '| todo |'` |
+| tasks done or dropped | ~~20 of 35~~ **read the status column** — the count moved five times on 2026-08-01 alone, and two tasks were added | `grep -cE '\| \*{0,2}done\*{0,2} \|' docs/tasks/refactor/README.md`, against the same for `todo` |
 | test suite, main | **green.** The count is whatever `Ran N tests` prints — see the note under this table | `cd backend && python3 -m unittest discover -s tests` |
 | test suite, webapp | **green.** Same: run it, read the line | `cd backend/webapp && .venv/bin/python -m unittest discover -s tests` |
 | broken doc links | **0** | `python3 backend/tools/audit-doc-links.py` |
@@ -128,10 +128,33 @@ rows are already answered on the owner's side, so a second person's ten are the 
 input needed. This is the owner's to arrange; no session can do it. It gates tasks 30, 13's
 weights, and 12's next bump.
 
-**Not blocked, not started:** the product/API surface — tasks 24–28, 31, 32. Its premises
-were audited on 2026-07-31 and several were stale; the corrections are in the task files
-themselves and in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), which is a **specification**
-and not a description of the shipped API.
+~~**Not blocked, not started:** the product/API surface — tasks 24–28, 31, 32.~~
+**STARTED 2026-08-01. Task 27 is done** (`2687bc0`); 24, 25, 26, 28, 31, 32 remain. Its
+premises were audited on 2026-07-31 and several were stale — **and 27's own dependency line
+was one of them**, declaring `Depends on: 26` while 26's Definition of done needs 27's
+`visibility` column. The corrections are in the task files themselves and in
+[`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), which is a **specification** and not a
+description of the shipped API.
+
+**Two things about that track a next session must not re-derive.**
+
+- **The contract's list payload is gated on task 30, which is gated on the labelling
+  night.** *"No 0–100 score appears anywhere; `bucket` carries the claim"* cannot be
+  honoured while `bucket` does not exist — removing `match_score`, `fit_score` and
+  `min_score` first would leave the API unable to express relevance at all. It is a
+  **deferral with a named blocker**, recorded as such in the contract, not an open question.
+- **`apply` vs `applied` is settled** (`DEC-73`), and `model_version` was replaced by
+  `criteria_version` (`DEC-74`) because the former is one of three names
+  `.claude/CLAUDE.md` records as planned and never built.
+
+**One open decision from task 27, and it is the owner's.** The impression dedup is keyed
+`(profile, job_id)` and not `(profile, job_id, request_id)`, so a second render of the same
+list inside 24 hours writes no impression rows — and the `skip` derivation reads
+impressions. **Skips are a first-render-per-day signal.** The change is one line; the cost
+is changing the documented meaning of *"a list re-render is not new information"*. Recorded
+in [`tranche_five/27-event-schema.md`](tranche_five/27-event-schema.md),
+[`API-CONTRACT-v1.md`](API-CONTRACT-v1.md) and
+[`../../ingest/engagement-events.md`](../../ingest/engagement-events.md).
 
 **Deliberately not done, with reasons recorded:** applying the `revenue_commercial`
 archetype (it is a `FACTS_VERSION` bump, and `pursuit-v1` is mid-labelling); re-tuning task
@@ -150,6 +173,19 @@ exactly one step better than prose — *"a script nobody runs automatically … 
 moment the person who remembers it stops running it."* Widening `docs_files()` to include
 the declared roots is the obvious next check and is not written. Until it is, **a figure in
 `.claude/CLAUDE.md` is on the honour system**, and it is the first thing every session reads.
+
+> **THE STATUS-COUNT INSTRUMENT WAS UNDER-REPORTING, found 2026-08-01 by running it.**
+> The command in that row was `grep -c '| done |'`, and two rows spell it `| **done** |` for
+> emphasis — task 34 and task 27. So the documented instrument reported **29 done** where
+> the file holds **31**, and it had been wrong since task 34 landed. Corrected to tolerate
+> the emphasis rather than by flattening the two rows, because the rows are not the defect.
+>
+> **This is the failure this row already exists to prevent, one level up.** The number was
+> replaced by a command precisely so it could not go stale — and then the command went
+> stale, silently, because nobody ran it. *"Re-derive it"* without checking that the
+> derivation still works is the same trust the typed figure asked for. `DOCS-POLICY.md`
+> rule 3's *"a number a script can produce is never typed into prose"* does not say the
+> script is exempt from being checked.
 
 ## How to audit this run in an hour
 
