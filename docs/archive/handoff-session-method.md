@@ -10,6 +10,11 @@ generator: none
 >
 > **What it is:** Method notes from the same sessions. The durable half is promoted to HANDOFF.md § How this run works.
 >
+> **Pointer updated 2026-08-01 (task 40):** that section was promoted again, to
+> [`docs/WORKING-METHOD.md`](../WORKING-METHOD.md), and only a stub remains in `HANDOFF.md`.
+> The sentence above is left as written — this is a `record` and its text is frozen; this
+> line is the pointer, which rule 4 requires to land somewhere real.
+>
 > Moved, not deleted. `git log --follow` on this path reaches the original text, and a stub
 > and link remain where this section was.
 
