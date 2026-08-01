@@ -40,8 +40,24 @@ tmp/
 evals/.cache/
 backend/evals/.cache/
 
-# Agent worktrees and scratch state
-.claude/
+# Agent worktrees and scratch state. CLAUDE.md is the deliberate exception: it
+# is the project brief every session reads before doing anything, and while it
+# was ignored it was machine-local -- so a correction to it could be made and
+# could not be committed, which is how tasks 38 and 40 found themselves editing
+# a file no diff could carry. settings.local.json stays ignored; it is this
+# machine's permission state and means nothing on another.
+.claude/*
+!.claude/CLAUDE.md
+
+# Agent-orchestration harness, not project code. 183b4dc untracked
+# scripts/tranche-two-launcher.sh on purpose -- it hard-codes this machine,
+# drives tmux, and runs tranche_two tasks that are all done -- and 3383f9a said
+# it would. It was NOT deleted: it is the owner's file and the owner's call
+# whether it moves to ~/bin/. But untracked-and-unignored means it shows as ??
+# in every git status and it has already been re-added once by a git add -A,
+# which is the exact thing 183b4dc exists to undo. Ignoring it makes the
+# decision durable instead of dependent on nobody typing -A.
+scripts/
 
 # flock target from the systemd unit ExecStart -- created on every run
 .run.lock
