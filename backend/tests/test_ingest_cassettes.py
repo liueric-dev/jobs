@@ -32,12 +32,31 @@ import json
 import os
 import sys
 import unittest
+from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema                                                 # noqa: E402
-from evals import cassettes                                   # noqa: E402
+from evals import cassettes, scratchdb                        # noqa: E402
 from evals.ingest_modules import load as load_ingest          # noqa: E402
+from lib import envfile                                       # noqa: E402
+from lib.upsert import upsert_checked                         # noqa: E402
+
+#: The pipeline's own .env, the way run-daily.py loads it. Same reason
+#: tests/test_nyc_open_data.py:52-55 does it: the DB-backed test below must
+#: not depend on the caller having exported DATABASE_URL by hand.
+envfile.load(os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), ".env"))
+
+#: Fixtures that are not cassettes -- a shape a recording cannot express.
+#: See evals/fixtures/builtin-nyc-desync.html's own header for why it exists
+#: and why it is not a re-recording.
+FIXTURE_DIR = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "evals", "fixtures")
+
+requires_db = unittest.skipUnless(
+    scratchdb.available(),
+    "no scratch database: set DATABASE_URL (or JOBS_SCRATCH_DATABASE_URL)")
 
 _ANNOUNCED = set()
 
@@ -257,6 +276,92 @@ class TestHNHiring(NormalizerContract):
         self.assertIsNone(item)
         self.assertFalse(item, "the `if not comment` guard must fire on it")
 
+    # -- D23: the ledger/upsert crash window ---------------------------------
+    #
+    # Both tests below drive the REAL read_comments() over the REAL recorded
+    # bytes into a REAL Postgres schema, and differ only in whether the
+    # transaction is committed or lost. A process that dies mid-run does not
+    # get to run cleanup code -- the server rolls its open transaction back --
+    # so `conn.rollback()` after read_comments() is exactly the crash, and
+    # calling upsert_checked() is exactly the survival. Nothing is simulated
+    # except the moment of death.
+
+    def _recorded_kids(self, thread):
+        """The comment ids this cassette actually holds, in thread order.
+
+        The thread lists far more kids than were recorded, and a request the
+        cassette does not hold is fatal by design (CassetteMiss), so the ids
+        are intersected with the recording rather than truncated to a count
+        that would break the day the cassette gains an interaction.
+        """
+        recorded = {i.url.rsplit("/", 1)[-1].removesuffix(".json")
+                    for i in cassettes.Cassette.load("hn-hiring").interactions}
+        return [k for k in thread["kids"] if str(k) in recorded]
+
+    @require("hn-hiring")
+    @requires_db
+    def test_a_crash_before_the_upsert_leaves_no_comment_marked_seen(self):
+        """D23. The ledger gates re-fetching, so a comment marked seen with no
+        `jobs` row is stranded for the life of the thread -- `--reparse` is the
+        only thing that recovers it, and nothing tells anyone to run it.
+
+        read_comments() commits nothing; a crash between it and the upsert
+        must therefore lose the ledger inserts too, so the next ordinary run
+        re-fetches those comments and writes the rows.
+        """
+        with scratchdb.scratch_schema() as (conn, _name):
+            with replaying("hn-hiring"):
+                thread = self.hn.find_latest_hiring_thread()
+                kids = self._recorded_kids(thread)
+                records, _declined, _errs, _null = self.hn.read_comments(
+                    conn, thread["id"], kids, "2026-08-01T00:00:00")
+            self.assertTrue(records, "the recording parsed into no records")
+            seen_before = conn.execute(
+                "SELECT count(*) FROM hn_seen_comments").fetchone()[0]
+            self.assertEqual(seen_before, len(kids),
+                             "read_comments must mark every fetched comment "
+                             "seen -- within its caller's transaction")
+
+            conn.rollback()          # the crash
+
+            self.assertEqual(
+                conn.execute(
+                    "SELECT count(*) FROM hn_seen_comments").fetchone()[0], 0,
+                "comments are marked seen but hold no jobs row: the ledger "
+                "gates re-fetching, so every one of them is stranded")
+            self.assertEqual(
+                conn.execute(f"SELECT count(*) FROM {schema.TABLE} "
+                             f"WHERE platform = 'hn_whoishiring'").fetchone()[0],
+                0)
+
+    @require("hn-hiring")
+    @requires_db
+    def test_the_ledger_and_the_jobs_rows_land_in_one_commit(self):
+        """The other half of D23: atomic means both, not neither.
+
+        Deferring the ledger commit would be a bad fix if it also deferred the
+        ledger -- the point is that the ordinary path still writes it, in the
+        same transaction as the rows it is a ledger OF.
+        """
+        with scratchdb.scratch_schema() as (conn, _name):
+            with replaying("hn-hiring"):
+                thread = self.hn.find_latest_hiring_thread()
+                kids = self._recorded_kids(thread)
+                records, _declined, _errs, _null = self.hn.read_comments(
+                    conn, thread["id"], kids, "2026-08-01T00:00:00")
+            upsert_checked(conn, schema.spec(schema.HASH_FIELDS_SHORT),
+                           records, schema.make_job_id, logger=lambda _l: None)
+            conn.rollback()   # anything uncommitted at this point was lost
+
+            self.assertEqual(
+                conn.execute(
+                    "SELECT count(*) FROM hn_seen_comments").fetchone()[0],
+                len(kids))
+            self.assertEqual(
+                conn.execute(f"SELECT count(*) FROM {schema.TABLE} "
+                             f"WHERE platform = 'hn_whoishiring'").fetchone()[0],
+                len(records))
+
 
 # ---------------------------------------------------------------------------
 # weworkremotely.py
@@ -324,6 +429,83 @@ class TestWeWorkRemotely(NormalizerContract):
             self.skipTest("no mistagged titles in this recording -- the "
                           "blocklist is untested by these bytes")
 
+    # -- D05: every dropped item is counted ----------------------------------
+
+    def _parse_both_feeds(self, stats):
+        with replaying("wwr-feeds"):
+            return [rec
+                    for cat in ("remote-back-end-programming-jobs",
+                                "remote-full-stack-programming-jobs")
+                    for rec in self.wwr.parse_feed(
+                        self.wwr.fetch_feed(cat), cat, stats)]
+
+    @require("wwr-feeds")
+    def test_every_item_the_feed_offered_is_either_a_record_or_a_counter(self):
+        """D05. The conservation law, over the real recorded feeds.
+
+        The summary used to print `len(all_records)` and nothing else, so an
+        exclude-pattern edit that started eating real engineering titles
+        "would produce no signal at all" (weworkremotely.md:309-312). The
+        counters make the difference between items offered and rows produced
+        add up -- which is the only thing that can turn that edit into a
+        number somebody sees.
+        """
+        import xml.etree.ElementTree as ET
+        stats = Counter()
+        records = self._parse_both_feeds(stats)
+        with replaying("wwr-feeds"):
+            offered = sum(
+                len(list(ET.fromstring(self.wwr.fetch_feed(cat)).iter("item")))
+                for cat in ("remote-back-end-programming-jobs",
+                            "remote-full-stack-programming-jobs"))
+        dropped = sum(stats[r] for r in self.wwr.DROP_REASONS)
+        self.assertGreater(dropped, 0,
+                           "this recording drops nothing, so it cannot show "
+                           "that drops are counted")
+        self.assertEqual(len(records) + dropped, offered,
+                         f"{offered} items in, {len(records)} records out, "
+                         f"{dropped} accounted for -- the difference is the "
+                         f"silence D05 is about")
+
+    @require("wwr-feeds")
+    def test_the_blocklist_drop_is_counted_under_its_own_name(self):
+        """Named counters, not one total. An exclude-pattern regression shows
+        up in `non_tech_excluded` and nowhere else; a feed that started
+        omitting `<link>` shows up in `no_source_id`. One number could not
+        tell those apart, and they need opposite responses."""
+        stats = Counter()
+        self._parse_both_feeds(stats)
+        self.assertGreater(stats["non_tech_excluded"], 0)
+        self.assertEqual(
+            sorted(k for k in stats if stats[k]), ["non_tech_excluded"],
+            f"this recording is supposed to exercise exactly one drop "
+            f"reason; it now shows {dict(stats)}")
+
+    @require("wwr-feeds")
+    def test_a_cross_listed_duplicate_is_counted_apart_from_a_drop(self):
+        """The fifth `continue`, and deliberately NOT a drop.
+
+        Deduping a posting that WWR published under two categories is a
+        correct outcome, and it is normally nonzero -- so adding it to the
+        dropped total would give that total a large noisy floor for a real
+        regression to hide inside. Counted, reported, kept separate.
+        """
+        stats = Counter()
+        records = self._parse_both_feeds(stats)
+        seen, kept = set(), []
+        for rec in records:                     # main()'s dedup, same keying
+            key = (rec["company_token"], rec["source_id"])
+            if key in seen:
+                stats["cross_listed"] += 1
+                continue
+            seen.add(key)
+            kept.append(rec)
+        self.assertGreater(stats["cross_listed"], 0,
+                           "two feeds were recorded so this has something to "
+                           "prove (weworkremotely.py:211-215)")
+        self.assertNotIn("cross_listed", self.wwr.DROP_REASONS)
+        self.assertEqual(len(kept) + stats["cross_listed"], len(records))
+
 
 # ---------------------------------------------------------------------------
 # builtin-nyc.py
@@ -345,13 +527,14 @@ class TestBuiltInNYC(NormalizerContract):
 
     @require("builtin-nyc")
     def test_titles_and_companies_line_up(self):
-        """D02: `parse_page` zips independently-matched title and company
-        lists, so one card missing a company anchor shifts every later row by
-        one -- silently, with a plausible-looking wrong employer on each.
+        """D02 -- FIXED, and this is the half the recorded page can prove.
 
-        Cheap invariant over real bytes: every parsed record has both, and
-        the company count matches the title count on the recorded page. When
-        D02 is fixed this test is where the misaligned fixture goes.
+        `parse_page` used to zip independently-matched title and company
+        lists positionally. The recorded page holds 23 titles and 23 anchors
+        interleaved one for one, so it cannot show the misattribution -- the
+        desync fixture below is what does. What this page CAN show is that
+        containment did not change the answer on well-formed markup, which is
+        the regression the fix could plausibly have caused.
         """
         with replaying("builtin-nyc"):
             page = self.builtin.fetch_page(1)
@@ -360,21 +543,145 @@ class TestBuiltInNYC(NormalizerContract):
         self.assertEqual(
             len(titles), len(companies),
             "title and company counts diverge on the recorded page -- this is "
-            "the exact condition D02 misattributes under")
-        for rec in self.builtin.parse_page(page):
+            "the exact condition D02 misattributed under")
+        stats = Counter()
+        records = self.builtin.parse_page(page, stats)
+        self.assertEqual(len(records), len(titles))
+        self.assertEqual(dict(stats), {})
+        for rec in records:
             self.assertTrue(rec["company_name"])
             self.assertTrue(rec["title"])
 
+    # -- D02: the desync fixture ---------------------------------------------
+
+    def _desync_fixture(self):
+        with open(os.path.join(FIXTURE_DIR, "builtin-nyc-desync.html"),
+                  encoding="utf-8") as fh:
+            return fh.read()
+
     @require("builtin-nyc")
-    def test_salaries_are_shaped_like_salaries(self):
-        """D03: SALARY_PATTERN is unscoped, so any `NNK-NNK` anywhere on the
-        card can be captured. Asserted over real bytes rather than argued."""
+    def test_the_desync_fixture_is_still_the_recorded_bytes(self):
+        """The fixture is a slice of the cassette with one anchor deleted.
+
+        A derived fixture that is allowed to drift from its source is a
+        hand-written fixture wearing a provenance note (the failure mode
+        `_immediate_success()` avoids by deriving in code). This is the same
+        guarantee for a case that cannot be derived in code: everything after
+        the deletion is asserted to still be a byte-for-byte substring of the
+        recording, so re-recording the cassette breaks this test rather than
+        silently leaving a stale copy behind.
+        """
         with replaying("builtin-nyc"):
             page = self.builtin.fetch_page(1)
+        body = self._desync_fixture().split("-->\n", 1)[1]
+        self.assertIn(
+            body, page,
+            "the fixture is no longer a slice of the recording it documents")
+        # The deletion is at the slice's leading edge, which is what makes the
+        # remainder contiguous and checkable this cheaply: what the fixture
+        # drops is exactly the anchor that ends where the fixture begins.
+        self.assertTrue(
+            page[:page.index(body)].endswith("<span>PwC</span>"),
+            "the fixture no longer starts immediately after the anchor it is "
+            "supposed to be missing")
+
+    def test_a_card_with_no_company_anchor_drops_only_itself(self):
+        """D02, stated as the property. No network, no cassette: the fixture
+        IS the input.
+
+        Under positional pairing this file produced `AI Engineer` at Narmi
+        (it is PwC's), `Senior Sales Engineer` at NBCUniversal (it is
+        Narmi's), and dropped the fourth card entirely when the shorter list
+        ran out -- two employers wrong, one row lost, nothing counted. The
+        wrong rows are the dangerous half: a title under a real employer's
+        name for a job that employer is not hiring for is indistinguishable
+        from a correct row at every point downstream.
+        """
+        stats = Counter()
+        records = self.builtin.parse_page(self._desync_fixture(), stats)
+        self.assertEqual(
+            [(r["title"], r["company_name"]) for r in records],
+            [("Senior Sales Engineer - Commercial Banking", "Narmi"),
+             ("Cyber Communications Lead", "NBCUniversal"),
+             ("Tech Lead Manager, AI/ML Engineering (East Coast)",
+              "NBCUniversal")])
+        self.assertEqual(stats["no_company_anchor"], 1,
+                         "the card whose anchor is missing must be counted, "
+                         "not merely skipped")
+
+    def test_an_anchorless_card_is_dropped_rather_than_misattributed(self):
+        """The same fixture, said as conservation: every title on the page is
+        either a record or a counted drop, and no record inherits a position.
+        """
+        fixture = self._desync_fixture()
+        stats = Counter()
+        records = self.builtin.parse_page(fixture, stats)
+        titles = self.builtin.TITLE_PATTERN.findall(fixture)
+        self.assertEqual(len(records) + stats["no_company_anchor"],
+                         len(titles))
+        self.assertNotIn("PwC", [r["company_name"] for r in records],
+                         "PwC's anchor was deleted from this fixture, so no "
+                         "record may claim it")
+        # The card that must go is the one whose anchor is gone, not whichever
+        # card happens to be last when a shorter list runs out. Under
+        # positional pairing it was the other way round: `AI Engineer`
+        # survived under Narmi's name and the final card was dropped instead.
+        self.assertNotIn("AI Engineer", [r["title"] for r in records])
+        # The token is cut from the anchor's own href, so a record whose name
+        # and token disagree took them from two different cards.
+        for rec in records:
+            self.assertEqual(rec["company_token"],
+                             rec["company_name"].lower().replace(" ", "-"))
+
+    # -- D03: the salary element ---------------------------------------------
+
+    @require("builtin-nyc")
+    def test_salaries_are_shaped_like_salaries(self):
+        """D03. Asserted over real bytes rather than argued."""
+        with replaying("builtin-nyc"):
+            page = self.builtin.fetch_page(1)
+        priced = 0
         for rec in self.builtin.parse_page(page):
             salary = rec.get("salary_text")
             if salary:
+                priced += 1
                 self.assertRegex(salary, r"^\d{1,3}K-\d{1,3}K")
+        # Re-derived, and pinned: scoping the pattern to the salary element
+        # must not lose a value the unscoped one found. 20 of 23 on this
+        # recording, before and after.
+        self.assertEqual(priced, 20)
+
+    @require("builtin-nyc")
+    def test_salary_comes_from_the_salary_element_not_from_the_title(self):
+        """D03 -- the false positive the recording does not happen to contain.
+
+        `SALARY_PATTERN` used to match `NNK-NNK` ANYWHERE in the card window,
+        and the window opens at the title. Built In titles do carry comp
+        ("Sales Engineer, 120K-260K OTE"), and a card like that stored the
+        title's number as `salary_text` with nothing to say it had not come
+        from the salary field -- which is precisely why the register could
+        only call the 135 live values "unverified".
+
+        DERIVED IN CODE FROM THE RECORDING, for the reason
+        `_immediate_success()` gives: one edit to one card's title text, with
+        the disclosed range left exactly where Built In renders it, so the
+        two candidate substrings are both real and the test is about which
+        one is read.
+        """
+        with replaying("builtin-nyc"):
+            page = self.builtin.fetch_page(1)
+        original = self.builtin.parse_page(page)[0]
+        self.assertEqual(original["salary_text"], "130K-150K Annually")
+        mutated = page.replace(">Executive Assistant to the COO<",
+                               ">Sales Engineer, 120K-260K OTE<", 1)
+        self.assertNotEqual(mutated, page, "the title text moved -- re-read "
+                                           "the cassette before trusting this")
+        rec = self.builtin.parse_page(mutated)[0]
+        self.assertEqual(rec["title"], "Sales Engineer, 120K-260K OTE")
+        self.assertEqual(
+            rec["salary_text"], "130K-150K Annually",
+            "the title's comp string was stored as the salary -- SALARY_PATTERN "
+            "is reading the card, not the fa-sack-dollar element")
 
     @require("builtin-nyc")
     def test_detail_page_yields_a_description(self):

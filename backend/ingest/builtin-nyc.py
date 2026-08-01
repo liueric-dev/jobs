@@ -112,6 +112,7 @@ import html as html_module
 import time
 import urllib.request
 import urllib.error
+from collections import Counter
 
 
 # ingest/ and tools/ sit one level below the pipeline modules they import
@@ -143,7 +144,22 @@ TITLE_PATTERN = re.compile(r'data-id="job-card-title"[^>]*data-alias="([^"]+)"[^
 COMPANY_PATTERN = re.compile(r'<a href="([^"]+)"[^>]*data-id="company-title"[^>]*><span>([^<]+)</span>')
 WORK_TYPE_PATTERN = re.compile(r'fa-house-building[^>]*></i></div>\s*<span[^>]*>([^<]+)</span>', re.DOTALL)
 GEO_PATTERN = re.compile(r'fa-location-dot[^>]*></i></div>\s*<div><span[^>]*>([^<]+)</span>', re.DOTALL)
-SALARY_PATTERN = re.compile(r'([0-9]{1,3}K-[0-9]{1,3}K[^<]*)')
+#: D03. SCOPED TO THE SALARY ELEMENT, not to the card. This used to be a bare
+#: `([0-9]{1,3}K-[0-9]{1,3}K[^<]*)`, which matches that shape ANYWHERE in the
+#: card window -- a title reading "Sales Engineer 120K-260K OTE", a bullet, a
+#: badge -- and stores it as `salary_text` with nothing to say it did not come
+#: from the salary field. Built In renders the disclosed range in its own
+#: `fa-sack-dollar` element, exactly like the location (`fa-location-dot`) and
+#: work type (`fa-house-building`) patterns above, so the fix is to read it
+#: the same way the two fields either side of it are already read.
+#:
+#: The recorded page (evals/fixtures/cassettes/builtin-nyc.json, 2026-07-28)
+#: holds 23 cards; scoped and unscoped agree on all 23 and both find 20
+#: salaries, so this changes nothing about that capture -- the false positive
+#: is a shape the recording happens not to contain, which is exactly why the
+#: register could only say the 135 live values were "unverified".
+SALARY_PATTERN = re.compile(
+    r'fa-sack-dollar[^>]*></i></div>\s*<span[^>]*>([^<]+)</span>', re.DOTALL)
 SENIORITY_PATTERN = re.compile(r'(Junior|Mid level|Senior level|Entry level|Expert/Leader)')
 POSTED_PATTERN = re.compile(r'fa-clock[^>]*></i>([^<]+)<', re.DOTALL)
 
@@ -310,7 +326,35 @@ def fill_descriptions(conn, budget):
     return fetched, failed
 
 
-def parse_page(page_html):
+def parse_page(page_html, stats=None):
+    """Records from one listing page. `stats` accumulates the drop counters.
+
+    D02 -- HOW TITLE AND COMPANY ARE PAIRED, AND WHY NOT BY INDEX
+        This used to read `companies[i]` for `titles[i]`: two independently
+        matched lists, zipped positionally, with nothing checking that the
+        two entries came from the same card. A card missing its company
+        anchor, or one stray `data-id="company-title"` anchor anywhere
+        earlier on the page (a promo tile, a "featured company" rail),
+        shifts EVERY later pairing by one -- and the result is not a
+        detectably broken row. It is a real title under a real employer's
+        name, for a job that employer is not hiring for. Nothing raises,
+        nothing counts it, and `raw_json` is None on this source so there is
+        nothing to audit it against afterwards.
+
+        Built In renders each card as company-anchor-then-title (the anchor
+        is `left-side-tile-item-2`, the title `left-side-tile-item-3`), so a
+        card's company is the LAST company anchor before its title and after
+        the previous title. That is containment: an anchor outside every
+        such span belongs to no card and is now ignored instead of consumed,
+        and a card with no anchor in its own span drops ONLY ITSELF.
+
+        The recorded page (evals/fixtures/cassettes/builtin-nyc.json) has 23
+        titles and 23 anchors interleaved one for one, so index-zip and
+        containment agree on it exactly -- which is why this needed the
+        desync fixture beside it (evals/fixtures/builtin-nyc-desync.html) to
+        have anything to prove.
+    """
+    stats = Counter() if stats is None else stats
     titles = list(TITLE_PATTERN.finditer(page_html))
     companies = list(COMPANY_PATTERN.finditer(page_html))
 
@@ -323,11 +367,16 @@ def parse_page(page_html):
         title = html_module.unescape(tm.group(2))
         job_id = alias.rsplit("/", 1)[-1]
 
+        # The card's own span: after the previous title, before this one.
+        span_start = titles[i - 1].start() if i else 0
+        mine = [cm for cm in companies if span_start <= cm.start() < tm.start()]
         company_href, company_name = (None, None)
-        if i < len(companies):
-            company_href = companies[i].group(1)
-            company_name = html_module.unescape(companies[i].group(2))
+        if mine:
+            company_href = mine[-1].group(1)
+            company_name = html_module.unescape(mine[-1].group(2))
         if not company_name:
+            # Was silent, and worse than silent: it shifted the next card.
+            stats["no_company_anchor"] += 1
             continue  # can't build a usable row without a company
 
         company_token = company_href.rsplit("/", 1)[-1] if company_href else "unknown"
@@ -376,6 +425,7 @@ def main():
 
     page_errors = []
     all_records = []
+    stats = Counter()
     for page_num in range(1, MAX_PAGES + 1):
         try:
             page_html = fetch_page(page_num)
@@ -385,7 +435,7 @@ def main():
                 print(f"[debug] fetch failed for page {page_num}: {e}", file=sys.stderr)
             continue
 
-        records = parse_page(page_html)
+        records = parse_page(page_html, stats)
         all_records.extend(records)
         if DEBUG_PRINT_KEYS:
             print(f"[debug] page {page_num}: parsed {len(records)} job cards", file=sys.stderr)
@@ -422,10 +472,16 @@ def main():
     if page_errors and DEBUG_PRINT_KEYS:
         print(f"[debug] {len(page_errors)} page(s) failed: {page_errors}", file=sys.stderr)
 
-    if new_count or updated_count or closed_count or page_errors or result.errors:
+    # D02. Reported at every verbosity: a card whose company anchor is missing
+    # is the leading edge of the markup change that used to shift every later
+    # pairing, and it is now the only visible symptom of one.
+    unpaired = stats["no_company_anchor"]
+    if (new_count or updated_count or closed_count or page_errors
+            or result.errors or unpaired):
         print(f"builtin-nyc: {new_count} new, {updated_count} updated, "
               f"{unchanged_count} unchanged, {closed_count} closed (stale), "
               f"{len(result.errors)} record(s) dropped, "
+              f"{unpaired} card(s) with no company anchor, "
               f"{desc_fetched} descriptions fetched ({desc_failed} failed), "
               f"{len(all_records)} parsed across {MAX_PAGES - len(page_errors)}/{MAX_PAGES} pages "
               f"({len(page_errors)} page failures).")

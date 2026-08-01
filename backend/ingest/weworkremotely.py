@@ -77,6 +77,7 @@ import time
 import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
+from collections import Counter
 from email.utils import parsedate_to_datetime
 from datetime import timezone
 
@@ -132,7 +133,31 @@ def parse_posted_at(pub_date_text):
         return None
 
 
-def parse_feed(xml_bytes, category):
+#: D05. Every way an item can leave this script without becoming a row, in
+#: report order. Named rather than counted anonymously, because the summary
+#: line's whole job is to tell an exclude-pattern change that started eating
+#: real engineering titles apart from a quiet week -- and one total cannot.
+#: weworkremotely.md:309-312 states the consequence of not having these:
+#: such a change "would produce no signal at all".
+#:
+#: DROPS ARE NOT DEDUPES. `cross_listed` is counted here too but reported
+#: separately below, because it is a CORRECT outcome and the other three are
+#: losses. It is also normally nonzero -- WWR cross-lists heavily by design
+#: (parse the same posting under back-end and full-stack) -- so folding it
+#: into a "dropped" total would give that total a large, noisy floor for a
+#: regression to hide inside, which is the exact failure this counter exists
+#: to expose.
+DROP_REASONS = ("no_company_or_title", "non_tech_excluded", "no_source_id")
+
+
+def parse_feed(xml_bytes, category, stats=None):
+    """Records from one category feed. `stats` accumulates DROP_REASONS.
+
+    `stats` is an optional Counter so that the existing callers -- and every
+    cassette test -- keep working unchanged, and so counts accumulate across
+    all four feeds in one object rather than being summed by the caller.
+    """
+    stats = Counter() if stats is None else stats
     root = ET.fromstring(xml_bytes)
     records = []
     for item in root.iter("item"):
@@ -144,8 +169,13 @@ def parse_feed(xml_bytes, category):
             company_name, title = None, raw_title.strip()
 
         if not company_name or not title:
+            # No colon in <title>, or a colon with nothing on one side of it.
+            # The register recorded this as "no colon"; the condition is
+            # broader than that and the counter is named for the condition.
+            stats["no_company_or_title"] += 1
             continue  # can't build a usable row without both
         if NON_TECH_EXCLUDE_PATTERN.search(title):
+            stats["non_tech_excluded"] += 1
             continue
 
         link = (item.findtext("link") or item.findtext("guid") or "").strip()
@@ -156,6 +186,7 @@ def parse_feed(xml_bytes, category):
 
         source_id = link.rsplit("/", 1)[-1] if link else None
         if not source_id:
+            stats["no_source_id"] += 1
             continue
 
         # D29. Parsed once and reused. It was called twice on the same string,
@@ -197,10 +228,11 @@ def main():
     category_errors = []
     all_records = []
     seen_ids = set()
+    stats = Counter()
     for i, category in enumerate(CATEGORIES):
         try:
             xml_bytes = fetch_feed(category)
-            records = parse_feed(xml_bytes, category)
+            records = parse_feed(xml_bytes, category, stats)
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
                 OSError, ET.ParseError) as e:
             category_errors.append(f"{category}: {e}")
@@ -211,6 +243,7 @@ def main():
         for rec in records:
             key = (rec["company_token"], rec["source_id"])
             if key in seen_ids:
+                stats["cross_listed"] += 1
                 continue  # same posting cross-listed under >1 category
             seen_ids.add(key)
             all_records.append(rec)
@@ -245,10 +278,18 @@ def main():
     if category_errors and DEBUG_PRINT_KEYS:
         print(f"[debug] {len(category_errors)} categor(y/ies) failed: {category_errors}", file=sys.stderr)
 
-    if new_count or updated_count or closed_count or category_errors or result.errors:
+    # D05. Reported at every verbosity, not behind DEBUG_PRINT_KEYS: a drop
+    # count that only appears when someone thinks to ask for it is the same
+    # silence in a different shape.
+    dropped = sum(stats[r] for r in DROP_REASONS)
+    breakdown = ", ".join(f"{r}={stats[r]}" for r in DROP_REASONS)
+    if (new_count or updated_count or closed_count or category_errors
+            or result.errors or dropped or stats["cross_listed"]):
         print(f"weworkremotely: {new_count} new, {updated_count} updated, "
               f"{unchanged_count} unchanged, {closed_count} closed (stale), "
               f"{len(result.errors)} record(s) dropped, "
+              f"{dropped} item(s) filtered out before upsert ({breakdown}), "
+              f"{stats['cross_listed']} cross-listed duplicate(s), "
               f"{len(all_records)} parsed across {len(CATEGORIES) - len(category_errors)}/{len(CATEGORIES)} "
               f"categories ({len(category_errors)} failures).")
 

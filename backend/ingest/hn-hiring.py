@@ -339,6 +339,78 @@ def touch_seen(conn, platform, source_ids):
     conn.commit()
 
 
+def read_comments(conn, thread_id, kid_ids, now):
+    """Fetch each comment, mark it seen, and parse it. COMMITS NOTHING.
+
+    D23 -- WHY THIS DOES NOT COMMIT
+        The ledger insert and the `jobs` row for the same comment used to
+        land in two different transactions: this loop ended with its own
+        `conn.commit()`, and the upsert commits separately at the end of its
+        own batch (lib/upsert.py:235). A crash in the window between them
+        leaves a comment marked seen in `hn_seen_comments` with no `jobs`
+        row -- and because the ledger is exactly what gates re-fetching
+        (main() below builds `new_kid_ids` from it), a subsequent normal run
+        skips it forever. Only `--reparse` recovers it, and only if somebody
+        knows to run it.
+
+        Both writes go through ONE connection, so the fix is to stop cutting
+        the transaction in half: the caller commits once, via the upsert.
+        A crash anywhere before that rolls back both halves and the comments
+        are simply re-fetched next run -- one wasted request each, against
+        HN's own free API, versus a posting lost for the life of the thread.
+
+        NOT SOLVED BY REORDERING. Upserting first and marking seen after
+        leaves the mirror-image window (rows written, ledger lost) and would
+        re-fetch every comment in the thread every night until it closed.
+        Atomicity is the property; ordering only chooses which failure.
+
+    Returns (records, declined, fetch_errors, null_items).
+    """
+    records = []
+    declined = []          # comment ids re-read but yielding no usable record
+    fetch_errors = 0
+    null_items = 0
+    for kid_id in kid_ids:
+        try:
+            comment = http.get_json(f"{HN_API_BASE}/item/{kid_id}.json")
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
+                json.JSONDecodeError, OSError) as e:
+            fetch_errors += 1
+            if DEBUG_PRINT_KEYS:
+                print(f"[debug] fetch failed for comment {kid_id}: {e}", file=sys.stderr)
+            continue  # transient failure -- don't mark seen, retry next run
+        if not comment:
+            # D42. A null item is HN answering "this comment is gone" -- deleted
+            # or dead. That is PERMANENT, unlike the fetch failure above, so it
+            # is marked seen rather than retried. It used to `continue` before
+            # the INSERT, which put a permanent condition on the transient path
+            # and re-fetched every dead comment in every thread on every run,
+            # for the life of the thread.
+            #
+            # Marked seen but NOT counted as declined: `declined` means "fetched
+            # and judged irrelevant", and a comment that no longer exists was
+            # never judged.
+            conn.execute(
+                "INSERT INTO hn_seen_comments (comment_id, fetched_at) VALUES (%s, %s) "
+                "ON CONFLICT (comment_id) DO NOTHING",
+                (str(kid_id), now),
+            )
+            null_items += 1
+            continue
+
+        conn.execute(
+            "INSERT INTO hn_seen_comments (comment_id, fetched_at) VALUES (%s, %s) "
+            "ON CONFLICT (comment_id) DO NOTHING",
+            (str(kid_id), now),
+        )
+        rec = parse_comment(comment, thread_id)
+        if rec:
+            records.append(rec)
+        else:
+            declined.append(str(kid_id))
+    return records, declined, fetch_errors, null_items
+
+
 def main():
     ap = argparse.ArgumentParser(description="HN 'Who is hiring?' ingest.")
     ap.add_argument(
@@ -392,50 +464,14 @@ def main():
 
     touch_seen(conn, "hn_whoishiring", already_seen_ids)
 
-    records = []
-    declined = []          # comment ids re-read but yielding no usable record
-    fetch_errors = 0
-    null_items = 0
     now = utc_now_str()
-    for kid_id in new_kid_ids:
-        try:
-            comment = http.get_json(f"{HN_API_BASE}/item/{kid_id}.json")
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
-                json.JSONDecodeError, OSError) as e:
-            fetch_errors += 1
-            if DEBUG_PRINT_KEYS:
-                print(f"[debug] fetch failed for comment {kid_id}: {e}", file=sys.stderr)
-            continue  # transient failure -- don't mark seen, retry next run
-        if not comment:
-            # D42. A null item is HN answering "this comment is gone" -- deleted
-            # or dead. That is PERMANENT, unlike the fetch failure above, so it
-            # is marked seen rather than retried. It used to `continue` before
-            # the INSERT, which put a permanent condition on the transient path
-            # and re-fetched every dead comment in every thread on every run,
-            # for the life of the thread.
-            #
-            # Marked seen but NOT counted as declined: `declined` means "fetched
-            # and judged irrelevant", and a comment that no longer exists was
-            # never judged.
-            conn.execute(
-                "INSERT INTO hn_seen_comments (comment_id, fetched_at) VALUES (%s, %s) "
-                "ON CONFLICT (comment_id) DO NOTHING",
-                (str(kid_id), now),
-            )
-            null_items += 1
-            continue
+    records, declined, fetch_errors, null_items = read_comments(
+        conn, thread["id"], new_kid_ids, now)
 
-        conn.execute(
-            "INSERT INTO hn_seen_comments (comment_id, fetched_at) VALUES (%s, %s) "
-            "ON CONFLICT (comment_id) DO NOTHING",
-            (str(kid_id), now),
-        )
-        rec = parse_comment(comment, thread["id"])
-        if rec:
-            records.append(rec)
-        else:
-            declined.append(str(kid_id))
-    conn.commit()
+    # D23. There is deliberately NO commit between here and the upsert below.
+    # read_comments()'s ledger inserts are still open in this transaction, and
+    # upsert()'s single commit (lib/upsert.py:235) is what lands both halves
+    # together. See read_comments()'s docstring for why that is the fix.
 
     # This source is insert-only -- a comment is never edited in place, so
     # only the new count is meaningful here. The ERROR count is meaningful

@@ -20,7 +20,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-69`.** Allocated `DEC-46`–`DEC-68`. The count starts at 46 rather than at
+**Next free: `DEC-70`.** Allocated `DEC-46`–`DEC-69`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -2235,3 +2235,46 @@ thing it was built to prevent. The module docstring says so in those words.
 
 Reversible: yes. Delete the baseline file and change the assertion to `assertEqual([], found)`
 once the tree is clean; nothing else depends on it.
+
+---
+
+<a id="dec-69"></a>
+
+## DEC-69 — deleted match rows are logged as ids on stderr, behind `DEBUG_PRINT_KEYS`
+
+**2026-08-01, task 42, closing defect D11.**
+
+**Decided:** `match.py` reads `DEBUG_PRINT_KEYS` — which it read **nowhere** — and prints
+the `job_id` of every demoted and every orphaned row to **stderr**, prefixed `[debug]`,
+off by default. `prune_orphans` obtains them from `DELETE … RETURNING job_id`; the
+demotion path already held the exact list.
+
+**Rejected: writing them to a table** (`job_match_deletions`, or an event row).
+
+**Why a deleted row's id is worth keeping at all.** `job_id` is derived and stable
+(`schema.make_job_id`), so it still resolves against `jobs`, `job_facts` and `job_events`
+long after the match row is gone. It is the only part of a deleted row that retains
+value, and it is what turns *"that weight edit demoted 412 rows"* from an observation
+into something reviewable. The rows were already gone by the time anyone read the count,
+so there was no answer to *"which ones"* from anywhere.
+
+**Why stderr and not a table.** A table is the better artifact and the wrong trade here:
+it needs a schema migration, a retention policy and a pruner, on a stage that runs nightly
+over every profile and whose whole design property is that it is free arithmetic.
+`job_events` is L2 in the measurement hierarchy (`docs/MEASUREMENT-TRAPS.md`) and writing
+pipeline bookkeeping into it would put machine-generated rows in a layer that means *"a
+user did something"*. Stderr is where this pipeline already puts log output —
+`check_criteria_sections()` and the D10 corrupt-`tech_stack` warning are two functions
+away — and it keeps the summary line the watchdog reads on stdout unchanged.
+
+**Why behind the flag.** This is a new output surface on a nightly stage, and a
+`--rebuild` can demote thousands of rows; printing them unconditionally would bury the
+line anyone actually reads. `.claude/CLAUDE.md` documents `DEBUG_PRINT_KEYS` as the
+verbose convention *everywhere*, and `match.py` was simply not part of "everywhere" —
+which is why the ids were unrecoverable at **every** verbosity rather than merely off by
+default. Verified: `python3 match.py --dry-run` prints byte-identically before and after.
+
+Reversible: yes. Nothing persists and no schema changed; deleting the two call sites
+restores the previous behaviour exactly. The table remains available later if the ids ever
+need to outlive a terminal — this decision does not foreclose it, it declines to pay for
+it now.

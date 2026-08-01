@@ -6,7 +6,7 @@ generator: none
 
 # 42 — Close the six UNBLOCKED defects
 
-**Status:** TODO. **Depends on:** nothing — task 09 landed three tranches ago and this task's
+**Status:** DONE 2026-08-01. **Depends on:** nothing — task 09 landed three tranches ago and this task's
 whole premise is that its blocker is gone. **Blocks:** nothing.
 
 Six defects in [`../../../ingest/DEFECTS.md`](../../../ingest/DEFECTS.md) are marked

@@ -51,6 +51,29 @@ fold into task 34).
 safely — do not fix blind against production), or **won't-fix** (reason
 given).
 
+**A disposition that names a blocker must spell it `BLOCKED-BY: <thing>`, and the thing
+must be greppable.** That is the one rule this register learned the hard way: nine entries
+were dispositioned *"fix with harness — task 09"*, task 09 landed three tranches ago,
+nothing rescheduled them, and they were invisible in both directions for three tranches. A
+blocker written as prose cannot be checked; a blocker written as a token can.
+
+```bash
+grep -n 'BLOCKED-BY:' docs/ingest/DEFECTS.md
+```
+
+is the whole mechanism. Every hit names something whose status is looked up in
+[`tasks/refactor/README.md`](../tasks/refactor/README.md); a hit whose blocker has landed
+is an entry that needs rescheduling **today**, and it is one command away instead of
+nowhere. When the blocker clears the token becomes `UNBLOCKED-BY: <thing> (landed <sha>)`
+and the entry is owned again — still greppable, now as a queue of work rather than a queue
+of excuses.
+
+**And check that the blocker was ever real.** Task 42 found that three of the six entries
+task 34 marked UNBLOCKED needed no harness at all (D05, D11, D13); two of them said so in
+their own text, in the same sentence that deferred them. A disposition written for a batch
+gets applied to members that did not need it, so `BLOCKED-BY:` is a claim to verify against
+the code, not a fact to inherit.
+
 ## Allocator — this register owns the `D` prefix
 
 Per [`DOCS-POLICY.md`](../DOCS-POLICY.md) rule 6, one allocator per register and no
@@ -131,23 +154,49 @@ cannot tell an import from the word appearing in a comment — which is exactly 
   database, not a code change. It needs the owner at a psql prompt and gains nothing from
   being run by an agent mid-refactor.
 
+## Task 42's pass, 2026-08-01
+
+**All six UNBLOCKED entries closed** (D02, D03, D05, D11, D13, D23), each with a test that
+fails without its fix — 21 tests added to `backend/tests`. The suite's size is
+[`AUDIT.md`](../tasks/refactor/AUDIT.md)'s figure under policy rule 2 and is read from the
+`Ran N tests` line, not restated here. (This paragraph originally typed both counts;
+`audit-docs.py` check C4 caught it within an hour of landing, which is the first thing that
+check ever did.)
+
+**Three of the six were never blocked** — D05, D11 and D13 needed no cassette, no scratch
+database and no fixture. Only D02 and D23 genuinely did; D03's fix needed nothing but its
+re-derivation did. This is D17's shape three more times, and it is why `BLOCKED-BY:` above
+is a token rather than prose.
+
+**Every count quoted for these six was wrong — all four of them:**
+
+| entry | recorded | actual |
+|---|---|---|
+| D03 | *"135 of 351 live rows"* | **421 of 678**, and **0 misshapen** |
+| D05 | *"three `continue` … a fourth"* | **five** statements: 3 drops, 1 already counted, 1 dedupe |
+| D02 | line cites correct | but the recorded page **cannot** show the defect — hence the fixture |
+| D13 | `extract.py:82-83` | **`extract.py:220-221`**, 138 lines off |
+
+Line cites had also drifted in D03 (`:148`→`:146`, `:338`→`:336`), D11 (all three sites
+moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
+
 ## Index
 
 | id | class | disposition | one-line |
 |---|---|---|---|
 | [D01](#d01) | silent data loss | **fixed** — task 03 | Per-record upsert errors discarded at 8 call sites |
-| [D02](#d02) | silent data loss | **open, UNBLOCKED** — task 09 landed | `builtin-nyc.py` title/company zip can silently misattribute |
-| [D03](#d03) | silent data loss | **open, UNBLOCKED** — task 09 landed | `builtin-nyc.py` salary regex unscoped, captures false positives |
+| [D02](#d02) | silent data loss | **fixed** — task 42, 2026-08-01 — paired by containment, desync fixture committed | `builtin-nyc.py` title/company zip can silently misattribute |
+| [D03](#d03) | silent data loss | **fixed** — task 42, 2026-08-01 — scoped to `fa-sack-dollar`; **421 of 678** live rows, not 135 of 351 | `builtin-nyc.py` salary regex unscoped, captures false positives |
 | [D04](#d04) | silent data loss | won't-fix (documented) | `weworkremotely.py` token from display name — silent duplicate rows |
-| [D05](#d05) | silent data loss | **open, UNBLOCKED** — task 09 landed | `weworkremotely.py` drops items with zero counters at any verbosity |
+| [D05](#d05) | silent data loss | **fixed** — task 42, 2026-08-01 — 3 named drop counters + a separate dedupe count, in the summary | `weworkremotely.py` drops items with zero counters at any verbosity |
 | [D06](#d06) | silent data loss | won't-fix (documented) | `weworkremotely.py` all-feeds-empty indistinguishable from a quiet day |
 | [D07](#d07) | silent data loss | won't-fix (mitigated) | Google sources: non-English relative dates silently lose `posted_at` |
 | [D08](#d08) | silent data loss | fix before deploy — task 24 | Contributor API: empty submit still advances the watermark |
 | [D09](#d09) | silent data loss | fix before deploy — task 24 | Contributor API: unreadable query bank silently mislabels `mode` |
 | [D10](#d10) | silent data loss | **fixed** — task 34, 2026-07-31 — now reported, still `[]` | `match.py`: bad `tech_stack` JSON silently becomes `[]` |
-| [D11](#d11) | silent data loss | **open, UNBLOCKED** — task 09 landed | `match.py`: demoted/orphaned rows deleted with no recoverable log |
+| [D11](#d11) | silent data loss | **fixed** — task 42, 2026-08-01 — ids logged at `DEBUG_PRINT_KEYS`, `DEC-69` | `match.py`: demoted/orphaned rows deleted with no recoverable log |
 | [D12](#d12) | silent data loss | **fixed** — task 34, 2026-07-31 — `check_criteria_sections()`, 4 tests | `match.py`: a typo'd `criteria.json` section silently disables itself |
-| [D13](#d13) | silent data loss | **open, UNBLOCKED** — task 09 landed | `match.py`/`extract.py`: seniority vocabulary drift scores as free |
+| [D13](#d13) | silent data loss | **fixed** — task 42, 2026-08-01 — import-time assertion, was never blocked | `match.py`/`extract.py`: seniority vocabulary drift scores as free |
 | [D14](#d14) | silent data loss | won't-fix (documented, low current risk) | `match.py --profile` can silently prune another profile's rows |
 | [D15](#d15) | silent data loss | **fixed** — task 08 | `score.py`: `fit_score`/`primary_track` stored unvalidated (audit item 8) |
 | [D16](#d16) | loud failure | **fixed** — task 08 | `score.py`: missing `buckets` key kills a profile's whole batch |
@@ -157,7 +206,7 @@ cannot tell an import from the word appearing in a comment — which is exactly 
 | [D20](#d20) | loud failure | fix opportunistically | `match.py`: no per-record isolation, one bad row kills the run (audit item 3) |
 | [D21](#d21) | loud failure | fix opportunistically | `hn-hiring.py`: `relevance.json` load failure crashes at import |
 | [D22](#d22) | loud failure | won't-fix (deliberate) | `ensure_schema` raises uncaught if `public.events` exists |
-| [D23](#d23) | silent data loss | **open, UNBLOCKED** — task 09 landed | `hn-hiring.py`: ledger-before-upsert crash window strands comments (audit item 4) |
+| [D23](#d23) | silent data loss | **fixed** — task 42, 2026-08-01 — one transaction, ledger commits with the rows | `hn-hiring.py`: ledger-before-upsert crash window strands comments (audit item 4) |
 | [D24](#d24) | silent data loss (unconfirmed) | won't-fix (unconfirmed; revisit if it recurs) | `extract.py`: 15 rows possibly permanently starved at `facts_version=1` |
 | [D25](#d25) | silent data loss | **fixed** — `28f1d0e` | Live model silently differed from the documented default |
 | [D26](#d26) | cosmetic | **fixed** — task 34, 2026-07-31 — the surviving half was a test's *reason* | Stale "`unescape=False`" claim in two files contradicts `ats.py` |
@@ -217,7 +266,7 @@ per-step written/dropped counts, so "ran and wrote nothing" and "ran and
 dropped everything" no longer print identically.
 `backend/tests/test_upsert_checked.py` covers all 8 paths.
 
-### D02
+### D02 — fixed
 
 **`builtin-nyc.py` pairs titles and companies by list index, not by
 containment**, and nothing verifies the pairing (`backend/ingest/builtin-nyc.py:316-333`).
@@ -232,7 +281,26 @@ needs a cassette fixture (`docs/ingestion_tests/05-fetcher-harness.md`'s
 suggested `fixtures/cassettes/`) to safely exercise a desync case without
 scraping the live site to check.
 
-### D03
+**Fixed, task 42, 2026-08-01.** `parse_page` now pairs by containment: a card's
+company is the last `data-id="company-title"` anchor before its title and after
+the previous title (`backend/ingest/builtin-nyc.py:328-345`). An anchor belonging
+to no card is ignored instead of consumed, and a card with no anchor of its own
+drops **only itself** and is counted (`no_company_anchor`, reported in the summary
+line at every verbosity).
+
+The recorded page could not express the defect — it holds 23 titles and 23 anchors
+interleaved one for one, so index-zip and containment agree on it exactly. Per task
+34 rule 4 the cassette was not re-recorded; the case lives in a fixture beside it,
+`backend/evals/fixtures/builtin-nyc-desync.html` — a four-card slice of the recording
+with exactly one anchor deleted, whose remainder is asserted to still be a
+byte-for-byte substring of the cassette so it cannot rot into a hand-written copy.
+
+**A correction worth keeping.** `test_titles_and_companies_line_up` asserted
+`len(titles) == len(companies)`, which is **not** sufficient: extend that fixture by
+one anchor and the counts match again while every pairing stays wrong. Counting is not
+a proxy for containment.
+
+### D03 — fixed
 
 **`SALARY_PATTERN` is not scoped to a salary element** — it matches
 `[0-9]{1,3}K-[0-9]{1,3}K` anywhere in a builtin card window
@@ -242,6 +310,25 @@ value, none verified against the actual salary field. Blast radius: one
 source (`builtin`). Disposition: **fix with harness** — task 09, same
 fixture work as D02 (both need a cassette of real `builtin` HTML to change
 the regex against without scraping production to check).
+
+**Fixed, task 42, 2026-08-01.** `SALARY_PATTERN` is scoped to Built In's own salary
+element (`fa-sack-dollar`), read exactly the way the location and work-type fields
+either side of it already are (`backend/ingest/builtin-nyc.py:146-160`). The line
+cites above were off by two: the pattern was at `:146`, the read at `:336`.
+
+**The count is re-derived and was stale.** Not 135 of 351 — **421 of 678** builtin
+rows carry a non-empty `salary_text` (2026-08-01, read-only query against the
+pipeline database). More usefully, **0 of the 421 are misshapen**: every one matches
+`^\d{1,3}K-\d{1,3}K` and the suffixes are `Annually` (417) and `Hourly` (4), which is
+Built In's two renderings of that element and nothing else. So the defect is real in
+principle with no observable instance in production today. Shape is evidence, not
+proof — a title reading "Sales Engineer 120K-260K OTE" would match too — but the
+suffix distribution is what makes the false-positive count credibly zero.
+
+On the recorded page scoped and unscoped agree on all 23 cards and both find 20
+salaries, so the change is provably inert on real bytes. The false positive is derived
+in-test from those bytes (one card's title text edited, the disclosed range left where
+Built In renders it), the same way `_immediate_success()` derives D17's.
 
 ### D04
 
@@ -255,7 +342,7 @@ Disposition: **won't-fix** — no alternative stable id exists in the feed;
 documented as a known limitation, not actionable without a fuzzy-match layer
 the docstring explicitly declines to build.
 
-### D05
+### D05 — fixed
 
 **`weworkremotely.py` drops items via three separate `continue` statements
 with zero counters at any verbosity**: no colon in `<title>`
@@ -268,6 +355,31 @@ Blast radius: one source (`weworkremotely`). Disposition: **fix with
 harness** — task 09; adding counters is low-risk but this script is one of
 the six task 09 covers, and a cassette confirms the counts match what the
 fixture actually drops before changing production output.
+
+**Fixed, task 42, 2026-08-01.** Three named counters — `DROP_REASONS`
+(`backend/ingest/weworkremotely.py:150`) — reported in the summary line at every
+verbosity, not behind `DEBUG_PRINT_KEYS`: a count that only appears when someone
+thinks to ask for it is the same silence in a different shape.
+
+**The `continue` count, re-derived.** There are five `continue` statements, not three
+and not four: `:147`, `:149`, `:159` are the silent drops this entry is about; `:209`
+is a fetch/parse failure that was **already** counted in `category_errors`; `:214` is
+the cross-listed dedupe. This entry's "three, plus a fourth" was structurally right and
+cited `:206-211` — the exception handler — for a dedupe that lives at `:211-215`.
+
+**The dedupe is counted and reported separately from the drops**, deliberately. It is a
+correct outcome, and it is normally nonzero — WWR cross-lists by design, 7 on the
+recorded feeds. Folding it into a "dropped" total gives that total a large noisy floor,
+and an exclude-pattern regression eating five real titles would move it from 7 to 12:
+invisible, which is the exact failure these counters exist to expose.
+
+**Measured on the `wwr-feeds` cassette:** 187 items in, 178 records out, 9 dropped (all
+`non_tech_excluded`), 7 cross-listed. 16 of 187 — 8.6% — left the script without a row,
+and every one was invisible.
+
+**This never needed task 09.** Adding counters is a caller-side change with no
+production dependency; this entry says so itself (*"adding counters is low-risk"*) in
+the same sentence that defers it. See the note under D13.
 
 ### D06
 
@@ -323,7 +435,7 @@ scratch database it builds, per its own "do not fix blind against
 production" principle); log a counter, no semantic change needed since `[]`
 is a reasonable fallback.
 
-### D11
+### D11 — fixed
 
 **Demoted and orphaned `job_matches` rows are deleted with no recoverable
 log of which jobs.** Only counts reach stdout
@@ -333,6 +445,20 @@ are already gone by the time anyone looks. Blast radius: all profiles (match
 stage). Disposition: **fix with harness** — task 09; log job ids at
 `DEBUG_PRINT_KEYS` verbosity at minimum, since `match.py` currently reads
 that flag nowhere.
+
+**Fixed, task 42, 2026-08-01.** `match.py` now reads `DEBUG_PRINT_KEYS` (it read it
+nowhere) and logs the ids of every deleted row through one function,
+`log_deleted_ids()` — `[debug]` prefix, stderr, off by default. `prune_orphans` gets
+them from `DELETE … RETURNING job_id`; the demotion path already held the exact list.
+Interface choice and rejected alternative recorded as decision `DEC-69`.
+
+**Every line cite in this entry had moved.** `:274` is `score_job`'s return, `:298` is
+inside a docstring, `:363-369` is `prune_orphans`'s docstring. The real sites are
+`:378-381` (orphan DELETE), `:438-441` and `:460-464` (demotion), `:506-512` (summary).
+The claim itself was accurate.
+
+**This never needed task 09** — wiring an env var and printing a list is caller-side.
+The scratch database appears in the test, not in the fix. See the note under D13.
 
 ### D12
 
@@ -344,7 +470,7 @@ erroring. `profiles.validate()` runs before every write but nothing re-checks
 at read time. Blast radius: all profiles (match stage). Disposition: **fix
 with harness** — task 09.
 
-### D13
+### D13 — fixed
 
 **`match.py`'s `SENIORITY_ORDER` must stay a superset of `extract.py`'s
 `SENIORITY` vocabulary, and nothing asserts it**
@@ -354,6 +480,29 @@ raising. Blast radius: all profiles (match/extract coupling). Disposition:
 **fix with harness** — task 09; a shared constant or a startup assertion
 would close this cheaply, verified against the scratch database rather than
 production.
+
+**Fixed, task 42, 2026-08-01.** `match.py` imports `extract.SENIORITY` and asserts at
+import time that `SENIORITY_ORDER` covers it — `check_seniority_vocabulary()`, called at
+module level, raising `SeniorityVocabularyDrift` (`backend/match.py:70-126`). A
+**superset**, not equality: the ranker's scale may legitimately carry rungs the extractor
+never emits, and only the other direction loses information. One definition of the
+vocabulary, in `extract.py`, where the prompt and `_enum()` both read it.
+
+Raised rather than warned, and that is the opposite of `check_criteria_sections()`: a
+stray criteria section is one profile's own data, this is a repo-wide invariant between
+two files that ship together. `score_job()` is untouched and still pure — the check is at
+import, never inside the scorer — and `lib/` is untouched.
+
+**The worst line drift in this register.** `extract.SENIORITY` is at
+`backend/extract.py:220-221`, not `:82-83`. `match.py:65-66` was right; `:116` is now a
+comment and the use site is `:152-158`.
+
+**It was never blocked, and it was not alone.** It needed no cassette, no scratch
+database and no fixture; it was dispositioned *"fix with harness"* alongside its
+neighbours and inherited a blocker it did not have — the identical shape task 34 found in
+D17. Task 42's pass found the same shape in **D05 and D11**: three of the six so-called
+UNBLOCKED entries were never blocked on task 09 at all. Two of the three say so in their
+own text. That is what the `BLOCKED-BY:` convention in this file's header exists to catch.
 
 ### D14
 
@@ -580,7 +729,7 @@ ingest (shared `ensure_schema` call). Disposition: **won't-fix** —
 what stops a script from running against a database still holding the
 legacy `events` table shape.
 
-### D23
+### D23 — fixed
 
 **A crash between the `hn-hiring.py` ledger commit and the `jobs` upsert
 commit permanently strands comments.** The ledger commits once, after the
@@ -595,6 +744,23 @@ occurred. Blast radius: one source (`hn_whoishiring`), unconfirmed
 frequency. Disposition: **fix with harness** — task 09 lists this as
 naturally expressible as a cassette test (crash-injection between the two
 commits).
+
+**Fixed, task 42, 2026-08-01.** The comment loop moved to `read_comments()`
+(`backend/ingest/hn-hiring.py:342-410`), which **commits nothing**; the ledger inserts
+stay open in the caller's transaction and `upsert()`'s single commit
+(`backend/lib/upsert.py:235`) lands both halves together. A crash before that rolls back
+both, so the comments are simply re-fetched next run — one wasted request each, against
+HN's own free API, versus a posting lost for the life of the thread. The ledger commit was
+at `:438`, not `:422` (`:422` is the null-item branch's INSERT).
+
+**Not solved by reordering.** Upserting first and marking seen after leaves the
+mirror-image window and would re-fetch every comment in the thread every night until it
+closed. Atomicity is the property; ordering only chooses which failure.
+
+Tested against the `hn-hiring` cassette and a scratch schema: `conn.rollback()` after
+`read_comments()` **is** the crash, since a process that dies does not run cleanup and the
+server rolls its open transaction back. Without the fix, 10 comments are stranded. Both
+directions are pinned — nothing survives a crash, everything survives a commit.
 
 ### D24
 

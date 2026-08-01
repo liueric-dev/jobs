@@ -19,6 +19,9 @@ WHY THESE TESTS AND NOT OTHERS
         calibrate-match.py both assume that range.
 """
 
+import contextlib
+import importlib
+import io
 import json
 import os
 import sys
@@ -26,7 +29,17 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import extract  # noqa: E402  (D13 -- the vocabulary match.py must cover)
 import match  # noqa: E402
+import schema  # noqa: E402
+from evals import scratchdb  # noqa: E402
+from lib import envfile  # noqa: E402
+
+#: The pipeline's own .env, so the D11 database tests run in an ordinary
+#: checkout rather than skipping. Same reason tests/test_nyc_open_data.py
+#: does it: a test must not depend on the caller having exported anything.
+envfile.load(os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), ".env"))
 
 CRITERIA = {
     "base": 35,
@@ -701,6 +714,200 @@ class TestCriteriaSectionsAreCheckedAtReadTime(unittest.TestCase):
         read = set(_re.findall(r'criteria\.get\("([a-z_]+)"', body))
         self.assertEqual(read - match.CRITERIA_SECTIONS, set(),
                          "score_job() reads a section CRITERIA_SECTIONS omits")
+
+
+class TestSeniorityVocabularyGuard(unittest.TestCase):
+    """D13: the two vocabularies were coupled by nothing but habit.
+
+    `extract.SENIORITY` decides what can land in `job_facts.seniority_level`;
+    `match.SENIORITY_ORDER` is the scale the seniority penalty measures
+    distance along. A level in the first and not the second falls through
+    every branch of the seniority block and is scored as FREE -- not zero the
+    way an on-target level is, but unpriced, silently, in the ranking that
+    decides what a user sees. Nothing asserted the relation anywhere.
+    """
+
+    def test_the_shipped_constants_agree(self):
+        self.assertEqual(match.check_seniority_vocabulary(),
+                         match.SENIORITY_ORDER)
+
+    def test_a_level_the_ranker_cannot_place_raises(self):
+        with self.assertRaises(match.SeniorityVocabularyDrift) as caught:
+            match.check_seniority_vocabulary(
+                vocabulary=extract.SENIORITY + ("staff_plus",))
+        self.assertIn("staff_plus", str(caught.exception))
+
+    def test_the_message_names_every_missing_level_not_just_the_first(self):
+        with self.assertRaises(match.SeniorityVocabularyDrift) as caught:
+            match.check_seniority_vocabulary(
+                vocabulary=("junior", "staff_plus", "fellow"))
+        self.assertIn("staff_plus", str(caught.exception))
+        self.assertIn("fellow", str(caught.exception))
+
+    def test_extra_rungs_in_the_ranker_are_allowed(self):
+        # A SUPERSET, not equality: SENIORITY_ORDER may carry rungs the
+        # extractor never emits, and forbidding that would be a different
+        # defect. Only the other direction loses information.
+        match.check_seniority_vocabulary(
+            order=match.SENIORITY_ORDER + ("emeritus",))
+
+    def test_the_guard_fires_at_import_not_only_when_called(self):
+        """The property that makes this a guard rather than a test.
+
+        A check nobody calls is a comment. This adds a level to the
+        extractor's vocabulary -- the real drift -- and asserts that merely
+        importing match.py refuses to proceed.
+        """
+        original = extract.SENIORITY
+        try:
+            extract.SENIORITY = original + ("staff_plus",)
+            # Caught as RuntimeError, not as match.SeniorityVocabularyDrift:
+            # reload() rebinds the class before the raise, so the exception
+            # raised is an instance of the NEW class object and the name held
+            # here is the old one. The type name is asserted instead.
+            with self.assertRaises(RuntimeError) as caught:
+                importlib.reload(match)
+        finally:
+            extract.SENIORITY = original
+            importlib.reload(match)
+        self.assertEqual(type(caught.exception).__name__,
+                         "SeniorityVocabularyDrift")
+        self.assertIn("staff_plus", str(caught.exception))
+        self.assertEqual(match.check_seniority_vocabulary(),
+                         match.SENIORITY_ORDER)
+
+
+class TestDeletedRowsAreRecoverable(unittest.TestCase):
+    """D11: demoted and orphaned rows were deleted with only a count.
+
+    A weight edit that demotes hundreds of rows printed a number, and the
+    rows were already gone by the time anyone read it -- so "which ones"
+    had no answer from anywhere. The id is the part still worth keeping:
+    `job_id` is stable and derived, so it resolves against `jobs`,
+    `job_facts` and `job_events` long after the match row is gone.
+    """
+
+    def _capture(self, debug, ids):
+        original = match.DEBUG_PRINT_KEYS
+        stream = io.StringIO()
+        try:
+            match.DEBUG_PRINT_KEYS = debug
+            with contextlib.redirect_stderr(stream):
+                match.log_deleted_ids("tech", "demoted", ids)
+        finally:
+            match.DEBUG_PRINT_KEYS = original
+        return stream.getvalue()
+
+    def test_the_ids_reach_the_log_at_debug_verbosity(self):
+        out = self._capture(True, ["job-a", "job-b"])
+        self.assertIn("job-a", out)
+        self.assertIn("job-b", out)
+        self.assertIn("2 demoted", out)
+        self.assertIn("tech", out)
+
+    def test_nothing_is_printed_by_default(self):
+        # A new output surface on a stage that runs nightly. The flag is the
+        # whole point: the summary line stays exactly as it was.
+        self.assertEqual(self._capture(False, ["job-a", "job-b"]), "")
+
+    def test_an_empty_deletion_says_nothing_even_at_debug_verbosity(self):
+        self.assertEqual(self._capture(True, []), "")
+
+    def test_match_py_reads_the_flag_at_all(self):
+        """It read `DEBUG_PRINT_KEYS` NOWHERE before this -- which is why the
+        ids were unrecoverable at every verbosity rather than merely off by
+        default. `.claude/CLAUDE.md` documents the flag as the convention
+        everywhere; this is the assertion that match.py is part of
+        'everywhere'."""
+        with open(match.__file__) as fh:
+            src = fh.read()
+        self.assertIn('os.environ.get("DEBUG_PRINT_KEYS"', src)
+        self.assertIn("log_deleted_ids(profile.profile, \"orphaned\"", src)
+        self.assertIn("log_deleted_ids(profile.profile, \"demoted\"", src)
+
+
+@unittest.skipUnless(
+    scratchdb.available(),
+    "no scratch database: set DATABASE_URL (or JOBS_SCRATCH_DATABASE_URL)")
+class TestPruneOrphansAgainstPostgres(unittest.TestCase):
+    """D11's other half: the ids have to be the ones actually deleted.
+
+    `prune_orphans` learns them from `DELETE ... RETURNING`, so this is the
+    only place the claim can be checked -- a fake connection would return
+    whatever it was told to.
+    """
+
+    class _Profile:
+        profile = "tech"
+
+    def _rows(self, conn, job_ids):
+        for job_id in job_ids:
+            # job_matches.job_id REFERENCES jobs(id), so the posting has to
+            # exist before its match row can.
+            conn.execute(
+                f"INSERT INTO {schema.TABLE} "
+                f"(id, platform, company_token, company_name, source_id, "
+                f" title, first_seen, last_seen) "
+                f"VALUES (%s, 'greenhouse', 'acme', 'Acme', %s, 'Engineer', "
+                f"'2026-08-01T00:00:00', '2026-08-01T00:00:00')",
+                (job_id, job_id))
+            conn.execute(
+                f"INSERT INTO {schema.MATCHES_TABLE} "
+                f"(job_id, profile, match_score, match_reasons, facts_version,"
+                f" criteria_version, matched_at) "
+                f"VALUES (%s, 'tech', 50, '[]', 3, 1, '2026-08-01T00:00:00')",
+                (job_id,))
+        conn.commit()
+
+    def test_the_logged_ids_are_exactly_the_deleted_rows(self):
+        stream = io.StringIO()
+        original = match.DEBUG_PRINT_KEYS
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._rows(conn, ["keep-1", "orphan-1", "orphan-2"])
+            try:
+                match.DEBUG_PRINT_KEYS = True
+                with contextlib.redirect_stderr(stream):
+                    deleted = match.prune_orphans(
+                        conn, self._Profile(), [{"job_id": "keep-1"}])
+            finally:
+                match.DEBUG_PRINT_KEYS = original
+            survivors = [r[0] for r in conn.execute(
+                f"SELECT job_id FROM {schema.MATCHES_TABLE}").fetchall()]
+        self.assertEqual(deleted, 2)
+        self.assertEqual(survivors, ["keep-1"])
+        out = stream.getvalue()
+        self.assertIn("orphan-1", out)
+        self.assertIn("orphan-2", out)
+        self.assertNotIn("keep-1", out)
+
+    def test_the_count_still_matches_what_the_delete_removed(self):
+        """RETURNING replaced `.rowcount`; the number callers print must not
+        have changed with it."""
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._rows(conn, ["a", "b", "c"])
+            self.assertEqual(
+                match.prune_orphans(conn, self._Profile(),
+                                    [{"job_id": "a"}, {"job_id": "b"}]), 1)
+            self.assertEqual(
+                match.prune_orphans(conn, self._Profile(),
+                                    [{"job_id": "a"}, {"job_id": "b"}]), 0)
+
+    def test_a_dry_run_deletes_nothing_and_logs_nothing(self):
+        stream = io.StringIO()
+        original = match.DEBUG_PRINT_KEYS
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._rows(conn, ["a", "b"])
+            try:
+                match.DEBUG_PRINT_KEYS = True
+                with contextlib.redirect_stderr(stream):
+                    n = match.prune_orphans(conn, self._Profile(),
+                                            [{"job_id": "a"}], dry_run=True)
+            finally:
+                match.DEBUG_PRINT_KEYS = original
+            remaining = conn.execute(
+                f"SELECT count(*) FROM {schema.MATCHES_TABLE}").fetchone()[0]
+        self.assertEqual((n, remaining), (1, 2))
+        self.assertEqual(stream.getvalue(), "")
 
 
 if __name__ == "__main__":

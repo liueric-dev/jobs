@@ -44,14 +44,23 @@ USAGE
 
 import argparse
 import json
+import os
 import sys
 
+import extract
 import llm
 import profiles
 import relevance
 import schema
 from lib import dbconn
 from lib.timeparse import utc_now_str
+
+#: D11. The verbose convention every ingest script already uses
+#: (ingest/ats.py, ingest/builtin-nyc.py, ingest/hn-hiring.py, ...), and the
+#: one `.claude/CLAUDE.md` documents as "verbose, convention everywhere".
+#: match.py read it nowhere, which is why the ids of deleted rows were
+#: unrecoverable at ANY verbosity rather than merely off by default.
+DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 
 #: A delta this negative disqualifies outright rather than being summed. Using
 #: a magnitude rather than a separate config key means "never show me research
@@ -64,6 +73,57 @@ HARD_EXCLUDE_AT = -100
 #: than a senior one without the config having to enumerate every pair.
 SENIORITY_ORDER = ("intern", "new_grad", "junior", "mid", "senior", "staff",
                    "principal", "director", "exec")
+
+
+class SeniorityVocabularyDrift(RuntimeError):
+    """`extract.SENIORITY` grew a level `SENIORITY_ORDER` cannot place.
+
+    D13. This is a coupling that had no assertion anywhere. Every value the
+    extractor may write into `job_facts.seniority_level` has to be findable
+    in SENIORITY_ORDER, because the distance fallback at the bottom of the
+    seniority block is guarded by `level in SENIORITY_ORDER` -- so a level
+    the extractor knows and the ranker does not falls through every branch
+    and is scored as FREE. Not zero-on-purpose the way an on-target level
+    is: free, silently, for a level nobody priced.
+
+    RAISED, NOT WARNED, and that is the opposite of check_criteria_sections()
+    below. A stray criteria section is one profile's own data and costs that
+    profile one rule; this is a repo-wide invariant between two stages that
+    ship together, and there is no state of the world where a released pair
+    of files should disagree. If they do, the fix is a one-line edit here.
+    """
+
+
+def check_seniority_vocabulary(order=SENIORITY_ORDER, vocabulary=None):
+    """Raise unless `order` covers every level the extractor can emit.
+
+    A SUPERSET, not equality: SENIORITY_ORDER may legitimately carry rungs
+    the extractor never writes (the scale is what penalty_per_level measures
+    distance along), and pinning them equal would forbid that. Only the
+    other direction is a defect.
+
+    ONE DEFINITION OF THE VOCABULARY. `extract.SENIORITY` stays the single
+    source of truth -- it is what the prompt lists (extract.py:327) and what
+    `_enum` validates against (extract.py:716), so it is what can actually
+    reach the column. This module imports it rather than restating it, which
+    is why the check can be an assertion instead of two lists to keep in
+    sync by hand. Importing extract costs nothing at run time: its module
+    body compiles regexes and reads environment variables, and match.py
+    already imports every module it depends on.
+    """
+    vocabulary = extract.SENIORITY if vocabulary is None else vocabulary
+    missing = [v for v in vocabulary if v not in order]
+    if missing:
+        raise SeniorityVocabularyDrift(
+            f"extract.SENIORITY has {len(missing)} level(s) missing from "
+            f"match.SENIORITY_ORDER: {', '.join(missing)}. A posting "
+            f"extracted at one of those scores as though seniority were free "
+            f"-- add each to SENIORITY_ORDER at its correct rung "
+            f"(match.py:65-66), worst to best.")
+    return order
+
+
+check_seniority_vocabulary()
 
 
 def _clamp(n, lo=0, hi=100):
@@ -368,6 +428,11 @@ def prune_orphans(conn, profile, facts, *, dry_run=False):
 
     Deliberately keyed on the loaded fact set rather than on a fresh query, so
     "what match.py just considered" and "what match.py keeps" cannot disagree.
+
+    D11. The DELETE uses RETURNING so the ids exist to be logged. It is the
+    same round trip either way, and the alternative -- a SELECT before the
+    DELETE -- is two statements answering one question, with a window between
+    them in which the answers can differ.
     """
     keep = [f["job_id"] for f in facts]
     if dry_run:
@@ -375,12 +440,37 @@ def prune_orphans(conn, profile, facts, *, dry_run=False):
             f"SELECT count(*) FROM {schema.MATCHES_TABLE} "
             f"WHERE profile = %s AND NOT (job_id = ANY(%s))",
             (profile.profile, keep)).fetchone()[0]
-    n = conn.execute(
+    gone = [r[0] for r in conn.execute(
         f"DELETE FROM {schema.MATCHES_TABLE} "
-        f"WHERE profile = %s AND NOT (job_id = ANY(%s))",
-        (profile.profile, keep)).rowcount
+        f"WHERE profile = %s AND NOT (job_id = ANY(%s)) "
+        f"RETURNING job_id",
+        (profile.profile, keep)).fetchall()]
     conn.commit()
-    return n
+    log_deleted_ids(profile.profile, "orphaned", gone)
+    return len(gone)
+
+
+def log_deleted_ids(profile, kind, job_ids):
+    """The ids of rows this run removed, at DEBUG_PRINT_KEYS verbosity.
+
+    D11. Both delete paths reported a COUNT and nothing else, and the rows
+    were gone by the time anyone read the count -- so "which hundred jobs did
+    that weight edit demote" had no answer, from anywhere, ever. A deleted
+    row's id is the only part of it that is still worth something: `job_id`
+    is stable and derived (schema.make_job_id), so it still resolves against
+    `jobs`, `job_facts` and `job_events` after the match row is gone. That is
+    what makes a demotion reviewable instead of merely observed.
+
+    STDERR, AND OFF BY DEFAULT. This runs nightly over every profile; a
+    rebuild can demote thousands of rows and printing them unconditionally
+    would bury the summary line the watchdog reads on stdout. Same split the
+    D10 corrupt-tech_stack warning uses two functions up, and the same
+    `[debug]` prefix every ingest script writes.
+    """
+    if not (DEBUG_PRINT_KEYS and job_ids):
+        return
+    print(f"[debug] match {profile}: {len(job_ids)} {kind} row(s) deleted: "
+          + ", ".join(str(j) for j in job_ids), file=sys.stderr)
 
 
 #: Every top-level section `score_job()` reads. D12: each lookup is a `.get()`
@@ -462,6 +552,10 @@ def match_profile(conn, profile, facts, *, rebuild=False, dry_run=False):
             f"DELETE FROM {schema.MATCHES_TABLE} "
             f"WHERE profile = %s AND job_id = ANY(%s)",
             (profile.profile, to_delete))
+        # D11. `to_delete` is already the exact id list, so no RETURNING is
+        # needed here -- unlike prune_orphans(), which only learns them from
+        # the DELETE itself.
+        log_deleted_ids(profile.profile, "demoted", to_delete)
     conn.commit()
     return len(to_write), len(to_delete), skipped
 
