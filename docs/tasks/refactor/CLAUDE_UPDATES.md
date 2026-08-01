@@ -2583,3 +2583,94 @@ fresh clone gets. The commands are in `41-git-and-repo-hygiene.md` § *Outcome*.
 
 **A second labeller for about twenty minutes still gates tasks 30, 13's weights and 12's next
 bump.** Unchanged by anything in this tranche.
+
+---
+
+## 2026-08-01 — tasks 43 and 44, and tranche seven closes
+
+**Two commits: `29a7d99` (44) and `b8c2943` (43), in that order.** 44 first, deliberately:
+it removed a `doc-figures.json` allowance that existed only until it landed, so leaving it
+open kept a known hole open. 43 was independent — `DEC-70` had already taken the decision.
+
+**Suite floor read before either task: `Ran 1233 tests` OK and `Ran 93 tests` OK.**
+Unchanged at the end. Neither task touches code; both suites are the regression gate for
+`test_docs_policy.py`, which is what makes a doc change capable of going red at all.
+
+### 44 — `HANDOFF.md` was two documents
+
+Moved verbatim to the archive: § *State at handoff* and § *What 08, 12 and 19 changed about
+the plan* → `docs/archive/handoff-state-2026-07-31.md`; § *Nothing is in flight* →
+`docs/archive/handoff-tree-state.md`. Stub and link left where each was.
+
+**Two parts of the last section did not move**, and deciding that was most of the task. Its
+FAQ is standing guidance — *"the single easiest mistake to make in this repo"* — and was
+promoted to a `##` in place. Its four cross-stream lessons went to
+`docs/MEASUREMENT-TRAPS.md` under rule 5: a shared database defeats file-level agent
+isolation, and a pin on set membership buys nothing about the derived facts. Neither is
+about this cohort, model or product, which is rule 5's test. They went into that file's
+**"Later additions"** block rather than as new `§4.8/4.9`, because `MEASUREMENT-TRAPS.md:19`
+pins its numbering at 4.1–4.7 so existing citations resolve.
+
+**THE PREMISE WAS WRONG ON TWO OF THE NINETEEN, AND THE CORRECTION IS THE TRANSFERABLE
+PART.** Task 44 assumed every restatement sat in the history region, so that a red C4 after
+the move would mean *"something that should have been archived was not."* Seventeen behaved
+that way. The other two — a `suite 1030 → 1058` delta in the next-steps list and a
+`Suite 1171 → 1178` delta in an open follow-up — sat inside **live rolling sections**, where
+archiving them would have archived current content. Both became citations of a document that
+already carried the pair (`docs/archive/handoff-gate-fix.md` and this file), which is rule
+2's fix rather than rule 4's move, and no figure was lost. **A figure inside a rolling
+document is not evidence that the section around it is history.** Recorded in
+`doc-figures.json`'s `_allowed_note`, where the next reader meets it.
+
+The allowance is removed and the struck paragraph kept beside it. **C4 now enforces on the
+file every session reads first**, which it could not do for the day the exemption stood.
+
+### 43 — `docs/scoring.md` splits
+
+The contract **kept the path**, because all eight live citations of it mean the contract
+half — read one by one. The measured half is `docs/scoring-measured-2026-07-27.md`,
+`kind: record`, frozen, maintained by nobody.
+
+**The task describes "the contract half" and "the record half" as though the file had two
+halves. It does not.** The 2026-07-27 figures are interleaved into almost every section —
+the funnel, the per-profile scale tables, the tier block, the tombstone counts,
+`fit_score`'s observed range, the `staff` demotion — so there was no line to cut at. What
+moved is every figure the file **owned**. Figures it already cited to another document
+(`SCORING.md`'s Spearman, the 59-row tie block, the learned-ranker avg-precision pair)
+stayed: a cited figure is already rule 2 being followed, and moving it would have been
+tidying rather than fixing.
+
+Two findings, both about citations rather than about scoring:
+
+- **`backend/config/criteria.json:43` cited `docs/scoring.md:374` and was already off by
+  seven lines before this task ran** — the 1-in-20 sentence is at `:381` — and the split
+  moved it again. Repointed to a section anchor, which cannot drift, with the correction
+  marked in place. The same drift had hit `docs/archive/README.md`'s `:15-21`. **A line
+  number into a live `contract` is a citation with an expiry date.**
+- **The contract quoted the learned-ranker probe's 12.7/20 in three places with none of the
+  caveat its owner attaches.** `docs/archive/README.md` relabels it as *imitation fidelity
+  against a non-target persona*, not a quality score, and says *"do not quote them
+  forward."* The record half carries the relabel beside the figure.
+
+### What closes, and what does not
+
+**Tranche seven is complete — tasks 36–44.** `audit-docs.py` reports 0 on all six checks,
+`audit-doc-links.py` reports 0, and `doc-policy-baseline.json` is still empty everywhere,
+which was phase 9's stated exit gate. **No row was added to that baseline by either task**;
+44's only tolerance is a struck-and-kept note explaining a tolerance it removed.
+
+**The refactor is not complete.** The status column reads 29 done, 10 todo. Ten of those are
+the product/API surface (24–28, 31, 32, 33) plus 30 and a mislabelled 23, and **the premises
+of the product tasks were audited on 2026-07-31 and several were stale** — read the task
+files and `API-CONTRACT-v1.md`, which is a specification and not a description of the
+shipped API.
+
+**A second labeller for about twenty minutes still gates tasks 30, 13's weights and 12's
+next bump**, and no session can arrange it. Unchanged by anything in this tranche.
+
+**One rule 7 gap is open and owns no task.** `audit-docs.py` walks `docs/` only, so
+`.claude/CLAUDE.md` and the root `README.md` are declared reachability roots for C2 and are
+scanned by no other check, C4 included — and both carry figures. Widening `docs_files()` to
+include the declared roots is the obvious next check and is unwritten. Phase 9 made the
+documentation checkable; it did not make **all** of it checkable, and saying so is what rule
+7 asks for.

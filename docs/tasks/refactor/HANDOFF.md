@@ -23,7 +23,29 @@ on it — the instrument is named in each case.*
 | `evals label report` | **exits 2, correctly.** Zero of task 29's three quantities exist |
 | suites | ~~a number was typed here~~ **read [`AUDIT.md`](AUDIT.md), which owns the figure** — per `DOCS-POLICY.md` rule 2, and per rule 3 the reproducible answer is the `Ran N tests` line of `cd backend && python3 -m unittest discover -s tests` |
 
-### THE CURRENT SESSION IS PHASE 9 DOC AND REPO HYGIENE — rolled forward 2026-08-01
+### ~~THE CURRENT SESSION IS PHASE 9~~ — **PHASE 9 IS CLOSED. Rolled forward 2026-08-01.**
+
+**Tranche seven is complete: tasks 36–44, ending `b8c2943`.** Nothing in `docs/` is the
+next session's work. **What is next is a choice between two tracks, and it is the repo
+owner's**, because the cheaper one cannot be started by a session at all:
+
+| track | tasks | what it needs |
+|---|---|---|
+| **the labelling night** | 30, then 13's weights and 12's next bump | **a second labeller for about twenty minutes.** `evals label report` exits 2 by design at one labeller — there is no inter-annotator ceiling to denominate a model score against. All ten `overlap` rows are already answered on the owner's side, so a second person's ten are the **last** input needed, not the first. No session can do this |
+| **the product / API surface** | 24, 25, 26, 27, 28, 31, 32, 33 | nothing — not blocked, not started. **Audit the premises first:** they were checked on 2026-07-31 and several were stale; the corrections are in the task files and in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), **which is a specification and not a description of the shipped API** |
+
+**Read [`README.md`](README.md)'s status column for what is done — do not trust a count.**
+Task 23 reads `todo` and its own row says descoped; that row is worth correcting before
+anyone plans against it.
+
+**One rule 7 gap is open and is not a task.** `audit-docs.py` walks `docs/` only, so
+`.claude/CLAUDE.md` and the root `README.md` are declared reachability roots for C2 and are
+scanned by **no other check, C4 included** — and both carry figures. Widening `docs_files()`
+to include the declared roots is the obvious next check and is unwritten. Until it is, **a
+figure in `.claude/CLAUDE.md` is on the honour system**, and it is the first thing every
+session reads. [`AUDIT.md`](AUDIT.md) § *What is open* has the argument.
+
+> **Superseded, kept per rule 4 — what this block said while phase 9 ran:**
 
 > ~~**THE NEXT SESSION IS CLEANUP, BUGFIXES AND DOCUMENTATION — decided 2026-07-31.**
 > … **Task 34 is the next session's task**, and its file did not exist until this
@@ -47,10 +69,11 @@ on it — the instrument is named in each case.*
 > was simply never given a reason to stop"*. **Rolling this block forward is what keeps C3
 > at 0; retiring it on a trigger is what stops it recurring.**
 
-**It is still not the labelling session, and still not the product/API phase.** Phases
-1–3 are built and measured. **Task 34 landed** (`99fbdb1`, `3c4cee0`, `46a5be4`,
-`3f42e2d`) and phase 9 — tranche seven, tasks **36–42** — is the current work: making
-the documentation rules it wrote *checkable* rather than merely written.
+~~**It is still not the labelling session, and still not the product/API phase.**~~ **It is
+now one of those two — see the table above.** Phases 1–3 are built and measured. **Task 34
+landed** (`99fbdb1`, `3c4cee0`, `46a5be4`, `3f42e2d`) and phase 9 — tranche seven, tasks
+~~36–42~~ **36–44** — made the documentation rules it wrote *checkable* rather than merely
+written. **That work is finished.**
 
 | tranche seven | state, 2026-08-01 |
 |---|---|
