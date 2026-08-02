@@ -2,7 +2,7 @@
 kind: contract
 script: backend/webapp/jobs.py
 written: 2026-07-27
-code_at: 2687bc0
+code_at: 8b4e831
 generator: none
 ---
 
