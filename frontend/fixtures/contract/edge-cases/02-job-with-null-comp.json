@@ -1,0 +1,37 @@
+{
+  "request_id": "req_74c2a90e5b1d4837ae60c98f213b7d0e",
+  "generated_at": "2026-08-01T06:12:00Z",
+  "profile": "pursuit",
+  "tracks": [
+    {
+      "track": "re_entry_and_growth",
+      "label": "Re-Entry & Growth",
+      "blurb": "Employers who say in writing that a career break or a change of field is not a mark against you.",
+      "jobs": [
+        {
+          "job_id": "e04a6d1b93f27c85ae1f0b32",
+          "rank": 1,
+          "bucket": "strong",
+          "title": "Member Support Specialist, AI Assist",
+          "company_name": "Oscar Health",
+          "location": "New York, NY",
+          "remote_policy": "hybrid",
+          "posted_at": "2026-07-24",
+          "posting_age_days": 8,
+          "comp": null,
+          "why": {
+            "gap_bridging_angle": "The posting is explicit that it wants someone who can say why a machine-written answer is wrong, in writing, to the people who build it. Four years of retail escalations is exactly that skill with a different name attached, and the listing asks for no degree and no prior insurance experience.",
+            "risk_factors": [
+              "No compensation stated anywhere in the posting.",
+              "Visa sponsorship explicitly not offered."
+            ]
+          },
+          "cohort_signal": { "save_bucket": "6-10" },
+          "state": { "saved": false, "dismissed": false, "applied": false },
+          "apply_url": "https://jobs.ashbyhq.com/oscar/9f2b1c74-3a80-4d6e-9c11-2b7e5a90d413"
+        }
+      ]
+    }
+  ],
+  "next_cursor": null
+}

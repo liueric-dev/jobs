@@ -21,14 +21,25 @@ check covers — the live Google login round trip.
 
 > **THIS IS THE STALEST SENTENCE IN THE TRANCHE, corrected 2026-07-31 (task 34).**
 > The API is working; it is not the API this task's own surface table needs. Today
-> `GET /v1/jobs` returns a **flat list with no `rank`, no `bucket`, no `tracks[]`
-> grouping and no `request_id`** — and it returns raw `match_score`/`fit_score`, which
+> `GET /v1/jobs` returns a **flat list with ~~no `rank`,~~ no `bucket`, no `tracks[]`
+> grouping ~~and no `request_id`~~** — and it returns raw `match_score`/`fit_score`, which
 > `API-CONTRACT-v1.md` explicitly forbids. Every surface in the table below needs
 > backend work that does not exist: Today-grouped-by-track needs task 30, the cohort
 > save signal needs 27 **and** 28, Search needs 25's `search_queries` table, and
 > Onboarding needs 26's `builder_profiles`. **Read the dependency line, not this
 > sentence.** The auth, session and read plumbing genuinely is done and genuinely is
 > reusable; the response shape is the work.
+>
+> **Half of that list landed 2026-08-01, in task 27** — struck above, kept per
+> `DOCS-POLICY.md` rule 4. `GET /v1/jobs` now sets a 1-based `rank` on every row and
+> returns a top-level `request_id` (`backend/webapp/jobs.py:396-406`), and the pair
+> rides in the opaque cursor, so ranks **resume across pages** instead of restarting
+> at 1 — which is what makes the next section's requirement satisfiable at all rather
+> than merely stated. **`bucket` and `tracks[]` are still absent** and are still task
+> 30's, and raw `match_score`/`fit_score` are still in the payload for the reason
+> `AUDIT.md` § *What is open* records: removing them before `bucket` exists would
+> leave the API unable to express relevance at all. So the correction narrows this
+> paragraph; it does not retire it.
 
 ## Non-negotiable: emit `rank` and `request_id`
 

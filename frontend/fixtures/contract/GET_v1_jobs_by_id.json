@@ -1,0 +1,36 @@
+{
+  "job_id": "7b21c4f8a03d9e5612c7ab84",
+  "rank": 1,
+  "bucket": "strong",
+  "title": "AI Operations Coordinator",
+  "company_name": "Mount Sinai Health System",
+  "location": "New York, NY",
+  "remote_policy": "hybrid",
+  "posted_at": "2026-07-25",
+  "posting_age_days": 7,
+  "comp": {
+    "min": 62000,
+    "max": 78000,
+    "currency": "USD",
+    "period": "yearly",
+    "is_estimated": false
+  },
+  "why": {
+    "gap_bridging_angle": "Six years running front-of-house scheduling for a 90-seat restaurant is the same job this posting describes: intake from people who do not know what they need, a written procedure they will actually follow, and a weekly number that says whether they followed it. The AI tools here are the ones you already use; the coordination is the part they are hiring for.",
+    "risk_factors": [
+      "Asks for one year in a healthcare setting, and the posting does not say it is flexible.",
+      "Hybrid three days a week in Manhattan, which the listing states as non-negotiable."
+    ]
+  },
+  "cohort_signal": { "save_bucket": "3-5" },
+  "state": { "saved": true, "dismissed": false, "applied": false },
+  "apply_url": "https://boards.greenhouse.io/mountsinai/jobs/7412886",
+  "description_html": "<h2>AI Operations Coordinator</h2><p>Digital &amp; Technology Partners is hiring an AI Operations Coordinator to support the safe, consistent use of approved AI assistants across our clinical support and administrative teams.</p><h3>What you'll do</h3><ul><li>Run intake for new AI use cases: gather what the team is trying to do, document it, and route it to the review group.</li><li>Write short, plain-language how-to guides and run 30-minute training sessions for non-technical staff.</li><li>Track adoption and produce a weekly summary for the Digital &amp; Technology Partners leadership meeting.</li><li>Maintain the internal register of approved tools and their allowed uses.</li></ul><h3>What we're looking for</h3><ul><li>One year of coordination, operations, or administrative experience in any industry. Healthcare experience is helpful but not required.</li><li>Comfort using tools like ChatGPT or Microsoft Copilot day to day. You do not need to have built anything.</li><li>Clear written English; much of this role is writing things down so other people can follow them.</li><li>We welcome applicants returning to work after a break and applicants changing careers.</li></ul><p>Schedule: hybrid, three days per week on site in Manhattan.<br/>Compensation: $62,000 - $78,000 annually, commensurate with experience.</p>",
+  "source": { "platform": "greenhouse", "first_seen": "2026-07-25" },
+  "closes_at": "2026-08-15",
+  "facts": {
+    "seniority_level": "junior",
+    "ai_involvement": "uses_ai_tools",
+    "role_archetype": "ai_operations"
+  }
+}

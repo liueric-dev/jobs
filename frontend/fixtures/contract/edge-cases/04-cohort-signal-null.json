@@ -1,0 +1,43 @@
+{
+  "request_id": "req_9e07c53a1b8d4f26a94e0b7d3c185642",
+  "generated_at": "2026-08-01T06:12:00Z",
+  "profile": "pursuit",
+  "tracks": [
+    {
+      "track": "bridge_and_solutions",
+      "label": "Bridge & Solutions",
+      "blurb": "Roles that pay for the operational judgement you already have, with the AI tooling attached.",
+      "jobs": [
+        {
+          "job_id": "9c47ae02b6135d8f27e4a1c0",
+          "rank": 1,
+          "bucket": "worth_a_look",
+          "title": "Data Operations Analyst I",
+          "company_name": "Con Edison",
+          "location": "New York, NY",
+          "remote_policy": "onsite",
+          "posted_at": null,
+          "posting_age_days": null,
+          "comp": {
+            "min": 60000,
+            "max": 72000,
+            "currency": "USD",
+            "period": "yearly",
+            "is_estimated": false
+          },
+          "why": {
+            "gap_bridging_angle": "Two years reconciling driver manifests against invoices at a logistics firm is the reconciliation half of this role already done, in a domain with the same tolerance for being wrong. The SQL is learnable in the window this posting allows; the habit of not trusting an extract is not.",
+            "risk_factors": [
+              "Fully onsite five days, stated in the posting.",
+              "Utility hiring cycles are slow; expect months, not weeks."
+            ]
+          },
+          "cohort_signal": null,
+          "state": { "saved": false, "dismissed": false, "applied": false },
+          "apply_url": "https://coned.wd1.myworkdayjobs.com/en-US/coned_careers/job/Data-Operations-Analyst-I_R-12408"
+        }
+      ]
+    }
+  ],
+  "next_cursor": null
+}

@@ -1,0 +1,12 @@
+{
+  "request_id": "req_5c9f4e1b2a7d4e0fb3c81d6a90e27f45",
+  "events": [
+    { "event": "impression", "job_id": "7b21c4f8a03d9e5612c7ab84", "rank": 1 },
+    { "event": "open", "job_id": "7b21c4f8a03d9e5612c7ab84", "rank": 1, "dwell_ms": 14200 },
+    { "event": "save", "job_id": "7b21c4f8a03d9e5612c7ab84", "rank": 1 },
+    { "event": "unsave", "job_id": "7b21c4f8a03d9e5612c7ab84" },
+    { "event": "dismiss", "job_id": "1f8b3e70c25a94d6e8b70a13", "rank": 4, "reason": "wrong_role" },
+    { "event": "undismiss", "job_id": "1f8b3e70c25a94d6e8b70a13" },
+    { "event": "applied", "job_id": "7b21c4f8a03d9e5612c7ab84", "rank": 1 }
+  ]
+}

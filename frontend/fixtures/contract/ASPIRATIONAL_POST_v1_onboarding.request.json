@@ -1,0 +1,14 @@
+{
+  "prior_domain": "hospitality",
+  "prior_years": 6,
+  "situation": "employed_seeking",
+  "location_pref": "nyc",
+  "remote_pref": "hybrid_ok",
+  "comp_floor": 55000,
+  "schedule_constraints": ["no_overnight"],
+  "seed_judgements": [
+    { "job_id": "7b21c4f8a03d9e5612c7ab84", "verdict": "interested" },
+    { "job_id": "e04a6d1b93f27c85ae1f0b32", "verdict": "interested" },
+    { "job_id": "1f8b3e70c25a94d6e8b70a13", "verdict": "not_interested" }
+  ]
+}

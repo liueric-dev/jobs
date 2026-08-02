@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "missing_rank",
+    "message": "event 'impression' for job 7b21c4f8a03d9e5612c7ab84 requires rank; an impression without a position is un-debiasable",
+    "request_id": "req_5c9f4e1b2a7d4e0fb3c81d6a90e27f45"
+  }
+}

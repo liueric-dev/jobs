@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "unknown_event",
+    "message": "unknown event(s) ['apply']; expected one of ['impression', 'open', 'save', 'unsave', 'dismiss', 'undismiss', 'applied']",
+    "request_id": "req_5c9f4e1b2a7d4e0fb3c81d6a90e27f45"
+  }
+}

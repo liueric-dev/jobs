@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "server_derived_event",
+    "message": "event(s) ['skip'] are derived server-side and may not be sent",
+    "request_id": "req_5c9f4e1b2a7d4e0fb3c81d6a90e27f45"
+  }
+}

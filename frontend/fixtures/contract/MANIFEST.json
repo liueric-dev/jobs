@@ -1,0 +1,85 @@
+{
+  "_comment": "What each fixture in this directory is. Everything here is the TARGET shape from docs/tasks/refactor/API-CONTRACT-v1.md. None of it is what the API returns today -- see ../shipped/ for that, and ../../README.md for which of the differences are blocked rather than merely unbuilt. Nothing in this directory is verified by frontend/verify_fixtures.py, deliberately: there is no code to verify it against.",
+  "_source": "docs/tasks/refactor/API-CONTRACT-v1.md, written 2026-07-28, kind: contract",
+  "_status": "TARGET. Build the client against these; expect the shipped shapes at runtime until tasks 28, 30 and 32 land.",
+
+  "_endpoint_reality": {
+    "GET /v1/jobs": "route exists (jobs.py:310), shape differs",
+    "GET /v1/jobs/{id}": "route exists (jobs.py:413), shape differs",
+    "POST /v1/events": "route exists (jobs.py:641), request shape agrees, response is undocumented in the contract",
+    "GET /v1/me": "route exists (auth.py:450); the onboarding block is aspirational",
+    "GET /v1/searches": "NO ROUTE, NO TABLE. search_queries exists nowhere.",
+    "POST /v1/searches": "NO ROUTE, NO TABLE.",
+    "POST /v1/onboarding": "NO ROUTE, NO TABLE. builder_profiles exists nowhere."
+  },
+
+  "GET_v1_jobs.json": {
+    "shows": "tracks[] grouping, bucket, nested comp{}/why{}/state{}, posting_age_days, cohort_signal, apply_url, and NO raw match_score or fit_score.",
+    "notes": [
+      "rank is global across the render, not per-track. The ranks here are 1,3 / 2 / 4 -- deliberately interleaved across tracks, because that is what 'the ordering the user actually saw' means. A client that renumbers within a track has broken the position-bias instrumentation.",
+      "TRACK VOCABULARY IS THE ONE OPEN QUESTION IN THIS DIRECTORY. The contract's single example is `ai_operations`, which is a role_archetype value in config/pursuit-criteria.json, not a track. The only track vocabulary that exists in the code is score.TRACKS (score.py:281-282): 'Core SWE', 'AI Integration', 'Bridge & Solutions', 'Re-Entry & Growth', 'Poor Fit'. These fixtures slugify those, and put the stored Title Case form in `label`. Whoever implements task 32 has to decide this; it is recorded here rather than resolved.",
+      "'Poor Fit' is a real score.TRACKS value and is deliberately absent from every fixture. Whether it is ever rendered is a product decision nobody has made."
+    ]
+  },
+
+  "GET_v1_jobs_by_id.json": {
+    "shows": "the same job object plus description_html, source{}, closes_at and facts{}.",
+    "notes": [
+      "closes_at has no column anywhere in schema.py. It is not merely unimplemented; there is nothing to read it from.",
+      "description_html is a different thing from the shipped description_text, which is plain text. Somebody has to decide where the HTML comes from -- the ATS payload keeps it, the pipeline does not store it.",
+      "source.first_seen is a date here; the shipped first_seen is a full '%Y-%m-%dT%H:%M:%S' stamp."
+    ]
+  },
+
+  "POST_v1_events.request.json": {
+    "shows": "all seven client event names in one batch, including undismiss and applied.",
+    "notes": [
+      "This body is VALID against the shipped validator today -- it is the one place the contract and the code already agree, after DEC-73 moved the contract from `apply` to `applied`.",
+      "undismiss carries no rank and no reason; a reason here is a 400 with code reason_not_allowed (jobs.py:514-519)."
+    ]
+  },
+
+  "POST_v1_events.response.json": {
+    "shows": "the shipped {recorded, deduped, skipped, derived_skips} response.",
+    "notes": ["The contract specifies no response body for this endpoint. This fixture is the shipped shape, carried into the contract set so a client has something to type against."]
+  },
+
+  "ASPIRATIONAL_GET_v1_me.json": {
+    "shows": "the shipped four keys plus an onboarding block.",
+    "notes": ["The onboarding block is invented. The contract has POST /v1/onboarding and no way to READ onboarding state, and a first-run client needs one. See edge-cases/06."]
+  },
+
+  "ASPIRATIONAL_GET_v1_searches.json": {
+    "shows": "suggested[] and mine[], verbatim from API-CONTRACT-v1.md § GET /v1/searches.",
+    "notes": ["watcher_count is exposed; watcher identities never are. No route, no table, task 25."]
+  },
+
+  "ASPIRATIONAL_POST_v1_searches.request.json": { "notes": ["Request shape is inferred; the contract shows only the GET response."] },
+  "ASPIRATIONAL_POST_v1_searches.response.json": {
+    "notes": ["202 with a queue position, per the contract. Searches are asynchronous -- never block a Builder on a scrape; results appear on the next list."]
+  },
+
+  "ASPIRATIONAL_POST_v1_onboarding.request.json": {
+    "notes": [
+      "Verbatim from API-CONTRACT-v1.md § POST /v1/onboarding, with a prior_domain from the real vocabulary.",
+      "prior_domain must be one of schema_web.PRIOR_DOMAINS (schema_web.py:142-146). That column DOES exist on app_users; the endpoint does not.",
+      "seed_judgements write real job_events with correct visibility -- so 'interested' has to map onto a CLIENT_EVENT_NAMES value, and no mapping has been decided."
+    ]
+  },
+  "ASPIRATIONAL_POST_v1_onboarding.response.json": { "notes": ["Response shape is invented; the contract specifies none."] },
+
+  "errors/error_envelope.json": {
+    "shows": "the contract's envelope, which IS shipped for ContractError (jobs.py:151-157).",
+    "notes": ["It is not shipped for 401/403/404/malformed-cursor. See ../shipped/errors/NOT-ENVELOPED-*.json."]
+  },
+
+  "edge-cases/": {
+    "_comment": "The six states API-CONTRACT-v1.md § Mocking names as 'the states most likely to be skipped'. All six are in contract shape.",
+    "01-track-with-zero-jobs.json": "Two tracks with empty jobs[]. A track is not omitted when it is empty -- the blurb still has to render, or the list silently shrinks and nobody can tell whether the track was filtered or was empty.",
+    "02-job-with-null-comp.json": "comp is null outright, not an object of nulls. Distinguishing 'no salary stated' from 'salary of zero' is the whole point.",
+    "03-comp-is-estimated.json": "comp.is_estimated true. Adzuna predicts salary; showing a prediction as though the employer stated it is a trust problem, not a formatting one (contract, task 35).",
+    "04-cohort-signal-null.json": "cohort_signal null, which is what fewer than three saves looks like. Never an exact count, never a recency, never an identity -- the suppression is a privacy control, enforced server-side (task 28).",
+    "05-empty-mine-search-list.json": "mine is [] while suggested is populated. GET /v1/searches shape; aspirational.",
+    "06-first-run-user-no-onboarding.json": "onboarding.completed false with prior_domain NULL. NULL is not the same as the domain literally named 'none': schema_web.py:136-141 makes that distinction load-bearing -- 'none' is a real answer about a real person, NULL means nobody asked. A first-run user is NULL."
+  }
+}

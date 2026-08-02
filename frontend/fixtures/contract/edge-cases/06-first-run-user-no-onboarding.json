@@ -1,0 +1,12 @@
+{
+  "email": "devon.reyes@example.org",
+  "display_name": "Devon Reyes",
+  "profile": "pursuit",
+  "is_admin": false,
+  "onboarding": {
+    "completed": false,
+    "completed_at": null,
+    "prior_domain": null,
+    "prior_years": null
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "request_id": "req_5c9f4e1b2a7d4e0fb3c81d6a90e27f45",
+  "generated_at": "2026-08-01T06:12:00Z",
+  "profile": "pursuit",
+  "tracks": [
+    {
+      "track": "bridge_and_solutions",
+      "label": "Bridge & Solutions",
+      "blurb": "Roles that pay for the operational judgement you already have, with the AI tooling attached.",
+      "jobs": [
+        {
+          "job_id": "7b21c4f8a03d9e5612c7ab84",
+          "rank": 1,
+          "bucket": "strong",
+          "title": "AI Operations Coordinator",
+          "company_name": "Mount Sinai Health System",
+          "location": "New York, NY",
+          "remote_policy": "hybrid",
+          "posted_at": "2026-07-25",
+          "posting_age_days": 7,
+          "comp": {
+            "min": 62000,
+            "max": 78000,
+            "currency": "USD",
+            "period": "yearly",
+            "is_estimated": false
+          },
+          "why": {
+            "gap_bridging_angle": "Six years running front-of-house scheduling for a 90-seat restaurant is the same job this posting describes: intake from people who do not know what they need, a written procedure they will actually follow, and a weekly number that says whether they followed it. The AI tools here are the ones you already use; the coordination is the part they are hiring for.",
+            "risk_factors": [
+              "Asks for one year in a healthcare setting, and the posting does not say it is flexible.",
+              "Hybrid three days a week in Manhattan, which the listing states as non-negotiable."
+            ]
+          },
+          "cohort_signal": { "save_bucket": "3-5" },
+          "state": { "saved": true, "dismissed": false, "applied": false },
+          "apply_url": "https://boards.greenhouse.io/mountsinai/jobs/7412886"
+        },
+        {
+          "job_id": "9c47ae02b6135d8f27e4a1c0",
+          "rank": 3,
+          "bucket": "worth_a_look",
+          "title": "Data Operations Analyst I",
+          "company_name": "Con Edison",
+          "location": "New York, NY",
+          "remote_policy": "onsite",
+          "posted_at": null,
+          "posting_age_days": null,
+          "comp": {
+            "min": 60000,
+            "max": 72000,
+            "currency": "USD",
+            "period": "yearly",
+            "is_estimated": false
+          },
+          "why": {
+            "gap_bridging_angle": "Two years reconciling driver manifests against invoices at a logistics firm is the reconciliation half of this role already done, in a domain with the same tolerance for being wrong. The SQL is learnable in the window this posting allows; the habit of not trusting an extract is not.",
+            "risk_factors": [
+              "Fully onsite five days, stated in the posting.",
+              "Utility hiring cycles are slow; expect months, not weeks."
+            ]
+          },
+          "cohort_signal": null,
+          "state": { "saved": true, "dismissed": false, "applied": true },
+          "apply_url": "https://coned.wd1.myworkdayjobs.com/en-US/coned_careers/job/Data-Operations-Analyst-I_R-12408"
+        }
+      ]
+    },
+    {
+      "track": "re_entry_and_growth",
+      "label": "Re-Entry & Growth",
+      "blurb": "Employers who say in writing that a career break or a change of field is not a mark against you.",
+      "jobs": [
+        {
+          "job_id": "e04a6d1b93f27c85ae1f0b32",
+          "rank": 2,
+          "bucket": "strong",
+          "title": "Member Support Specialist, AI Assist",
+          "company_name": "Oscar Health",
+          "location": "New York, NY",
+          "remote_policy": "hybrid",
+          "posted_at": "2026-07-24",
+          "posting_age_days": 8,
+          "comp": null,
+          "why": {
+            "gap_bridging_angle": "The posting is explicit that it wants someone who can say why a machine-written answer is wrong, in writing, to the people who build it. Four years of retail escalations is exactly that skill with a different name attached, and the listing asks for no degree and no prior insurance experience.",
+            "risk_factors": [
+              "No compensation stated anywhere in the posting.",
+              "Visa sponsorship explicitly not offered."
+            ]
+          },
+          "cohort_signal": { "save_bucket": "6-10" },
+          "state": { "saved": false, "dismissed": false, "applied": false },
+          "apply_url": "https://jobs.ashbyhq.com/oscar/9f2b1c74-3a80-4d6e-9c11-2b7e5a90d413"
+        }
+      ]
+    },
+    {
+      "track": "ai_integration",
+      "label": "AI Integration",
+      "blurb": "Roles where you'd wire AI tools into a product or an internal workflow.",
+      "jobs": [
+        {
+          "job_id": "3d6f18b0e7c25a94ab130e82",
+          "rank": 4,
+          "bucket": "stretch",
+          "title": "Automation Associate, Grants Operations",
+          "company_name": "Brooklyn Public Library",
+          "location": "Brooklyn, NY",
+          "remote_policy": "hybrid",
+          "posted_at": "2026-07-29",
+          "posting_age_days": 3,
+          "comp": {
+            "min": 54000,
+            "max": 61000,
+            "currency": "USD",
+            "period": "yearly",
+            "is_estimated": true
+          },
+          "why": {
+            "gap_bridging_angle": "Grants operations is deadline work with an audit trail, which is the shape of every shift-handover you have run. The automation half is one tool and a template library, and the posting says they will teach it to whoever they hire.",
+            "risk_factors": [
+              "Compensation is an estimate from the aggregator, not a figure the employer stated.",
+              "Grant-funded position; the listing does not say how long the funding runs."
+            ]
+          },
+          "cohort_signal": null,
+          "state": { "saved": false, "dismissed": false, "applied": false },
+          "apply_url": "https://www.bklynlibrary.org/careers/automation-associate-grants-2418"
+        }
+      ]
+    }
+  ],
+  "next_cursor": null
+}

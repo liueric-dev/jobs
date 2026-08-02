@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "reason_not_allowed",
+    "message": "reason is only meaningful on dismiss, not 'undismiss'",
+    "request_id": "req_5c9f4e1b2a7d4e0fb3c81d6a90e27f45"
+  }
+}

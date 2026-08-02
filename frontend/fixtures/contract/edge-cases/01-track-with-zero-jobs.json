@@ -1,0 +1,54 @@
+{
+  "request_id": "req_0b3e91d47a25486cb1f07e2d9c4a5f83",
+  "generated_at": "2026-08-01T06:12:00Z",
+  "profile": "pursuit",
+  "tracks": [
+    {
+      "track": "bridge_and_solutions",
+      "label": "Bridge & Solutions",
+      "blurb": "Roles that pay for the operational judgement you already have, with the AI tooling attached.",
+      "jobs": [
+        {
+          "job_id": "7b21c4f8a03d9e5612c7ab84",
+          "rank": 1,
+          "bucket": "strong",
+          "title": "AI Operations Coordinator",
+          "company_name": "Mount Sinai Health System",
+          "location": "New York, NY",
+          "remote_policy": "hybrid",
+          "posted_at": "2026-07-25",
+          "posting_age_days": 7,
+          "comp": {
+            "min": 62000,
+            "max": 78000,
+            "currency": "USD",
+            "period": "yearly",
+            "is_estimated": false
+          },
+          "why": {
+            "gap_bridging_angle": "Six years running front-of-house scheduling for a 90-seat restaurant is the same job this posting describes: intake from people who do not know what they need, a written procedure they will actually follow, and a weekly number that says whether they followed it.",
+            "risk_factors": [
+              "Asks for one year in a healthcare setting, and the posting does not say it is flexible."
+            ]
+          },
+          "cohort_signal": { "save_bucket": "3-5" },
+          "state": { "saved": true, "dismissed": false, "applied": false },
+          "apply_url": "https://boards.greenhouse.io/mountsinai/jobs/7412886"
+        }
+      ]
+    },
+    {
+      "track": "core_swe",
+      "label": "Core SWE",
+      "blurb": "Straight software engineering roles. Nothing matched today.",
+      "jobs": []
+    },
+    {
+      "track": "ai_integration",
+      "label": "AI Integration",
+      "blurb": "Roles where you'd wire AI tools into a product or an internal workflow.",
+      "jobs": []
+    }
+  ],
+  "next_cursor": null
+}

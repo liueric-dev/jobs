@@ -1,0 +1,11 @@
+{
+  "request_id": "req_5c9f4e1b2a7d4e0fb3c81d6a90e27f45",
+  "events": [
+    { "event": "impression", "job_id": "7b21c4f8a03d9e5612c7ab84", "rank": 1 },
+    { "event": "impression", "job_id": "e04a6d1b93f27c85ae1f0b32", "rank": 2 },
+    { "event": "impression", "job_id": "9c47ae02b6135d8f27e4a1c0", "rank": 3 },
+    { "event": "open", "job_id": "9c47ae02b6135d8f27e4a1c0", "rank": 3, "dwell_ms": 14200 },
+    { "event": "save", "job_id": "9c47ae02b6135d8f27e4a1c0", "rank": 3 },
+    { "event": "applied", "job_id": "7b21c4f8a03d9e5612c7ab84" }
+  ]
+}

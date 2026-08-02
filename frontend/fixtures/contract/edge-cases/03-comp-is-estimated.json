@@ -1,0 +1,43 @@
+{
+  "request_id": "req_2f81b60d9c3a4e57b0d84a1e6c72935f",
+  "generated_at": "2026-08-01T06:12:00Z",
+  "profile": "pursuit",
+  "tracks": [
+    {
+      "track": "ai_integration",
+      "label": "AI Integration",
+      "blurb": "Roles where you'd wire AI tools into a product or an internal workflow.",
+      "jobs": [
+        {
+          "job_id": "3d6f18b0e7c25a94ab130e82",
+          "rank": 1,
+          "bucket": "stretch",
+          "title": "Automation Associate, Grants Operations",
+          "company_name": "Brooklyn Public Library",
+          "location": "Brooklyn, NY",
+          "remote_policy": "hybrid",
+          "posted_at": "2026-07-29",
+          "posting_age_days": 3,
+          "comp": {
+            "min": 54000,
+            "max": 61000,
+            "currency": "USD",
+            "period": "yearly",
+            "is_estimated": true
+          },
+          "why": {
+            "gap_bridging_angle": "Grants operations is deadline work with an audit trail, which is the shape of every shift-handover you have run. The automation half is one tool and a template library, and the posting says they will teach it to whoever they hire.",
+            "risk_factors": [
+              "Compensation is an estimate from the aggregator, not a figure the employer stated.",
+              "Grant-funded position; the listing does not say how long the funding runs."
+            ]
+          },
+          "cohort_signal": null,
+          "state": { "saved": false, "dismissed": false, "applied": false },
+          "apply_url": "https://www.bklynlibrary.org/careers/automation-associate-grants-2418"
+        }
+      ]
+    }
+  ],
+  "next_cursor": null
+}

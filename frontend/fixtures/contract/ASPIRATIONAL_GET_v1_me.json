@@ -1,0 +1,12 @@
+{
+  "email": "amara.okonkwo@example.org",
+  "display_name": "Amara Okonkwo",
+  "profile": "pursuit",
+  "is_admin": false,
+  "onboarding": {
+    "completed": true,
+    "completed_at": "2026-07-21T15:04:11Z",
+    "prior_domain": "hospitality",
+    "prior_years": 6
+  }
+}

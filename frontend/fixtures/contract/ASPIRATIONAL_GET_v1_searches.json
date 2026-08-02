@@ -1,0 +1,45 @@
+{
+  "suggested": [
+    {
+      "id": 12,
+      "text": "AI operations coordinator",
+      "location": "New York, NY",
+      "source": "track",
+      "watcher_count": 7
+    },
+    {
+      "id": 18,
+      "text": "member support specialist AI",
+      "location": "New York, NY",
+      "source": "track",
+      "watcher_count": 4
+    },
+    {
+      "id": 23,
+      "text": "automation associate nonprofit",
+      "location": "Brooklyn, NY",
+      "source": "cohort",
+      "watcher_count": 3
+    }
+  ],
+  "mine": [
+    {
+      "id": 44,
+      "text": "prompt specialist nonprofit",
+      "location": "New York, NY",
+      "last_run_at": "2026-07-28T04:00:00Z",
+      "result_count_last_run": 12,
+      "watcher_count": 3,
+      "watching": true
+    },
+    {
+      "id": 51,
+      "text": "clinical operations coordinator AI",
+      "location": "New York, NY",
+      "last_run_at": null,
+      "result_count_last_run": null,
+      "watcher_count": 1,
+      "watching": true
+    }
+  ]
+}

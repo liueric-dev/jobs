@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "unknown_reason",
+    "message": "unknown reason 'too_far'; expected one of ['wrong_level', 'wrong_role', 'wrong_location', 'bad_company', 'stale_posting', 'other']",
+    "request_id": "req_5c9f4e1b2a7d4e0fb3c81d6a90e27f45"
+  }
+}

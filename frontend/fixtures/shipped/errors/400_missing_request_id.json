@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "missing_request_id",
+    "message": "request_id is required; echo the one GET /v1/jobs returned",
+    "request_id": null
+  }
+}
