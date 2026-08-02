@@ -36,6 +36,38 @@ task 39. Tasks 37-40 prune it as they land, and phase 9 exits when `findings` is
 empty everywhere. If you are reading this and the baseline is still non-empty
 after tranche seven closed, that is the finding.
 
+WHY THE SUBSET TEST IS RED TODAY, 2026-08-02
+
+`audit-docs.py` was widened to scan the declared roots outside `docs/` -- the root
+`README.md` and `.claude/CLAUDE.md` -- which closes the rule 7 gap `AUDIT.md` s
+"What is open" and `HANDOFF.md` both name: those two were reachability roots for C2
+and were read by NO other check, C4 included, while both carry figures.
+
+**It landed red, on purpose, and the baseline was NOT grown to hide it.** That is
+task 36's own precedent -- it landed red with real C5 failures -- and growing the
+baseline here would be worse than the finding, because `doc-policy-baseline.json`
+was pruned empty at the close of tranche seven and its `_why` says in terms: do not
+add to it. Run `python3 backend/tools/audit-docs.py` for the current set; it is
+deliberately not typed here (rule 3). The findings are of two kinds and only one is
+a defect in a document:
+
+  C1  neither root declares `kind:` in frontmatter. REAL, and rule 1 says every
+      document declares one. Both read as `contract` by that table. The fix is two
+      frontmatter blocks and it is the owner's, not a session's: `.claude/CLAUDE.md`
+      is harness configuration and the root `README.md` is the repo's front page.
+
+  C4  two hits in `.claude/CLAUDE.md`, and BOTH ARE THE INSTRUMENT, NOT THE FILE.
+      The row patterns in `doc-figures.json` make a line compliant when it names its
+      metric or cites the owner, and that lookahead is scoped to the PHYSICAL LINE.
+      This file is hard-wrapped at ~88 columns, so `94.8%` sits one line above
+      `agree2` and `~~1182~~` one line above `AUDIT.md` -- the prose satisfies rule
+      3's corollary exactly as written and C4 cannot see it. Task 38 measured every
+      one of those patterns line-by-line over `docs/`, where no registered figure
+      happened to straddle a wrap; the widening is what surfaced that the unit of
+      the claim is the sentence and the unit of the check is the line. Fixing it
+      means re-deciding task 38's measured design and re-recording its
+      `_pattern_note`s, which is a task, not a side effect of this one.
+
 WHAT THESE TESTS DO NOT ASSERT
 
 That the documents are any good. `audit-docs.py`'s own docstring names what is
@@ -315,6 +347,67 @@ class TestSyntheticTree(unittest.TestCase):
         self.write("docs/quoted.md", "# quoted\n\n```\n$ echo 42\n```\n")
         found, _ = self.run_check("C4")
         self.assertEqual(["docs/copy.md"], [f.path for f in found])
+
+    def test_the_declared_roots_outside_docs_are_scanned_for_figures(self):
+        """The rule 7 gap `AUDIT.md` named: roots were C2 roots and nothing else.
+
+        `.claude/CLAUDE.md` and the root `README.md` are the two most-read documents
+        in the repo and both carry figures, and until this they were checked by a
+        `grep` in one task's Definition of done that a person has to remember to run
+        -- which `DOCS-POLICY.md` rule 7 says is exactly one step better than prose.
+        """
+        self.figures([{"name": "widget count", "owner": "docs/owner.md",
+                       "pattern": r"\b42\b", "allowed": []}])
+        self.write("docs/owner.md", "# owner\n\nthe count is 42\n")
+        self.write("README.md", "# root\n\nsomeone typed 42 here\n")
+        self.write(".claude/CLAUDE.md", "# session context\n\nand 42 here too\n")
+        found, _ = self.run_check("C4")
+        self.assertEqual([".claude/CLAUDE.md", "README.md"],
+                         sorted(f.path for f in found))
+
+    def test_c1_reads_the_external_roots_too(self):
+        """Rule 1 says EVERY document declares its kind, and these are documents."""
+        self.write("README.md", "# root, undeclared\n")
+        self.write(".claude/CLAUDE.md", "---\nkind: contract\n---\n# declared\n")
+        found = {f.path: f for f in self.run_check("C1")[0]}
+        self.assertIn("README.md", found)
+        self.assertNotIn(".claude/CLAUDE.md", found)
+
+    def test_a_root_is_never_reported_as_an_orphan(self):
+        """C2 is the one check the roots are exempt from, and not as a favour.
+
+        Reachability is defined FROM these files. Asking whether the thing the walk
+        starts at was reached by the walk is a category error, and answering it
+        would put a permanent unfixable finding on the file every session opens
+        first -- which is the reflex that retires every other check.
+        """
+        self.write("README.md", "# root, linked from nowhere\n")
+        self.write(".claude/CLAUDE.md", "# also linked from nowhere\n")
+        found, _ = self.run_check("C2")
+        self.assertEqual([], [f.path for f in found if not f.path.startswith("docs/")])
+
+    def test_a_declared_root_that_does_not_exist_is_c2s_finding_and_only_c2s(self):
+        """One missing file is one finding. `.claude/CLAUDE.md` is absent here."""
+        self.assertNotIn(".claude/CLAUDE.md", audit_docs.external_roots(self.root))
+        self.assertEqual([], [f.path for f in self.run_check("C1")[0]
+                              if f.path == ".claude/CLAUDE.md"])
+        self.assertIn(".claude/CLAUDE.md::missing-root",
+                      [f.key for f in self.run_check("C2")[0]])
+
+    def test_docs_files_stays_narrow_and_scanned_files_is_the_wider_set(self):
+        """The widening is visible in the names, not hidden inside a walk."""
+        self.write("README.md", "# root\n")
+        self.write("docs/a.md", "# a\n")
+        self.assertEqual(["docs/a.md"], audit_docs.docs_files(self.root))
+        self.assertEqual(["README.md"], audit_docs.external_roots(self.root))
+        self.assertEqual(["docs/a.md", "README.md"],
+                         audit_docs.scanned_files(self.root))
+
+    def test_external_roots_is_derived_from_ROOTS_and_is_not_a_second_list(self):
+        """A second list of roots would be a figure copied to two places."""
+        self.write("README.md", "# root\n")
+        for rel in audit_docs.external_roots(self.root):
+            self.assertIn(rel, audit_docs.ROOTS)
 
     def test_c6_wants_a_date_and_a_supersede_word_in_a_blockquote(self):
         os.makedirs(os.path.join(self.root, "docs/archive"))

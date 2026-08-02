@@ -191,9 +191,32 @@ every session reads about the test suite, and the root `README.md` types a count
 entry points under `docs/ingest/`. Task 38's Definition of done checks the first of those
 with a **`grep` a person has to remember to run**, which `DOCS-POLICY.md` rule 7 says is
 exactly one step better than prose — *"a script nobody runs automatically … decays the
-moment the person who remembers it stops running it."* Widening `docs_files()` to include
+moment the person who remembers it stops running it."* ~~Widening `docs_files()` to include
 the declared roots is the obvious next check and is not written. Until it is, **a figure in
-`.claude/CLAUDE.md` is on the honour system**, and it is the first thing every session reads.
+`.claude/CLAUDE.md` is on the honour system**, and it is the first thing every session reads.~~
+
+> **THE WIDENING LANDED 2026-08-02, RED ON PURPOSE — 4 findings, and one sentence above is
+> half-stale.** The scanned set now takes the two declared roots as well as `docs/`, derived
+> from `ROOTS` rather than a second list. C2 is deliberately excluded: a root cannot be an
+> orphan, since reachability is defined *from* those files.
+>
+> **The root `README.md` no longer types that count.** Task 37 replaced it with a link to
+> `docs/README.md` and left the strike visible at `README.md:25-29`, citing rule 3 by name.
+> C4 confirms it — zero findings there. So the live half of the gap was `.claude/CLAUDE.md`
+> alone, and had been for a day before this paragraph was read as current.
+>
+> The 4 findings split cleanly and are [`tranche_seven/45`](tranche_seven/45-declare-kind-on-the-roots.md)
+> and [`tranche_seven/46`](tranche_seven/46-sentence-scope-the-c4-lookahead.md):
+> **2 real** (neither root declares `kind:`) and **2 false positives where the file is right
+> both times** — C4's compliance lookahead is scoped to the physical line, and
+> `.claude/CLAUDE.md` is hard-wrapped, so `94.8%` sits one line above the `` `agree2` `` that
+> licenses it. The unit of the claim is the sentence; the unit of the check is the line.
+> Task 38's design was correct against `docs/`, where no owned figure straddled a wrap.
+>
+> **Nothing was added to the declared baseline and it is still empty.** The `backend` suite
+> is red on `test_findings_are_a_subset_of_the_declared_baseline` until 45 and 46 land, which
+> is the disposition task 36 took and the reason that test is written to be pruned, never
+> grown.
 
 > **THE STATUS-COUNT INSTRUMENT WAS UNDER-REPORTING, found 2026-08-01 by running it.**
 > The command in that row was `grep -c '| done |'`, and two rows spell it `| **done** |` for

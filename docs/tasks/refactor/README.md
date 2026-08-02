@@ -120,7 +120,10 @@ Nothing downstream is trustworthy until these land. None of them are large.
 **The system, then the sweep.** Task 34 paid down the debt it could find by hand; this tranche
 makes the same work *checkable*, because the one documentation rule that has held in this repo
 is the one with a script attached. [`docs/DOCS-POLICY.md`](../../DOCS-POLICY.md) is the system
-these seven tasks execute — read it first; each task file cites a rule from it by number.
+the tasks below execute — read it first; each task file cites a rule from it by number.
+~~these seven tasks~~ — the tranche opened at 36–42 and has twice grown by finding
+something; a typed count of its own rows is the shape of thing rule 3 exists to stop, and it
+was already wrong at 44.
 
 | | Task | Lands | |
 |---|---|---|---|
@@ -133,6 +136,9 @@ these seven tasks execute — read it first; each task file cites a rule from it
 | 42 | [Close the six UNBLOCKED defects](tranche_seven/42-close-the-unblocked-defects.md) | D02, D03, D05, D11, D13, D23 all closed, each with a test that fails without its fix. **Three of the six were never blocked at all** — D05, D11 and D13 needed no harness, and two say so in their own text. Every count the register quoted for them was wrong | done |
 | 43 | [Split `docs/scoring.md`](tranche_seven/43-split-scoring-doc.md) | the contract half kept the path (every live citation means it); the measured half is `docs/scoring-measured-2026-07-27.md`, frozen. **The decision was already taken — `DEC-70` names the rejected option**; this executed it. The file had no two halves to cut between — the figures were interleaved into every section, so what moved is every figure it *owned*. Found `criteria.json`'s line citation already off by seven, and 12.7/20 quoted three times without the caveat its owner attaches | done |
 | 44 | [Archive the handoff history](tranche_seven/44-archive-the-handoff-history.md) | **`HANDOFF.md` is two documents** — a `rolling` entry point sitting on a frozen session narrative, and rule 1 has no name for that. Found by check C4, which hit nineteen restatements below line 380 and none above it. The frozen half is archived in two files, the allowance is removed, and **C4 now enforces on the file every session reads first**. Its premise was wrong on two of the nineteen: they sat in *live* sections and became citations, not moves. Four cross-stream lessons promoted to `MEASUREMENT-TRAPS.md` (rule 5) | done |
+| — | The rule 7 gap — no task file; [`AUDIT.md`](AUDIT.md) § *What is open* named it | `audit-docs.py` scans the two declared reachability roots as well as `docs/`. `external_roots()` derives them **from `ROOTS`**, because a second hand-written list is the copied figure this script exists to catch; C2 is deliberately excluded, since a root cannot be an orphan. **Landed red on purpose, 4 findings** — the same disposition task 36 took — split into 45 and 46 below. Half the stated motivation was already gone: task 37 had replaced the root `README.md`'s entry-point count with a link, so the live half was `.claude/CLAUDE.md` alone | done |
+| 45 | [Declare `kind:` on the two roots](tranche_seven/45-declare-kind-on-the-roots.md) | the two C1 findings. **Carries one real decision** — whether `.claude/CLAUDE.md` should hold frontmatter at all or be exempted like `CLAUDE_UPDATES.md`, which is the owner's and wants a `DEC-` entry either way | todo |
+| 46 | [Sentence-scope the C4 lookahead](tranche_seven/46-sentence-scope-the-c4-lookahead.md) | the two C4 findings, **both false positives and the file is right both times**. `doc-figures.json`'s compliance lookahead is scoped to the physical line; `.claude/CLAUDE.md` is hard-wrapped, so a figure and the metric that licenses it land on different lines. Task 38's design was correct against `docs/`, where no owned figure straddled a wrap — the widening moved the population, not the instrument. **Widening a match can only ever clear findings, so the deliverable is the list of what it clears, not a green** | todo |
 
 ---
 

@@ -17,9 +17,21 @@ So this file is not "another tool in tools/": it is a checker that fails a suite
 someone is already running, and `backend/tests/test_docs_policy.py` wires in both
 this script and `audit-doc-links.py`.
 
+WHAT IS SCANNED
+
+Every `.md` under `docs/`, PLUS the declared reachability roots that live outside
+it -- `README.md` and `.claude/CLAUDE.md`. Task 36 scoped this to `docs/` and said
+widening was a later call; `AUDIT.md` s "What is open" and `DOCS-POLICY.md` rule 7
+then named the hole precisely: those two files were roots for C2 and were read by
+NO other check, C4 included, while both carry figures. They are also the two most-
+read documents in the repo -- `.claude/CLAUDE.md` is the first thing every session
+opens. A figure there was on the honour system, checked by a `grep` in one task's
+Definition of done that a person has to remember to run, which is the exact thing
+rule 7 says is one step better than prose. See `scanned_files()`.
+
 THE SIX CHECKS
 
-  C1  kind declared      every `.md` under docs/ has frontmatter with a `kind:` in
+  C1  kind declared      every scanned `.md` has frontmatter with a `kind:` in
                          {contract, rationale, record, rolling, task}   (rule 1)
   C2  no orphans         every `.md` under docs/ is reachable by relative link,
                          transitively, from a declared root                (rule 1)
@@ -192,7 +204,12 @@ class Finding:
 
 
 def docs_files(root):
-    """Every `.md` under `docs/`, repo-relative and sorted."""
+    """Every `.md` under `docs/`, repo-relative and sorted.
+
+    Deliberately still means exactly what its name says. `scanned_files()` is what
+    the checks read; keeping this one narrow is what makes the widening visible in
+    the diff instead of hidden inside a walk.
+    """
     out = []
     for dirpath, _, filenames in os.walk(os.path.join(root, "docs")):
         for name in filenames:
@@ -200,6 +217,49 @@ def docs_files(root):
                 out.append(os.path.relpath(
                     os.path.join(dirpath, name), root).replace(os.sep, "/"))
     return sorted(out)
+
+
+def external_roots(root):
+    """The declared roots that live outside `docs/`, and that exist.
+
+    DERIVED FROM `ROOTS`, NEVER A SECOND LIST. A second list would be a figure
+    copied to two places, which is the rule this script checks. The set is exactly
+    "declared root, not under docs/": today `README.md` and `.claude/CLAUDE.md`.
+
+    A root that does not exist is skipped here and reported by C2 as
+    `missing-root`, which is where that finding already lives. Reporting it twice
+    would make one missing file two findings and two fixes.
+    """
+    return sorted(rel for rel in ROOTS
+                  if not rel.startswith("docs/")
+                  and os.path.isfile(os.path.join(root, rel)))
+
+
+def scanned_files(root):
+    """Everything the checks read: `docs/` plus the external declared roots.
+
+    WHY THE ROOTS ARE IN, AND WHAT IT COSTS. `AUDIT.md` s "What is open" states the
+    gap this closes and states it as a rule 7 gap rather than an oversight. The two
+    files are read more than anything under `docs/` and are edited by every session,
+    which is the combination that makes an unchecked figure spread.
+
+    NOT EVERY CHECK USES THIS SET, and the exceptions are properties of the checks
+    rather than exemptions for the files:
+
+      C1  yes. Rule 1 says EVERY document declares its kind, and these two are
+          documents -- `.claude/CLAUDE.md` is a `contract` by every line of rule 1's
+          table (edited in place, a stale line in it is a defect, and it already
+          carries struck-and-kept corrections).
+      C2  no -- a root cannot be an orphan. Reachability is defined FROM these
+          files; asking whether they are reached is a category error, and
+          `check_orphans()` reads `ROOTS` directly for that reason.
+      C3  yes, and it finds nothing: neither root declares `kind: rolling`. It is in
+          so that marking one `rolling` later is checked without a code change.
+      C4  yes, and this is the whole point of the widening.
+      C5  unaffected. It reads the two register files named in `REGISTERS`.
+      C6  unaffected. It reads `docs/archive/` only.
+    """
+    return docs_files(root) + external_roots(root)
 
 
 def read(root, rel):
@@ -579,13 +639,18 @@ CHECKS = ("C1", "C2", "C3", "C4", "C5", "C6")
 
 def run_checks(root=REPO_ROOT, only=None):
     """(findings, allowed). The entry point the suite calls."""
-    files = docs_files(root)
+    #: Two sets, and the difference is one line of meaning: C2 asks whether a
+    #: document is REACHED, and the roots are what it is reached from. Everything
+    #: else asks a question about the document itself, which the roots are not
+    #: exempt from. See `scanned_files()`.
+    files = scanned_files(root)
+    reachable = docs_files(root)
     wanted = set(only or CHECKS)
     findings, allowed = [], []
     if "C1" in wanted:
         findings += list(check_kind(root, files))
     if "C2" in wanted:
-        got, allowed = check_orphans(root, files)
+        got, allowed = check_orphans(root, reachable)
         findings += got
     if "C3" in wanted:
         findings += list(check_rolling(root, files))
@@ -661,9 +726,13 @@ def load_baseline(root=REPO_ROOT):
 # ---------------------------------------------------------------------------
 
 
-EPILOG = """the checks, all six by name:
+EPILOG = """scanned: every .md under docs/, PLUS the declared roots outside it --
+README.md and .claude/CLAUDE.md. C2 exempts them because a root cannot be an orphan;
+C5 and C6 read their own fixed file sets. See scanned_files() for the rest.
 
-  C1  kind declared       every .md under docs/ declares kind: in frontmatter, one
+the checks, all six by name:
+
+  C1  kind declared       every scanned .md declares kind: in frontmatter, one
                           of contract, rationale, record, rolling, task  (rule 1)
   C2  no orphans          every .md under docs/ is reachable by relative link,
                           transitively, from a declared root; deliberate orphans
@@ -727,7 +796,9 @@ def main(argv):
             continue
         n = sum(1 for f in findings if f.check == check)
         print(f"{check}: {n} finding(s)", file=sys.stderr)
-    print(f"\n{len(findings)} finding(s) under {args.root}/docs/", file=sys.stderr)
+    scope = ", ".join(["docs/"] + list(external_roots(args.root)))
+    print(f"\n{len(findings)} finding(s) under {args.root} ({scope})",
+          file=sys.stderr)
     return 1 if findings else 0
 
 
