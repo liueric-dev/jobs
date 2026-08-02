@@ -12,13 +12,14 @@
 // HASH ROUTES, so there is no server-side rewrite to configure and a deep link
 // survives a reload without the API process needing a catch-all route.
 
-import { me, logout, loginUrl, ApiError } from "./api.mjs";
+import { me, getOnboarding, logout, loginUrl, ApiError } from "./api.mjs";
 import { setErrorHandler, flush, stopObserving } from "./events.mjs";
 import { toast, hideToast, errorBlock } from "./ui.mjs";
 import { esc } from "./format.mjs";
 import * as today from "./today.mjs";
 import * as saved from "./saved.mjs";
 import * as detail from "./detail.mjs";
+import * as onboarding from "./onboarding.mjs";
 
 const view = document.getElementById("view");
 const topbar = document.getElementById("topbar");
@@ -39,17 +40,100 @@ async function boot() {
     return showSignIn(e);
   }
   topbar.hidden = false;
+  // If it redirected, the hashchange it caused does the routing. Calling
+  // route() here as well would render the screen twice and fetch its data
+  // twice, because a hash assignment queues hashchange as its own task rather
+  // than dispatching it inline.
+  if (await sendFirstRunToOnboarding()) return;
   route();
+}
+
+/**
+ * A Builder who has never onboarded lands on the form instead of the list.
+ *
+ * THIS IS TASK 26's FIRST DONE BULLET, on the client side: "a Builder signs in
+ * with Google and reaches a ranked list without any manual DB work". The row
+ * that used to need a CLI is a builder_profiles row, and this is the only
+ * thing on the page that puts a first-run Builder in front of the form that
+ * creates it.
+ *
+ * IT IS A NUDGE, NOT A GATE, AND THAT IS DELIBERATE ON TWO COUNTS. It fires
+ * only when the Builder did not ask for something specific -- an empty hash or
+ * #/today -- so a deep link into a posting still resolves. And it never blocks
+ * the list: every onboarding field is optional server-side, so a Builder who
+ * skips it is a Builder with NULLs, which is the honest state and is exactly
+ * what the nullable columns mean (schema_web.py:228-232). Gating the list on a
+ * form would lose people at screen zero, in a population where
+ * 26 § Onboarding says "every additional screen loses someone".
+ *
+ * A FAILED CHECK NEVER COSTS ANYONE THEIR LIST. If GET /v1/onboarding is down
+ * or refuses, this logs and routes normally. The failure mode of an onboarding
+ * probe must not be "nobody can see any postings".
+ *
+ * Returns true when it redirected, so boot() can leave the routing to the
+ * hashchange rather than doing it twice.
+ */
+async function sendFirstRunToOnboarding() {
+  const hash = location.hash.replace(/^#/, "");
+  if (hash && hash !== "/" && hash !== "/today") return false;
+  try {
+    const body = await getOnboarding();
+    if (body && body.onboarding && !body.onboarding.completed) {
+      location.hash = "#/onboarding";
+      return true;
+    }
+  } catch (e) {
+    console.warn("could not read onboarding state; going to the list", e);
+  }
+  return false;
 }
 
 // -- routing ---------------------------------------------------------------
 
+/**
+ * The routing table. ONE ENTRY PER SCREEN, and adding a screen is adding a row.
+ *
+ * WHY A TABLE AND NOT THE IF-CHAIN IT REPLACED. Three screens fit in an
+ * if-chain; the surfaces table in tranche_six/32-frontend.md lists six, and
+ * the chain had the route match in one function and the dispatch in another,
+ * so a fourth screen meant editing two places that could disagree. A row here
+ * carries `name` (which is also the `data-tab` value markTab looks for),
+ * `pattern`, and `show`, which returns the screen's teardown.
+ *
+ * ORDER MATTERS: first match wins, so `/job/:id` sits above the prefix
+ * patterns. The last row is the fallback and its pattern must match anything.
+ *
+ * TO ADD Search (task 25's screen, which has no route and no table yet): write
+ * js/search.mjs exporting `show(root)`, import it, add
+ * `{ name: "search", pattern: /^\/search/, show: (root) => search.show(root) }`
+ * above the fallback, and add one <a data-tab="search"> to index.html. Nothing
+ * else in this file changes.
+ */
+const ROUTES = [
+  {
+    name: "job",
+    pattern: /^\/job\/(.+)$/,
+    show: (root, match) => detail.show(root, decodeURIComponent(match[1])),
+  },
+  { name: "saved", pattern: /^\/saved/, show: (root) => saved.show(root) },
+  {
+    name: "onboarding",
+    pattern: /^\/onboarding/,
+    show: (root) => onboarding.show(root),
+  },
+  // The fallback. Anything unrecognised is Today rather than a 404 screen: a
+  // hash this client does not know is a stale bookmark, and the list is a
+  // better answer to one than an error is.
+  { name: "today", pattern: /^.*$/, show: (root) => today.show(root) },
+];
+
 function currentRoute() {
   const hash = location.hash.replace(/^#/, "") || "/today";
-  const job = hash.match(/^\/job\/(.+)$/);
-  if (job) return { name: "job", id: decodeURIComponent(job[1]) };
-  if (hash.startsWith("/saved")) return { name: "saved" };
-  return { name: "today" };
+  for (const entry of ROUTES) {
+    const match = hash.match(entry.pattern);
+    if (match) return { ...entry, match };
+  }
+  return null;   // unreachable: the last pattern matches everything.
 }
 
 async function route() {
@@ -61,9 +145,7 @@ async function route() {
   const target = currentRoute();
   markTab(target.name);
   try {
-    if (target.name === "job") teardown = await detail.show(view, target.id);
-    else if (target.name === "saved") teardown = await saved.show(view);
-    else teardown = await today.show(view);
+    teardown = await target.show(view, target.match);
   } catch (e) {
     if (e instanceof ApiError && (e.isAuth || e.isForbidden)) return showSignIn(e);
     view.innerHTML = errorBlock(e);

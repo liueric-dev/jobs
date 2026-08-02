@@ -1,6 +1,6 @@
 {
   "_comment": "What each fixture in this directory is, and the file:line it was derived from. It is a sidecar rather than a `_comment` key inside each fixture because these bodies are meant to be byte-faithful: a client that parses one must see exactly what the API sends, and an extra key would be a lie in the shape of documentation. `python3 frontend/verify_fixtures.py` re-derives every claim below from the source and fails if one has gone stale.",
-  "_derived_from": "backend/webapp/jobs.py, backend/webapp/auth.py, backend/webapp/schema_web.py, backend/schema.py, working tree at 2026-08-01, one commit past da47503.",
+  "_derived_from": "backend/webapp/jobs.py, backend/webapp/auth.py, backend/webapp/schema_web.py, backend/webapp/onboarding.py, backend/schema.py. The job/event/me fixtures were derived from the working tree at 2026-08-01, one commit past da47503; the four onboarding fixtures were derived on 2026-08-02, at 43f95c0.",
   "_line_numbers": "READ THE CODE, NOT THE CITE -- docs/ingest/DEFECTS.md's own instruction, and it applies here for a concrete reason: jobs.py moved ~26 lines while these fixtures were being written (the D66/D67 fix). The line numbers below were re-derived after that landed and are correct as of then. verify_fixtures.py resolves everything by NAME and never by line, so it stays right when these drift; it is the authority, this is the map.",
   "_status": "REAL. Every endpoint here has a route today. These are what the API returns, not what it should return.",
 
@@ -114,6 +114,63 @@
     "notes": [
       "There is no onboarding block, no prior_domain and no cohort information. It deliberately touches no jobs table.",
       "profile is 'pursuit' (migrations/migrate_pursuit_profile.py:109), not the contract's 'pursuit-cohort-2026a'."
+    ]
+  },
+
+  "POST_v1_onboarding.request.json": {
+    "endpoint": "POST /v1/onboarding (request body)",
+    "derived_from": [
+      "onboarding.py -- OnboardingRequest: the seven fields, in this order. Every one is optional at the model layer and validated in the handler, which is jobs.Event's arrangement and is copied for jobs.Event's reason: a contract violation has to come back in the contract's own 400 envelope, and pydantic cannot produce that shape.",
+      "onboarding.py -- validate_request() and _VOCABULARIES: the four closed enums, plus the schedule_constraints subset check and the duplicate-job_id refusal",
+      "schema_web.py -- PRIOR_DOMAINS, SITUATIONS, LOCATION_PREFS, REMOTE_PREFS, SCHEDULE_CONSTRAINTS, each of which also generates a CHECK on the column",
+      "onboarding.py -- VERDICT_EVENTS: the two verdicts. `interested` -> save, `not_interested` -> dismiss",
+      "onboarding.py -- MAX_SEED_JUDGEMENTS = 40, the cap on one request"
+    ],
+    "notes": [
+      "THIS WAS contract/ASPIRATIONAL_POST_v1_onboarding.request.json AND THE PREFIX HAD GONE FALSE. Task 26 gave the endpoint a route while frontend/README.md was being written, so a file describing a live route sat in the directory verify_fixtures.py deliberately does not read, and nothing checked it against the code. Moved 2026-08-02; the request body itself is unchanged, because it was already correct.",
+      "THERE IS NO `profile` FIELD AND THERE MUST NEVER BE ONE. The cohort comes from the session via app_users.profile, exactly as jobs.py's tenancy does -- a `?profile=` parameter would turn one forgotten check into a cross-user data leak.",
+      "THERE IS NO `tracks` FIELD EITHER. Track subscriptions are derived from the seed judgements rather than picked from a checkbox (onboarding.derive_tracks) -- task 26 asks for them to be seeded 'from behaviour rather than a checkbox'. derive_tracks returns nothing today: primary_track is written by score.py and `pursuit` has daily_narrative_budget = 0, so job_scores holds zero pursuit rows.",
+      "AN UNKNOWN FIELD IS NOT A 400. Pydantic ignores keys the model does not declare, so a client sending `prior_domains` for `prior_domain` gets a 200 and stores nothing. Nothing on either side logs it. verify_fixtures.py and check_client.mjs both derive OnboardingRequest's field names for exactly this reason.",
+      "seed_judgements is optional and defaults to []. A Builder who skipped the second screen sends the form alone, which is legal and is the point: every field here is skippable."
+    ]
+  },
+
+  "POST_v1_onboarding.response.json": {
+    "endpoint": "POST /v1/onboarding (response)",
+    "derived_from": [
+      "onboarding.py -- post_onboarding()'s return: {onboarding, seed_judgements_recorded, profile}",
+      "onboarding.py -- _state(): the onboarding block, {completed, completed_at, prior_domain, prior_years}",
+      "schema_web.py -- builder_profiles.onboarded_at is TEXT, which is what `completed` and `completed_at` are read from"
+    ],
+    "notes": [
+      "completed_at LOST A TRAILING 'Z' ON THE MOVE, AND THE FIXTURE WAS THE THING THAT WAS WRONG. onboarded_at is TEXT written by lib.timeparse.utc_now_str(), whose docstring says the '%Y-%m-%dT%H:%M:%S' shape is load-bearing and 'must not gain an offset or microseconds' because both pipelines compare these as STRINGS. The 'Z' came from the contract, which invented this response shape against no code. A client doing new Date(completed_at) on the real value reads it as LOCAL time -- the same trap first_seen sets, which js/format.mjs handles by appending the Z itself.",
+      "seed_judgements_recorded CAN BE LOWER THAN WHAT WAS SENT AND THAT IS NOT AN ERROR. jobs.record_events() silently drops events for jobs outside this profile's match set; onboarding.py logs the discrepancy and deliberately does not 400, because the form half has already committed and a retry would re-write the judgements that did work. The client reports the difference in a toast.",
+      "THE WRITE IS TWO TRANSACTIONS, ORDERED SO THE SURVIVABLE FAILURE IS THE ONE THAT HAPPENS. The profile row commits first, so a crash between the halves leaves a Builder who onboarded with no judgements -- retryable -- rather than judgements belonging to a Builder with no profile row.",
+      "prior_domain is read back from app_users, not from builder_profiles: it is a fact about the labeller (eval_labels.labeller_id = app_users.id) rather than a matching input, so it lives on the account row while the other six live on the override row.",
+      "IDEMPOTENT ON THE FORM, APPEND-ONLY ON THE JUDGEMENTS. Re-submitting the form updates the same row -- a Builder correcting their comp floor is not a second Builder. Re-submitting judgements writes more job_events rows, because that table is the append-only evidence."
+    ]
+  },
+
+  "GET_v1_onboarding.json": {
+    "endpoint": "GET /v1/onboarding",
+    "derived_from": [
+      "onboarding.py -- get_onboarding()'s return: {onboarding, profile}",
+      "onboarding.py -- _state(), the same block POST returns"
+    ],
+    "notes": [
+      "NO FIXTURE FOR THIS EXISTED IN EITHER DIRECTORY until 2026-08-02, and the route is not in API-CONTRACT-v1.md at all. The contract covers reading onboarding state by inventing an `onboarding` block on GET /v1/me (contract/ASPIRATIONAL_GET_v1_me.json). The code answers it with this route instead, because /v1/me is auth.py's and its 'deliberately touches no jobs table' property is worth more than saving a request. The two must never both exist with different shapes -- and shipped/GET_v1_me.json is the proof that only one does.",
+      "The block here is byte-identical to POST_v1_onboarding.response.json's. One Builder cannot have two answers, and it is the same read -- _state() -- in both handlers. check_client.mjs asserts the two agree.",
+      "This is the COMPLETED state. See GET_v1_onboarding.first_run.json for the other one, which is the case a first-run client actually branches on."
+    ]
+  },
+
+  "GET_v1_onboarding.first_run.json": {
+    "endpoint": "GET /v1/onboarding",
+    "derived_from": ["onboarding.py -- _state() with no builder_profiles row: the LEFT JOIN yields NULLs and `completed` is `onboarded_at is not None`"],
+    "notes": [
+      "THE STATE EVERY BUILDER STARTS IN, and the one the client routes on: js/app.mjs sends a Builder whose `completed` is false to #/onboarding instead of the list.",
+      "prior_domain IS null AND NOT THE DOMAIN LITERALLY NAMED 'none'. schema_web.py spends a paragraph on the distinction and it is load-bearing: 'none' is a real answer about a real person -- somebody whose prior work is in none of the listed domains -- and NULL means NOBODY ASKED. Collapsing the two would score an unasked labeller as a labeller with no background. verify_fixtures.py asserts this fixture carries the NULL.",
+      "There is no 404 and no error for a Builder who has never onboarded. The row's absence is an answer, not a failure."
     ]
   },
 

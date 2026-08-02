@@ -8,14 +8,17 @@
 // `verify_fixtures.py` is the server half -- it re-derives every shape claim in
 // fixtures/shipped/ from backend/webapp/*.py. This is the client half: it feeds
 // those same fixtures to the code that will parse them in a browser, and it
-// re-derives three vocabularies from the Python that owns them. Between them,
-// the fixture directory is checked from both ends rather than from neither.
+// re-derives nine names from the Python that owns them -- ROLE_TRACK, the six
+// closed vocabularies, the event names, and OnboardingRequest's field list.
+// Between them, the fixture directory is checked from both ends rather than
+// from neither.
 //
 // WHAT IT COVERS THAT verify_fixtures.py CANNOT. Shape is not behaviour. The
 // four JSON-string columns are correctly shaped strings in the fixture and are
 // still a client bug if nobody parses them; a track vocabulary can be correct
 // in Python and absent from the client's copy; `apply` is a perfectly
-// well-shaped string that is a 400.
+// well-shaped string that is a 400; and a form field misspelt by one letter is
+// a 200 that stores nothing, because pydantic ignores keys it does not declare.
 //
 // IT IS PLAIN NODE, NO TEST FRAMEWORK, NO package.json. The client modules are
 // .mjs so node reads them as ES modules with no manifest at all -- which is
@@ -63,6 +66,7 @@ const format = await import("./js/format.mjs");
 const ui = await import("./js/ui.mjs");
 const events = await import("./js/events.mjs");
 const detailView = await import("./js/detail.mjs");
+const onboardingView = await import("./js/onboarding.mjs");
 
 // -- helpers ----------------------------------------------------------------
 
@@ -79,6 +83,62 @@ function pyTuple(relPath, name) {
   const match = source.match(new RegExp(`^${name} = \\(([\\s\\S]*?)\\)`, "m"));
   assert.ok(match, `${name} is no longer a module-level tuple in ${relPath}`);
   return [...match[1].matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+}
+
+/** Every module-level NAME = {"a": "b", ...} mapping of string literals.
+ *  onboarding.VERDICT_EVENTS is a dict rather than a tuple because it IS a
+ *  mapping -- verdict to event name -- and both halves are checked below. */
+function pyDict(relPath, name) {
+  const source = fs.readFileSync(path.join(REPO, relPath), "utf8");
+  const match = source.match(new RegExp(`^${name} = \\{([\\s\\S]*?)\\}`, "m"));
+  assert.ok(match, `${name} is no longer a module-level dict in ${relPath}`);
+  return Object.fromEntries(
+    [...match[1].matchAll(/"([^"]*)"\s*:\s*"([^"]*)"/g)].map((m) => [m[1], m[2]]));
+}
+
+/** A module-level NAME = <int>. */
+function pyInt(relPath, name) {
+  const source = fs.readFileSync(path.join(REPO, relPath), "utf8");
+  const match = source.match(new RegExp(`^${name} = (-?\\d+)\\s*$`, "m"));
+  assert.ok(match, `${name} is no longer a module-level int in ${relPath}`);
+  return Number(match[1]);
+}
+
+/** The field names one pydantic model declares, in declaration order.
+ *
+ *  THE REASON THIS IS WORTH A PARSER. Pydantic ignores unknown fields, so a
+ *  client sending a key OnboardingRequest does not declare gets a 200 and
+ *  stores nothing -- the Builder answered a question that went nowhere and was
+ *  told it worked. Neither a 400 nor a log line marks it. Deriving the field
+ *  set here is the only place on the client side that can catch it. */
+function pyModelFields(relPath, className) {
+  const source = fs.readFileSync(path.join(REPO, relPath), "utf8");
+  const match = source.match(
+    new RegExp(`^class ${className}\\(BaseModel\\):([\\s\\S]*?)\\n\\n\\n`, "m"));
+  assert.ok(match, `${className} is no longer a BaseModel in ${relPath}`);
+  return [...match[1].matchAll(/^ {4}(\w+): /gm)].map((m) => m[1]);
+}
+
+/** One file's text, for the checks that are about source rather than about
+ *  behaviour -- the routing table and the shell markup, neither of which can
+ *  be imported here (app.mjs reaches for document at module scope and boots). */
+function fileText(...parts) {
+  return fs.readFileSync(path.join(HERE, ...parts), "utf8");
+}
+
+/** The same text with `//` and block comments removed.
+ *
+ *  WHY THIS EXISTS, since it is exactly the sort of helper that gets added for
+ *  no reason: the file-upload check below scans source for `type="file"`, and
+ *  the first thing it found was onboarding.mjs's own comment saying there is no
+ *  such input and there must not be one. A prohibition that fails on being
+ *  written down is a bad prohibition. Every source scan that is about what the
+ *  code DOES rather than what it SAYS goes through this. */
+function codeOnly(text) {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
 }
 
 const cases = [];
@@ -109,6 +169,30 @@ async function renderDetail(job) {
   };
   try {
     const teardown = await detailView.show(root, job.id);
+    teardown();
+    return html;
+  } finally {
+    globalThis.fetch = before;
+  }
+}
+
+/**
+ * Render the onboarding form for one GET /v1/onboarding body and return its HTML.
+ *
+ * Same arrangement as renderDetail: the real show() with a stubbed root and a
+ * fetch that answers the onboarding read. Screen one is the one that can be
+ * reached without a form submit, and it is the one carrying every control.
+ */
+async function renderOnboarding(body) {
+  const before = globalThis.fetch;
+  let html = "";
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => body });
+  const root = {
+    set innerHTML(v) { html = v; }, get innerHTML() { return html; },
+    addEventListener() {}, removeEventListener() {}, querySelector: () => null,
+  };
+  try {
+    const teardown = await onboardingView.show(root);
     teardown();
     return html;
   } finally {
@@ -417,6 +501,301 @@ it("every event name the client can emit is one jobs.py accepts", () => {
   }
   assert.ok(emitted.has("applied") && !emitted.has("apply"),
             "DEC-73: the event for an application is 'applied'; 'apply' is a 400");
+});
+
+// -- onboarding ----------------------------------------------------------------
+//
+// COVERED HERE FOR THE FIRST TIME. frontend/README.md recorded that this client
+// "calls neither onboarding route" and that nothing checked the two onboarding
+// fixtures against onboarding.py. Both are now false; the fixtures moved into
+// shipped/ and verify_fixtures.py derives their shapes, and this is the client
+// half of the same pair.
+
+it("onboarding fits inside task 26's screen budget", () => {
+  // tranche_five/26 § Definition of done: "Onboarding is <= 3 screens and
+  // involves no file upload." Two, because 26 § Onboarding's third step is
+  // literally "Nothing else -- resist adding steps", so a confirmation screen
+  // would spend the budget on the one thing the task asked not to add.
+  assert.ok(onboardingView.SCREENS.length <= 3,
+            `${onboardingView.SCREENS.length} screens; the ceiling is 3`);
+  assert.deepEqual(onboardingView.SCREENS, ["form", "seed"]);
+});
+
+it("there is no file upload anywhere in the client", async () => {
+  // THE OTHER HALF OF THAT BULLET, and it is a privacy decision rather than an
+  // unfinished feature (onboarding.py:37-43): a resume upload would mean
+  // storing personal documents for thirty low-income adults on a residential
+  // home connection. Checked in the rendered markup AND in every module's
+  // source, because the second catches a file input built at runtime.
+  const html = await renderOnboarding(fixture("GET_v1_onboarding.first_run.json"));
+  assert.ok(!/type=["']?file/i.test(html), "the onboarding form has a file input");
+  for (const file of fs.readdirSync(path.join(HERE, "js"))) {
+    const source = codeOnly(fileText("js", file));
+    assert.ok(!/type=["']file|FileReader|\.files\b/.test(source),
+              `${file} reads a file; onboarding is a form, not an upload`);
+  }
+  assert.ok(!/type=["']file/.test(codeOnly(fileText("index.html"))),
+            "index.html carries a file input");
+});
+
+it("every onboarding vocabulary is schema_web's, in order, with copy", () => {
+  // ONE SOURCE, THREE ENFORCEMENTS. Each tuple generates a CHECK constraint on
+  // builder_profiles (schema_web.py:543-577) AND is what
+  // onboarding.validate_request() refuses outside of (:316-337), so a slug
+  // invented in the client is a 400 on one Builder's submit and nowhere else.
+  // The blurb-style requirement is the tracks.mjs one: a value with no copy is
+  // a value somebody added and never gave words to.
+  const vocabularies = [
+    ["PRIOR_DOMAINS", onboardingView.PRIOR_DOMAIN_LABELS],
+    ["SITUATIONS", onboardingView.SITUATION_LABELS],
+    ["LOCATION_PREFS", onboardingView.LOCATION_PREF_LABELS],
+    ["REMOTE_PREFS", onboardingView.REMOTE_PREF_LABELS],
+    ["SCHEDULE_CONSTRAINTS", onboardingView.SCHEDULE_CONSTRAINT_LABELS],
+  ];
+  for (const [name, labels] of vocabularies) {
+    const py = pyTuple("backend/webapp/schema_web.py", name);
+    assert.deepEqual(Object.keys(labels), py,
+                     `the client's ${name} has drifted from schema_web.py`);
+    for (const [slug, text] of Object.entries(labels)) {
+      assert.ok(text, `${name}.${slug} has no plain-language copy`);
+      assert.ok(!text.includes("_"), `${name}.${slug}'s label is still a slug`);
+    }
+  }
+});
+
+it("the verdicts are VERDICT_EVENTS' keys, and the mapping stays server-side", () => {
+  const verdicts = pyDict("backend/webapp/onboarding.py", "VERDICT_EVENTS");
+  assert.deepEqual(Object.keys(onboardingView.VERDICT_LABELS), Object.keys(verdicts));
+  // The client sends the VERDICT, never the event it maps to. Sending `save`
+  // or `dismiss` here would be a second answer to a question onboarding.py:
+  // 118-139 already answered with its reasoning attached, and the two would
+  // drift -- which is the failure record_seed_judgements() routes through
+  // jobs.record_events() to avoid in the first place.
+  const source = fileText("js", "onboarding.mjs");
+  for (const event of Object.values(verdicts)) {
+    assert.ok(!new RegExp(`verdict:\\s*"${event}"`).test(source),
+              `onboarding.mjs sends the event '${event}' as a verdict`);
+  }
+  assert.ok(!/from "\.\/events\.mjs"/.test(source),
+            "onboarding.mjs imports events.mjs; a seed judgement must ride in "
+            + "the POST body under the server's own request_id "
+            + "(onboarding.py:474-495), not as a standalone event");
+});
+
+it("the seed size is inside 26's range and under the server's cap", () => {
+  const cap = pyInt("backend/webapp/onboarding.py", "MAX_SEED_JUDGEMENTS");
+  assert.ok(onboardingView.SEED_TARGET <= cap,
+            `SEED_TARGET ${onboardingView.SEED_TARGET} exceeds `
+            + `MAX_SEED_JUDGEMENTS ${cap}, which is a 422 from pydantic`);
+  assert.ok(onboardingView.SEED_TARGET >= 15 && onboardingView.SEED_TARGET <= 20,
+            "26 § Onboarding asks for 15-20 deliberately diverse postings");
+});
+
+it("the request body carries exactly the fields OnboardingRequest declares", () => {
+  // THE SILENT FAILURE THIS EXISTS FOR. Pydantic ignores unknown keys, so
+  // `prior_domains` for `prior_domain` is a 200 that stores nothing. Nothing
+  // else on either side catches it.
+  const declared = pyModelFields("backend/webapp/onboarding.py", "OnboardingRequest");
+  const full = onboardingView.buildRequest({
+    prior_domain: "hospitality", prior_years: 6, situation: "employed_seeking",
+    location_pref: "nyc", remote_pref: "hybrid_ok", comp_floor: 55000,
+    schedule_constraints: ["no_overnight"],
+  }, new Map([["j1", "interested"], ["j2", "not_interested"]]));
+  assert.deepEqual(Object.keys(full), declared,
+                   "buildRequest() and OnboardingRequest have drifted");
+  assert.deepEqual(full.seed_judgements, [
+    { job_id: "j1", verdict: "interested" },
+    { job_id: "j2", verdict: "not_interested" },
+  ]);
+  // And the frozen request fixture is the same shape, so a client author
+  // typing against it lands on the model.
+  assert.deepEqual(Object.keys(fixture("POST_v1_onboarding.request.json")), declared);
+});
+
+it("every field the endpoint accepts has a control, and no control is orphaned",
+   async () => {
+  // THE END-TO-END VERSION OF THE CHECK ABOVE, and the one that actually binds.
+  // buildRequest() copies whatever it is handed, so passing it a literal only
+  // proves the literal. This drives the real form and reads the `name`
+  // attributes out of the rendered markup, which is what the browser will post,
+  // so it fails in BOTH directions: a model field with no question on the
+  // screen, and a question whose answer the server discards silently.
+  const declared = pyModelFields("backend/webapp/onboarding.py", "OnboardingRequest")
+    .filter((f) => f !== "seed_judgements");   // screen two, not a form control
+  const html = await renderOnboarding(fixture("GET_v1_onboarding.first_run.json"));
+  const controls = new Set(
+    [...html.matchAll(/name="([a-z_]+)"/g)].map((m) => m[1]));
+  for (const field of declared) {
+    assert.ok(controls.has(field),
+              `OnboardingRequest declares '${field}' and the form never asks it`);
+  }
+  for (const control of controls) {
+    assert.ok(declared.includes(control),
+              `the form asks '${control}', which OnboardingRequest does not `
+              + `declare -- pydantic ignores unknown keys, so that answer is `
+              + `discarded and the Builder is told it was saved`);
+  }
+});
+
+/** Drive readAnswers() with the two FormData methods it actually takes. */
+function answersFrom(fields, checked = []) {
+  return onboardingView.readAnswers(
+    (name) => (name in fields ? fields[name] : null),
+    (name) => (name === "schedule_constraints" ? checked : []));
+}
+
+it("an untouched form sends nothing, and a blank number is never a zero", () => {
+  // ABSENT MEANS PRESERVE on all seven columns -- the upsert is
+  // coalesce(EXCLUDED.x, builder_profiles.x) (onboarding.py:432-444) -- so
+  // omitting a field is how "I did not touch that question" is expressed. An
+  // untouched <select> yields "" and an untouched number box yields "", and
+  // BOTH have to come out as null: NULL means nobody asked, and 0 is a real
+  // comp_floor meaning "no floor" (onboarding.py:81-83). Number("") is 0,
+  // which is exactly how an empty box becomes a preference nobody expressed.
+  const blank = answersFrom({
+    prior_domain: "", prior_years: "", situation: "", location_pref: "",
+    remote_pref: "", comp_floor: "",
+  });
+  for (const [field, value] of Object.entries(blank)) {
+    if (field === "schedule_constraints") continue;
+    assert.equal(value, null, `an empty '${field}' came back as ${value} `
+                 + `instead of null; NULL is "nobody asked"`);
+  }
+  const body = onboardingView.buildRequest(blank, new Map());
+  assert.deepEqual(Object.keys(body),
+                   ["schedule_constraints", "seed_judgements"],
+                   "a skipped form must send no preference keys");
+  assert.deepEqual(body.seed_judgements, []);
+
+  // A typed 0 IS an answer and must survive the same path.
+  assert.equal(answersFrom({ comp_floor: "0" }).comp_floor, 0);
+  assert.equal(answersFrom({ prior_years: "0" }).prior_years, 0);
+});
+
+it("an empty schedule_constraints is sent, because {} is not NULL", () => {
+  // schema_web.py:238-245: `{}` is "asked, and there are none", NULL is
+  // "nobody asked". The Builder was shown the boxes either way, so the empty
+  // set is a real answer and has to reach the wire as [].
+  const none = onboardingView.buildRequest(answersFrom({}, []), new Map());
+  assert.ok("schedule_constraints" in none,
+            "unticking every box must not collapse to 'nobody asked'");
+  assert.deepEqual(none.schedule_constraints, []);
+
+  const ticked = onboardingView.buildRequest(
+    answersFrom({}, ["no_overnight"]), new Map());
+  assert.deepEqual(ticked.schedule_constraints, ["no_overnight"]);
+});
+
+it("the seed draw spreads across tracks, and is rank order while it cannot", () => {
+  // TODAY: role_track is in no response body (see the assertion above), so
+  // trackOf() puts every row in one bucket and the draw is the payload order
+  // unchanged -- match_score order, never re-sorted by fit_score.
+  const flat = fixture("GET_v1_jobs.json").jobs;
+  assert.deepEqual(onboardingView.pickSeed(flat, 3).map((j) => j.rank), [1, 2, 3]);
+
+  // THE DAY IT LANDS: round-robin across buckets, so a Builder reacts to a
+  // spread rather than to four near-identical top-of-list postings. Same
+  // property tracks.mjs's grouping has and for the same reason -- written to
+  // start working on its own rather than to be revisited.
+  const tracked = [
+    { id: "a", rank: 1, role_track: "software_engineering" },
+    { id: "b", rank: 2, role_track: "software_engineering" },
+    { id: "c", rank: 3, role_track: "software_engineering" },
+    { id: "d", rank: 4, role_track: "data_and_analytics" },
+    { id: "e", rank: 5, role_track: "technical_support" },
+  ];
+  assert.deepEqual(onboardingView.pickSeed(tracked, 3).map((j) => j.id),
+                   ["a", "d", "e"], "the draw must not be three of one track");
+  assert.equal(onboardingView.pickSeed(tracked, 99).length, 5,
+               "asking for more than exists returns what exists");
+});
+
+it("a seed card names no score and raises no event", () => {
+  for (const raw of fixture("GET_v1_jobs.json").jobs) {
+    const html = onboardingView.seedCard(parseJobRow({ ...raw }));
+    for (const forbidden of ["match_score", "fit_score", "primary_track",
+                             "cohort", "data-act"]) {
+      assert.ok(!html.includes(forbidden), `the seed card carries ${forbidden}`);
+    }
+    // No link off the card either: nothing is stored until Finish, so tapping
+    // through would lose every answer given so far.
+    assert.ok(!html.includes("href="), "a seed card links away mid-onboarding");
+    for (const verdict of Object.keys(onboardingView.VERDICT_LABELS)) {
+      assert.ok(html.includes(`data-verdict="${verdict}"`),
+                `the seed card offers no '${verdict}' button`);
+    }
+  }
+  const escaped = onboardingView.seedCard({
+    id: "x", title: '<img src=x onerror="alert(1)">', company_name: "A & B",
+  });
+  assert.ok(!escaped.includes("<img"), "a job title reached innerHTML unescaped");
+  assert.ok(escaped.includes("A &amp; B"));
+});
+
+it("the form reads both onboarding states out of the shipped fixtures", async () => {
+  const firstRun = await renderOnboarding(fixture("GET_v1_onboarding.first_run.json"));
+  assert.match(firstRun, /Let's set you up/,
+               "a Builder who has never onboarded gets the first-run heading");
+  // NULL prior_domain is "nobody asked" and must not preselect the domain
+  // literally named 'none' -- schema_web.py:177-182 makes that load-bearing.
+  assert.match(firstRun, /<option value=""\s+selected>Prefer not to say/);
+
+  const done = await renderOnboarding(fixture("GET_v1_onboarding.json"));
+  assert.match(done, /Your setup/, "a returning Builder is not onboarding again");
+  assert.match(done, /<option value="hospitality" selected>/,
+               "the stored prior_domain is not read back into the form");
+  assert.match(done, /value="6"/, "the stored prior_years is not read back");
+
+  // Every field optional, on both. A required attribute here would be the
+  // client inventing a constraint the nullable columns refuse to express.
+  assert.ok(!/\brequired\b/.test(firstRun + done),
+            "a field is marked required; every column is nullable on purpose");
+});
+
+it("the two onboarding fixtures agree about the same Builder", () => {
+  // One Builder cannot have two answers, the same rule the cohort_signal pair
+  // is held to. The POST response's block and the completed GET's block are
+  // the same read -- _state(), onboarding.py:502-514 -- so they must match.
+  assert.deepEqual(fixture("GET_v1_onboarding.json").onboarding,
+                   fixture("POST_v1_onboarding.response.json").onboarding);
+});
+
+it("completed_at carries no zone, because onboarded_at is TEXT", () => {
+  // builder_profiles.onboarded_at is TEXT (schema_web.py:553) written by
+  // lib.timeparse.utc_now_str(), whose docstring says '%Y-%m-%dT%H:%M:%S' is
+  // load-bearing and "must not gain an offset". The fixture inherited a
+  // trailing Z from the contract, which invented this response shape; a client
+  // doing new Date(completed_at) on the real value reads it as LOCAL time.
+  // Same trap first_seen sets, which format.mjs:45 handles by appending the Z.
+  for (const name of ["GET_v1_onboarding.json", "POST_v1_onboarding.response.json"]) {
+    const stamp = fixture(name).onboarding.completed_at;
+    assert.match(stamp, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/,
+                 `${name}: completed_at is not utc_now_str()'s format`);
+  }
+});
+
+// -- the router ----------------------------------------------------------------
+
+it("every route has a tab, and every tab has a route", () => {
+  // app.mjs cannot be imported here: it reaches for document.getElementById at
+  // module scope and boots. So this reads the table as text, which is also
+  // what makes it catch the failure it is for -- a screen added to one of the
+  // two places and not the other. markTab() matches data-tab against the
+  // route's `name`, so the two lists are the same list.
+  const app = codeOnly(fileText("js", "app.mjs"));
+  const table = app.match(/const ROUTES = \[([\s\S]*?)\n\];/);
+  assert.ok(table, "ROUTES is no longer a module-level array literal in app.mjs");
+  const routes = [...table[1].matchAll(/name: "([a-z]+)"/g)].map((m) => m[1]);
+  const tabs = [...codeOnly(fileText("index.html"))
+    .matchAll(/data-tab="([a-z]+)"/g)].map((m) => m[1]);
+  assert.ok(routes.includes("onboarding"), "there is no onboarding route");
+  assert.ok(tabs.includes("onboarding"), "there is no onboarding tab");
+  for (const tab of tabs) {
+    assert.ok(routes.includes(tab), `tab '${tab}' routes nowhere`);
+  }
+  // `job` and the fallback are reachable and deliberately tabless: a detail
+  // page belongs to whichever list it was opened from.
+  assert.deepEqual(routes.filter((r) => !tabs.includes(r)), ["job"]);
 });
 
 // -- the event queue -----------------------------------------------------------

@@ -18,13 +18,21 @@ problem**.
 
 ```
 index.html app.css   the client. One page, hash routes, no build step.
-js/*.mjs             api, events, tracks, format, ui, today, saved, detail, app.
+js/*.mjs             api, events, tracks, format, ui, today, saved, detail,
+                     onboarding, app.
 serve.py             dev launcher: this directory + the API on one origin.
-fixtures/shipped/    what GET /v1/jobs returns TODAY. Derived from the code.
+fixtures/shipped/    what the API returns TODAY. Derived from the code.
 fixtures/contract/   the target shape in API-CONTRACT-v1.md. Derived from the doc.
 verify_fixtures.py   re-derives every shape claim in shipped/ from the source.
 check_client.mjs     the other direction: the client, against shipped/.
 ```
+
+**Adding a screen is two lines and one module.** `js/app.mjs`'s `ROUTES` table
+takes one row — `{name, pattern, show}`, where `show(root)` returns the
+screen's teardown — and `index.html` takes one `<a data-tab="…">` whose value
+is that same `name`, because `markTab()` matches on it. `check_client.mjs`
+asserts the two lists agree, so a screen added to one and not the other goes
+red. Search (task 25) is the next row; it has no route and no table yet.
 
 Build the client's types against `contract/`. Build the client's **parser**
 against `shipped/`, because that is what the server sends.
@@ -39,8 +47,8 @@ against `shipped/`, because that is what the server sends.
 | `GET /v1/me` | yes, `auth.py:450` | both — contract adds an onboarding block |
 | `GET /v1/searches` | **no route, no table** | `contract/` only |
 | `POST /v1/searches` | **no route, no table** | `contract/` only |
-| `POST /v1/onboarding` | ~~**no route, no table**~~ **yes, `onboarding.py:534`** | `contract/` only — **and nothing checks it** |
-| `GET /v1/onboarding` | **yes, `onboarding.py:517`** | **no fixture at all** |
+| `POST /v1/onboarding` | ~~**no route, no table**~~ **yes, `onboarding.py:534`** | ~~`contract/` only — **and nothing checks it**~~ **`shipped/`, 2026-08-02** |
+| `GET /v1/onboarding` | **yes, `onboarding.py:517`** | ~~**no fixture at all**~~ **`shipped/`, two of them** |
 
 ~~Every aspirational file is named `ASPIRATIONAL_*`. `search_queries` and
 `builder_profiles` exist nowhere in `schema.py` or `schema_web.py` — these three
@@ -68,7 +76,7 @@ are not "unimplemented endpoints", they are a feature with no storage.~~
 >
 > Two consequences worth stating rather than leaving to be discovered:
 >
-> * **The `ASPIRATIONAL_*` prefix is now load-bearing in the wrong direction.**
+> * ~~**The `ASPIRATIONAL_*` prefix is now load-bearing in the wrong direction.**
 >   `fixtures/contract/ASPIRATIONAL_POST_v1_onboarding.{request,response}.json`
 >   describe an endpoint that ships. The prefix says "no route", the route
 >   exists, and **nothing checks the two against each other** —
@@ -76,10 +84,26 @@ are not "unimplemented endpoints", they are a feature with no storage.~~
 >   code to check `contract/` against. Now there is, for one endpoint. Whoever
 >   owns task 26 should either move those two into `shipped/` and teach the
 >   verifier about them, or record where the shipped shape deviates. They were
->   built against, so the deviation list is the artifact that matters.
-> * **This client calls neither onboarding route.** The onboarding *screen* is
+>   built against, so the deviation list is the artifact that matters.~~
+>   **DONE 2026-08-02, task 26.** Both are now
+>   `shipped/POST_v1_onboarding.{request,response}.json`, plus
+>   `shipped/GET_v1_onboarding.json` and `.first_run.json`, which existed in
+>   neither directory. `verify_fixtures.py` derives all four shapes out of
+>   `onboarding.py` — the two route returns and `_state()` are single dict
+>   literals and the request is a pydantic model, so unlike the list endpoint
+>   there is **no `rank`-shaped hardcoded residue** in that block. **The
+>   deviation list is one item and the fixture was the thing that was wrong:**
+>   `completed_at` carried a trailing `Z`, inherited from a contract that
+>   invented the response shape against no code. `onboarded_at` is TEXT written
+>   by `lib.timeparse.utc_now_str()`, whose docstring says
+>   `'%Y-%m-%dT%H:%M:%S'` must not gain an offset because both pipelines
+>   compare these as *strings*. Same trap `first_seen` sets. Both checkers now
+>   assert the absence of the zone.
+> * ~~**This client calls neither onboarding route.** The onboarding *screen* is
 >   out of task 32's scope, so the route is live and unexercised by anything in
->   `frontend/`.
+>   `frontend/`.~~ **It calls both, as of 2026-08-02** — `js/onboarding.mjs`,
+>   routed at `#/onboarding`, reached automatically on first run from
+>   `js/app.mjs`.
 
 Everything in `shipped/` is real, has a route today, and is checked by
 `verify_fixtures.py`. Nothing in `contract/` is checked by anything, because
@@ -392,12 +416,21 @@ Both are wired into `backend/tests/test_frontend_fixtures.py`, so
 running"* — and neither had met it. The node one skips where node is absent; it
 is not a dependency of this repo.
 
-`check_client.mjs` re-derives three vocabularies out of Python and fails when
-they drift: `ROLE_TRACK` from `backend/extract.py`, `DISMISS_REASONS` from
-`backend/webapp/schema_web.py`, and `CLIENT_EVENT_NAMES` from
+`check_client.mjs` re-derives ~~three vocabularies~~ **nine names** out of
+Python and fails when they drift: `ROLE_TRACK` from `backend/extract.py`;
+`DISMISS_REASONS`, `PRIOR_DOMAINS`, `SITUATIONS`, `LOCATION_PREFS`,
+`REMOTE_PREFS` and `SCHEDULE_CONSTRAINTS` from
+`backend/webapp/schema_web.py`; `CLIENT_EVENT_NAMES` from
 `backend/webapp/jobs.py` — the last checked against every `event: "..."`
 literal in `js/`, which is what would catch a client sending `apply` (`DEC-73`)
-or `skip`.
+or `skip`; and `VERDICT_EVENTS`, `MAX_SEED_JUDGEMENTS` and
+`OnboardingRequest`'s field list from `backend/webapp/onboarding.py`.
+
+**The last of those is the one that catches a failure nothing else can.**
+Pydantic ignores keys a model does not declare, so a client sending
+`prior_domains` for `prior_domain` gets a **200** and stores nothing — no 400,
+no log line, and a Builder told their answer was saved. Deriving the field set
+on both sides is the only check in the repo that sees it.
 
 ### Why the modules are `.mjs`
 

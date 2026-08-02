@@ -6,9 +6,18 @@ generator: none
 
 # 26 — Profile creation
 
-**Status:** ~~todo~~ **backend half DONE 2026-08-02; the screen half is task 32's and is
-not started.** **Depends on:** 13, ~~and 27 declared itself dependent on this~~ **and 27,
-which is DONE.** **Blocks:** 28, 29, 32.
+**Status:** ~~todo~~ ~~**backend half DONE 2026-08-02; the screen half is task 32's and is
+not started.**~~ **DONE 2026-08-02 — the screen landed the same day, as
+`frontend/js/onboarding.mjs`.** **Depends on:** 13, ~~and 27 declared itself dependent on
+this~~ **and 27, which is DONE.** **Blocks:** 28, 29, 32.
+
+> **THE SCREEN CAME BACK TO THIS TASK RATHER THAN GOING TO 32.** The struck line above
+> handed it to task 32, and 32's own definition-of-done table handed it back — *"onboarding
+> completes without manual DB work: **not done** — out of scope for this stream;
+> `POST /v1/onboarding` is another stream's"*. Both were reasonable and together they were
+> a hole, which is what a bullet owned by two tasks and neither always is. It is built and
+> it is recorded here, in the task whose endpoint it posts to; 32's table now points at
+> this file.
 
 > **THE 26/27 ARROW WAS BACKWARDS AND IS CORRECTED, 2026-08-01.**
 > `27-event-schema.md` declared *"Depends on: 26"*. Nothing in 27 read anything 26 builds,
@@ -171,14 +180,26 @@ two diverge.
 
 ## What the work turned up, 2026-08-02
 
-Five of the seven done bullets are met. The two that are not are the two that need a
-screen, and they are **task 32's, not a remainder of this one** — see the correction at
-the top of this file. Nothing below builds UI and `frontend/` was not touched.
+**Two streams, one day, and this section is both of them.** The backend half is
+everything down to § *Still open*; the screen is § *The screen* at the end. They were
+written hours apart and against each other, so the second one names where the first was
+right and where it left a gap.
 
-Built: `builder_profiles` in `backend/webapp/schema_web.py`, resolution in a new
-`backend/webapp/onboarding.py` (`resolve`, `resolved_for`), `POST`/`GET /v1/onboarding`
+~~Five of the seven done bullets are met. The two that are not are the two that need a
+screen, and they are **task 32's, not a remainder of this one** — see the correction at
+the top of this file. Nothing below builds UI and `frontend/` was not touched.~~
+**All seven are met.** The struck sentence was true when written and stopped being true
+the same day; the screen is § *The screen* below.
+
+Built, backend half: `builder_profiles` in `backend/webapp/schema_web.py`, resolution in a
+new `backend/webapp/onboarding.py` (`resolve`, `resolved_for`), `POST`/`GET /v1/onboarding`
 in the same file, and the narrowing in `backend/migrations/migrate_profiles.py`. Webapp
 suite `Ran 159` → `Ran 300`, OK.
+
+Built, screen half: `frontend/js/onboarding.mjs`, a route in `frontend/js/app.mjs`, a tab
+in `frontend/index.html`, styles in `frontend/app.css`, four fixtures moved or added under
+`frontend/fixtures/shipped/`, and coverage in both `frontend/verify_fixtures.py` and
+`frontend/check_client.mjs`. `check_client.mjs` `28 checks` → `43 checks`, 0 failed.
 
 ### The foreign key this file sketched cannot be written, and a better one can
 
@@ -260,3 +281,141 @@ than `{}`, because "subscribed to no tracks" is not an answer anybody gave.
 - **Nothing filters on the resolved config yet.** `resolved_for()` is written and tested;
   wiring it into `GET /v1/jobs` belongs with the screen that lets a Builder change these
   values, because turning on a filter nobody can see would silently shrink thirty lists.
+
+### The screen — what building it against the endpoint found
+
+Written 2026-08-02, on landing the onboarding **screen** — the last outstanding
+bullet. `4c874e7` landed the entire server side and touched `frontend/` not at all;
+six of the seven bullets were met in code and the third had no screen. This section
+is what building the screen against the shipped endpoint found.
+
+**Two screens, not three, and the third bullet is honoured by not spending it.**
+`SCREENS` in `frontend/js/onboarding.mjs` is `["form", "seed"]`. § *Onboarding*'s
+third step is literally *"Nothing else. Resist adding steps"*, so a confirmation
+screen would have spent the budget on the one thing this task asked not to add.
+The outcome goes in a toast and the Builder lands on Today.
+`frontend/check_client.mjs` asserts the length against the ceiling, because a
+definition-of-done bullet nothing checks is a bullet that drifts.
+
+**The form asks seven questions, and § *Onboarding* asks for fifteen fields.** The
+endpoint accepts exactly seven (`OnboardingRequest`, `backend/webapp/onboarding.py`),
+and pydantic **ignores** keys a model does not declare — so an eighth question would
+have been answered by a Builder, discarded silently, and reported as a 200. Building
+the missing eight would be a schema change with eight new CHECK constraints, which is
+a decision and not a screen. The screen asks what can be stored.
+
+**That silent-discard is the sharpest thing this stream found, and it now has a
+check.** Both checkers derive `OnboardingRequest`'s field list out of Python:
+`frontend/verify_fixtures.py` compares it to the frozen request fixture, and
+`check_client.mjs` compares it to the `name=` attributes in the **rendered** form,
+so it fails in both directions — a field the endpoint accepts with no question on
+the screen, and a question whose answer the server throws away. Nothing else in the
+repo can see that failure: it produces no 400, no log line and no wrong row.
+
+**The two "aspirational" onboarding fixtures were moved to `shipped/`, and the
+fixture was the thing that was wrong.** They now derive from the code, and one
+deviation fell out:
+
+> `completed_at` carried a trailing **`Z`** that this endpoint never sends.
+> `builder_profiles.onboarded_at` is `TEXT` (`backend/webapp/schema_web.py`, the
+> `CREATE TABLE`) written by `lib.timeparse.utc_now_str()`, whose docstring says
+> the `'%Y-%m-%dT%H:%M:%S'` shape is load-bearing and **"must not gain an offset
+> or microseconds"** because both pipelines compare these as *strings*. The `Z`
+> came from `API-CONTRACT-v1.md`, which invented this response shape against no
+> code. A client doing `new Date(completed_at)` on the real value reads it as
+> **local time** — the same trap `first_seen` sets, which `js/format.mjs` already
+> handles by appending the `Z` itself. Both checkers now assert the zone's absence.
+
+`GET /v1/onboarding` had **no fixture in either directory** and now has two, the
+completed state and the first-run state. The first-run one pins that `prior_domain`
+is `null` and **not** the domain literally named `none` — the distinction
+`schema_web.py` spends a paragraph on, and the one a first-run client is most likely
+to collapse.
+
+**The onboarding block of `verify_fixtures.py` has no `rank`-shaped residue, and
+that is luck rather than virtue.** Both route returns and `_state()` are single
+dict literals and the request is a pydantic model, so every expectation is derived
+and a new key appears on its own. The list endpoint is not in that position because
+`jobs.py` assembles `item["rank"]` inside a handler, where there is no constant for
+`ast` to read — the seam `D70` documents. Worth stating because the difference is
+that `onboarding.py` happens not to build any response key inside a function body,
+not that anybody designed for it.
+
+**The seed draw asks for diversity across `role_track` and there is no `role_track`
+to draw across.** § *Onboarding* step 2 wants "15–20 deliberately diverse postings
+drawn across `role_track`s". That column is on `job_facts` and the `jobs_app` view
+does not select it, so it is in no response body — task 32's finding 1, unchanged.
+`pickSeed()` is written round-robin over `tracks.trackOf()` anyway: today that
+degenerates to the first eighteen in `match_score` order, and it becomes the diverse
+draw the day the field lands, with no edit. Same shape as the grouping in
+`js/tracks.mjs`, and for the same reason.
+
+**A judgement is never sent as an event.** The verdicts ride inside the POST body
+and the **server** mints their `request_id` (`record_seed_judgements()`), because a
+seed set genuinely is its own render. `js/onboarding.mjs` therefore imports nothing
+from `js/events.mjs` and `check_client.mjs` asserts that it does not — sending them
+under the *list's* `request_id` would claim they were part of a render they were
+not, and would arm `derive_skips` against rows nobody was shown.
+
+**The four preferences are stored and filter nothing, so the screen does not say
+they do.** `resolved_for()`'s own docstring records that nothing calls it on the list
+path, deliberately, because turning on a filter nobody can see or change would
+silently shrink thirty people's lists. The copy on the screen says the answers are
+saved, and stops there. This is the same class of care as never rendering a
+suppressed `cohort_signal` as a zero: a true-sounding sentence the system does not
+support is worse than a plainer one that it does.
+
+**The first-run redirect is a nudge and not a gate**, on two counts. It fires only
+when the Builder did not ask for something specific, so a deep link into a posting
+still resolves; and a failed `GET /v1/onboarding` logs and routes to the list rather
+than blocking it. Every onboarding field is optional server-side, so a Builder who
+skips is a Builder with NULLs — the honest state, and exactly what the nullable
+columns mean. Gating the list on a form would lose people at screen zero in a
+population where this task's own § *Onboarding* says "every additional screen loses
+someone".
+
+#### Proposed `DECISIONS.md` entry — FULL TEXT, no number allocated
+
+> **26 — Why onboarding is two screens and the form asks seven questions**
+>
+> `26-profile-creation.md` § *Onboarding* asks for three steps, "fifteen fields", and
+> 15–20 seed postings drawn across `role_track`s. The screen that shipped on
+> 2026-08-02 has **two** screens, **seven** fields and an eighteen-posting draw that
+> cannot yet be diverse. All three departures are deliberate and none of them is a
+> shortcut.
+>
+> **Two screens, because the task's own third step is "nothing else".** The budget in
+> the definition of done is ≤3 and the third step in the body is *"Resist adding
+> steps. The population includes people for whom this is a first technical product;
+> every additional screen loses someone."* A confirmation screen would have spent the
+> remaining budget on the single thing the task named as the failure mode. The
+> outcome — including the one case the endpoint reports without failing on, a
+> `seed_judgements_recorded` lower than what was sent — goes in a toast, and the
+> Builder lands on the list. `frontend/check_client.mjs` asserts `SCREENS.length` so
+> the ceiling is enforced rather than remembered.
+>
+> **Seven fields, because pydantic ignores the eighth.** `OnboardingRequest`
+> (`backend/webapp/onboarding.py`) declares seven, and an undeclared key is not a
+> 400: it is a **200 that stores nothing**, with no log line anywhere. An eighth
+> question on the screen would have been answered by a Builder, discarded silently,
+> and confirmed as saved. Widening to fifteen means eight new columns with eight
+> generated CHECK constraints — a schema decision, taken with real answers in hand,
+> which is the treatment `PRIOR_DOMAINS` and `SCHEDULE_CONSTRAINTS` already document
+> for themselves. The screen asks what can be stored, and both checkers now derive
+> the field list from the model so the two cannot drift apart in silence.
+>
+> **An eighteen-posting draw that is round-robin over a field that is always null.**
+> `role_track` is on `job_facts` and the `jobs_app` view does not select it, so it
+> reaches no response body. `pickSeed()` spreads across `tracks.trackOf()` regardless:
+> with one bucket that is the payload order unchanged, and it becomes the diverse draw
+> the task asked for on the day the field lands, with no edit. Rejected: picking the
+> top eighteen and adding a comment promising diversity later.
+>
+> **And one fixture was wrong rather than one endpoint.** The frozen
+> `POST /v1/onboarding` response carried `completed_at` with a trailing `Z`.
+> `builder_profiles.onboarded_at` is `TEXT` written by `lib.timeparse.utc_now_str()`,
+> whose docstring forbids an offset because both pipelines compare these as strings.
+> The `Z` was inherited from `API-CONTRACT-v1.md`, which invented the shape against no
+> code — which is the general hazard of a contract fixture nothing checks, and the
+> reason those two files moved into `shipped/` rather than staying prefixed
+> `ASPIRATIONAL_`.

@@ -314,6 +314,104 @@ button {
   margin: 0.75rem 0;
 }
 
+/* -- onboarding ---------------------------------------------------------- */
+
+/* Every control here is at least --tap tall and full width at phone size.
+   Selects and number inputs are the two native controls that give a phone a
+   good picker for free, which is why the form uses them rather than custom
+   widgets: the population is phone-primary and the OS keyboard/wheel is
+   better than anything hand-rolled here would be. */
+
+.step {
+  margin: 0.75rem 0 0;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.onboard { margin-top: 1rem; }
+
+.field {
+  display: block;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  border: 0;
+}
+
+.field > label,
+.field > legend {
+  display: block;
+  margin-bottom: 0.35rem;
+  padding: 0;
+  font-weight: 600;
+}
+
+.field select,
+.field input[type="number"] {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+
+.hint {
+  margin: 0.35rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+/* The whole row is the target, not the 16px box. */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: var(--tap);
+  padding: 0 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+}
+
+.check input { width: 1.15rem; height: 1.15rem; }
+
+.onboard-actions {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+}
+
+.onboard-actions .linkish { text-align: center; text-decoration: none; }
+
+/* Finish stays reachable without scrolling to the end of eighteen cards. */
+.onboard-actions.sticky {
+  position: sticky;
+  bottom: 0;
+  gap: 0.35rem;
+  padding: 0.6rem 0;
+  padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+
+.tally {
+  margin: 0;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+/* A judged card recedes rather than disappears: the list is the record of what
+   was answered, and a card that vanished would make "12 of 18" unverifiable. */
+.card.seed.is-judged { border-color: var(--accent); }
+.card.seed .card-title { margin-top: 0; }
+
 /* -- reason sheet -------------------------------------------------------- */
 
 .sheet-backdrop {

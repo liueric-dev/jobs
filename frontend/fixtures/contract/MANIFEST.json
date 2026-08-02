@@ -8,9 +8,10 @@
     "GET /v1/jobs/{id}": "route exists (jobs.py:413), shape differs",
     "POST /v1/events": "route exists (jobs.py:641), request shape agrees, response is undocumented in the contract",
     "GET /v1/me": "route exists (auth.py:450); the onboarding block is aspirational",
-    "GET /v1/searches": "NO ROUTE, NO TABLE. search_queries exists nowhere.",
+    "GET /v1/searches": "NO ROUTE, NO TABLE. search_queries exists nowhere -- re-grepped 2026-08-02, still zero hits across backend/. Task 25.",
     "POST /v1/searches": "NO ROUTE, NO TABLE.",
-    "POST /v1/onboarding": "NO ROUTE, NO TABLE. builder_profiles exists nowhere."
+    "POST /v1/onboarding": "MOVED TO ../shipped/ ON 2026-08-02. It has a route (onboarding.py) and builder_profiles is a real table (schema_web.py), so the two ASPIRATIONAL_POST_v1_onboarding.* files that used to live here are now shipped/POST_v1_onboarding.{request,response}.json and are checked by verify_fixtures.py. One deviation was found on the way and the FIXTURE was wrong: completed_at carried a trailing 'Z' this endpoint never sends.",
+    "GET /v1/onboarding": "HAS A ROUTE AND IS NOT IN THE CONTRACT AT ALL. See ../shipped/GET_v1_onboarding.json. The contract covers reading onboarding state with an invented block on GET /v1/me (ASPIRATIONAL_GET_v1_me.json, edge-cases/06); the code answers it with its own route instead, and onboarding.py says why. The two must never both exist with different shapes."
   },
 
   "GET_v1_jobs.json": {
@@ -58,15 +59,6 @@
   "ASPIRATIONAL_POST_v1_searches.response.json": {
     "notes": ["202 with a queue position, per the contract. Searches are asynchronous -- never block a Builder on a scrape; results appear on the next list."]
   },
-
-  "ASPIRATIONAL_POST_v1_onboarding.request.json": {
-    "notes": [
-      "Verbatim from API-CONTRACT-v1.md § POST /v1/onboarding, with a prior_domain from the real vocabulary.",
-      "prior_domain must be one of schema_web.PRIOR_DOMAINS (schema_web.py:142-146). That column DOES exist on app_users; the endpoint does not.",
-      "seed_judgements write real job_events with correct visibility -- so 'interested' has to map onto a CLIENT_EVENT_NAMES value, and no mapping has been decided."
-    ]
-  },
-  "ASPIRATIONAL_POST_v1_onboarding.response.json": { "notes": ["Response shape is invented; the contract specifies none."] },
 
   "errors/error_envelope.json": {
     "shows": "the contract's envelope, which IS shipped for ContractError (jobs.py:151-157).",

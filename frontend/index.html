@@ -27,9 +27,24 @@
 
 <header class="topbar" id="topbar" hidden>
   <a class="brand" href="#/today">Jobs</a>
+  <!--
+    ONE <a> PER ROUTE, and data-tab is the route's `name` in js/app.mjs's
+    ROUTES table -- markTab() matches on exactly that string. Adding a screen
+    is one row there and one link here; nothing else in the shell changes.
+
+    THE THIRD TAB SAYS "Profile" AND POINTS AT #/onboarding, which is one name
+    for the screen and one for the route on purpose. The route is the
+    endpoint's (POST/GET /v1/onboarding, backend/webapp/onboarding.py), so a
+    deep link matches the thing it opens. The label is the Builder's: after
+    the first run this screen is where they change their answers, and a
+    permanent tab reading "Onboarding" would describe a thing they already did.
+    Same screen either way -- the endpoint is idempotent on the form
+    (onboarding.py:545-551) and the heading follows `completed`.
+  -->
   <nav class="tabs">
     <a href="#/today" data-tab="today">Today</a>
     <a href="#/saved" data-tab="saved">Saved</a>
+    <a href="#/onboarding" data-tab="onboarding">Profile</a>
   </nav>
   <button class="linkish" id="signout" type="button">Sign out</button>
 </header>

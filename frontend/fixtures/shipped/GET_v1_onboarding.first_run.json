@@ -1,0 +1,9 @@
+{
+  "onboarding": {
+    "completed": false,
+    "completed_at": null,
+    "prior_domain": null,
+    "prior_years": null
+  },
+  "profile": "pursuit"
+}

@@ -54,6 +54,7 @@ skip is not a failure" is written for exactly this.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -66,9 +67,35 @@ VERIFY = os.path.join(FRONTEND, "verify_fixtures.py")
 CHECK_CLIENT = os.path.join(FRONTEND, "check_client.mjs")
 NODE = shutil.which("node")
 
-#: The three modules verify_fixtures.py parses. Copied into the synthetic tree
-#: below so the second test exercises the real comparison rather than a stub.
-WEBAPP_SOURCES = ("jobs.py", "auth.py", "schema_web.py")
+def _webapp_sources():
+    """The `backend/webapp/*.py` modules verify_fixtures.py parses, read out of
+    verify_fixtures.py itself.
+
+    DERIVED RATHER THAN LISTED, AND THE LIST IS WHY. This was the literal
+    ``("jobs.py", "auth.py", "schema_web.py")``. On 2026-08-02 the verifier
+    grew a fourth -- ``onboarding.py``, for the onboarding fixtures task 26's
+    screen moved into ``shipped/`` -- and the synthetic tree below stopped
+    containing everything the verifier reads. The script then died on a missing
+    file, which is still a non-zero exit, so the assertion that it "goes red"
+    PASSED FOR THE WRONG REASON and only the assertion on its *output* noticed.
+
+    That is `D70`'s shape one layer out: a check stops being a derivation
+    exactly where its hardcoding starts, and that is where the next file lands.
+    So the list is read from the source of truth, and a fifth module costs
+    nothing here.
+    """
+    source = open(VERIFY, encoding="utf-8").read()
+    names = re.findall(r'= REPO / "backend" / "webapp" / "([\w.]+)"', source)
+    assert names, (
+        "verify_fixtures.py no longer names its webapp sources as "
+        '`REPO / "backend" / "webapp" / "<file>"`, so this test cannot build a '
+        "tree containing them. Fix the pattern above, do not delete the check.")
+    return tuple(dict.fromkeys(names))
+
+
+#: The modules verify_fixtures.py parses. Copied into the synthetic tree below
+#: so the second test exercises the real comparison rather than a stub.
+WEBAPP_SOURCES = _webapp_sources()
 
 
 def _run(script):
@@ -89,7 +116,7 @@ class TestVerifyFixturesIsWiredIn(unittest.TestCase):
         self.assertEqual(
             0, result.returncode,
             "frontend/fixtures/shipped/ no longer describes "
-            "backend/webapp/{jobs,auth,schema_web}.py.\n\n"
+            f"backend/webapp/{{{','.join(n[:-3] for n in WEBAPP_SOURCES)}}}.py.\n\n"
             f"{result.stdout}{result.stderr}\n"
             "Either a fixture is stale or a response shape changed by accident. "
             "There is no generator: fix the JSON by hand and re-run "
@@ -110,6 +137,21 @@ class TestVerifyFixturesIsWiredIn(unittest.TestCase):
             for name in WEBAPP_SOURCES:
                 shutil.copy(os.path.join(REPO, "backend", "webapp", name),
                             os.path.join(webapp, name))
+
+            # THE COPY MUST BE GREEN BEFORE IT IS BROKEN, and this line is here
+            # because its absence let a real bug through on 2026-08-02: the
+            # verifier grew a fourth webapp source, the tree below did not have
+            # it, and the script died on a missing file -- which is a non-zero
+            # exit, so "it goes red" passed while proving nothing at all. A
+            # mutation test is only evidence if the unmutated case passes.
+            clean = _run(os.path.join(frontend, "verify_fixtures.py"))
+            self.assertEqual(
+                0, clean.returncode,
+                "the synthetic tree does not satisfy verify_fixtures.py before "
+                "anything was broken in it, so the mutation below proves "
+                "nothing. Usually this means the verifier reads a file "
+                "WEBAPP_SOURCES did not copy.\n\n"
+                f"{clean.stdout}{clean.stderr}")
 
             # Drop one key from one job object. That is exactly the drift this
             # exists to catch -- a column added to or removed from LIST_COLUMNS

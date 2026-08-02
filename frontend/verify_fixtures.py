@@ -30,6 +30,7 @@ verify_schema() collects problems instead of raising on the first.
 import ast
 import json
 import pathlib
+import re
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -37,6 +38,7 @@ REPO = HERE.parent
 JOBS_PY = REPO / "backend" / "webapp" / "jobs.py"
 SCHEMA_WEB_PY = REPO / "backend" / "webapp" / "schema_web.py"
 AUTH_PY = REPO / "backend" / "webapp" / "auth.py"
+ONBOARDING_PY = REPO / "backend" / "webapp" / "onboarding.py"
 SHIPPED = HERE / "fixtures" / "shipped"
 
 
@@ -79,20 +81,100 @@ def _tuples(path):
     return out
 
 
+def _returned_dict_keys(path, function):
+    """The keys one function returns, read from the dict literal it returns.
+
+    THE GENERAL FORM OF WHAT _me_keys() WAS. Four response shapes in this repo
+    are a single `return {…}` of string keys -- auth.me(), and onboarding's
+    _state(), get_onboarding() and post_onboarding() -- so one reader covers
+    all four and a fifth costs a call rather than a function.
+
+    IT RAISES RATHER THAN RETURNING EMPTY. A response shape that stops being a
+    dict literal is exactly the moment this file stops deriving anything, and
+    the D70 lesson is that a check which silently degrades to agreeing with the
+    fixture is worse than no check: the two agree with each other and both
+    disagree with the source.
+    """
+    tree = ast.parse(path.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == function:
+            for stmt in ast.walk(node):
+                if isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Dict):
+                    return tuple(k.value for k in stmt.value.keys)
+    raise LookupError(f"{path.name}:{function}() no longer returns a dict literal")
+
+
 def _me_keys():
-    """The keys GET /v1/me returns, read from the dict literal it returns.
+    """The keys GET /v1/me returns.
 
     auth.py's me() is the only function in that file whose body is a single
     Return of a dict of `user.<attr>` values, so it is found by name rather
     than by shape.
     """
-    tree = ast.parse(AUTH_PY.read_text())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "me":
-            for stmt in ast.walk(node):
-                if isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Dict):
-                    return tuple(k.value for k in stmt.value.keys)
-    raise LookupError("auth.me() no longer returns a dict literal")
+    return _returned_dict_keys(AUTH_PY, "me")
+
+
+def _model_fields(path, model):
+    """The field names one pydantic model declares, in declaration order.
+
+    WHY THE ORDER AND NOT JUST THE SET. A request fixture is what a client
+    author types against, so the key order is documentation; but the reason
+    this check exists at all is the SET. Pydantic IGNORES unknown fields by
+    default, so a client sending `prior_domains` for `prior_domain` gets a 200
+    and stores nothing -- the Builder answered a question that went nowhere and
+    was told it worked. That is silence, this system's documented failure mode
+    (.claude/CLAUDE.md), reached through a typo, and a shape check on the
+    request fixture is the only thing on either side that catches it.
+
+    Reads AnnAssign targets in the class body only -- not nested, not inherited
+    -- which is the one form OnboardingRequest uses.
+    """
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and node.name == model:
+            return tuple(stmt.target.id for stmt in node.body
+                         if isinstance(stmt, ast.AnnAssign)
+                         and isinstance(stmt.target, ast.Name))
+    raise LookupError(f"{path.name} declares no class {model}")
+
+
+def _dict_literal(path, name):
+    """A module-level NAME = {"a": "b", ...} mapping of string literals.
+
+    onboarding.VERDICT_EVENTS is a dict rather than a tuple because it IS a
+    mapping -- verdict to event name -- and flattening it to a tuple here would
+    lose the half that matters. Narrow on purpose, like _tuples(): anything
+    that is not a plain dict of string constants is skipped, and the caller's
+    KeyError names it.
+    """
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == name):
+            try:
+                literal = ast.literal_eval(node.value)
+            except (ValueError, TypeError, SyntaxError):
+                break
+            if isinstance(literal, dict) and all(
+                    isinstance(k, str) and isinstance(v, str)
+                    for k, v in literal.items()):
+                return literal
+    raise LookupError(f"{path.name}: {name} is no longer a module-level "
+                      f"dict of string literals")
+
+
+def _int_literal(path, name):
+    """A module-level NAME = <int>."""
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == name
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, int)):
+            return node.value.value
+    raise LookupError(f"{path.name}: {name} is no longer a module-level int")
 
 
 # --------------------------------------------------------------------------
@@ -256,6 +338,118 @@ def check(problems):
     # -- me -----------------------------------------------------------------
     keyset("GET_v1_me.json", _load("GET_v1_me.json"), _me_keys())
 
+    # -- onboarding ---------------------------------------------------------
+    #
+    # THESE TWO FIXTURES WERE `contract/ASPIRATIONAL_POST_v1_onboarding.*` AND
+    # THE PREFIX HAD GONE FALSE. Task 26 gave the endpoint a route
+    # (onboarding.py:534, mounted at app.py:99) while frontend/README.md was
+    # being written, so two files describing a live route sat in the directory
+    # this script deliberately does not read, and NOTHING checked them against
+    # the code they described. They are in shipped/ now and this block is the
+    # check they never had.
+    #
+    # EVERY EXPECTATION HERE IS DERIVED, WITH NO `rank`-SHAPED RESIDUE. All
+    # three response shapes are single dict literals and the request shape is a
+    # pydantic model, so there is nothing to hardcode -- which is a better
+    # position than the list endpoint is in, and is worth saying because the
+    # reason is luck rather than virtue: onboarding.py assembles no key inside
+    # a handler the way jobs.py assigns item["rank"].
+    onboarding_state = _returned_dict_keys(ONBOARDING_PY, "_state")
+    request_fields = _model_fields(ONBOARDING_PY, "OnboardingRequest")
+    verdicts = _dict_literal(ONBOARDING_PY, "VERDICT_EVENTS")
+    max_seed = _int_literal(ONBOARDING_PY, "MAX_SEED_JUDGEMENTS")
+
+    for name in ("GET_v1_onboarding.json", "GET_v1_onboarding.first_run.json"):
+        body = _load(name)
+        keyset(f"{name} (top level)", body,
+               _returned_dict_keys(ONBOARDING_PY, "get_onboarding"))
+        keyset(f"{name} .onboarding", body["onboarding"], onboarding_state)
+
+    response = _load("POST_v1_onboarding.response.json")
+    keyset("POST_v1_onboarding.response.json", response,
+           _returned_dict_keys(ONBOARDING_PY, "post_onboarding"))
+    keyset("POST_v1_onboarding.response.json .onboarding",
+           response["onboarding"], onboarding_state)
+
+    # `completed_at` HAS NO ZONE AND MUST NOT GROW ONE. builder_profiles.
+    # onboarded_at is TEXT (schema_web.py:553) written by
+    # lib.timeparse.utc_now_str(), whose docstring says the
+    # '%Y-%m-%dT%H:%M:%S' shape is load-bearing and "must not gain an offset or
+    # microseconds" because both pipelines compare these as STRINGS. The fixture
+    # carried a trailing 'Z' -- inherited from the contract, which invented the
+    # response shape -- and a client doing new Date(completed_at) on the real
+    # value reads it as local time. Same trap `first_seen` already sets, which
+    # is why format.mjs appends the Z itself.
+    for name in ("GET_v1_onboarding.json", "POST_v1_onboarding.response.json"):
+        stamp = _load(name)["onboarding"]["completed_at"]
+        if stamp is not None and not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}",
+                                                  stamp):
+            problems.append(
+                f"{name}: completed_at {stamp!r} is not utc_now_str()'s "
+                f"'%Y-%m-%dT%H:%M:%S'. onboarded_at is TEXT written by that "
+                f"function (schema_web.py, onboarding.py); an offset here is a "
+                f"fixture inventing a timezone the column does not carry.")
+
+    # A first-run Builder is `completed: false` with NULL everywhere, and NULL
+    # is not the prior_domain literally named 'none' -- schema_web.py:177-182
+    # makes that distinction load-bearing.
+    first_run = _load("GET_v1_onboarding.first_run.json")["onboarding"]
+    if first_run["completed"] is not False or first_run["completed_at"] is not None:
+        problems.append("GET_v1_onboarding.first_run.json: not a first-run state")
+    if first_run["prior_domain"] is not None:
+        problems.append(
+            "GET_v1_onboarding.first_run.json: prior_domain must be null, not "
+            "'none'. NULL means nobody asked; 'none' is a real answer.")
+
+    request = _load("POST_v1_onboarding.request.json")
+    keyset("POST_v1_onboarding.request.json", request, request_fields)
+
+    # The four closed vocabularies the handler validates against, plus the
+    # array one. Read from _VOCABULARIES' own tuples so a widened vocabulary
+    # cannot be accepted here and refused by the column.
+    for field, tuple_name in (("prior_domain", "PRIOR_DOMAINS"),
+                              ("situation", "SITUATIONS"),
+                              ("location_pref", "LOCATION_PREFS"),
+                              ("remote_pref", "REMOTE_PREFS")):
+        value = request.get(field)
+        if value is not None and value not in web[tuple_name]:
+            problems.append(f"POST_v1_onboarding.request.json: {field} {value!r} "
+                            f"is not in schema_web.{tuple_name}")
+    for value in request.get("schedule_constraints") or ():
+        if value not in web["SCHEDULE_CONSTRAINTS"]:
+            problems.append(f"POST_v1_onboarding.request.json: schedule "
+                            f"constraint {value!r} is not in "
+                            f"schema_web.SCHEDULE_CONSTRAINTS")
+
+    seed = request.get("seed_judgements") or []
+    if len(seed) > max_seed:
+        problems.append(f"POST_v1_onboarding.request.json: {len(seed)} seed "
+                        f"judgements exceeds MAX_SEED_JUDGEMENTS ({max_seed})")
+    seen_ids = set()
+    for i, judgement in enumerate(seed):
+        keyset(f"POST_v1_onboarding.request.json seed_judgements[{i}]",
+               judgement, ("job_id", "verdict"))
+        if judgement.get("verdict") not in verdicts:
+            problems.append(f"seed_judgements[{i}]: verdict "
+                            f"{judgement.get('verdict')!r} is not a "
+                            f"VERDICT_EVENTS key")
+        # Two verdicts on one posting is a 400 with code
+        # duplicate_seed_judgement (onboarding.py:356-365), so a fixture
+        # carrying one would be a request the endpoint refuses.
+        if judgement.get("job_id") in seen_ids:
+            problems.append(f"seed_judgements[{i}]: job "
+                            f"{judgement.get('job_id')} judged twice; that is a "
+                            f"400, code duplicate_seed_judgement")
+        seen_ids.add(judgement.get("job_id"))
+
+    # The event names the verdicts map onto have to be ones POST /v1/events
+    # accepts, because record_seed_judgements() goes through jobs.record_events()
+    # rather than a second INSERT (onboarding.py:454-495).
+    for verdict, event in verdicts.items():
+        if event not in client_events:
+            problems.append(f"VERDICT_EVENTS[{verdict!r}] = {event!r}, which is "
+                            f"not in CLIENT_EVENT_NAMES")
+
     # -- errors -------------------------------------------------------------
     # Every enveloped fixture's code must be one the validator can actually
     # raise, and the two vocabularies must not overlap.
@@ -297,7 +491,8 @@ def main():
         print("\nfixtures/shipped/ no longer describes the code. Either the "
               "fixtures are stale or the change was unintended.")
         return 1
-    print("fixtures/shipped/ matches backend/webapp/{jobs,auth,schema_web}.py")
+    print("fixtures/shipped/ matches "
+          "backend/webapp/{jobs,auth,schema_web,onboarding}.py")
     return 0
 
 

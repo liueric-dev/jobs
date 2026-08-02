@@ -206,7 +206,7 @@ files load in a browser and under `node` with nothing installed.
 | no 0–100 score displayed | **done** — and asserted, including that the `match_reasons` deltas never reach a chip, since they sum to `match_score` |
 | empty states are seeded, never blank | **done** for Today and Saved |
 | works on a phone, **tested on a real one** | **not done.** Built mobile-first — 44px targets, bottom sheet, sticky action bar, safe-area insets — and rendered against live payloads, but no phone was in the loop. This one needs a person. |
-| onboarding completes without manual DB work | **not done** — out of scope for this stream; `POST /v1/onboarding` is another stream's |
+| onboarding completes without manual DB work | ~~**not done** — out of scope for this stream; `POST /v1/onboarding` is another stream's~~ **done 2026-08-02, by task 26's stream** — `frontend/js/onboarding.mjs`, two screens, routed at `#/onboarding` and reached automatically on first run. See `tranche_five/26-profile-creation.md` § *What the work turned up*. |
 | live Google login round trip verified by hand | **not done** — needs an interactive browser session |
 
 Verified against the running API instead: both response shapes key-for-key

@@ -143,6 +143,54 @@ export async function getJob(jobId) {
 }
 
 /**
+ * GET /v1/onboarding. Has this Builder onboarded?
+ *
+ * Returns {onboarding: {completed, completed_at, prior_domain, prior_years},
+ * profile} -- backend/webapp/onboarding.py:517-531, and the block itself is
+ * _state() at :502-514.
+ *
+ * IT IS THIS ROUTE AND NOT AN `onboarding` BLOCK ON GET /v1/me. The contract
+ * invents one on /v1/me (fixtures/contract/ASPIRATIONAL_GET_v1_me.json) and
+ * onboarding.py:519-528 says in terms why it did not build it there: /v1/me is
+ * auth.py's and "deliberately touches no jobs table", which is worth more than
+ * saving a request. The two must never both exist with different shapes, so
+ * this client calls exactly one of them and it is this one.
+ *
+ * `completed_at` CARRIES NO ZONE. onboarded_at is TEXT (schema_web.py:553)
+ * written by lib.timeparse.utc_now_str(), whose docstring says the
+ * '%Y-%m-%dT%H:%M:%S' shape is load-bearing and "must not gain an offset".
+ * Same trap as `first_seen` -- see format.mjs, which appends the Z.
+ */
+export function getOnboarding() {
+  return request("/v1/onboarding");
+}
+
+/**
+ * POST /v1/onboarding. The structured form and the seed judgements, together.
+ *
+ * ONE REQUEST, NOT TWO, and that is the endpoint's shape rather than a client
+ * convenience: onboarding.py:591-594 writes the profile row and commits it
+ * BEFORE recording the judgements, deliberately, so that the survivable half-
+ * failure is "onboarded with no judgements" rather than "judgements belonging
+ * to a Builder with no profile row". Splitting this into two calls client-side
+ * would put that ordering back in the client's hands.
+ *
+ * THE BODY CARRIES NO `profile` AND NO `tracks`, EVER. The cohort comes from
+ * the session (onboarding.py:279-283) and tracks are derived from the
+ * judgements rather than picked from a checkbox (:284-287, derive_tracks at
+ * :372-407). Sending either is not a 400 -- pydantic ignores unknown fields --
+ * it is silently discarded, which is why check_client.mjs re-derives
+ * OnboardingRequest's field names out of Python rather than trusting this file.
+ */
+export function postOnboarding(body) {
+  return request("/v1/onboarding", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/**
  * POST /v1/events. One request_id per batch, which is why events.js groups.
  *
  * EVERY VALIDATION FAILURE FAILS THE WHOLE BATCH (jobs.py:503-512), so a

@@ -17,6 +17,21 @@ endpoint for which that stopped being true, so this is where the aspirational
 fixture starts being held to the code. It is here rather than in
 verify_fixtures.py because the check needs pydantic, which lives only in this
 venv.
+
+THE FIXTURES MOVED TO shipped/ ON 2026-08-02, WITH THE ONBOARDING SCREEN, AND
+THAT CHANGED WHAT ONE TEST BELOW SHOULD ASSERT. While they sat in contract/ they
+were a TARGET, so a difference from the code was a deviation to record --
+which is what test_the_one_deviation_is_the_timestamp_format did, correctly.
+shipped/ means something stronger: "what the API returns TODAY, derived from the
+code". A shipped fixture that differs from the code is not a deviation, it is
+the confidently-wrong fixture verify_fixtures.py's docstring exists to prevent.
+So the `Z` came off the fixture and that test now pins its absence. The
+REASONING did not change and neither did the conclusion about which form wins;
+only which file has to agree with which.
+
+Both paths below are still resolved here rather than duplicated, and
+verify_fixtures.py now checks the same two files from the other side under the
+bare interpreter. Two checkers, one fixture, neither able to be the only one.
 """
 
 import json
@@ -35,9 +50,16 @@ import onboarding  # noqa: E402
 import schema_web  # noqa: E402
 
 REPO = pathlib.Path(WEBAPP_DIR).parents[1]
-CONTRACT = REPO / "frontend" / "fixtures" / "contract"
-REQUEST_FIXTURE = CONTRACT / "ASPIRATIONAL_POST_v1_onboarding.request.json"
-RESPONSE_FIXTURE = CONTRACT / "ASPIRATIONAL_POST_v1_onboarding.response.json"
+#: Moved out of fixtures/contract/ on 2026-08-02, when the onboarding screen
+#: landed: the ASPIRATIONAL_ prefix said "no route" and the route had shipped
+#: since 4c874e7. See the module docstring for what that changed about the last
+#: test in this file.
+SHIPPED = REPO / "frontend" / "fixtures" / "shipped"
+REQUEST_FIXTURE = SHIPPED / "POST_v1_onboarding.request.json"
+RESPONSE_FIXTURE = SHIPPED / "POST_v1_onboarding.response.json"
+#: GET /v1/onboarding was in neither directory until the same day.
+GET_FIXTURE = SHIPPED / "GET_v1_onboarding.json"
+GET_FIRST_RUN_FIXTURE = SHIPPED / "GET_v1_onboarding.first_run.json"
 
 
 class TestTheVocabulariesAreDerivedNotInvented(unittest.TestCase):
@@ -413,16 +435,35 @@ class TestRequestValidation(unittest.TestCase):
 
 
 class TestTheFrozenContractFixture(unittest.TestCase):
-    """The aspirational fixture the frontend is being built against, held to the
-    code for the first time. MANIFEST.json calls this directory "TARGET" and
-    says nothing in it is verified because "there is no code to verify it
-    against". As of task 26 there is, for this one endpoint."""
+    """The frozen fixtures the client is built against, held to the code.
+
+    ~~The aspirational fixture~~ -- they are in fixtures/shipped/ as of
+    2026-08-02, because the endpoint ships and a fixture in contract/ is one
+    nothing checks. The pydantic-dependent half of the checking is still here,
+    because pydantic lives only in this venv; the shape half is in
+    frontend/verify_fixtures.py, which runs under the bare system python3.
+
+    IT ASSERTS THAT THE FILES EXIST RATHER THAN SKIPPING PAST THEM. The setUp
+    used to skipTest on a missing request fixture, and on the day the files were
+    renamed that turned seven tests green-by-absence: the suite still said OK
+    and nothing in it was checking the fixture any more. A missing shipped
+    fixture is a failure, not an unavailable dependency -- unlike a scratch
+    database, these files are in the repo.
+    """
 
     def setUp(self):
-        if not REQUEST_FIXTURE.exists():          # pragma: no cover
-            self.skipTest(f"{REQUEST_FIXTURE} is missing")
+        for path in (REQUEST_FIXTURE, RESPONSE_FIXTURE,
+                     GET_FIXTURE, GET_FIRST_RUN_FIXTURE):
+            self.assertTrue(
+                path.exists(),
+                f"{path} is missing. It is a committed fixture, so this is a "
+                f"rename or a deletion, not an absent dependency -- skipping "
+                f"here is how seven of these tests silently stopped running "
+                f"when the files moved out of fixtures/contract/.")
         self.request = json.loads(REQUEST_FIXTURE.read_text())
         self.response = json.loads(RESPONSE_FIXTURE.read_text())
+        self.get = json.loads(GET_FIXTURE.read_text())
+        self.first_run = json.loads(GET_FIRST_RUN_FIXTURE.read_text())
 
     def test_the_frozen_request_body_parses(self):
         onboarding.OnboardingRequest(**self.request)
@@ -459,23 +500,55 @@ class TestTheFrozenContractFixture(unittest.TestCase):
         self.assertEqual(self.response["seed_judgements_recorded"],
                          len(self.request["seed_judgements"]))
 
-    def test_the_one_deviation_is_the_timestamp_format(self):
-        """DEVIATION, RECORDED RATHER THAN MATCHED. The fixture's completed_at
-        is "2026-08-01T14:22:09Z" and this service emits
-        '%Y-%m-%dT%H:%M:%S' with no Z, from lib.timeparse.utc_now_str().
+    def test_the_one_deviation_is_gone_because_the_fixture_moved(self):
+        """~~DEVIATION, RECORDED RATHER THAN MATCHED.~~ MATCHED, 2026-08-02.
 
-        The repo form wins and the fixture is the outlier. schema_web.py's
-        docstring gives the reason for the storage format -- "every other table
-        in this database does it, and one table with TIMESTAMPTZ would make
-        every join and every hand-written diagnostic query a special case" --
-        and MANIFEST.json already notes that the shipped first_seen is the same
-        bare stamp. Adding a Z to this one field would make it the only
-        timestamp in the API with a suffix, which is a worse contract than a
-        consistent one.
+        THE REASONING IS UNCHANGED AND THE CONCLUSION WAS ALWAYS THE SAME: the
+        repo form wins and the fixture was the outlier. This service emits
+        '%Y-%m-%dT%H:%M:%S' with no Z, from lib.timeparse.utc_now_str(), whose
+        docstring says that shape is load-bearing and "must not gain an offset
+        or microseconds" because both pipelines compare these as STRINGS.
+        schema_web.py gives the reason for the storage format -- "every other
+        table in this database does it, and one table with TIMESTAMPTZ would
+        make every join and every hand-written diagnostic query a special case"
+        -- and the shipped first_seen is the same bare stamp.
+
+        WHAT CHANGED IS WHICH FILE HAS TO AGREE WITH WHICH. In
+        fixtures/contract/ the fixture was a TARGET, so a difference from the
+        code was a deviation to write down. In fixtures/shipped/ it is a claim
+        about what the API returns today, and a wrong one is exactly the
+        confidently-wrong fixture verify_fixtures.py exists to prevent -- a
+        client doing new Date(completed_at) on the real value reads it as LOCAL
+        time. So the Z came off, and this pins its absence from both ends:
+        against utc_now_str() and against the file.
         """
         from lib.timeparse import utc_now_str
-        self.assertRegex(utc_now_str(), r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
-        self.assertTrue(self.response["onboarding"]["completed_at"].endswith("Z"))
+        bare = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$"
+        self.assertRegex(utc_now_str(), bare)
+        for name, body in (("POST response", self.response), ("GET", self.get)):
+            self.assertRegex(
+                body["onboarding"]["completed_at"], bare,
+                f"the {name} fixture's completed_at is not utc_now_str()'s "
+                f"format; onboarded_at is TEXT written by that function")
+
+    def test_the_get_fixtures_are_the_same_read_as_the_post_response(self):
+        # get_onboarding() and post_onboarding() both return _state(), so the
+        # block is the same block. One Builder cannot have two answers.
+        self.assertEqual(set(self.get), {"onboarding", "profile"})
+        self.assertEqual(self.get["onboarding"], self.response["onboarding"])
+        self.assertEqual(set(self.first_run["onboarding"]),
+                         set(self.response["onboarding"]))
+
+    def test_a_first_run_builder_is_null_and_not_the_domain_named_none(self):
+        # schema_web.py spends a paragraph on this and it is load-bearing:
+        # `none` is a real answer about a real person, NULL means NOBODY ASKED.
+        # A first-run client that collapsed the two would record every Builder
+        # who has not onboarded as one with no prior domain.
+        self.assertFalse(self.first_run["onboarding"]["completed"])
+        self.assertIsNone(self.first_run["onboarding"]["completed_at"])
+        self.assertIsNone(self.first_run["onboarding"]["prior_domain"])
+        self.assertIn("none", schema_web.PRIOR_DOMAINS,
+                      "the value NULL is being distinguished FROM still exists")
 
 
 if __name__ == "__main__":
