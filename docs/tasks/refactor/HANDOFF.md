@@ -51,6 +51,28 @@ on it — the instrument is named in each case.*
 > section was re-measured in the primary tree after merge, and that is the only reason they
 > can be quoted.** A reading is only as current as the tree it was taken in.
 
+## THE OPEN QUESTIONS, IN ONE PLACE — every one is the owner's, none is a session's
+
+*Assembled 2026-08-02 because they were scattered across this file and three others, and the
+next session is going to work through them first. Each row names the document that owns the
+full argument; this table is an index and deliberately does not restate the reasoning.*
+
+| # | question | owns it | if you do nothing |
+|---|---|---|---|
+| 1 | **Who issues a contributor credential?** Grant `jobs_web` INSERT on `jobs_api`'s tables / a server-to-server mint / a request queue the owner services by hand | `DEC-84`, [`24`](tranche_four/24-revive-contributor-api.md) | 24's *"a Builder onboards without the author"* cannot be met, and the page stays unbuilt. **This is a product call about how long `backend/api/` is expected to live** |
+| 2 | **Is the impression dedup key `(profile, job_id)` or `(profile, job_id, request_id)`?** One line of code; it changes the documented meaning of *"a list re-render is not new information"* | [`27`](tranche_five/27-event-schema.md), [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), [`engagement-events.md`](../../ingest/engagement-events.md) | **skips stay a first-render-per-day signal**, and every skip-derived figure quietly means that instead of what it says |
+| 3 | **More labellers on the SAME ten overlap rows**, and round 2 (~2026-08-09) | [`AUDIT.md`](AUDIT.md) § *What is open*, [`labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md) | tasks **30**, 13's weights and 12's next bump stay gated. More *postings* do nothing — 25 of 36 carry one labeller and add zero to the ceiling |
+| 4 | **The machine half of 33** — Cloudflare account and `cloudflared login`, the OAuth redirect URI, `systemctl --user enable`, an off-machine backup destination, and **the one verified restore** | [`33`](tranche_six/33-deployment.md) § the command list, [`RUNBOOK.md`](../../RUNBOOK.md) | nothing is reachable by a Builder, and **there is no proven backup** — the script and its verify timer are written and have never run |
+| 5 | **Apply the `revenue_commercial` archetype?** Proposed and deliberately unapplied | `DEC-64`/`DEC-65`, [`11`](tranche_two/11-archetype-superset-role-track.md) | `role_archetype = other` stays where it is. It is a `FACTS_VERSION` bump and `pursuit-v1` is mid-labelling, which is why it waits |
+| 6 | **`D31`** needs a decision, not a fix | [`DEFECTS.md`](../../ingest/DEFECTS.md) | stays open, correctly |
+
+**Two of these have moved since they were written and the movement is easy to miss.** (3) is
+no longer *"get a second labeller"* — that happened, the report printed, and **the ceiling
+came back below the model's floor on all five fields**, so what is needed now is *overlap*,
+not volume. And (4) is no longer blocked on a decision — `DEC-91` took the Cloudflare-vs-
+Tailscale call and `DEC-92` took the stays-on-the-home-box call; what is left is purely
+account access and a person at a terminal.
+
 **THE ONE FINDING TO CARRY FORWARD FROM THIS SESSION: three separate task files specified a
 schema that could not be built as written, and all three failures were the same failure.**
 `profile` is the **cohort** — thirty Builders share one — so any table keyed on it can hold
