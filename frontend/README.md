@@ -543,7 +543,25 @@ same shape in three days, in three different files.
 ```bash
 cd backend/webapp && .venv/bin/python ../../frontend/serve.py
 # then open http://localhost:8421/
+
+# From a phone on the same network, for task 32's "works on a phone" bullet.
+# Prints the address the phone should use, and what will not work yet.
+cd backend/webapp && .venv/bin/python ../../frontend/serve.py --host 0.0.0.0
 ```
+
+**`--host` defaults to `127.0.0.1` and that default does not move.** It binds this
+machine only unless you ask otherwise, because opening a listener on an app running
+with no TLS and `SESSION_COOKIE_SECURE=false` should be typed rather than inherited.
+`backend/tests/test_frontend_fixtures.py` asserts the default, for the same reason.
+
+**A LAN bind buys the layout half of the phone test and not the sign-in half.** The
+page renders and the API answers against live payloads — viewport, tap targets, the
+bottom sheet, safe-area insets. Signing in additionally needs the LAN origin
+registered as an authorised redirect URI in the Google Cloud Console, which is not a
+change this repo can make; `FRONTEND_ORIGIN` also holds exactly one value, so pointing
+it at the phone is what stops localhost sign-in working while it is set. `serve.py`
+prints both of those on a non-loopback bind rather than leaving them to a browser that
+reports neither.
 
 `serve.py` imports `backend/webapp/app.py` unchanged and mounts this directory
 at `/` **after** every router, so `/v1/*` still resolves to the API and only

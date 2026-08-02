@@ -13,7 +13,8 @@ and Search. Contribute is the one left, and it is blocked on an ownership decisi
 rather than on effort (`DEC-84`, open question 1).** Both "no backing table" claims
 were falsified within the day — task 26 landed `builder_profiles`, task 25 landed
 four search tables. **Every remaining DoD item needs a person, not a session**: the
-phone test needs a device *and* one line in `serve.py` (it binds `127.0.0.1`), and
+phone test needs a device ~~*and* one line in `serve.py` (it binds `127.0.0.1`)~~ —
+**the `serve.py` half landed 2026-08-02, `--host`, default still loopback** — and
 the Google login round trip needs an interactive browser.
 **Depends on:** 26, 27, 28, 30, 31. **Blocks:** nothing.
 
@@ -276,7 +277,7 @@ frozen fixtures, which is a weaker instrument than the round trip items 1–6 of
 | impressions fire on visibility, not on payload receipt | **done** — IntersectionObserver, 50% for 500ms |
 | no 0–100 score displayed | **done** — and asserted, including that the `match_reasons` deltas never reach a chip, since they sum to `match_score` |
 | empty states are seeded, never blank | **done** for Today, Saved **and Search** — and Search is the one this bullet was written about (§ *Design constraints*, "never an empty search box"). The screen opens on `GET /v1/searches?scope=suggested` with the form **below** the suggestions, and `check_client.mjs` asserts the document order rather than the presence, because a catalogue underneath the box is a blank box. |
-| works on a phone, **tested on a real one** | **not done.** Built mobile-first — 44px targets, bottom sheet, sticky action bar, safe-area insets — and rendered against live payloads, but no phone was in the loop. This one needs a person. |
+| works on a phone, **tested on a real one** | **not done, and no longer blocked on code.** Built mobile-first — 44px targets, bottom sheet, sticky action bar, safe-area insets — and rendered against live payloads, but no phone was in the loop. ~~`serve.py` binds `127.0.0.1`, so no phone on the LAN can load the page at all.~~ **`serve.py --host 0.0.0.0` landed 2026-08-02** (default unchanged, and asserted by `tests/test_frontend_fixtures.py`). What is exercisable is the **layout** half; **signing in from the phone is not**, because Google's authorised redirect URI must name the LAN origin and `FRONTEND_ORIGIN` holds one value. Still needs a person and a device. ~~And it needs the live database fixed first — `verify_schema()` refuses to start the service today, which is open question 7.~~ **Open question 7 closed 2026-08-02; the service boots and was served on `0.0.0.0:8421`, `/v1/health` answering and the page rendering over the LAN address.** |
 | onboarding completes without manual DB work | ~~**not done** — out of scope for this stream; `POST /v1/onboarding` is another stream's~~ **done 2026-08-02, by task 26's stream** — `frontend/js/onboarding.mjs`, two screens, routed at `#/onboarding` and reached automatically on first run. See `tranche_five/26-profile-creation.md` § *What the work turned up*. |
 | live Google login round trip verified by hand | **not done** — needs an interactive browser session |
 

@@ -52,6 +52,7 @@ and `.claude/CLAUDE.md`'s "read the `Ran N tests` line, not a static count; a
 skip is not a failure" is written for exactly this.
 """
 
+import ast
 import json
 import os
 import re
@@ -199,6 +200,66 @@ class TestClientAgreesWithTheFixtures(unittest.TestCase):
             "the client no longer agrees with frontend/fixtures/shipped/ or with "
             "the Python vocabularies it copies.\n\n"
             f"{result.stdout}{result.stderr}")
+
+
+class TestTheLauncherStillDefaultsToLoopback(unittest.TestCase):
+    """`frontend/serve.py --host` exists, and its default did not move.
+
+    `--host` was added so task 32's phone test does not have to wait for task
+    33's tunnel. The risk it introduces is the obvious one: a default that
+    quietly becomes 0.0.0.0 puts an app running with SESSION_COOKIE_SECURE
+    false, and no TLS, on the LAN of whoever next runs the documented command.
+    Nothing else in the repo would notice.
+
+    Read with `ast` rather than imported, exactly as `verify_fixtures.py` reads
+    `backend/webapp/*.py`: this module runs under the top level's bare system
+    python3, which has no fastapi and cannot import serve.py at all.
+    """
+
+    def setUp(self):
+        with open(os.path.join(FRONTEND, "serve.py"), encoding="utf-8") as fh:
+            self.tree = ast.parse(fh.read())
+
+    def _assign(self, name):
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == name:
+                        value = node.value
+                        # literal_eval has no opinion about frozenset({...}),
+                        # which is the form LOOPBACK_HOSTS is written in.
+                        if (isinstance(value, ast.Call)
+                                and isinstance(value.func, ast.Name)
+                                and value.func.id in ("frozenset", "set")):
+                            value = value.args[0]
+                        return ast.literal_eval(value)
+        self.fail(f"{name} is not assigned in serve.py")
+
+    def test_the_default_host_is_loopback(self):
+        self.assertEqual("127.0.0.1", self._assign("DEFAULT_HOST"))
+
+    def test_the_argparse_default_is_that_constant_and_not_a_literal(self):
+        """A second spelling of the address is a second thing to get wrong."""
+        for node in ast.walk(self.tree):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "add_argument"
+                    and node.args and getattr(node.args[0], "value", None) == "--host"):
+                default = [kw.value for kw in node.keywords if kw.arg == "default"]
+                self.assertTrue(default, "--host has no default; it would bind nothing")
+                self.assertIsInstance(
+                    default[0], ast.Name,
+                    "--host's default is written as a literal rather than "
+                    "DEFAULT_HOST, so the two can drift")
+                self.assertEqual("DEFAULT_HOST", default[0].id)
+                return
+        self.fail("serve.py no longer declares a --host argument")
+
+    def test_loopback_hosts_are_all_loopback(self):
+        """The set decides whether the LAN warnings print. A stray public
+        address in it would silence them for exactly the case they exist for."""
+        self.assertEqual({"127.0.0.1", "localhost", "::1"},
+                         set(self._assign("LOOPBACK_HOSTS")))
 
 
 if __name__ == "__main__":

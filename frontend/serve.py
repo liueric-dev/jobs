@@ -31,9 +31,30 @@ in `backend/webapp/README.md` should serve them. There is also no TLS here:
 SESSION_COOKIE_SECURE=false is what makes the cookie work over plaintext
 localhost, and app.py's docstring is explicit that this must not be how it is
 served anywhere else.
+
+--host, AND WHY THE DEFAULT DOES NOT MOVE. This bound 127.0.0.1 unconditionally,
+which made task 32's "works on a phone, tested on a real one" impossible without
+the Cloudflare tunnel of task 33 -- no device on the LAN could load the page at
+all. `--host 0.0.0.0` lifts that. The default is unchanged and deliberately so:
+opening a listener is the kind of thing that should be typed, not inherited.
+
+    cd backend/webapp && .venv/bin/python ../../frontend/serve.py --host 0.0.0.0
+
+WHAT A LAN BIND DOES NOT GIVE YOU, AND IT IS THE HALF PEOPLE ASSUME. The page
+renders and the API answers, so the LAYOUT half of the phone test is exercisable
+-- viewport, tap targets, the bottom sheet, safe-area insets, against live
+payloads. SIGNING IN IS NOT. Google's OAuth client rejects a redirect URI that is
+not registered byte-for-byte, and `http://<lan-ip>:8421/...` is not; adding it is
+a Google Cloud Console change, which is the same console step the tunnel needs.
+FRONTEND_ORIGIN also holds exactly one value, so pointing it at the LAN address
+is what breaks signing in from localhost while it is set. main() warns about
+each of these rather than leaving them to be discovered in a browser with no
+error message, which is this stack's documented failure mode for all three.
 """
 
+import argparse
 import os
+import socket
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -57,26 +78,100 @@ from app import app                              # noqa: E402
 app.mount("/", StaticFiles(directory=HERE, html=True), name="frontend")
 
 
-def main():
-    import uvicorn
+#: Bind addresses that reach this machine and nothing else. Anything outside
+#: this set is treated as a LAN bind, including a specific interface address.
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
-    port = config.PORT
-    origin = f"http://localhost:{port}"
-    if origin not in config.ALLOWED_ORIGINS:
+DEFAULT_HOST = "127.0.0.1"
+
+
+def lan_address():
+    """The address a phone on the same network would use to reach this box.
+
+    Nothing is sent. `connect()` on a UDP socket only selects a route, which is
+    the one portable way to ask the kernel "which interface would you leave by"
+    without parsing `ip`/`ifconfig` output per platform. The peer is TEST-NET-1
+    (RFC 5737), which is guaranteed never to be routed anywhere real.
+
+    Returns None when there is no route out -- an offline laptop, a container
+    with no network. The caller degrades to advice rather than printing a
+    confident wrong address, because a wrong address here costs someone the
+    ten minutes of typing it into a phone.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("192.0.2.1", 9))
+        return sock.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        sock.close()
+
+
+def warn_about_origins(origin, host, port):
+    """Print what will silently not work, before it silently does not work.
+
+    Every case below fails in a browser with no error text -- CORS drops a
+    credentialed fetch as a bare network error, an unregistered redirect URI is
+    Google's own screen, and a wrong FRONTEND_ORIGIN lands the browser on a port
+    where nothing is listening. None of them reach a log on this side.
+    """
+    if origin and origin not in config.ALLOWED_ORIGINS:
         # Not fatal: the app still boots and the API still answers. But every
         # credentialed fetch from the page will be refused by CORS, and the
         # browser reports that as a network error with no explanation.
         print(f"WARNING: {origin} is not in ALLOWED_ORIGINS "
-              f"({config.ALLOWED_ORIGINS}). Set ALLOWED_ORIGINS and "
-              f"FRONTEND_ORIGIN to {origin} in backend/webapp/.env.",
+              f"({config.ALLOWED_ORIGINS}). Add it in backend/webapp/.env.",
               file=sys.stderr)
-    if config.FRONTEND_ORIGIN != origin:
+    if origin and config.FRONTEND_ORIGIN != origin:
         print(f"WARNING: FRONTEND_ORIGIN is {config.FRONTEND_ORIGIN}, not "
-              f"{origin}. Signing in will land you on the wrong port.",
+              f"{origin}. Signing in will land you on the wrong origin.",
               file=sys.stderr)
 
-    print(f"frontend + API on {origin}/")
-    uvicorn.run(app, host="127.0.0.1", port=port)
+    if host in LOOPBACK_HOSTS:
+        return
+
+    # ALLOWED_ORIGINS is a list and can name both; FRONTEND_ORIGIN and the
+    # Google redirect URI hold one value each, so serving a phone means taking
+    # them off localhost for as long as the phone is the thing being tested.
+    print(f"NOTE: bound to {host}, so this is reachable by anything on the "
+          "LAN. Three things must name the address the PHONE uses, not "
+          "localhost: ALLOWED_ORIGINS (can hold both), FRONTEND_ORIGIN (one "
+          "value -- setting it here stops localhost sign-in working) and "
+          "Google's authorised redirect URI (Cloud Console, not this repo). "
+          "Without the third, the page renders and signing in does not.",
+          file=sys.stderr)
+    print("NOTE: there is no TLS here and SESSION_COOKIE_SECURE is "
+          f"{config.SESSION_COOKIE_SECURE}. On a LAN bind the session cookie "
+          "crosses the network in the clear. Fine on a home network for a "
+          "layout test; not a way to serve anyone.", file=sys.stderr)
+
+
+def main(argv=None):
+    import uvicorn
+
+    parser = argparse.ArgumentParser(
+        description="Serve frontend/ and the webapp API from one origin.")
+    parser.add_argument(
+        "--host", default=DEFAULT_HOST,
+        help="bind address (default %(default)s -- this machine only). Use "
+             "0.0.0.0 to reach it from a phone on the same network; read the "
+             "module docstring first, signing in needs a console change too.")
+    args = parser.parse_args(argv)
+
+    port = config.PORT
+    if args.host in LOOPBACK_HOSTS:
+        origin = f"http://localhost:{port}"
+    else:
+        address = lan_address()
+        origin = f"http://{address}:{port}" if address else None
+
+    warn_about_origins(origin, args.host, port)
+
+    print(f"frontend + API on {origin}/" if origin else
+          f"frontend + API on port {port} -- no route out, so the address a "
+          f"phone would use could not be determined")
+    uvicorn.run(app, host=args.host, port=port)
 
 
 if __name__ == "__main__":
