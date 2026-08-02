@@ -54,10 +54,10 @@ instrument, and every other document cites this one rather than restating them.
 | | value | instrument |
 |---|---|---|
 | tasks done or dropped | ~~20 of 35~~ **read the status column** — the count moved five times on 2026-08-01 alone, and two tasks were added | `grep -cE '\| \*{0,2}done\*{0,2} \|' docs/tasks/refactor/README.md`, against the same for `todo` |
-| test suite, main | ~~**green.**~~ **RED, one failure, and it is deliberate** — see the row below and § *What is open*. The count is whatever `Ran N tests` prints — see the note under this table | `cd backend && python3 -m unittest discover -s tests` |
+| test suite, main | ~~**green.**~~ ~~**RED, one failure, and it is deliberate**~~ **GREEN again 2026-08-02 — tasks 45 and 46 landed and cleared the deliberate failure (`2586bb2`).** The count is whatever `Ran N tests` prints — see the note under this table | `cd backend && python3 -m unittest discover -s tests` |
 | test suite, webapp | **green.** Same: run it, read the line | `cd backend/webapp && .venv/bin/python -m unittest discover -s tests` |
 | broken doc links | **0** | `python3 backend/tools/audit-doc-links.py` |
-| documentation policy | ~~**all six checks 0**~~ **C1 2, C4 2 — 4 findings, red on purpose** since the scanned set widened to the two declared roots 2026-08-02. **The baseline is still empty** and that emptiness is phase 9's exit gate; the findings are tasks [45](tranche_seven/45-declare-kind-on-the-roots.md) and [46](tranche_seven/46-sentence-scope-the-c4-lookahead.md), not baseline rows | `python3 backend/tools/audit-docs.py`; wired into `backend/tests/test_docs_policy.py` |
+| documentation policy | ~~**all six checks 0**~~ ~~**C1 2, C4 2 — 4 findings, red on purpose**~~ **all six checks 0 again, exit 0, on the widened set** — tasks [45](tranche_seven/45-declare-kind-on-the-roots.md) and [46](tranche_seven/46-sentence-scope-the-c4-lookahead.md) closed all four 2026-08-02. **The baseline was never grown and is still empty**, which is phase 9's exit gate | `python3 backend/tools/audit-docs.py`; wired into `backend/tests/test_docs_policy.py` |
 | defect register | ~~45 entries, `D01`–`D45`~~ **48 entries — `D01`–`D45` and `D66`–`D68`**; `D46`–`D65` are burnt, re-prefixed to `DEC-` by task 39. Next free `D69` | [`../../ingest/DEFECTS.md`](../../ingest/DEFECTS.md) |
 | human labels | ~~186 rows / 31 postings / **one** labeller~~ **271 rows / 36 postings / two labellers**, round 1 (2026-08-02) | `python3 backend/tools/label-findings.py` |
 | model vs human | **measured 2026-08-02, and the ceiling is below the floor on all five fields** — owned by [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md), which carries the table and the reasons not to tune on it | the command in that document; every input is committed |
@@ -161,7 +161,11 @@ to do:
    needs, and both are the owner's.
 
 ~~**Not blocked, not started:** the product/API surface — tasks 24–28, 31, 32.~~
-**STARTED 2026-08-01. Task 27 is done** (`2687bc0`); 24, 25, 26, 28, 31, 32 remain. Its
+**STARTED 2026-08-01.** ~~**Task 27 is done** (`2687bc0`); 24, 25, 26, 28, 31, 32 remain.~~
+**27, 31 and 28 are done, and 26 and 32 are each one screen short — 2026-08-02.** 28 is
+`3ad38dd`, 26's backend half is `4c874e7`, 32's client is `681c2a1`. What remains on the
+track is **24, 25, 33, and two screens** (26's onboarding, 32's search — and the search one
+is blocked on 25, which does not exist in code at all). Its
 premises were audited on 2026-07-31 and several were stale — **and 27's own dependency line
 was one of them**, declaring `Depends on: 26` while 26's Definition of done needs 27's
 `visibility` column. The corrections are in the task files themselves and in
@@ -224,10 +228,20 @@ the declared roots is the obvious next check and is not written. Until it is, **
 > licenses it. The unit of the claim is the sentence; the unit of the check is the line.
 > Task 38's design was correct against `docs/`, where no owned figure straddled a wrap.
 >
-> **Nothing was added to the declared baseline and it is still empty.** The `backend` suite
-> is red on `test_findings_are_a_subset_of_the_declared_baseline` until 45 and 46 land, which
-> is the disposition task 36 took and the reason that test is written to be pruned, never
-> grown.
+> **Nothing was added to the declared baseline and it is still empty.** ~~The `backend` suite
+> is red on `test_findings_are_a_subset_of_the_declared_baseline` until 45 and 46 land~~,
+> which is the disposition task 36 took and the reason that test is written to be pruned,
+> never grown.
+>
+> **CLOSED 2026-08-02 by `2586bb2`. All six checks are 0 on the widened set and the suite is
+> green.** Both roots declare `kind: contract` (`DEC-76`); C4's compliance lookahead is
+> evaluated against the enclosing **sentence**, with struck figures exempt under rule 4
+> (`DEC-78`). **Task 46's diagnosis was right about one of its two findings, not both** — the
+> second was licensed by the strike, because `main suite test count` is the one row in
+> `doc-figures.json` carrying no compliance lookahead at all, so joining the paragraph still
+> matched. Two independent fixes clearing disjoint sets. And the first implementation cleared
+> a **real** restatement through greedy `[^\n]*` letting a later cell license an earlier one —
+> the failure the task warns about, arriving through the fix rather than the bug.
 
 > **THE STATUS-COUNT INSTRUMENT WAS UNDER-REPORTING, found 2026-08-01 by running it.**
 > The command in that row was `grep -c '| done |'`, and two rows spell it `| **done** |` for
