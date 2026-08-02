@@ -639,6 +639,296 @@ class TestListState(unittest.TestCase):
 
 
 @requires_db
+class TestEventStateIsPerBuilder(unittest.TestCase):
+    """`seen` and `applied`, with two accounts -- defects D66 and D67.
+
+    The other half of TestListState's question, and the half that could not be
+    asked until job_events carried app_user_id. dismissed and saved live in
+    builder_job_state and were made per-Builder by task 31; seen and applied
+    derive from the append-only log and stayed cohort-wide, because a table
+    keyed (profile, job_id) cannot answer "did THIS Builder see it" and thirty
+    Builders share the `pursuit` profile.
+
+    EVERY TEST HERE PASSES VACUOUSLY WITH ONE ACCOUNT. That is the defects'
+    whole shape: with a single active Builder every value of e.profile belonged
+    to one person and the old join was accidentally correct, so it was
+    invisible at one Builder and wrong at two, with no error on the day it
+    turned. USER_B is not decoration.
+    """
+
+    def list_for(self, user, **kwargs):
+        # Same reason as TestListState.list_for: calling the handler as a plain
+        # function leaves unpassed arguments as their Query(...) OBJECT, and
+        # Query(False) is truthy.
+        call = dict(limit=jobs.MAX_LIMIT, cursor=None, q=None, remote=None,
+                    nyc=None, min_score=None, since=None,
+                    include_dismissed=False)
+        call.update(kwargs)
+        return jobs.list_jobs(user=user, **call)
+
+    def row_for(self, listing, job_id):
+        return next(j for j in listing["jobs"] if j["id"] == job_id)
+
+    def test_an_application_is_not_visible_as_another_builders_application(self):
+        # D67, and the sharper of the two. visibility_for("applied") stores the
+        # row `private` and API-CONTRACT-v1.md calls an application private;
+        # resolving the flag by profile then leaked the same fact back out of
+        # the response body -- the control enforced in the column and defeated
+        # in the join. At N=30 in one classroom that is not a distinction task
+        # 28 is willing to rely on.
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER, USER_B))
+            with redirect_db(conn):
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_a", events=[
+                        {"job_id": ids[0], "event": "applied"}]), USER)
+                mine = self.list_for(USER)
+                theirs = self.list_for(USER_B)
+            self.assertTrue(self.row_for(mine, ids[0])["applied"])
+            self.assertFalse(self.row_for(theirs, ids[0])["applied"])
+
+    def test_an_impression_is_not_visible_as_another_builders_impression(self):
+        # D66. `seen` is the one flag a Builder never sets deliberately, so a
+        # cohort-wide answer here is also the one they are least likely to
+        # notice is wrong.
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER, USER_B))
+            with redirect_db(conn):
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_i", events=[
+                        {"job_id": ids[1], "event": "impression", "rank": 2}]),
+                    USER)
+                mine = self.list_for(USER)
+                theirs = self.list_for(USER_B)
+            self.assertTrue(self.row_for(mine, ids[1])["seen"])
+            self.assertFalse(self.row_for(theirs, ids[1])["seen"])
+
+    def test_the_detail_endpoint_answers_the_same_way(self):
+        # _STATE_COLUMNS exists so the list and the detail endpoint cannot
+        # answer the same question differently, and it takes both joins'
+        # parameters -- which the detail endpoint binds in its own tuple rather
+        # than through list_jobs' params list. A fix applied to one and not the
+        # other would be caught only here.
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER, USER_B))
+            with redirect_db(conn):
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_a", events=[
+                        {"job_id": ids[0], "event": "applied"},
+                        {"job_id": ids[0], "event": "open", "rank": 1}]), USER)
+                mine = jobs.get_job(ids[0], user=USER)
+                theirs = jobs.get_job(ids[0], user=USER_B)
+            self.assertTrue(mine["applied"])
+            self.assertTrue(mine["seen"])
+            self.assertFalse(theirs["applied"])
+            self.assertFalse(theirs["seen"])
+
+    def test_the_event_row_records_who_wrote_it(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER, USER_B))
+            with redirect_db(conn):
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_a", events=[
+                        {"job_id": ids[0], "event": "applied"}]), USER)
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_b", events=[
+                        {"job_id": ids[1], "event": "save", "rank": 2}]), USER_B)
+            rows = dict(conn.execute(
+                "SELECT job_id, app_user_id FROM job_events "
+                "ORDER BY job_id").fetchall())
+            self.assertEqual(rows[ids[0]], USER.id)
+            self.assertEqual(rows[ids[1]], USER_B.id)
+
+    def test_a_derived_skip_belongs_to_the_builder_whose_impression_it_came_from(self):
+        # derive_skips copies imp.app_user_id rather than taking it from the
+        # caller. A skip attributed to nobody is a lost negative; a skip
+        # attributed to the wrong Builder is a wrong one, which is worse.
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER, USER_B))
+            with redirect_db(conn):
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_r", events=[
+                        {"job_id": job_id, "event": "impression", "rank": i}
+                        for i, job_id in enumerate(ids[:OPEN_RANK], start=1)]),
+                    USER)
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_r", events=[
+                        {"job_id": ids[OPEN_RANK - 1], "event": "open",
+                         "rank": OPEN_RANK}]), USER)
+            owners = {r[0] for r in conn.execute(
+                "SELECT app_user_id FROM job_events WHERE event = 'skip'"
+            ).fetchall()}
+            self.assertEqual(owners, {USER.id})
+
+    def test_an_echoed_request_id_cannot_derive_another_builders_skips(self):
+        """Defect D68. A `request_id` does not establish whose render it was.
+
+        `EventBatch.request_id` is a free-form client string, `validate_batch`
+        checks only that it is non-empty, and nothing records which user a
+        minted id was issued to -- it goes out in the list response and comes
+        back unverified. Before `imp.app_user_id = %s` the derivation's only
+        other predicate was the profile, which thirty Builders share, so B
+        echoing A's request_id on an `open` derived six skip rows FROM A's
+        impressions and stored them UNDER A's app_user_id: fabricated negatives
+        for postings B never saw.
+        """
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER, USER_B))
+            with redirect_db(conn):
+                # A renders a list and reports impressions for ranks 1..7.
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_belongs_to_A", events=[
+                        {"job_id": j, "event": "impression", "rank": i}
+                        for i, j in enumerate(ids[:OPEN_RANK], start=1)]), USER)
+                # B posts an open echoing A's request_id. Nothing issued it to
+                # B; B simply put A's string in the batch.
+                result = jobs.record_events(
+                    jobs.EventBatch(request_id="req_belongs_to_A", events=[
+                        {"job_id": ids[OPEN_RANK - 1], "event": "open",
+                         "rank": OPEN_RANK}]), USER_B)
+
+            # B's own open is recorded -- it is a real event by a real user on
+            # a job in the profile's match set. What must not happen is the
+            # derivation reading A's impressions.
+            self.assertEqual(result["recorded"], 1)
+            self.assertEqual(result["derived_skips"], 0)
+            self.assertEqual(
+                conn.execute("SELECT count(*) FROM job_events "
+                             "WHERE event = 'skip'").fetchone()[0], 0)
+
+    def test_a_builders_own_open_still_derives_its_skips(self):
+        # The other half of D68, and the one that catches a conjunct bound to
+        # the wrong value: narrowing the derivation must not disable it. Same
+        # render, same ranks, one Builder throughout.
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER, USER_B))
+            with redirect_db(conn):
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_mine", events=[
+                        {"job_id": j, "event": "impression", "rank": i}
+                        for i, j in enumerate(ids[:OPEN_RANK], start=1)]), USER)
+                result = jobs.record_events(
+                    jobs.EventBatch(request_id="req_mine", events=[
+                        {"job_id": ids[OPEN_RANK - 1], "event": "open",
+                         "rank": OPEN_RANK}]), USER)
+            self.assertEqual(result["derived_skips"], OPEN_RANK - 1)
+            owners = {r[0] for r in conn.execute(
+                "SELECT app_user_id FROM job_events WHERE event = 'skip'"
+            ).fetchall()}
+            self.assertEqual(owners, {USER.id})
+
+    def test_another_builders_action_cannot_suppress_my_skip(self):
+        """D68's second half: suppression, found by the fix for the first.
+
+        The NOT EXISTS asks "was there a non-impression event on this job in
+        this render". Without an owner predicate it answered that question
+        across all thirty Builders, so B -- echoing A's request_id and posting
+        a `save` -- could veto a skip A's own open should have derived. A lost
+        negative rather than a false one, and invisible the same way.
+        """
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER, USER_B))
+            with redirect_db(conn):
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_mine", events=[
+                        {"job_id": j, "event": "impression", "rank": i}
+                        for i, j in enumerate(ids[:OPEN_RANK], start=1)]), USER)
+                # B saves a job A saw, under A's request_id. B's own state is
+                # B's business; what it must not do is speak for A's render.
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_mine", events=[
+                        {"job_id": ids[2], "event": "save", "rank": 3}]), USER_B)
+                result = jobs.record_events(
+                    jobs.EventBatch(request_id="req_mine", events=[
+                        {"job_id": ids[OPEN_RANK - 1], "event": "open",
+                         "rank": OPEN_RANK}]), USER)
+
+            self.assertEqual(result["derived_skips"], OPEN_RANK - 1)
+            skipped = {r[0] for r in conn.execute(
+                "SELECT job_id FROM job_events WHERE event = 'skip'").fetchall()}
+            self.assertIn(ids[2], skipped)
+
+    def test_my_own_action_still_suppresses_my_skip(self):
+        # The other side of the same predicate, and the reason it is an owner
+        # match rather than a removal: a job THIS Builder acted on in THIS
+        # render is not passed over. Counting a save as a skip would feed the
+        # ranker a negative for its best outcome.
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER,))
+            with redirect_db(conn):
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_mine", events=[
+                        {"job_id": j, "event": "impression", "rank": i}
+                        for i, j in enumerate(ids[:OPEN_RANK], start=1)]), USER)
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_mine", events=[
+                        {"job_id": ids[2], "event": "save", "rank": 3}]), USER)
+                result = jobs.record_events(
+                    jobs.EventBatch(request_id="req_mine", events=[
+                        {"job_id": ids[OPEN_RANK - 1], "event": "open",
+                         "rank": OPEN_RANK}]), USER)
+
+            self.assertEqual(result["derived_skips"], OPEN_RANK - 2)
+            skipped = {r[0] for r in conn.execute(
+                "SELECT job_id FROM job_events WHERE event = 'skip'").fetchall()}
+            self.assertNotIn(ids[2], skipped)
+
+    def test_a_pre_column_action_event_does_not_suppress(self):
+        """The NULL case in the NOT EXISTS, asserted rather than reasoned to.
+
+        `other.app_user_id = imp.app_user_id` against a legacy row's NULL is
+        NULL, not TRUE, so the row does not satisfy the EXISTS and the skip is
+        still derived. That is the intended answer and not a workaround: an
+        event nobody can be shown to have generated should not veto somebody
+        else's negative. The outer conjunct guarantees `imp.app_user_id` is
+        non-NULL, so this is the only NULL that can reach the comparison.
+        """
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER,))
+            with redirect_db(conn):
+                jobs.record_events(
+                    jobs.EventBatch(request_id="req_mine", events=[
+                        {"job_id": j, "event": "impression", "rank": i}
+                        for i, j in enumerate(ids[:OPEN_RANK], start=1)]), USER)
+            # A pre-column action event: same render, same job, no owner.
+            conn.execute(
+                """
+                INSERT INTO job_events (profile, job_id, event, request_id,
+                                        rank, occurred_at)
+                VALUES (%s, %s, 'save', 'req_mine', 3, '2026-07-01T00:00:00')
+                """, (PROFILE, ids[2]))
+            conn.commit()
+            with redirect_db(conn):
+                result = jobs.record_events(
+                    jobs.EventBatch(request_id="req_mine", events=[
+                        {"job_id": ids[OPEN_RANK - 1], "event": "open",
+                         "rank": OPEN_RANK}]), USER)
+
+            self.assertEqual(result["derived_skips"], OPEN_RANK - 1)
+            skipped = {r[0] for r in conn.execute(
+                "SELECT job_id FROM job_events WHERE event = 'skip' "
+                "AND app_user_id IS NOT NULL").fetchall()}
+            self.assertIn(ids[2], skipped)
+
+    def test_an_event_written_before_the_column_belongs_to_nobody(self):
+        # The pre-existing rows carry NULL and are deliberately not backfilled
+        # (../schema.py). This asserts the direction that failure takes: the
+        # join's equality never matches NULL, so an unattributable impression
+        # reads as unseen for everyone rather than as seen for everyone.
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER,))
+            conn.execute(
+                """
+                INSERT INTO job_events (profile, job_id, event, occurred_at)
+                VALUES (%s, %s, 'impression', '2026-07-01T00:00:00')
+                """, (PROFILE, ids[3]))
+            conn.commit()
+            with redirect_db(conn):
+                mine = self.list_for(USER)
+            self.assertFalse(self.row_for(mine, ids[3])["seen"])
+
+
+@requires_db
 class TestSchemaShape(unittest.TestCase):
     """The columns exist, and the ones that must stay nullable are."""
 
@@ -649,7 +939,7 @@ class TestSchemaShape(unittest.TestCase):
                 "WHERE table_schema = %s AND table_name = 'job_events'",
                 (name,)).fetchall()}
             for col in ("request_id", "rank", "dwell_ms", "reason", "visibility",
-                        "criteria_version"):
+                        "criteria_version", "app_user_id"):
                 self.assertIn(col, cols)
 
     def test_rank_and_request_id_are_nullable(self):
@@ -665,6 +955,22 @@ class TestSchemaShape(unittest.TestCase):
                 (name,)).fetchall())
             self.assertEqual(nullable["rank"], "YES")
             self.assertEqual(nullable["request_id"], "YES")
+
+    def test_app_user_id_is_nullable_and_has_no_default(self):
+        # Same argument as rank, one column later. NOT NULL is unsatisfiable
+        # for the rows that predate the column, and every way of satisfying it
+        # -- a DEFAULT, a sentinel, a backfill from the only account that
+        # currently exists -- asserts an owner nobody recorded. A sentinel is
+        # worse than NULL for a specific reason: a sentinel JOINs, so it would
+        # hand every pre-existing impression to whichever Builder drew the
+        # sentinel. NULL cannot match _EVENT_STATE_JOIN's equality at all.
+        with web_scratch_schema() as (conn, name):
+            row = conn.execute(
+                "SELECT is_nullable, column_default FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = 'job_events' "
+                "AND column_name = 'app_user_id'", (name,)).fetchone()
+            self.assertEqual(row[0], "YES")
+            self.assertIsNone(row[1])
 
     def test_visibility_defaults_to_private(self):
         # The one column whose value for a pre-instrumentation row is knowable

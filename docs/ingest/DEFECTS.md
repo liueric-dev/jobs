@@ -83,7 +83,7 @@ else does.** Decisions are `DEC-<n>` and live in
 [`DECISIONS.md`](../tasks/refactor/DECISIONS.md); task numbers live in
 [`tasks/refactor/README.md`](../tasks/refactor/README.md).
 
-**Next free: `D68`.** Allocated `D01`–`D45` and `D66`–`D67`; **`D46`–`D65` are burnt and
+**Next free: `D69`.** Allocated `D01`–`D45` and `D66`–`D68`; **`D46`–`D65` are burnt and
 must never be issued.** They are not defects and never were — `DECISIONS.md` continued this register's
 count when it started allocating decision IDs mid-file, so those twenty numbers circulate
 in eighty-odd places meaning *decisions*. Task 39 re-prefixed the live sites to `DEC-46`–
@@ -230,6 +230,14 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D43](#d43) | silent data loss | **fixed** — task 08 | `score.py`: a tombstone left the previous score in place, and `has_fields` let an all-null answer through |
 | [D44](#d44) | loud failure | **fixed** — task 08 | `evals/__main__.py`: `evals run` raised `UnboundLocalError` for every task |
 | [D45](#d45) | silent under-sizing | **fixed** — verified 2026-07-31; the body has said so and this row did not | `company_ats`: the `never_found` write-back from `ats_seed` is partial. 35 rows against a true population of 139 |
+| [D66](#d66) | silent data loss | **fixed** — 2026-08-01 — `job_events.app_user_id`, nullable and unbackfilled | `GET /v1/jobs` reports `seen` cohort-wide, not per Builder |
+| [D67](#d67) | silent data loss | **fixed** — 2026-08-01 — same column, same join; dedup key deliberately untouched | `applied` likewise, contradicting the `private` visibility on its own event row |
+| [D68](#d68) | silent data loss | **fixed** — 2026-08-01 — both halves; two conjuncts, one on each end of the derivation | `derive_skips` reads *and* is vetoed by another Builder's events if the client echoes their `request_id` |
+
+**D66 and D67 were absent from this index entirely** until they were closed — added
+2026-08-01, on the lesson D45's row records four paragraphs above: *"the index is the part
+anyone scans."* A body with no index row is the same failure as an index row that
+disagrees with its body, one step earlier.
 
 ---
 
@@ -1107,7 +1115,7 @@ as a cassette test (`fixtures/cassettes/hn-item-null.json`).
 
 ---
 
-### D66 — open
+### D66 — fixed
 
 **`GET /v1/jobs` and `GET /v1/jobs/{id}` report `seen` cohort-wide, not per Builder.**
 `_EVENT_STATE_JOIN` resolves it from `job_events` with `WHERE e.profile = v.profile`
@@ -1125,11 +1133,46 @@ from impressions and impressions live only in `job_events`.
 accidentally correct. It becomes wrong on the day a second Builder signs in, silently, with
 no error and no changed code. Class: **silent data loss** (a wrong answer reported as a
 right one). Disposition: **fix with schema change** —
-`BLOCKED-BY: job_events has no app_user_id`.
+~~`BLOCKED-BY: job_events has no app_user_id`~~
+`UNBLOCKED-BY: job_events.app_user_id` — the column landed with the fix rather than
+ahead of it, so this entry was never a queue item; the token is rewritten anyway, because
+the header's grep is the mechanism and a stale `BLOCKED-BY:` on a closed entry is the
+same invisible-in-both-directions state the nine task-09 entries were in.
+
+**Fixed, 2026-08-01.** `app_user_id TEXT` was added to `job_events`
+(`backend/schema.py:678`, in the `add_missing_columns` block on `EVENTS_TABLE`),
+`POST /v1/events` writes it from `user.id` (`backend/webapp/jobs.py:837`), and
+`_EVENT_STATE_JOIN` now resolves `seen` by `e.app_user_id = %s AND e.job_id = v.id`
+(`backend/webapp/jobs.py:291`) instead of `e.profile = v.profile`.
+
+**The profile is gone from the predicate rather than joined beside the user id.** Keeping
+`e.profile = v.profile` as an extra conjunct would have preserved the existing
+`idx_job_events_profile_job` for free, and it is wrong for the same reason the original
+line was: a user id already names exactly one Builder, and re-adding the profile would
+silently drop that Builder's own events from before a profile change
+(`backend/webapp/manage_app_users.py:136`, `cmd_set_profile` — *"the only supported way to
+move a user"*). `idx_job_events_user_job ON job_events(app_user_id,
+job_id) WHERE app_user_id IS NOT NULL` (`backend/schema.py:703`) is the analogue that
+keeps the per-row lookup off a sequential scan — the same regression
+`idx_job_events_profile_job` was added to prevent, one key earlier.
+
+**Nullable and unbackfilled, and that decides which way it fails.** The pre-existing rows
+carry NULL, so the join's equality never matches them: an event nobody can be shown to
+have generated resolves `seen` to FALSE for everyone rather than TRUE for everyone. A
+sentinel would have been worse than NULL for a mechanical reason, not a stylistic one — a
+sentinel JOINs, so it would hand every pre-column impression to whichever Builder drew it.
+Pinned by `tests/test_event_replay.py`
+`TestEventStateIsPerBuilder.test_an_event_written_before_the_column_belongs_to_nobody`.
+
+**Every test for this passes vacuously with one account**, which is the defect's own shape
+restated as a test-design constraint; `TestEventStateIsPerBuilder` uses `USER` and
+`USER_B` on one profile throughout. With the read-side join reverted and everything else
+in place, four of its cases fail on an assertion rather than an error — the two flags,
+the detail endpoint, and the NULL-attribution direction.
 
 ---
 
-### D67 — open
+### D67 — fixed
 
 **The same for `applied`, and this one contradicts a written privacy promise.**
 `bool_or(e.event = 'applied')` in the same lateral, same cause as D66.
@@ -1146,15 +1189,160 @@ N=30 in a shared classroom that is the distinction task 28 spends its whole *sma
 problem* section refusing to rely on.
 
 Found by task 31, same pass as D66. Class: **silent data loss**. Disposition: **fix with
-schema change** — `BLOCKED-BY: job_events has no app_user_id`.
+schema change** — ~~`BLOCKED-BY: job_events has no app_user_id`~~
+`UNBLOCKED-BY: job_events.app_user_id`.
 
-> **The shared fix, noted once for both.** An `app_user_id` column on `job_events` closes
-> D66 and D67 together and is also what task 28 needs — *"4 Builders saved this"* requires
-> distinct users, and no query over `(profile, job_id)` can produce one. It is a change to
-> task 27's landed schema and is deliberately not taken here: task 31's Definition of done
-> names dismissal, `builder_job_state` covers `saved` on the way past, and widening a
-> landed event schema in passing is how a column acquires two meanings. Whoever takes 28
-> should expect to take this first.
+**Fixed, 2026-08-01, by the same change as D66** — one column, one join, and the two
+defects were always one defect seen through two flags. `bool_or(e.event = 'applied')` sits
+in the same lateral and is now filtered by the same `e.app_user_id = %s`
+(`backend/webapp/jobs.py:291`).
+
+**The privacy claim is now enforced in both places rather than one.**
+`visibility_for("applied")` already returned `private` on the event row and always had;
+what changed is that the response body stopped contradicting it. Pinned in both the list
+and the detail endpoint, because `_STATE_COLUMNS` exists so the two cannot answer the same
+question differently and they bind the join's parameters through different code paths —
+`list_jobs` through its `params` list (`backend/webapp/jobs.py:352`), `get_job` through a
+literal tuple (`:461`). A fix applied to one and not the other would have been caught only
+by `TestEventStateIsPerBuilder.test_the_detail_endpoint_answers_the_same_way`.
+
+**What this does NOT change: the 24-hour impression dedup.** It is still keyed
+`(profile, job_id)` and not `(profile, job_id, app_user_id)`, so one Builder's render
+still suppresses another Builder's impression of the same job for the rest of the window.
+That is an OPEN DECISION belonging to the repo owner, recorded in
+[`27-event-schema.md`](../tasks/refactor/tranche_five/27-event-schema.md),
+[`API-CONTRACT-v1.md`](../tasks/refactor/API-CONTRACT-v1.md) and
+[`engagement-events.md`](engagement-events.md). This change makes narrowing it *possible*
+for the first time; it does not make the decision. **It is a real remaining hole in the
+per-Builder story** — `seen` is now per-Builder in the read path while the write path can
+still drop the impression that would have set it — and it is left recorded rather than
+closed in passing.
+
+> **The shared fix, noted once for both.** ~~An `app_user_id` column on `job_events`
+> closes D66 and D67 together and is also what task 28 needs~~ — the column landed
+> 2026-08-01 and D66/D67 are closed above. **The half of this note that is still live is
+> task 28**: *"4 Builders saved this"* requires distinct users, no query over
+> `(profile, job_id)` can produce one, and `job_events(app_user_id, job_id)` now can.
+> Task 28's counting problem is unblocked by this column; its *small-N* privacy problem is
+> not, and is not something a column can answer.
+
+---
+
+### D68 — fixed
+
+**`derive_skips` was open at BOTH ends to another Builder's events if the client echoes
+their `request_id`** — it read their impressions, and their actions vetoed the skips it
+should have derived. `jobs.derive_skips()` selected impressions on
+`imp.profile = %s AND imp.request_id = %s` (`backend/webapp/jobs.py:698-701`) and
+inherited each row's `app_user_id`; its `NOT EXISTS` matched on
+`other.profile = imp.profile` with no owner predicate at all. Thirty Builders share
+`pursuit`, so the profile predicate constrains nothing, and the `request_id` predicate
+constrains nothing either.
+
+**One defect with two halves**, kept as one entry because they are one wrong idea — that a
+`request_id` identifies a render and therefore a Builder — reached from two directions:
+
+| half | what it did | shape |
+|---|---|---|
+| **fabrication** | derived skips FROM another Builder's impressions, stored under their name | a **false** negative |
+| **suppression** | another Builder's action VETOED a skip this Builder's open should have derived | a **lost** negative |
+
+**The second half was found by the fix for the first**, and that is worth keeping as a
+pattern rather than as a footnote: narrowing the outer selection to one Builder made it
+immediately visible that the inner `NOT EXISTS` had never been narrowed at all. A
+half-answered question looks answered. The fabrication half was measured first and fixed
+first; the suppression half was flagged in that fix's own "what this does not cover"
+section and closed the same day, on the owner's call.
+
+**Nothing binds a `request_id` to the user it was issued to.** `new_request_id()`
+(`backend/webapp/jobs.py:164`) mints one per render and its own docstring says *"a client
+cannot be trusted to generate it"* — but that is a statement of intent, not an
+enforcement. `EventBatch.request_id` is a free-form client string (`:495`),
+`validate_batch` checks only that it is non-empty (`:529`), and **there is no issuance
+record anywhere**: the id goes out in the list response, rides the opaque cursor across
+pages, and comes back on the batch unverified.
+
+**Measured on a scratch schema, 2026-08-01**, before the fix:
+
+> Builder A reports 7 impressions under `req_A`. Builder B posts one `open` at rank 7
+> echoing `req_A`. The batch returns `{'recorded': 1, 'derived_skips': 6}`, and
+> `job_events` holds `('impression', A, 7)`, `('open', B, 1)`, `('skip', A, 6)`.
+
+Six fabricated negative training rows, for postings B never saw, stored under **A's**
+`app_user_id`.
+
+**It predates `app_user_id` and was not introduced by it.** The cross-Builder *read* has
+been there since the derivation landed with task 27; before the column those six rows were
+merely anonymous, and what the column added was a wrong *name* on the result. That is what
+moved it from "note it" to "fix it" — and the reasoning that first dismissed it (*"the
+selection is not additionally filtered by `app_user_id` because `request_id` already is
+one"*) was written into `jobs.py` as a justification and was wrong. It was disproved by
+measuring it rather than by re-reading it.
+
+**It never reached `seen` or `applied`, and that boundary is part of the finding rather
+than a mitigation of it.** `_EVENT_STATE_JOIN` matches `event IN ('impression','open')`
+and `event = 'applied'`; `skip` is in neither, so none of this was ever visible in a
+response body and no Builder could observe another's activity through it. The damage was
+confined to L2 training data — which is the entire reason `job_events` exists, and
+`job_events` is append-only, so every day the hole stayed open wrote permanently
+unremovable wrong rows. That is what decided the fix over the deferral.
+
+Class: **silent data loss** (fabricated rows reported as recorded). Disposition:
+**fixed, 2026-08-01.**
+
+**The fix is two conjuncts, one on each end of the derivation:**
+
+- `AND imp.app_user_id = %s` bound to `user.id` (`backend/webapp/jobs.py:734`), with
+  `derive_skips` taking the caller's id as a parameter (`:619`, passed at `:857`). Confines
+  the derivation to the caller's own impressions.
+- `AND other.app_user_id = imp.app_user_id` in the `NOT EXISTS` (`:742`). Confines the veto
+  to the caller's own actions.
+
+Together they make the `request_id` predicate a convenience rather than a load-bearing one.
+`app_user_id` is still **copied** from the impression rather than stamped from the caller;
+the first conjunct is what makes those two agree. Stamping instead would put B's name on a
+row carrying A's rank and A's score snapshot — internally inconsistent, and worse.
+
+**The owner match is not a removal.** A job *this* Builder acted on in *this* render must
+still be excluded — counting a save as a skip would feed the ranker a negative for its best
+outcome — and the derived `skip` rows carry the caller's `app_user_id`, which is what keeps
+a second `open` further down the same render idempotent.
+
+**The NULL question one level down resolves cleanly, and the resolution is correct on the
+merits rather than convenient.** The outer conjunct already forces `imp.app_user_id`
+non-NULL, so the only NULL that can reach `other.app_user_id = imp.app_user_id` is a legacy
+row's; `NULL = 'u_123'` is NULL rather than TRUE, the row fails the `EXISTS`, and a
+pre-column action event simply stops suppressing. **An event nobody can be shown to have
+generated should not veto somebody else's negative.** Asserted rather than reasoned to —
+see the third test below, which fails `5 != 6` without the inner conjunct.
+
+**What this still does not cover, stated so it is not read as total:**
+
+- **Renders whose impressions predate the column derive nothing.** NULL cannot satisfy the
+  outer equality. Accepted deliberately by the owner: those rows are historical and already
+  unattributable, so the practical loss is near zero against a hole that was writing
+  unremovable rows daily.
+- **`request_id` is still unverified.** The two conjuncts make a borrowed render id harmless
+  to *this derivation*, not impossible to send. A batch echoing another Builder's
+  `request_id` still writes its own events under that id, so one render id can span two
+  Builders' rows. **Nothing reads it that way today** — grepped 2026-08-01, `derive_skips`
+  is the only consumer of `job_events.request_id` in the tree; `score.py`, `match.py` and
+  `tools/` do not reference the column. It is a constraint on the L2 analysis not yet
+  written: `GROUP BY request_id` alone is not a render, `(app_user_id, request_id)` is.
+- **The 24-hour impression dedup is untouched** and remains keyed `(profile, job_id)` —
+  the OPEN DECISION recorded in D67 and in `engagement-events.md`.
+
+Pinned by five cases in `backend/webapp/tests/test_event_replay.py`
+`TestEventStateIsPerBuilder`, each paired with a guard so a broken derivation cannot pass
+trivially:
+
+| test | fails without the fix as |
+|---|---|
+| `test_an_echoed_request_id_cannot_derive_another_builders_skips` | `AssertionError: 6 != 0` |
+| `test_a_builders_own_open_still_derives_its_skips` | *(guard — must hold both ways)* |
+| `test_another_builders_action_cannot_suppress_my_skip` | `AssertionError: 5 != 6` |
+| `test_my_own_action_still_suppresses_my_skip` | *(guard — must hold both ways)* |
+| `test_a_pre_column_action_event_does_not_suppress` | `AssertionError: 5 != 6` |
 
 ---
 

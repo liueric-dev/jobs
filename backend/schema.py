@@ -634,6 +634,40 @@ def ensure_schema(conn):
     # visibility is the one exception and takes a DEFAULT, because it is the one
     # column whose value for an old row is knowable rather than guessed: every
     # pre-instrumentation row was written under a system that shared nothing.
+    #
+    # app_user_id is a LATER and DIFFERENT concern that lands in this same block
+    # because it needs this block's nullability argument verbatim.
+    #
+    #   app_user_id -- WHICH BUILDER. Not position bias: identity. This table
+    #     was keyed (profile, job_id) and thirty Builders share the `pursuit`
+    #     profile, so "did this Builder see it" was not a question the table
+    #     could answer at all. webapp/jobs.py resolved `seen` and `applied` from
+    #     it anyway, by profile, which made one Builder's impression everyone's
+    #     -- defects D66 and D67 in docs/ingest/DEFECTS.md, both recorded as
+    #     BLOCKED-BY this column. `applied` was the sharper half: visibility
+    #     above correctly stores an application as 'private' and the response
+    #     body then reported it cohort-wide, so the control was enforced in the
+    #     column and defeated in the join. Task 31 had already moved `dismissed`
+    #     and `saved` onto builder_job_state (webapp/schema_web.py), which
+    #     carries app_user_id; `seen` and `applied` could not follow, because
+    #     they derive from events and events live only here.
+    #
+    #     It is TEXT and not a foreign key on purpose. app_users belongs to
+    #     webapp/schema_web.py, on the other side of the ownership line this
+    #     file's processes keep -- the same reason builder_job_state declares a
+    #     real FK to app_users and declines one to jobs. A pipeline table must
+    #     not require the surfacing service's schema to exist.
+    #
+    # NULLABLE AND UNBACKFILLED, for exactly the reason the paragraph above
+    # gives for rank. There is no recoverable fact here: the pre-existing rows
+    # were written by a single labeller under a system with no per-Builder
+    # identity, and stamping today's only active account onto them would assert
+    # something nobody recorded -- the same guess `rank` is forbidden to make.
+    # A sentinel ('unknown', '') is that guess wearing a different name, and it
+    # is worse than NULL because a sentinel JOINs. NULL means "written before
+    # this column existed", which is true, and it makes the read side fail in
+    # the safe direction: an old impression resolves `seen` to FALSE for
+    # everyone rather than TRUE for everyone.
     dbconn.add_missing_columns(conn, EVENTS_TABLE, [
         ("request_id", "TEXT"),
         ("rank", "INTEGER"),
@@ -641,6 +675,7 @@ def ensure_schema(conn):
         ("reason", "TEXT"),
         ("visibility", "TEXT DEFAULT 'private'"),
         ("criteria_version", "INTEGER"),
+        ("app_user_id", "TEXT"),
     ])
     # The skip derivation's only query: "un-actioned impressions before rank k
     # in this render". Without it, deriving skips on an open is a sequential
@@ -650,6 +685,24 @@ def ensure_schema(conn):
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_job_events_request "
                  f"ON {EVENTS_TABLE}(profile, request_id, rank) "
                  f"WHERE request_id IS NOT NULL")
+    # The per-Builder analogue of idx_job_events_profile_job above, and needed
+    # for the same reason that one is: webapp/jobs.py's _EVENT_STATE_JOIN asks
+    # "has THIS Builder seen or applied to THIS job" once per row on every list
+    # render, and it now asks it by app_user_id. Re-keying that join without
+    # this index would move a per-row lookup off an index and onto a sequential
+    # scan of a table whose whole purpose is to grow forever -- which is the
+    # exact regression idx_job_events_profile_job was added to prevent, one key
+    # earlier. (profile, job_id) cannot answer the new question: thirty
+    # Builders share a profile, so it matches thirty times as many rows as the
+    # answer needs.
+    #
+    # Partial, on the same argument as idx_job_events_request: the join's
+    # predicate is a strict equality against a real user id, so a NULL
+    # app_user_id can never satisfy it, and the NULL rows are precisely the
+    # pre-existing ones that must not be attributed to anybody.
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_job_events_user_job "
+                 f"ON {EVENTS_TABLE}(app_user_id, job_id) "
+                 f"WHERE app_user_id IS NOT NULL")
     conn.commit()
 
     for name, col in (("idx_jobs_company", "company_token"),

@@ -241,21 +241,45 @@ def _like(term):
     return "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
-#: This PROFILE's interaction state for each row -- which is thirty Builders'
-#: interaction state, not one Builder's, and that is the point of the second
-#: join below. The lookup is by (profile, job_id), which is what
-#: idx_job_events_profile_job in ../schema.py exists for -- the older
-#: (profile, occurred_at DESC) index answers "recent activity" and cannot answer
-#: this, so without it every page render is a sequential scan over a table that
-#: only grows.
+#: THIS Builder's event-derived state for each row -- `seen` and `applied`,
+#: the half of the state that cannot live in builder_job_state because it is
+#: derived from the append-only log rather than written as a current answer.
 #:
-#: `seen` AND `applied` ARE STILL COHORT-WIDE AND THAT IS A KNOWN DEFECT --
-#: D66 and D67 in docs/ingest/DEFECTS.md. job_events has no app_user_id column
-#: at all (../schema.py), so "did THIS Builder see it" is not a question this
-#: table can answer, and inventing an answer here would be worse than the
-#: honest one. Both are BLOCKED-BY that column. `applied` is the worse of the
-#: two: API-CONTRACT-v1.md calls an application `private`, and a cohort-wide
-#: applied=true contradicts that in the response body.
+#: IT USED TO READ `e.profile = v.profile`, AND THAT WAS DEFECTS D66 AND D67
+#: (docs/ingest/DEFECTS.md). Thirty Builders share the `pursuit` profile, so
+#: one Builder's impression marked the row `seen` for all thirty and one
+#: Builder's application marked it `applied` for all thirty. D67 was the
+#: sharper one: visibility_for("applied") correctly stores an application as
+#: `private` and API-CONTRACT-v1.md calls it private, and the response body
+#: then leaked the same fact anyway -- the control enforced in the column and
+#: defeated in the join. It was invisible at one Builder (every value of
+#: e.profile belonged to one person, so the join was accidentally correct) and
+#: wrong at two, with no error on the day it turned. Both are closed by
+#: job_events.app_user_id (../schema.py, add_missing_columns on EVENTS_TABLE).
+#:
+#: THE PROFILE IS DELIBERATELY GONE FROM THE PREDICATE, not merely joined by
+#: an extra column. A user id already names exactly one Builder; re-adding
+#: `e.profile = v.profile` would silently drop that Builder's own events from
+#: before a profile change (manage_app_users.py:136, cmd_set_profile -- the
+#: only supported way to move a user), which is a second wrong answer reached
+#: from the same wrong idea that the profile identifies a person.
+#:
+#: The lookup is by (app_user_id, job_id), which is what idx_job_events_user_job
+#: in ../schema.py exists for -- the older (profile, job_id) index cannot answer
+#: this question and (profile, occurred_at DESC) answers "recent activity", so
+#: without it every page render is a sequential scan over a table that only
+#: grows.
+#:
+#: PRE-COLUMN ROWS HAVE app_user_id NULL AND RESOLVE TO FALSE, for everyone.
+#: That is the intended direction: the equality never matches NULL, so an event
+#: nobody can be shown to have generated is attributed to nobody, rather than
+#: to whoever happens to be asking. ../schema.py says why they are not
+#: backfilled.
+#:
+#: IT TAKES A PARAMETER AND IT COMES FIRST -- before _BUILDER_STATE_JOIN's,
+#: which is spliced in after it, and before anything the WHERE contributes.
+#: Both are user.id, so these two cannot be swapped against each other into a
+#: wrong answer; the WHERE's params still can. See _BUILDER_STATE_JOIN.
 #:
 #: dismissed and saved USED to be resolved here too, by event recency. They are
 #: not any more -- see _BUILDER_STATE_JOIN.
@@ -264,7 +288,7 @@ _EVENT_STATE_JOIN = """
             SELECT bool_or(e.event IN ('impression', 'open')) AS seen,
                    bool_or(e.event = 'applied') AS applied
             FROM job_events e
-            WHERE e.profile = v.profile AND e.job_id = v.id
+            WHERE e.app_user_id = %s AND e.job_id = v.id
         ) ev ON TRUE
 """
 
@@ -277,13 +301,15 @@ _EVENT_STATE_JOIN = """
 #: fixed-effect/random-effect split as task 26's config inheritance and the
 #: ranker's eventual shape, kept deliberately consistent.
 #:
-#: IT TAKES A PARAMETER, AND THE PARAMETER COMES FIRST. This fragment is
-#: spliced in ahead of the WHERE clause, so app_user_id must be the FIRST
-#: element of the params list, before anything the WHERE contributes. Getting
-#: that backwards does not raise -- it compares a user id against a profile
-#: name, finds nothing, and silently reports every Builder as having no state.
-#: tests/test_event_replay.py TestListState is what fails if it is ever
-#: reordered.
+#: IT TAKES A PARAMETER, AND THE PARAMETER COMES BEFORE THE WHERE'S. Both this
+#: fragment and _EVENT_STATE_JOIN are spliced in ahead of the WHERE clause, so
+#: the params list LEADS with their two -- _EVENT_STATE_JOIN's user.id, then
+#: this one's -- before anything the WHERE contributes. Getting that backwards
+#: does not raise: it compares a user id against a profile name, finds nothing,
+#: and silently reports every Builder as having no state. The two leading
+#: values are both user.id and so are interchangeable with each other; it is
+#: the boundary against the WHERE that matters. tests/test_event_replay.py
+#: TestListState is what fails if it is ever reordered.
 _BUILDER_STATE_JOIN = """
         LEFT JOIN builder_job_state bs
                ON bs.app_user_id = %s AND bs.job_id = v.id
@@ -320,10 +346,11 @@ def list_jobs(
     include_dismissed: bool = Query(
         False, description="debugging only; dismissed postings are hidden by default"),
 ):
-    # THE JOIN'S PARAMETER LEADS. _BUILDER_STATE_JOIN is spliced in ahead of the
-    # WHERE clause, so its %s binds before any of the WHERE's -- see the comment
-    # on that constant for what a reordering silently does.
-    params = [user.id]
+    # THE JOINS' PARAMETERS LEAD. _EVENT_STATE_JOIN and _BUILDER_STATE_JOIN are
+    # both spliced in ahead of the WHERE clause, in that order, so their two %s
+    # bind before any of the WHERE's -- see the comment on _BUILDER_STATE_JOIN
+    # for what a reordering silently does.
+    params = [user.id, user.id]
 
     where = ["v.profile = %s"]
     params.append(user.profile)
@@ -430,9 +457,9 @@ def get_job(job_id: str, user: User = Depends(require_user)):
             {_BUILDER_STATE_JOIN}
             WHERE v.profile = %s AND v.id = %s
             """,
-            # user.id leads: the join binds before the WHERE. See
-            # _BUILDER_STATE_JOIN.
-            (user.id, user.profile, job_id),
+            # user.id leads TWICE: both joins bind before the WHERE, in the
+            # order they are spliced. See _BUILDER_STATE_JOIN.
+            (user.id, user.id, user.profile, job_id),
         ).fetchone()
 
     if row is None:
@@ -589,7 +616,7 @@ def write_builder_state(conn, app_user_id, job_id, event, reason, now):
     return True
 
 
-def derive_skips(conn, profile, request_id, rank, now):
+def derive_skips(conn, profile, app_user_id, request_id, rank, now):
     """An open at rank k means every un-actioned item above it was passed over.
 
     The strongest free negative signal available, and derivable ONLY because
@@ -611,16 +638,100 @@ def derive_skips(conn, profile, request_id, rank, now):
     existing documented behaviour ("a list re-render is not new information")
     for a different task's benefit, so it is recorded here and in
     docs/ingest/engagement-events.md rather than changed in passing.
+
+    THE DERIVATION IS CONFINED TO ONE BUILDER AT BOTH ENDS -- it reads only the
+    caller's own impressions (`imp.app_user_id = %s`, bound to user.id) and only
+    the caller's own actions veto them (`other.app_user_id = imp.app_user_id`).
+    Both are defect D68 (docs/ingest/DEFECTS.md), which has two halves, and this
+    is the paragraph that says why neither is redundant with the request_id
+    beside them.
+
+    request_id DOES NOT ESTABLISH WHOSE RENDER THIS IS. new_request_id() mints
+    one per render and its own docstring says a client cannot be trusted to
+    generate it -- but nothing here enforces that. EventBatch.request_id is a
+    free-form client string (`request_id: str | None`), validate_batch checks
+    only that it is non-empty, and NOTHING RECORDS WHICH USER A MINTED ID WAS
+    ISSUED TO: it goes out in the list response, rides the cursor across pages,
+    and comes back in the batch unverified. Before this conjunct the only other
+    predicate was `imp.profile = %s`, and thirty Builders share `pursuit`.
+
+    Measured before the fix, not reasoned: A reports 7 impressions under
+    "req_A"; B posts one `open` echoing "req_A"; the batch returned
+    derived_skips=6 and job_events held ('skip', A's app_user_id, 6) -- six
+    fabricated negatives for postings B never saw, stored under A's name. The
+    cross-Builder READ predates app_user_id; what the column added was a wrong
+    NAME on the result, which is what made it worth fixing rather than noting.
+
+    THE SECOND HALF WAS FOUND BY THE FIX FOR THE FIRST, and is the mirror
+    image: the NOT EXISTS asks "was there a non-impression event on this job in
+    this render", and without an owner predicate it asked it across all thirty
+    Builders. So B, echoing A's request_id and posting a `save`, could VETO a
+    skip A's own open should have derived. Suppression rather than fabrication
+    -- a lost negative rather than a false one -- and invisible in exactly the
+    same way, since a skip that is never written looks identical to an item
+    nobody passed over. Closing the read half and leaving the veto half would
+    have been a half-answer to one question.
+
+    THE OWNER MATCH IS NOT A REMOVAL. A job THIS Builder acted on in THIS
+    render must still be excluded -- counting a save as a skip would feed the
+    ranker a negative for its best outcome -- and the derived skip rows
+    themselves carry the caller's app_user_id, which is what keeps a second
+    open further down the same render idempotent.
+
+    THE NULL CASE RESOLVES CLEANLY AND IS THE HONEST ANSWER, not a workaround.
+    The outer conjunct already forces imp.app_user_id non-NULL, so the only
+    NULL that can reach `other.app_user_id = imp.app_user_id` is a legacy
+    row's; NULL = 'u_123' is NULL rather than TRUE, the row fails the EXISTS,
+    and a pre-column action event simply stops suppressing. That is correct on
+    the merits: an event nobody can be shown to have generated should not veto
+    somebody else's negative. Asserted rather than reasoned to, by
+    tests/test_event_replay.py
+    TestEventStateIsPerBuilder.test_a_pre_column_action_event_does_not_suppress.
+
+    IT NEVER REACHED seen OR applied, and that boundary is part of the finding.
+    _EVENT_STATE_JOIN matches event IN ('impression','open') and
+    event = 'applied'; 'skip' is in neither, so none of this was ever visible in
+    a response body. The damage was confined to L2 training data -- which is
+    this table's entire purpose, so it is not a mitigation.
+
+    app_user_id IS STILL COPIED FROM THE IMPRESSION RATHER THAN STAMPED FROM
+    THE CALLER, and the conjunct is what makes those two agree. Copying keeps a
+    skip's owner a fact already on the row instead of one re-asserted from the
+    caller, and it is what makes the NULL case above behave.
+
+    WHAT THIS STILL DOES NOT COVER, stated so it is not read as total:
+
+      * A render whose impressions predate app_user_id derives NOTHING, because
+        NULL cannot satisfy the outer equality. Accepted deliberately: those
+        rows are historical and already unattributable, and job_events is
+        append-only, so every day the hole stayed open wrote permanently
+        unremovable wrong rows.
+      * request_id IS STILL UNVERIFIED. Nothing here rejects a batch echoing
+        another Builder's render id -- the two conjuncts make it harmless to
+        THIS derivation rather than impossible to send. A batch carrying a
+        borrowed request_id still writes ITS OWN events (the open, the save)
+        under that request_id and the sender's app_user_id, so one render id
+        can end up spanning two Builders' rows. Nothing reads it that way
+        today: grepped 2026-08-01, this function is the ONLY consumer of
+        job_events.request_id in the tree -- score.py, match.py and tools/ do
+        not reference the column at all. It is a constraint on the L2 analysis
+        not yet written: GROUP BY request_id alone is not a render, and
+        (app_user_id, request_id) is.
+      * The 24-hour dedup above is untouched and remains keyed
+        (profile, job_id), which is the OPEN DECISION recorded there.
     """
     rows = conn.execute(
         """
-        INSERT INTO job_events (profile, job_id, event, request_id, rank,
+        INSERT INTO job_events (profile, app_user_id, job_id, event, request_id,
+                                rank,
                                 visibility, match_score, fit_score,
                                 criteria_version, occurred_at)
-        SELECT imp.profile, imp.job_id, 'skip', imp.request_id, imp.rank,
+        SELECT imp.profile, imp.app_user_id, imp.job_id, 'skip', imp.request_id,
+               imp.rank,
                %s, imp.match_score, imp.fit_score, imp.criteria_version, %s
         FROM job_events imp
         WHERE imp.profile = %s
+          AND imp.app_user_id = %s
           AND imp.request_id = %s
           AND imp.event = 'impression'
           AND imp.rank IS NOT NULL
@@ -628,12 +739,13 @@ def derive_skips(conn, profile, request_id, rank, now):
           AND NOT EXISTS (
                 SELECT 1 FROM job_events other
                  WHERE other.profile = imp.profile
+                   AND other.app_user_id = imp.app_user_id
                    AND other.request_id = imp.request_id
                    AND other.job_id = imp.job_id
                    AND other.event <> 'impression')
         RETURNING id
         """,
-        (VISIBILITY_PRIVATE, now, profile, request_id, rank),
+        (VISIBILITY_PRIVATE, now, profile, app_user_id, request_id, rank),
     ).fetchall()
     return len(rows)
 
@@ -663,6 +775,23 @@ def record_events(batch: EventBatch, user: User = Depends(require_user)):
     as the reason that column exists there. visibility is set by event type
     because it is a privacy control, and a privacy control a client can set is
     not one.
+
+    app_user_id is written from user.id, on the same principle again and for a
+    third reason: it is WHO, and the read side needs it. Without it `seen` and
+    `applied` were resolved by profile and were therefore cohort-wide -- D66
+    and D67, closed by this line and by _EVENT_STATE_JOIN together. The column
+    is nullable and unbackfilled (../schema.py), so every row written from here
+    onward has it and no earlier row acquires a guess.
+
+    THE 24-HOUR IMPRESSION DEDUP IS STILL KEYED (profile, job_id) AND IS NOT
+    NARROWED TO app_user_id. That is not an oversight left over from the
+    column: it is an OPEN DECISION belonging to the repo owner, recorded in
+    tranche_five/27-event-schema.md, API-CONTRACT-v1.md and
+    docs/ingest/engagement-events.md, and it has a real consequence -- one
+    Builder's render suppresses another Builder's impression of the same job
+    for the rest of the window. Adding the column makes narrowing it POSSIBLE
+    for the first time; it does not make the decision. derive_skips' docstring
+    documents the second half of the same interaction.
     """
     validate_batch(batch)
 
@@ -689,10 +818,11 @@ def record_events(batch: EventBatch, user: User = Depends(require_user)):
                 continue
             row = conn.execute(
                 """
-                INSERT INTO job_events (profile, job_id, event, request_id, rank,
+                INSERT INTO job_events (profile, app_user_id, job_id, event,
+                                        request_id, rank,
                                         dwell_ms, reason, visibility, match_score,
                                         fit_score, criteria_version, occurred_at)
-                SELECT m.profile, m.job_id, %s, %s, %s, %s, %s, %s, m.match_score,
+                SELECT m.profile, %s, m.job_id, %s, %s, %s, %s, %s, %s, m.match_score,
                        (SELECT s.fit_score FROM job_scores s
                          WHERE s.job_id = m.job_id AND s.profile = m.profile),
                        m.criteria_version, %s
@@ -704,7 +834,7 @@ def record_events(batch: EventBatch, user: User = Depends(require_user)):
                            AND prior.event = 'impression' AND prior.occurred_at >= %s))
                 RETURNING id
                 """,
-                (e.event, batch.request_id, e.rank, e.dwell_ms, e.reason,
+                (user.id, e.event, batch.request_id, e.rank, e.dwell_ms, e.reason,
                  visibility_for(e.event), now, user.profile, e.job_id, e.event,
                  cutoff),
             ).fetchone()
@@ -721,8 +851,11 @@ def record_events(batch: EventBatch, user: User = Depends(require_user)):
                 # excludes any job with a non-impression event in this render,
                 # and the job just opened must be one of them.
                 if e.event == "open":
-                    derived += derive_skips(conn, user.profile, batch.request_id,
-                                            e.rank, now)
+                    # user.id as well as user.profile: the derivation reads
+                    # impressions back out of the table, and request_id alone
+                    # does not establish whose render they came from. D68.
+                    derived += derive_skips(conn, user.profile, user.id,
+                                            batch.request_id, e.rank, now)
             else:
                 deduped += 1
         # One transaction for the batch, so an open and the skips it implies

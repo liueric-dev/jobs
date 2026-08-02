@@ -22,7 +22,7 @@ generator: none
 >
 > | | added |
 > |---|---|
-> | columns on `job_events` | `request_id`, `rank`, `dwell_ms`, `reason`, `visibility`, `criteria_version` — all nullable, `visibility DEFAULT 'private'` (`backend/schema.py`, `add_missing_columns` on `EVENTS_TABLE`) |
+> | columns on `job_events` | `request_id`, `rank`, `dwell_ms`, `reason`, `visibility`, `criteria_version` — all nullable, `visibility DEFAULT 'private'` (`backend/schema.py`, `add_missing_columns` on `EVENTS_TABLE`). `app_user_id` joined that same block on 2026-08-01, nullable and with no default; see the 2026-08-01 amendment below |
 > | issued by `GET /v1/jobs` | a top-level `request_id` and a per-row `rank`, both carried across pages in the opaque cursor |
 > | derived, never accepted | **`skip`** — an `open` at rank *k* makes every un-actioned impression above it in that render a skip. `jobs.derive_skips()` |
 > | vocabularies | `CLIENT_EVENT_NAMES` / `SERVER_EVENT_NAMES` split; `DISMISS_REASONS`; `VISIBILITY_PRIVATE` / `VISIBILITY_COHORT` |
@@ -86,6 +86,43 @@ generator: none
 >
 > **Line citations below remain from `dd49a27` and are still not swept**, for the reason
 > the task 27 block gives. `grep -n` on the symbol names is the instrument.
+
+> **AMENDED 2026-08-01 — `job_events` acquired `app_user_id`, and the other two flags
+> followed. This closes the block above; read it after that one.**
+>
+> **`seen` and `applied` are per-Builder now, and D66/D67 are closed** (`DEFECTS.md`). The
+> block above says the state *could not* live in `job_events` because the table had no
+> `app_user_id`. That sentence was true of the table as it stood and was never true of the
+> table as a design — the column was the missing thing, not an impossibility — so the
+> honest correction is that `dismissed` and `saved` still belong in `builder_job_state`
+> for their own reason (they are a **current answer**, not evidence), while `seen` and
+> `applied` stay in `job_events` for theirs (they are **derived from the log** and have no
+> current-answer form).
+>
+> | | |
+> |---|---|
+> | new column | `app_user_id TEXT` on `job_events` — **nullable, no default, unbackfilled** (`backend/schema.py:678`, `add_missing_columns` on `EVENTS_TABLE`) |
+> | written by | `POST /v1/events` from `user.id` (`backend/webapp/jobs.py:837`), and copied from the source impression by `derive_skips` (`:729`) |
+> | read by | `_EVENT_STATE_JOIN`, now `WHERE e.app_user_id = %s AND e.job_id = v.id` (`backend/webapp/jobs.py:291`) — the profile is **gone** from that predicate, not joined beside the user id |
+> | new index | `idx_job_events_user_job ON job_events(app_user_id, job_id) WHERE app_user_id IS NOT NULL` (`backend/schema.py:703`) |
+> | grants | **unchanged.** `job_events` is already `SELECT, INSERT` to `jobs_web` (`backend/webapp/schema_web.py:48`) and the startup check is table-level |
+>
+> **NULL is the pre-column state and it fails in the safe direction.** The equality never
+> matches NULL, so an event nobody can be shown to have generated resolves `seen` to FALSE
+> for everyone rather than TRUE for everyone. A sentinel would JOIN, which is why it is
+> worse than NULL here and not merely less tidy — it would hand every pre-column
+> impression to whichever Builder drew it. Same argument `rank` gets in `schema.py`.
+>
+> **The dedup key did NOT move and the hole it leaves is real.** It is still
+> `(profile, job_id)`, so one Builder's render still suppresses another Builder's
+> impression of the same job for 24 hours: `seen` is per-Builder in the read path while
+> the write path can still drop the row that would have set it. The open decision recorded
+> in the task 27 block above is now *actionable* — the column that makes narrowing it
+> possible exists — and is still the owner's to make.
+>
+> **This unblocks task 28's counting problem and not its privacy problem.** *"4 Builders
+> saved this"* is now a query; *small-N* at thirty in one classroom is not something a
+> column answers.
 
 ## Purpose
 
@@ -214,7 +251,7 @@ flowchart TD
     INS -.reads.-> S[("job_scores")]
 
     EV -.read back by.-> SC["score.py _recently_active<br/>gates the nightly warm pass<br/>score.py:552-570"]
-    EV -.read back by.-> LIST["GET /v1/jobs · _EVENT_STATE_JOIN<br/>seen / dismissed / applied / saved<br/>jobs.py:122-132"]
+    EV -.read back by.-> LIST["GET /v1/jobs · _EVENT_STATE_JOIN<br/>seen / applied, keyed app_user_id<br/>dismissed / saved moved to builder_job_state<br/>jobs.py:122-132"]
 ```
 
 ---
@@ -255,6 +292,7 @@ clothes. The deviation is recorded in the contract and pinned by
 | Column | Source | Client-controllable? |
 |---|---|---|
 | `profile` | `m.profile` — from `job_matches`, matched on the **session's** profile | **no** |
+| **`app_user_id`** | `user.id` — from the **session**, never the request, exactly as `profile` is | **no** |
 | `job_id` | `m.job_id` — from `job_matches`, not echoed from the request | no |
 | `event` | the client's string, after allowlist check | yes, from a closed set |
 | **`match_score`** | `m.match_score` — read from `job_matches` in the same statement | **no** |
@@ -286,10 +324,75 @@ generation ordered the list a user saw."*
 
 `jobs.derive_skips()`. When an `open` arrives at rank *k*, every impression in the same
 `request_id` at rank < *k* **with no other event on that job in that render** becomes a
-`skip` row, inheriting the impression's `rank`, `match_score`, `fit_score` and
-`criteria_version`. It runs after the `open`'s own insert and inside the same transaction,
-so the opened item is excluded and a reader can never see an open without the skips it
-implies.
+`skip` row, inheriting the impression's `rank`, `match_score`, `fit_score`,
+`criteria_version` and — since 2026-08-01 — `app_user_id`. It runs after the `open`'s own
+insert and inside the same transaction, so the opened item is excluded and a reader can
+never see an open without the skips it implies.
+
+**`app_user_id` is inherited rather than passed in**, which is the same rule the scores
+follow one clause earlier: a derived skip belongs to whoever generated the impression it
+came from, and that is a fact already on the row. It also means a skip derived from a
+pre-column impression inherits that impression's NULL instead of acquiring an owner it
+never had.
+
+**The derivation is confined to one Builder at both ends** — it reads only the caller's own
+impressions (`AND imp.app_user_id = %s`, bound to `user.id`, `backend/webapp/jobs.py:734`)
+and only the caller's own actions veto them (`AND other.app_user_id = imp.app_user_id` in
+the `NOT EXISTS`, `:742`). `derive_skips` takes the caller's id as a parameter for this
+(`:619`). Both are **defect [D68](DEFECTS.md)**, fixed 2026-08-01, and neither is redundant
+with the `request_id` beside them.
+
+> **`request_id` DOES NOT ESTABLISH WHOSE RENDER IT WAS.** `new_request_id()`
+> (`backend/webapp/jobs.py:164`) mints one per render and its own docstring says *"a
+> client cannot be trusted to generate it"* — a statement of intent, not an enforcement.
+> `EventBatch.request_id` is a free-form client string (`:495`), `validate_batch` checks
+> only that it is non-empty (`:529`), and **nothing records which user a minted id was
+> issued to**: it goes out in the list response, rides the opaque cursor across pages, and
+> comes back on the batch unverified. Before the conjunct the only other predicate was
+> `imp.profile = %s`, and thirty Builders share `pursuit`.
+>
+> **Measured 2026-08-01, not reasoned — and it disproved the justification that had been
+> written into the code.** Builder A reports 7 impressions under `req_A`; Builder B posts
+> one `open` echoing `req_A`; the batch returned `derived_skips: 6` and `job_events` held
+> `('skip', A's app_user_id, 6)` — six fabricated negatives for postings B never saw,
+> under A's name.
+>
+> **It never reached `seen` or `applied`**, and that boundary is part of the finding rather
+> than a mitigation of it. `_EVENT_STATE_JOIN` matches `event IN ('impression','open')` and
+> `event = 'applied'`, and `skip` is in neither, so none of it was ever visible in a
+> response body. The damage was confined to L2 training data — this table's entire purpose
+> — and `job_events` is append-only, so every day the hole stayed open wrote permanently
+> unremovable wrong rows. That is what decided the fix over the deferral.
+>
+> **Pre-existing, and newly *named*.** The cross-Builder read predates `app_user_id`;
+> before the column those rows were anonymous, and the column added a wrong name to them.
+>
+> **The defect had a second half, and the fix for the first is what found it.** Narrowing
+> the outer selection made it visible that the `NOT EXISTS` had never been narrowed at all:
+> another Builder's action on a job, under a borrowed `request_id`, **vetoed** a skip this
+> Builder's `open` should have derived. **Suppression rather than fabrication** — a lost
+> negative rather than a false one, and invisible the same way, because a skip that is
+> never written looks identical to an item nobody passed over. Closed the same day.
+
+**The owner match is not a removal.** A job *this* Builder acted on in *this* render is
+still excluded — counting a save as a skip would feed the ranker a negative for its best
+outcome — and the derived `skip` rows carry the caller's `app_user_id`, which is what keeps
+a second `open` further down the same render idempotent.
+
+**The NULL case resolves cleanly and is the honest answer, not a workaround.** The outer
+conjunct forces `imp.app_user_id` non-NULL, so the only NULL reaching
+`other.app_user_id = imp.app_user_id` is a legacy row's; `NULL = 'u_123'` is NULL rather
+than TRUE, so a pre-column action event simply stops suppressing. An event nobody can be
+shown to have generated should not veto somebody else's negative.
+
+**What this still does not cover.** Renders whose impressions predate `app_user_id` derive
+nothing, NULL being unable to satisfy the outer equality — accepted deliberately, those
+rows being historical and already unattributable. And **`request_id` is still unverified**:
+the conjuncts make a borrowed render id harmless to this derivation, not impossible to
+send, so one render id can span two Builders' rows. Nothing reads it that way today —
+`derive_skips` is the only consumer of `job_events.request_id` in the tree (grepped
+2026-08-01; `score.py`, `match.py` and `tools/` do not reference the column) — but
+`GROUP BY request_id` alone is not a render, and `(app_user_id, request_id)` is.
 
 **"No other event" rather than "no open" is what makes it idempotent**, and the distinction
 is load-bearing: a `skip` is itself a non-impression event, so a second `open` further down
@@ -340,7 +443,7 @@ rewritten, and they say `applied`.
 | Reader | Uses |
 |---|---|
 | `score.py:_recently_active` (`backend/score.py:552-570`) | any event within N days gates the nightly warm pass; **zero events counts as active** |
-| `GET /v1/jobs` `_EVENT_STATE_JOIN` (`:122-132`) | ~~`bool_or(event IN ('impression','open')) AS seen`, `bool_or(event='dismiss')`, `bool_or(event='applied')`, and the latest `save`/`unsave` timestamps~~ **`seen` and `applied` only, since 2026-08-01** |
+| `GET /v1/jobs` `_EVENT_STATE_JOIN` (`:122-132`) | ~~`bool_or(event IN ('impression','open')) AS seen`, `bool_or(event='dismiss')`, `bool_or(event='applied')`, and the latest `save`/`unsave` timestamps~~ **`seen` and `applied` only, since 2026-08-01** — and keyed on ~~`e.profile = v.profile`~~ **`e.app_user_id = %s`**, also since 2026-08-01 (D66/D67) |
 | `GET /v1/jobs` `_BUILDER_STATE_JOIN` | `dismissed`, `saved` and `dismiss_reason`, from `builder_job_state` keyed on `app_user_id` — **not** from this table |
 | `backend/tools/dismiss-reasons.py` | the `undismiss` count, and nothing else. Everything it reports about dismissals comes from `builder_job_state`, which is the only place a *Builder* can be counted |
 
@@ -501,10 +604,22 @@ The service "never writes `jobs`, `job_facts`, `job_matches` or `job_scores`"
 
 ### Index support
 
-`idx_job_events_profile_job ON job_events(profile, job_id)`
+~~`idx_job_events_profile_job ON job_events(profile, job_id)`
 (`backend/schema.py:416`) exists specifically for this access pattern —
 `backend/schema.py` notes it answers "has this profile saved/dismissed THIS
-job", which the other index `(profile, occurred_at DESC)` cannot.
+job", which the other index `(profile, occurred_at DESC)` cannot.~~
+
+**Superseded 2026-08-01 for the read path; still correct about the other index.**
+`_EVENT_STATE_JOIN` now asks the per-Builder question, and `(profile, job_id)` cannot
+answer it — thirty Builders share a profile, so it matches thirty times as many rows as
+the answer needs. `idx_job_events_user_job ON job_events(app_user_id, job_id) WHERE
+app_user_id IS NOT NULL` (`backend/schema.py:703`) is the analogue that serves it.
+`idx_job_events_profile_job` is **not dropped**: the dedup subquery in `POST /v1/events`
+still keys on `(profile, job_id)` and is the reason it stays.
+
+**Partial on the same argument as `idx_job_events_request`**: the join's predicate is a
+strict equality against a real user id, so a NULL `app_user_id` can never satisfy it, and
+the NULL rows are precisely the pre-existing ones that must not be attributed to anybody.
 
 ### Undocumented assumptions
 

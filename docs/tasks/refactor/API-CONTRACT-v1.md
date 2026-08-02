@@ -158,18 +158,37 @@ cohort profile.
 > |---|---|---|
 > | `dismissed` | `builder_job_state.dismissed_at` | **yes** |
 > | `saved` | `builder_job_state.saved_at` | **yes** |
-> | `seen` | `job_events`, by `profile` | **no** — defect D66 |
-> | `applied` | `job_events`, by `profile` | **no** — defect D67 |
+> | `seen` | ~~`job_events`, by `profile`~~ `job_events`, by `app_user_id` | ~~**no** — defect D66~~ **yes** |
+> | `applied` | ~~`job_events`, by `profile`~~ `job_events`, by `app_user_id` | ~~**no** — defect D67~~ **yes** |
 >
-> `job_events` has no `app_user_id` column, so the last two cannot be answered per Builder
+> ~~`job_events` has no `app_user_id` column, so the last two cannot be answered per Builder
 > without a change to task 27's landed schema. Both are `BLOCKED-BY: job_events has no
 > app_user_id` in [`../../ingest/DEFECTS.md`](../../ingest/DEFECTS.md), which owns the
-> argument. **D67 is a contradiction inside this document**: an application is `private`
+> argument.~~ **D67 is a contradiction inside this document**: an application is `private`
 > two paragraphs above and cohort-wide in the response body.
 >
-> **This is invisible at one Builder and wrong at two.** There is one active `pursuit`
+> ~~**This is invisible at one Builder and wrong at two.** There is one active `pursuit`
 > account today, so every `e.profile` belongs to one person and the join is accidentally
-> correct. Nothing will change in the code on the day it stops being.
+> correct. Nothing will change in the code on the day it stops being.~~
+>
+> > **FULLY SHIPPED 2026-08-01, and the struck text above is what this document said while
+> > it was half true.** `app_user_id TEXT` landed on `job_events` (`backend/schema.py:678`),
+> > `POST /v1/events` writes it from `user.id` (`backend/webapp/jobs.py:837`), and
+> > `_EVENT_STATE_JOIN` resolves both flags by `e.app_user_id = %s AND e.job_id = v.id`
+> > (`backend/webapp/jobs.py:291`). **D66 and D67 are closed** in
+> > [`../../ingest/DEFECTS.md`](../../ingest/DEFECTS.md), which owns the argument. All five
+> > `state` fields are per-Builder.
+> >
+> > **Pre-column rows carry NULL and resolve to `false` for everyone**, rather than `true`
+> > for everyone: the equality never matches NULL, so the failure is in the safe direction.
+> > Nothing was backfilled.
+> >
+> > **One hole survives and it is the write path, not the read path.** The impression dedup
+> > key is still `(profile, job_id)`, so one Builder's render can suppress another's
+> > impression of the same job for 24 hours — `seen` is per-Builder when it is read and
+> > cohort-wide when it is written. That is the open owner decision recorded below and in
+> > [`../../ingest/engagement-events.md`](../../ingest/engagement-events.md); the column
+> > that makes narrowing it possible now exists.
 >
 > Two fields this response also gained: `dismiss_reason` (null unless dismissed), and the
 > list now **hides** dismissed postings by default. `GET /v1/jobs/{id}` does not hide them,

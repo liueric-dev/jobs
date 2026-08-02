@@ -21,14 +21,27 @@ WHY THIS IS A REPORT AND NOT A LOOP
     closed enum mapping onto existing features instead of free text.
 
 WHY IT READS builder_job_state AND NOT job_events
-    `job_events` has no `app_user_id` column -- it is keyed `(profile, job_id)`
-    and thirty Builders share the `pursuit` profile, so it can count DISMISSALS
-    but it cannot count BUILDERS. "Twelve Builders dismissed postings as
-    wrong_level this week" and "one Builder dismissed twelve" are the same row
-    count and opposite conclusions, and only the first is a reason to touch a
-    weight. `builder_job_state` carries `app_user_id`, so the distinct count is
-    available; that is why every headline figure below is a Builder count and
-    the posting count is printed beside it rather than instead of it.
+    Because `builder_job_state` is the CURRENT ANSWER and `job_events` is the
+    evidence, and a dismissal that was undone is not a complaint any more.
+    Counting the log would count reversed dismissals as live ones.
+
+    ~~`job_events` has no `app_user_id` column~~ -- IT DOES, since 2026-08-01
+    (`../schema.py`, `add_missing_columns` on `EVENTS_TABLE`; defects D66/D67 in
+    `docs/ingest/DEFECTS.md`). That was the original reason this tool read the
+    other table and it is no longer true, so it is corrected rather than left to
+    mislead the next reader into thinking the log cannot be grouped by Builder.
+    It can. Note the column is NULLABLE AND UNBACKFILLED: rows written before
+    that date carry NULL, so any per-Builder count over `job_events` must say
+    what it does with them rather than silently dropping them into a bucket.
+
+    The reason it still matters that a Builder can be counted at all: this tool
+    can count DISMISSALS or it can count BUILDERS, and "twelve Builders
+    dismissed postings as wrong_level this week" and "one Builder dismissed
+    twelve" are the same row count and opposite conclusions -- only the first is
+    a reason to touch a weight. `builder_job_state` carries `app_user_id`, so
+    the distinct count is available; that is why every headline figure below is
+    a Builder count and the posting count is printed beside it rather than
+    instead of it.
 
     The cost of that choice is stated rather than hidden: this table holds the
     CURRENT state, so an undone dismissal is gone from it. An undo is still a
