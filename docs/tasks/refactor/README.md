@@ -152,7 +152,28 @@ archival, entirely invisible to six passing checks**, is what this tranche is fo
 |---|---|---|---|
 | 47 | [Split the entry point](tranche_eight/47-split-the-entry-point.md) | `HANDOFF.md` is now **four** documents, not 44's two — an entry point, a session narrative, an open-questions register that never got rule 6's ID prefix, and a recommendations essay. The narrative becomes `sessions/*.md`, `kind: record`, **frozen on write so it cannot accrete strikes** — which is the property that stops the growth, not the archival. The questions become `OPEN-QUESTIONS.md` owning `OQ-`, because today they are cited by *row position* from `tranche_six/32-frontend.md` and the rows already read 1, 2, 3, ~~7~~, 8, 4, 5, 6. **Plus C7, a declared size budget on `rolling` documents** — the check that would have gone red on the morning of 2026-08-02 and did not. Deliberately does not delete anything, does not rewrite tasks 01–46, and does not widen C4. **`HANDOFF.md` 2669 → 119 lines against a declared budget of 150, every body extracted by line range so the text is byte-identical.** Its premise was wrong by one and the missing one is the biggest: a **fifth** lifecycle, `STANDING-GUIDANCE.md` — true until the code changes, so neither entry point nor dated record. **C7 is the only check in this repo that landed green**, tested against a synthetic tree instead of against a live document left broken. The unplanned work was the link sweep: moving text one directory deeper broke **47** relative links, and `audit-doc-links.py` **defaults its root to `docs` relative to cwd** — run from `backend/` it scanned `backend/docs/` and reported 0 while 47 were live | **done** |
 
----
+## Phase 11 — Retire the documentation system
+
+**Phase 10 fixed the entry point. This tranche asks why there was so much to enter.** Tasks
+36–47 were twelve consecutive tasks of documentation infrastructure, every one green and every
+one correct, and they produced no product movement: ~46,000 lines of Markdown against ~74,500 of
+Python. The diagnosis is not a missing rule — it is that this repo answers five different
+questions with one instrument, and a Markdown file is a good answer to only one of them.
+[`tranche_nine/README.md`](tranche_nine/README.md) has that table, the order, and the ceiling.
+
+**There is no task 55.** Work this tranche discovers goes to `OWNER-QUEUE.md` or
+[`DECISIONS.md`](DECISIONS.md); it does not become an eighth task. Strictly sequential — 49 is
+load-bearing and everything after it reads its output.
+
+| | Task | Lands | |
+|---|---|---|---|
+| 48 | [Stop clean](tranche_nine/48-stop-clean.md) | a green, committed, known state to cut from | todo |
+| 49 | [Orientation from the code](tranche_nine/49-orientation-from-code.md) | `docs/STATE-OF-THE-SYSTEM.md`, written from code and git, **not from the docs** | todo |
+| 50 | [Extract the durable core](tranche_nine/50-extract-durable-core.md) | the ~300 lines out of ~46,000 that cannot be regenerated | todo |
+| 51 | [Archive the rest](tranche_nine/51-archive-the-rest.md) | `git mv`. Nothing deleted. Tree under 8,000 lines | todo |
+| 52 | [Build the harness](tranche_nine/52-build-the-harness.md) | `.claude/` and `~/.claude/` — each question answered in its own slot | todo |
+| 53 | [Owner queue and the changelog routine](tranche_nine/53-owner-queue-and-changelog.md) | one file that says what is on the owner, with instructions; a standing ecosystem check | todo |
+| 54 | [Re-plan the product work](tranche_nine/54-replan-the-product.md) | a new, small task list against 49's understanding | todo |
 
 ## Why evals moved to the front
 

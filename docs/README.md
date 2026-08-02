@@ -131,7 +131,7 @@ came from.
 The numbered task files themselves are indexed by the tree they belong to, in order
 and with their status:
 
-- [`tasks/refactor/README.md`](tasks/refactor/README.md) — the Pursuit retarget, tranches one through seven.
+- [`tasks/refactor/README.md`](tasks/refactor/README.md) — the Pursuit retarget, tranches one through nine.
 - [`tasks/README.md`](tasks/README.md) — the five `job_ingest` tasks that built `backend/webapp/`.
 - [`ingestion_tests/README.md`](ingestion_tests/README.md) — the `backend/evals/` work breakdown.
 
