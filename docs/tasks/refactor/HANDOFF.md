@@ -26,7 +26,47 @@ on it — the instrument is named in each case.*
 ### ~~THE CURRENT SESSION IS PHASE 9~~ — **PHASE 9 IS CLOSED. Rolled forward 2026-08-01.**
 ### ~~**THE PRODUCT / API TRACK IS OPEN AND TASK 27 HAS LANDED.**~~ **27 AND 31 HAVE BOTH LANDED. Rolled forward 2026-08-01.**
 ### ~~**THE LABELLING NIGHT HAPPENED AND THE REPORT PRINTED** — and the answer is "not yet".~~ Rolled forward 2026-08-02.
-### **THE `role_track` GROUPING AXIS HAS THREE INDEPENDENT PROBLEMS, AND THE TREE IS UNCOMMITTED. 2026-08-02, four parallel streams.**
+### ~~**THE `role_track` GROUPING AXIS HAS THREE INDEPENDENT PROBLEMS, AND THE TREE IS UNCOMMITTED.**~~ Rolled forward 2026-08-02 — **the tree is committed; the three `role_track` problems all stand and are restated under task 30 below.**
+
+### **THE PRODUCT/API TRACK IS FOUR TASKS FURTHER ON. 2026-08-02, a second four-stream session — 24, 25, 33 and 26's screen, each in its own worktree.**
+
+> **Everything is committed and both — now three — suites are green.** No count is typed
+> here; [`AUDIT.md`](AUDIT.md) owns the figures under rule 2 and names the command for each.
+> **There is a third suite as of today**: `backend/api/` had zero tests and now has its own,
+> run by its own venv, because that venv cannot import what the top level has
+> (`DEC-81`). Read all three `Ran N tests` lines, and do not assume the number in front of
+> you is the one you want.
+>
+> **What landed:** the pre-deploy half of **24**, all of **25**, the file half of **33**, and
+> **26's onboarding screen**, which closes 26's last DoD item. Thirteen decisions,
+> `DEC-81`–`DEC-93`. Two new defects, `D71` and `D72`, both open and both filed by the work
+> that fixed their neighbours.
+>
+> **THE PROCESS LESSON, AND IT IS THE SAME ONE THIS RUN KEEPS RE-LEARNING.** Three of the
+> four worktrees were branched twelve commits stale. The agents' own before/after readings
+> were internally consistent and therefore looked fine — and meant nothing, because the
+> instrument had moved: `audit-docs.py`'s widening to the two declared roots was not in
+> those trees, so a "0 findings" there was the *old* check passing. One stream's central
+> precedent (`cohort_signal`) did not exist in its tree at all. **Every figure in this
+> section was re-measured in the primary tree after merge, and that is the only reason they
+> can be quoted.** A reading is only as current as the tree it was taken in.
+
+**THE ONE FINDING TO CARRY FORWARD FROM THIS SESSION: three separate task files specified a
+schema that could not be built as written, and all three failures were the same failure.**
+`profile` is the **cohort** — thirty Builders share one — so any table keyed on it can hold
+one row per cohort, not one per Builder. Task 28 hit it (`job_events` had no `app_user_id`),
+task 31 hit it (one Builder's save read as everyone's), and task 25's sketch hit it again
+with `search_query_watchers (query_id, profile, …)`, which makes its own Definition of done
+*"one row with two watchers"* unsatisfiable by construction (`DEC-86`). **The next task file
+that sketches a per-Builder table should be read with this in hand before it is implemented,
+not after.**
+
+**A SECOND PATTERN, ALSO THREE FOR THREE: a privacy control enforced in the value and
+defeated by the key.** `DEC-80` (a sub-threshold `cohort_signal` row's *existence* is the
+disclosure), `D67` (`visibility` stored correctly, reported cohort-wide by the join), and now
+`DEC-87` — a `watcher_count` column on a table the service can `INSERT` into is a count the
+service can write, however carefully the fold computes it. In each case the control was
+correct one layer up and undone one layer down.
 
 > **NOTHING BELOW IS COMMITTED.** 15 modified files and 6 new ones sit in the working tree.
 > The natural split is four commits along stream lines. **Take a `git status` before
@@ -94,7 +134,7 @@ worth keeping: it is the only work in the plan that **cannot be backfilled**, be
 | track | tasks | what it needs |
 |---|---|---|
 | **the labelling night** | 30, then 13's weights and 12's next bump | ~~a second labeller for about twenty minutes; no session can do this~~ **DONE 2026-08-02 — and it did not unblock them.** The report prints ([`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md)) and **the ceiling came back BELOW the floor on all five fields**, on 6–10 items each. What these tasks need is a *usable* ceiling: more labellers on the **same ten** overlap rows (more postings do nothing), round 2 ~2026-08-09, and an n=120 selfcheck covering `role_track`. Only the last is a session's to run |
-| **the product / API surface** | ~~24, 25, 26, 27,~~ ~~24, 25, 26, 28, 31, 32, 33~~ **24, 25, 26, 28, 32, 33** | **27 and 31 are done.** The rest is unblocked apart from ordering, ~~**except 28 — see the D66/D67 note below, which is new and is a real blocker.**~~ **and 28 is now the LEAST blocked of them, not the most — its column landed in `3f4f88e`.** **Audit the premises first:** they were checked on 2026-07-31 and several were stale, and **~~two~~ FIVE dependency arrows have now been found wrong, and two of them are cycles** — 27 declared *"Depends on: 26"* while 26's own DoD needs 27's `visibility` column; 31's *"Depends on: 27, 26"* needed nothing 26 builds; **24 ↔ 33** each declared the other; **26 ↔ 32** each declared the other; and **25 → 24** is contradicted by 24's own file at `:92-94`. All five corrected in the task files 2026-08-02. Corrections are also in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), **which is a specification and not a description of the shipped API** |
+| **the product / API surface** | ~~24, 25, 26, 27,~~ ~~24, 25, 26, 28, 31, 32, 33~~ ~~**24, 25, 26, 28, 32, 33**~~ **32's search screen, and the machine half of 33. Nothing else on this track is a session's work.** 27, 31, 28 and 26 are done; 24, 25 and 33 each landed the half a session can do and each named what remains. The search screen is now **unblocked** — task 25's tables and its six routes exist, and 26's stream left `frontend/js/app.mjs` with a `ROUTES` table a screen slots into with one row and one `<a>`, asserted against the tab list so adding one and not the other goes red | **27 and 31 are done.** The rest is unblocked apart from ordering, ~~**except 28 — see the D66/D67 note below, which is new and is a real blocker.**~~ **and 28 is now the LEAST blocked of them, not the most — its column landed in `3f4f88e`.** **Audit the premises first:** they were checked on 2026-07-31 and several were stale, and **~~two~~ FIVE dependency arrows have now been found wrong, and two of them are cycles** — 27 declared *"Depends on: 26"* while 26's own DoD needs 27's `visibility` column; 31's *"Depends on: 27, 26"* needed nothing 26 builds; **24 ↔ 33** each declared the other; **26 ↔ 32** each declared the other; and **25 → 24** is contradicted by 24's own file at `:92-94`. All five corrected in the task files 2026-08-02. Corrections are also in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), **which is a specification and not a description of the shipped API** |
 
 **Three things a session picking up this track next must not re-derive.**
 

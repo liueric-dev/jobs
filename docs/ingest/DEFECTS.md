@@ -83,7 +83,7 @@ else does.** Decisions are `DEC-<n>` and live in
 [`DECISIONS.md`](../tasks/refactor/DECISIONS.md); task numbers live in
 [`tasks/refactor/README.md`](../tasks/refactor/README.md).
 
-**Next free: `D71`.** Allocated `D01`–`D45` and `D66`–`D70`; **`D46`–`D65` are burnt and
+**Next free: `D73`.** Allocated `D01`–`D45` and `D66`–`D72`; **`D46`–`D65` are burnt and
 must never be issued.** They are not defects and never were — `DECISIONS.md` continued this register's
 count when it started allocating decision IDs mid-file, so those twenty numbers circulate
 in eighty-odd places meaning *decisions*. Task 39 re-prefixed the live sites to `DEC-46`–
@@ -1610,3 +1610,66 @@ for one day and only because a person typed the command — the rule 7 decay
 [`DOCS-POLICY.md`](../DOCS-POLICY.md) names. `backend/tests/test_frontend_fixtures.py` runs
 it, and asserts it can still go **red** by breaking a fixture in a throwaway copy of the tree.
 A green checker nobody has seen fail is the state this defect was found in.
+
+### D71 — open
+
+<a id="d71"></a>
+
+**Concurrent claims per contributor are uncapped; only the daily total is capped.**
+[`DEC-83`](../tasks/refactor/DECISIONS.md#dec-83--submission_logaction-and-a-daily-cap-that-counts-what-its-name-says)
+closed `D41` by making `claim` write a `submission_log` row per query granted, so
+`MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` finally counts claims. **Nothing caps how many a
+contributor may hold at once.** The default is 50 and the committed query bank
+(`backend/config/google-queries.json`) has 32 slugs, so one worker can sit inside its daily
+allowance while holding **the entire bank**, each row locked for `CLAIM_TTL_MINUTES`
+(default 15).
+
+**This is the second half of the original claim-loop threat and it survives the fix** — which
+is the reason it is filed rather than folded into `D41`'s closure. Reading `D41` as closed
+and the threat as gone would be wrong.
+
+**Found 2026-08-02, task 24**, by the work that fixed the first half.
+
+Cheap to close: `job_ingest_state.claimed_by` is already set by `try_claim_query`, so "how
+many does this contributor hold right now" is one
+`SELECT COUNT(*) WHERE claimed_by = %s AND claimed_at >= ttl_cutoff`. **It was deliberately
+left out** because the right ceiling is a policy number nobody has picked — it interacts with
+`MAX_QUERIES_PER_CLAIM` (5), with the per-bucket budgets, and with how many Builders are
+actually running workers, and picking it before any of the three is observable would be
+inventing a constant.
+
+Class: **cosmetic** while the service is undeployed, on the same reasoning `D41` carried.
+Disposition: **fix before opening to more than a handful of contributors** — not before
+deploy, since the tailnet-only configuration has no adversary. Note that
+[`DEC-92`](../tasks/refactor/DECISIONS.md#dec-92--the-app-stays-on-the-home-box-and-the-coupling-is-named)
+names this as one of the three couplings between the pipeline and the contributor API: a held
+claim blocks the nightly pipeline from that query.
+
+### D72 — open
+
+<a id="d72"></a>
+
+**The claim protocol has no test.** `try_claim_query`'s conditional update and `holds_claim`'s
+three conditions are `backend/api/`'s subtlest reasoning — particularly the
+`claim_granted_at` takeover guard, which exists because the pipeline's own claim statement
+sets `claimed_at` without knowing about `claimed_by` and therefore leaves it stale
+(`backend/api/query_claims.py:287-308`).
+
+**All of it is SQL semantics, and `backend/api/tests/fakedb.py` dispatches on SQL text and
+cannot falsify a `WHERE` clause.** So the suite that
+[`DEC-81`](../tasks/refactor/DECISIONS.md#dec-81--backendapi-gets-its-own-test-suite-run-by-its-own-venv)
+established covers everything around this protocol and not the protocol itself. Worth filing
+precisely because the suite is green: a green suite beside an untested core is the shape this
+register exists to make visible.
+
+**Found 2026-08-02, task 24**, by the work that built that suite.
+
+`backend/webapp/tests/test_event_replay.py` is the worked pattern for closing it: a scratch
+schema from `evals/scratchdb`, skipped where no database is available. It was not built here
+because `scratchdb.create()` calls `schema.ensure_schema()`, which needs CREATE — and
+`api/`'s `.env` holds `jobs_api`, which by design has none, so the fixture would need the
+same `JOBS_SCRATCH_DATABASE_URL` indirection `test_event_replay.py:48-77` documents at
+length. **That is a real piece of work, not a line.**
+
+Class: **cosmetic** — a testing gap, not a defect in the code. Disposition: fix with the
+scratch-schema fixture, before the service is exposed beyond the tailnet.

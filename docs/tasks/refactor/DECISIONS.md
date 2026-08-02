@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-81`.** Allocated `DEC-46`–`DEC-80`. The count starts at 46 rather than at
+**Next free: `DEC-94`.** Allocated `DEC-46`–`DEC-93`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -2789,3 +2789,409 @@ half the time.
 Reversible: yes, cheaply — `ALTER … DROP NOT NULL` and emit sub-threshold rows. The table is
 derived and rebuilt nightly, so nothing is lost, and the endpoint needs no change: it
 already renders a missing row and a NULL identically.
+
+## DEC-81 — `backend/api/` gets its own test suite, run by its own venv
+
+**2026-08-02, task 24.**
+
+`backend/api/` had zero tests. The two files in `backend/tests/` that mention it name
+`api/app.py` and `api/query_claims.py` as *paths* in a parametrised list over
+`schema.google_spec()` (`backend/tests/test_upsert_checked.py:133-134`) and in a comment
+(`backend/tests/test_lib_contract.py:331`); neither imports the service, and the first says
+so in its own docstring at `:20-28`. Three defects dispositioned *fix before deploy* were
+pointed at it with nothing to catch a regression in the fix.
+
+**Decided: tests live in `backend/api/tests/` and are run by api's own venv.**
+
+```bash
+cd backend/api && .venv/bin/python -m unittest discover -s tests
+```
+
+That is a **third suite**, alongside `backend/tests/` and `backend/webapp/tests/`, and the
+discovery command is recorded in `.claude/CLAUDE.md`.
+
+**Why this and not `backend/tests/`. It is not a preference.**
+`backend/api/.venv/pyvenv.cfg` sets `include-system-site-packages = false`, and `app.py`
+imports `fastapi`; the top level runs on system `python3` with no venv at all, where
+`import fastapi` raises `ModuleNotFoundError`. Verified directly rather than inferred.
+Putting these tests in `backend/tests/` would mean either adding `fastapi` to the pipeline's
+dependency set — which `.claude/CLAUDE.md` states as a constraint to keep, `psycopg[binary]`
+being the only third-party dependency — or a suite that skips everywhere, which is worse
+than no suite because it reports a number.
+
+**Rejected: importing `app.py` by path with `importlib`**, the way `evals/ingest_modules.py`
+imports the hyphenated ingest scripts. That solves the filename problem, which `api/` does
+not have, and not the dependency problem, which is the actual one.
+
+**The consequence, accepted rather than hidden.** Three suites means three `Ran N tests`
+lines and three chances to read the wrong one. The three are independent by construction —
+separate processes, separate venvs, separate Postgres roles — so this is the cost of that
+separation showing up in the test story, not a new problem.
+
+## DEC-82 — an empty submission does not advance the watermark, and the pipeline's opposite rule stays
+
+**2026-08-02, task 24, closing `D08`.**
+
+`submit` called `mark_success` unconditionally, so `{"jobs": []}` marked a query covered for
+`GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS` with nothing stored.
+
+**Decided: an empty payload short-circuits** — no `mark_success`, no
+`google_jobs_query_stats` row, the claim is **released**, a `submission_log` row is written
+anyway, and the response carries `watermark_advanced: false`. The pipeline's
+`ingest/google-serpapi.py` keeps doing the opposite — advancing on zero results — and **the
+asymmetry is deliberate**.
+
+**Why the two differ.** The pipeline made the SerpApi call itself, so an empty array there
+is evidence: the fetch succeeded and the window is genuinely quiet. This endpoint sees only
+an array, from a caller its own module docstring calls untrusted. An empty one is what an
+exhausted key, a blocked worker, a wrong chip and a quiet query all look like from here.
+*"Silence is this system's failure mode"* is a named invariant, and this was its instance.
+
+**Rejected:**
+
+- **A `fetch_ok: true` flag in the payload.** It moves the assertion to the side that has
+  the bug, and a buggy worker sends it by default.
+- **400 on an empty submit.** The honest "my search returned nothing" worker then retries
+  forever, reports failures to its owner, and leaves the claim locked for the full TTL.
+- **Holding the claim rather than releasing it.** Holding throttles a broken worker, which
+  is a real benefit, but it also blocks the contributor with a *different* SerpApi account
+  who could succeed on it right now.
+
+**The cost, stated rather than hidden.** A genuinely-empty query is handed out and fetched
+again — one SerpApi credit, bounded by the per-contributor daily cap and the per-bucket
+budgets. The other direction is a posting nobody ever sees and no counter records, which is
+unbounded and undetectable.
+
+## DEC-83 — `submission_log.action`, and a daily cap that counts what its name says
+
+**2026-08-02, task 24, closing `D41`.**
+
+`MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` was enforced by `claims_today()`, which counted
+`submission_log` rows — and `claim`, the only endpoint that takes a query out of the pool,
+wrote none.
+
+**Decided: `claim` writes one `submission_log` row per query granted, and `claims_today()`
+counts rows with `action = 'claim'` and nothing else.** That needed a new nullable
+`submission_log.action` column, created by `query_claims.ensure_schema()` through
+`dbconn.add_missing_columns` and declared in a new `query_claims.REQUIRED_COLUMNS` that
+`verify_schema()` checks at startup. `SUBMISSION_ACTIONS` is the closed set;
+`log_submission()` is the only writer of the table.
+
+**Why both halves.** Writing the rows without filtering the count would charge an honest
+submit and an honest release against a cap whose name is about claims — doing the work would
+reduce how much work you were allowed, which is a worse defect than the one being fixed and
+**would have looked like the fix working**.
+
+**Why per query and not per request.** The endpoint already computed `remaining = MAX - used`
+and passed it to `max_queries`, so the number had always been read as a count of queries. It
+now is one.
+
+**Why a request granted nothing writes nothing.** It locked no query and cost nothing.
+Metering it would make "the bank is fully fresh today" indistinguishable from abuse and would
+spend an honest daily cron's allowance on exactly the days there is no work.
+
+**Why a column and not a `reason` prefix or a second table.** `reason` is free text a caller
+partially controls; a quota that parses it is a quota an input can influence. A second table
+doubles the grants this role holds. The column costs nothing to add because the service has
+never been deployed, so there is no migration and no backfill — a NULL `action` honestly
+means "written before this column existed" and is never counted as a claim.
+
+**Why `CHECK` was rejected.** It would need DDL rights this service deliberately does not
+hold, plus a migration to widen the set. The closed tuple in code is the same shape
+`webapp/jobs.py`'s `EVENT_NAMES` uses for `job_events.event`, for the same reason.
+
+## DEC-84 — a contributor credential-issuing page needs an ownership decision, and it is the owner's
+
+**2026-08-02, task 24. OPEN — recorded, not taken.**
+
+Task 24's § *Builder onboarding* asks for "a page, behind the existing Google SSO, that
+issues a contributor credential". **It was deliberately not built, and the reason is an
+ownership boundary rather than effort.**
+
+That page would live in `backend/webapp/`, which runs as `jobs_web`. Issuing a credential
+means `INSERT` on `contributors` and `api_keys` — two of the tables `jobs_api` owns, and two
+that `jobs_web` is granted nothing on. `docs/tasks/README.md:40-52` states the boundary and
+states that task 24 reverses the *deprecation* half and explicitly **not** the import half.
+
+Three ways to satisfy the requirement without breaking it:
+
+1. **Grant `jobs_web` INSERT on `contributors` and `api_keys`.** Simplest, and it widens the
+   blast radius of a webapp session-hijacking bug from "reads and event rows" to "mint
+   yourself a contributor credential". It also makes two roles writers of one table, which
+   is the thing role separation buys.
+2. **A server-to-server call: webapp asks api to mint a key**, with a shared secret. Keeps
+   every table single-writer. Adds a synchronous dependency between two processes that
+   currently cannot reach each other at all, and a second credential to rotate.
+3. **Keep issuance in `manage_users.py` and make the page a request queue** — the Builder
+   asks, the owner runs one command, the key is delivered out of band. Does not meet the
+   DoD's "without the author's involvement", and is the only option that changes no grant
+   and no boundary.
+
+The honest reading is that (2) is right if this service is really being revived and (3) is
+right if it is a stopgap for one cohort. **That is a product call about how long
+`backend/api/` is expected to live** — which is exactly what "expected to be deprecated" was
+about, and it is the owner's.
+
+## DEC-85 — the watcher floor is 4, where the cohort floor is 3
+
+**2026-08-02, task 25.**
+
+`schema.SEARCH_MIN_WATCHERS = 4`, against `schema.COHORT_MIN_SAVERS = 3` two constants above
+it. The obvious move is to copy the neighbour, and **it is wrong here for two reasons that do
+not apply to a save count.**
+
+**The observed object is attacker-chosen.** The set of postings a save badge can be watched
+on is fixed by the pipeline: an observer can watch a badge but cannot conjure the posting it
+sits on. A search query is created by submitting it, which is free. An observer who suspects
+a specific Builder is looking for "bilingual healthcare operations Brooklyn" can type exactly
+that, create the row, and then watch its bucket. **That is a chosen-plaintext capability
+`cohort_signal` does not have.**
+
+**The planter is always a watcher.** `POST /v1/searches` registers its caller, so at a floor
+of 3 the badge appears when *two other people* arrive — an anonymity set of two, in a
+thirty-person cohort who sit in a room together. 4 restores the set of three that
+`COHORT_MIN_SAVERS` was chosen to give.
+
+**Why not higher.** At N=30 a floor of 5 or 6 means most real searches never show a badge,
+and a signal nobody sees is not a privacy win — it is the feature removed, on a guess rather
+than a measurement. 4 is the smallest number that survives both asymmetries.
+
+**What it does not defend against**, stated so it is not read as more than it is: a planter
+who gets no badge still learns "fewer than four". The mitigation is the same one
+`COHORT_MIN_SAVERS` relies on — 0, 1, 2 and 3 render identically, because
+`search_watcher_bucket()` returns `None` for all of them and `search_query_signal` holds no
+row at all.
+
+The buckets are `4-6` / `7-10` / `11+` and **do not overlap**, which is the one place this
+deviates from `COHORT_BUCKETS` (`3-5` / `6-10` / `10+`, where 10 satisfies two of three).
+That constant's own comment says its labels are the task file's verbatim and already shipped
+in `frontend/fixtures/contract/`, so they are not its to tidy. This vocabulary is new,
+nothing has shipped against it, and `DOCS-POLICY.md` rule 4's reason for leaving the old
+labels alone does not extend to inventing the same wart twice.
+
+## DEC-86 — the watcher table is keyed on `app_user_id`, not `profile`
+
+**2026-08-02, task 25.**
+
+Task 25's schema sketch reads `search_query_watchers (query_id, profile, created_at)`.
+`profile` in this system is the **cohort** — thirty Builders share one, which
+`backend/webapp/schema_web.py:297-301` gives as the whole reason `builder_job_state` exists.
+A profile-keyed watcher table can hold at most one row per query per cohort, **which makes
+the task's own "one row with two watchers" unsatisfiable by construction.**
+
+**It is the same defect that blocked task 28** before `app_user_id` landed on `job_events`,
+and it was written into a second task file before the first was closed. `profile` is still
+stored, as the cohort the watch belongs to, because the fold is deliberately within-cohort.
+
+`app_user_id` is bare `TEXT` with **no** foreign key to `app_users(id)`: that table is
+`schema_web.py`'s, and a real FK would make the pipeline's DDL depend on a table it must not
+own. `schema_web.py:303-309` makes the identical call in the other direction for
+`builder_job_state.job_id`.
+
+## DEC-87 — the exposed watcher count is a separate table, not a column
+
+**2026-08-02, task 25.**
+
+Task 25 sketches `watcher_count INTEGER NOT NULL DEFAULT 0` on `search_queries`. **It cannot
+go there.** The service needs `INSERT` on that row to register a query, and an `INSERT` names
+whatever columns it likes — so a count column on a table the service can insert into is a
+count the service can write, which is exactly what `cohort_signal`'s entry in
+`REQUIRED_TABLES` forbids for the neighbouring aggregate.
+
+**Decided:** `search_query_signal (query_id, cohort_profile, watcher_bucket NOT NULL,
+computed_at)`, service-`SELECT`-only, written by `searchqueries.refresh()` and nothing else.
+`search_queries` gets `SELECT, INSERT` and **no `UPDATE`** — the run statistics and the decay
+flag are the pipeline's. Find-or-create still works without `UPDATE` because
+`searchnorm.REGISTER_QUERY_SQL`'s `ON CONFLICT` branch assigns a column to itself.
+
+`watcher_bucket` is `NOT NULL` and a sub-threshold query has **no row**, which is
+[`DEC-80`](#dec-80--a-suppressed-posting-gets-no-row-in-cohort_signal-and-save_bucket-is-not-null)
+taken again for the same reason: a NULL-bucket row would be present for 1, 2 or 3 watchers
+and absent for none, and that presence is the count leaking back out one indirection later.
+
+## DEC-88 — `search_query_results` exists, and takes no gate decision
+
+**2026-08-02, task 25.**
+
+A fourth table, `(query_id, job_id, first_seen_at, provider)`, service-`SELECT`-only. It is
+what makes *"results route through the full gate"* a **structural property rather than a
+promise**: `GET /v1/searches/{id}/results` joins `jobs_app`, which requires a `job_matches`
+row, which `match.py` writes only for postings passing `relevance.union_sql`. A relister
+posting a provider returned therefore cannot be selected however it got into the table, and
+`webapp/search.py` contains no relevance logic at all — which is `.claude/CLAUDE.md`'s *"do
+not reimplement relevance matching in Python"* honoured by construction.
+
+`attach_results()` links **every** job id a provider returned, including ones the gate will
+reject. Deliberate: baking today's relevance config into a stored link would mean raising
+`max_tier` or fixing a `\y` pattern did not retroactively surface postings the pipeline had
+already paid to fetch.
+
+## DEC-89 — seeded queries never decay
+
+**2026-08-02, task 25.**
+
+`searchnorm.UNDECAYABLE_SOURCES = ("seeded", "track")`. Nobody can watch a suggestion that
+has already been retired for having no watchers, so decaying the catalogue would switch the
+seeding feature off after two weeks — the decay rule eating the feature it was written
+beside. Nine track queries a day against ~280 renewable searches/day is a fixed ~3% of the
+pool, which is what the catalogue costs.
+
+## DEC-90 — onboarding is two screens and the form asks seven questions
+
+**2026-08-02, task 26.**
+
+Task 26 § *Onboarding* asks for three steps, "fifteen fields", and 15–20 seed postings drawn
+across `role_track`s. The screen that shipped has **two** screens, **seven** fields and an
+eighteen-posting draw that cannot yet be diverse. All three departures are deliberate.
+
+**Two screens, because the task's own third step is "nothing else".** The budget in the
+definition of done is ≤3 and the third step in the body is *"Resist adding steps. The
+population includes people for whom this is a first technical product; every additional
+screen loses someone."* A confirmation screen would have spent the remaining budget on the
+single thing the task named as the failure mode. `frontend/check_client.mjs` asserts
+`SCREENS.length`, so the ceiling is enforced rather than remembered.
+
+**Seven fields, because pydantic ignores the eighth.** `OnboardingRequest` declares seven,
+and an undeclared key is not a 400: **it is a 200 that stores nothing**, with no log line
+anywhere. An eighth question on the screen would have been answered by a Builder, discarded
+silently, and confirmed as saved. Widening to fifteen means eight new columns with eight
+generated CHECK constraints — a schema decision, taken with real answers in hand. Both
+checkers now **derive** the field list from the model so the two cannot drift apart in
+silence.
+
+**An eighteen-posting draw that is round-robin over a field that is always null.**
+`role_track` is on `job_facts` and the `jobs_app` view does not select it, so it reaches no
+response body. `pickSeed()` spreads across `tracks.trackOf()` regardless: with one bucket
+that is the payload order unchanged, and it becomes the diverse draw the task asked for on
+the day the field lands, with no edit. **Rejected: picking the top eighteen and adding a
+comment promising diversity later.**
+
+**And one fixture was wrong rather than one endpoint.** The frozen `POST /v1/onboarding`
+response carried `completed_at` with a trailing `Z`. `builder_profiles.onboarded_at` is
+`TEXT` written by `lib.timeparse.utc_now_str()`, whose docstring forbids an offset because
+both pipelines compare these as strings. The `Z` was inherited from `API-CONTRACT-v1.md`,
+which invented the shape against no code — **the general hazard of a contract fixture nothing
+checks**, and the reason those two files moved into `shipped/` rather than staying prefixed
+`ASPIRATIONAL_`.
+
+## DEC-91 — Cloudflare Tunnel supersedes the Tailscale plan
+
+**2026-08-02, task 33.**
+
+`backend/api/README.md:182-204` documented a two-phase Tailscale plan: phase 1 tailnet-only
+with no TLS, phase 2 Tailscale Funnel for public contributors. Task 33 specifies Cloudflare
+Tunnel. **These are not the same plan and the difference is a decision, not a typo.**
+
+**Decided: Cloudflare Tunnel, one transport, from day one, for both services.**
+
+The Tailscale argument was *correct* and is struck rather than deleted. Tailscale is
+WireGuard: transport is already encrypted and device-authenticated, so bearer tokens over
+plain HTTP inside a tailnet genuinely are fine, and the README is right that adding a proxy
+there buys nothing. **What changed is the population.** Phase 1 was written when the only
+callers were one person's own devices. The service now has to serve ~30 Builders who are not
+on anyone's tailnet and **must never be put on one** — the same README already says why,
+because that would grant network-level access to a home network. Once every real caller is
+outside the tailnet, phase 1 describes a configuration with no users, and maintaining two
+transports to reach a state nobody uses is more surface, not less.
+
+Between Funnel and Cloudflare the margin is genuinely thin, and Funnel was a defensible
+answer. Cloudflare wins on three narrow points: it serves the **webapp** on the same
+mechanism, so there is one thing to understand rather than two; it takes an ingress config
+as a **tracked file** (`deploy/cloudflared/config.yml`), where Funnel's state lives in the
+tailnet's control plane and would have been the second piece of this deployment living only
+on a machine; and its hostname does not encode the tailnet's node name, so moving the app off
+this box later does not change the URL thirty people have bookmarked.
+
+**Rejected: Caddy or nginx with a forwarded port.** Both need port 443 open on a residential
+connection, a certificate to renew, and a dynamic IP to track — four failure modes where the
+tunnel has one.
+
+**Rejected: keeping phase 1 as a documented fallback.** A fallback nobody exercises is not a
+fallback. `ssh -L` to `127.0.0.1:8421` covers the operator's own emergency access without a
+second supported configuration.
+
+**What this does not buy, worth stating because it is easy to assume otherwise:** the tunnel
+authenticates the *origin* to Cloudflare, not the *user* to the app. Both hostnames are
+reachable by anyone on the internet. The webapp's Google OAuth session and the contributor
+API's bearer key are the only things keeping strangers out.
+
+## DEC-92 — the app stays on the home box, and the coupling is named
+
+**2026-08-02, task 33.**
+
+Task 33 § *Split the pipeline from the app* asks for the two halves to be in separate failure
+domains, and allows "if everything must stay at home, that is workable — but know which half
+is fragile and say so".
+
+**Decided: both halves stay on the home box for now. The coupling is documented rather than
+removed**, in `docs/RUNBOOK.md` § *Failure domains*.
+
+They are now separate systemd **units** — each restarts alone, each fails alone,
+`Restart=always` with systemd's start-limit removed so a flapping restart cannot disable the
+unit and lock the cohort out. That is as far as unit boundaries can take it.
+
+**What is honestly still shared:**
+
+1. **One Postgres instance.** The single point of failure in the design. Splitting it means a
+   managed database (recurring cost, which the task rules out) or replication (an operational
+   burden well beyond thirty users).
+2. **One host.** So a power cut costs a night of ingest **and** locks thirty people out.
+   **The task's stated goal — "a power cut should cost a night of ingest, not access" — is
+   therefore NOT met**, and that is recorded as an open gap rather than reported as done.
+3. **One `job_ingest_state` claim row**, shared between the pipeline and the contributor API.
+   The least obvious coupling and the most likely to bite: a contributor holding a claim
+   blocks the nightly pipeline from that query for `CLAIM_TTL_MINUTES`, and concurrent
+   claiming is uncapped (`D71`).
+
+**Rejected: moving the app to a free-tier PaaS now.** It would fix (2) and worsen (1) — the
+app would reach Postgres over the internet, so the database would need to be exposed or
+tunnelled outward, converting a power-cut risk into a permanent attack surface.
+
+**The trigger to revisit**, so this is a decision with an expiry rather than a default: the
+first time a Builder reports being unable to reach the app for a reason that was not a
+deploy.
+
+## DEC-93 — a volume floor is a window, not a nightly number
+
+**2026-08-02, task 33.**
+
+Task 33 asks to "record expected nightly volume per source; alert when any source drops below
+a floor". **Implemented literally, that check fires constantly.**
+
+**Decided: a floor is a minimum total over a trailing window of runs, and the window is a
+property of the source.** `backend/config/volume-floors.json` carries both per source, with
+the journal command that produced every number.
+
+The evidence is the five nightly runs the journal held on 2026-08-02. A nightly floor would
+have fired on **four of the nine sources while nothing was wrong**: `hn-hiring` is one
+monthly thread and wrote zero on every night measured; `nyc-open-data` wrote zero on four of
+five, because it re-reads a full slice and unchanged rows are deliberately excluded from the
+written count; `weworkremotely` ran 0/0/3/2/2. **Zero is those sources' ordinary Tuesday, and
+an alarm that cries wolf teaches the reflex that retires all the others.**
+
+**Floors are set to catch zero, not to catch a dip.** `ats` wrote 1143 one night and 105
+another with nothing wrong either time. Any floor tight enough to see that swing fires most
+weeks, so the shipped floors sit roughly an order of magnitude below the observed window
+minimum. The quantity being defended is "the boards still answer", not "the boards are as
+busy as last week".
+
+**Rejected: a percentage of the trailing median.** The obvious design, and it fails on
+exactly the case that matters — a source returning zero for a week has a median of zero, so
+its floor becomes zero and the check agrees that nothing is wrong. **A floor that adapts to
+the outage it is meant to detect is not a floor.**
+
+**Rejected: one global floor over the run total.** `ats` outweighs everything else by an
+order of magnitude, so it alone holds any global total above any global floor while every
+other source is dead.
+
+**Also decided: the check runs outside `run-daily.py`.** The hardest failure to notice is the
+run that never happened, and a check inside the run is structurally incapable of reporting
+the run's absence. `run-daily.py` appends per-source counts to `backend/.run-volumes.jsonl`;
+`jobs-volume-check.service` reads them back on its own timer, so staleness of the newest
+entry is a finding like any other. It also keeps a quiet night off `jobs-ingest.service`'s
+exit code — "a step crashed" and "a source went quiet" need different responses, and one
+alert channel meaning both very quickly means neither.
+
+**The floors are provisional and say so.** Five nightly runs is the whole history the journal
+held. The config's `_n` field records that and names re-derivation from a longer
+`.run-volumes.jsonl` as the next step.

@@ -2937,3 +2937,57 @@ retiring it was sitting untracked in the same tree. **A stream that produces a m
 and stops before retiring the item that asked for it leaves the ask looking open**, which
 is the failure `HANDOFF.md` records as *"marked still owed in two files for three days
 after it landed."* Corrected here, struck rather than deleted.
+
+---
+
+## 2026-08-02 — a second four-stream session: 24, 25, 33 and 26's screen, and three trees that were measuring the past
+
+Four agents, one per stream, each in its own git worktree, merged one at a time and
+**re-verified in the primary tree after every merge**. Six commits: an index correction
+first, then one per stream, then this rollup.
+
+**What landed.** The pre-deploy half of **24** — `backend/api/`'s first tests ever, a third
+suite run by its own venv (`DEC-81`), and `D08`/`D09`/`D41` closed with each fix watched
+failing against the unfixed code. All of **25** — four tables, a pure normaliser, six routes,
+decay, a seeded query per `role_track`. The file half of **33** — `deploy/`, twelve systemd
+units, backup and verify, per-source volume floors, `docs/RUNBOOK.md`. And **26's onboarding
+screen**, which closes 26's last DoD item.
+
+Thirteen decisions, `DEC-81`–`DEC-93`. Two defects, `D71` and `D72`, both open, both filed by
+the work that fixed their neighbours rather than found separately.
+
+**THE FINDING OF THE SESSION IS THE PROCESS ONE.** Three of the four worktrees branched
+twelve commits stale — a spawning error, not an agent error. The consequences were not
+uniform and that is the instructive part:
+
+- One stream's readings were fine but its `audit-docs.py` result was **the old check
+  passing**: the widening to the two declared reachability roots was not in its tree, and it
+  was editing `.claude/CLAUDE.md`, which is precisely what the widening added to the scanned
+  set. A green from an instrument that cannot see your change is not a green.
+- One stream's central precedent — `cohort_signal`, the thing it was told to copy — **did
+  not exist in its tree at all**. It was sent back to re-derive against the real one.
+- One stream detected its own stale base, said so, fast-forwarded, and **declared its first
+  baseline void**. That is the behaviour the other two should have had, and it is the reason
+  its numbers were usable.
+
+Every agent's before/after pair was internally consistent, which is exactly why nothing
+looked wrong. **The comparison was valid and the population was not the one being reported
+on.** Same shape as `MEASUREMENT-TRAPS.md`'s existing entries and as task 46's, arriving this
+time through the harness rather than through the code.
+
+**Two content patterns worth carrying, both three-for-three.** A schema keyed on `profile`
+cannot express per-Builder anything, because thirty Builders share one — tasks 28, 31 and now
+25's sketch, which made its own DoD unsatisfiable by construction (`DEC-86`). And a privacy
+control enforced in a value can be defeated by a key: `DEC-80`, `D67`, and now `DEC-87`.
+
+**One deliberate deviation from the four-documents convention**, recorded because
+[`AUDIT.md`](AUDIT.md) states the convention. Four concurrent agents cannot all append to
+`DECISIONS.md`, so none of them touched the five run documents; each wrote its proposed
+entries as full unnumbered text into its own task file, and they were numbered and landed
+here in one commit. The text is the agents'; only the numbers are not.
+
+**Two off-by-ones in this rollup's own bookkeeping, both caught before landing.** The next
+free `DEC` and the next free `D` were each read one too high, because the allocator line
+*naming* the next free number matched the same grep that was looking for the highest
+allocated one. A register that documents its own allocator in its own prose will do that to
+any regex; the fix is to read the line, not to match it.
