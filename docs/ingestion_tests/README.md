@@ -124,6 +124,14 @@ cd backend && python3 -m evals selfcheck --model deepseek-v4-flash \
 345 live calls. Full table in
 [`selfcheck-n120-2026-07-28.json`](selfcheck-n120-2026-07-28.json).
 
+> **This section describes the prompt as it stood on 2026-07-28, which is not the
+> prompt in force now.** `role_track` entered `backend/extract.py` ten hours after
+> this artifact was committed, and the `role_archetype` description was rewritten in
+> the same window. The measurement covering `role_track` — same corpus, same model,
+> same n, **different prompt** — is
+> [`selfcheck-n120-2026-08-02.md`](selfcheck-n120-2026-08-02.md), which owns that
+> field's figures and explains why it does not supersede the table below.
+
 `agree2` is repeat 1 against repeat 2 — the same two-run protocol the
 superseded figures below used, so the two columns are comparable. `unan` is
 all three identical. Intervals are 95% Wilson.
