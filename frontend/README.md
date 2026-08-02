@@ -283,8 +283,10 @@ Everything else the contract adds — `tracks[]`, `posting_age_days`,
   > facts.** *"The only track vocabulary in the code is `score.TRACKS`"* — there
   > are **two**, and the one this paragraph missed is the one that matters:
   > **`extract.ROLE_TRACK` (`backend/extract.py:305-308`)**, nine snake_case
-  > values, which is what is actually stored on `jobs.role_track`
-  > (`backend/schema.py:542`) and what `extract._enum` validates against
+  > values, which is what is actually stored on `job_facts.role_track`
+  > (~~`jobs.role_track`, `backend/schema.py:542`~~ — **`backend/schema.py:740`**;
+  > `:542` is the `profiles` DDL, so that cite was wrong about the table as well
+  > as the line) and what `extract._enum` validates against
   > (`backend/extract.py:754`). `score.TRACKS` is five Title Case values written
   > by the LLM scorer into `job_scores.primary_track`.
   >
@@ -293,7 +295,8 @@ Everything else the contract adds — `tracks[]`, `posting_age_days`,
   > holds it, and `check_client.mjs` re-derives the tuple out of `extract.py` so
   > the two cannot drift.
   >
-  > **And it does not appear in any response body — see the next section.**
+  > ~~**And it does not appear in any response body — see the next section.**~~
+  > **It does now.** See finding 1 below, which this change closes.
 
 ## What building against these fixtures turned up
 
@@ -301,18 +304,38 @@ The fixtures had never been used. Six things were found by using them, in
 descending order of how much they cost. Every one was **re-checked against the
 running API on 2026-08-02**, not inferred from the JSON.
 
-**1. `role_track` is in no response body, so DEC-77's grouping has nothing to
-group by.** It is a column on `job_facts` (`backend/schema.py:542`) and it is
-**not selected by the `jobs_app` view** (`backend/schema.py:779-825` selects
-`f.role_archetype` and never `f.role_track`), therefore not in `LIST_COLUMNS`
-(`backend/webapp/jobs.py:102-111`), therefore not in `GET /v1/jobs` or
-`GET /v1/jobs/{id}`. Confirmed live: `'role_track' in row` is `False` on every
-row the API returned. The two lines that would fix it are in two files this
-stream does not own. Until then every posting resolves to the untracked group
-and Today renders as one ungrouped list — which is also what
-`backend/schema.py:534` predicts independently, since `role_track` is NULL on
-every pre-task-11 row anyway. `js/tracks.mjs` groups by the field the moment it
-appears; `check_client.mjs` has the assertion that goes red on the day it does.
+**1. ~~`role_track` is in no response body, so DEC-77's grouping has nothing to
+group by.~~ CLOSED — the field landed.** It is a column on `job_facts`
+(~~`backend/schema.py:542`~~ **`:740`**) that the `jobs_app` view did not
+select, therefore not in `LIST_COLUMNS`, therefore not in `GET /v1/jobs` or
+`GET /v1/jobs/{id}`. *"The two lines that would fix it are in two files this
+stream does not own"* — those two lines are now written: `f.role_track` is the
+last entry of `_APP_VIEW_SQL` and `"role_track"` the last of `LIST_COLUMNS`.
+
+**Both had to be last, and one of them for a reason worth carrying.**
+`CREATE OR REPLACE VIEW` can only append columns, so putting it where it reads
+naturally — beside `f.role_archetype` — is a reorder, which sends
+`ensure_app_view` down its `DROP VIEW` fallback, and **`DROP VIEW` takes every
+GRANT on `jobs_app` with it.** Nothing in the repo re-grants. That failure
+surfaces as the webapp refusing to start on the next nightly run.
+
+**What it cost the client: nothing, which was the bet.** `js/tracks.mjs` and
+`pickSeed()` were both written round-robin over a field that was always null,
+so that they would start working on their own. Neither changed. What changed is
+the two tests that *pinned the old behaviour* — and one of them,
+*"the seed draw … is rank order while it cannot"*, **went on passing after the
+field landed**: the top three shipped rows sit in three different buckets, so
+spread order and payload order coincide on exactly that fixture. It now asserts
+the property rather than the sequence. A green test whose stated premise is
+false is worth less than a red one.
+
+The struck sentence *"which is also what `backend/schema.py:534` predicts
+independently, since `role_track` is NULL on every pre-task-11 row anyway"* was
+**wrong twice**: `:534` is the `profiles` DDL, and the comment it meant (now
+`:725`) had itself gone stale when task 12 re-extracted. Measured through the
+view on 2026-08-02: **134 of 166 visible `pursuit` rows carry a track, all nine
+values present.** Re-measure before quoting — `docs/facts-v3-diff.md` records
+that a corpus statistic here has a shelf life of one night.
 
 **2. There is no way to ask for saved postings.** `GET /v1/jobs` takes eight
 query parameters (`jobs.py:337-348`) and not one filters on state, so Saved is

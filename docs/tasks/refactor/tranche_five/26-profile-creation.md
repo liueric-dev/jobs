@@ -341,14 +341,23 @@ and a new key appears on its own. The list endpoint is not in that position beca
 that `onboarding.py` happens not to build any response key inside a function body,
 not that anybody designed for it.
 
-**The seed draw asks for diversity across `role_track` and there is no `role_track`
-to draw across.** § *Onboarding* step 2 wants "15–20 deliberately diverse postings
-drawn across `role_track`s". That column is on `job_facts` and the `jobs_app` view
-does not select it, so it is in no response body — task 32's finding 1, unchanged.
-`pickSeed()` is written round-robin over `tracks.trackOf()` anyway: today that
-degenerates to the first eighteen in `match_score` order, and it becomes the diverse
-draw the day the field lands, with no edit. Same shape as the grouping in
-`js/tracks.mjs`, and for the same reason.
+~~**The seed draw asks for diversity across `role_track` and there is no `role_track`
+to draw across.**~~ **CLOSED 2026-08-02 — the field landed and the draw became diverse
+with no edit to this stream's code.** § *Onboarding* step 2 wants "15–20 deliberately
+diverse postings drawn across `role_track`s". That column is on `job_facts` and the
+`jobs_app` view did not select it, so it was in no response body — task 32's finding 1.
+`f.role_track` is now the view's last column and `"role_track"` `LIST_COLUMNS`' last
+entry; `pickSeed()` was already round-robin over `tracks.trackOf()` and **not one line
+of `js/onboarding.mjs` changed.**
+
+**The bet paid, and the way it nearly went unnoticed is the part worth keeping.** The
+check pinning this behaviour was named *"the seed draw spreads across tracks, and is
+rank order **while it cannot**"*, and it **went on passing** after the field landed —
+the top three shipped rows sit in three different buckets, so spread order and payload
+order coincide on exactly that fixture. The assertion was true and its stated premise
+had become false. It now asserts the property (no track repeats while an unused one is
+available) rather than the sequence `[1, 2, 3]`. A green test whose premise is false is
+worth less than a red one, and nothing would have caught this one but reading it.
 
 **A judgement is never sent as an event.** The verdicts ride inside the POST body
 and the **server** mints their `request_id` (`record_seed_judgements()`), because a

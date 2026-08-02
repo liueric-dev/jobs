@@ -722,11 +722,18 @@ def ensure_schema(conn):
     #     PROVISIONAL -- derived pre-Phase-3 from a tech-heavy corpus, and
     #     tools/derive-role-tracks.py exists to re-run it once Phase 3 lands.
     #
-    # role_track is NULL on every existing row and stays NULL until task 12
-    # re-extracts. That is honest rather than a gap: nothing has ever been
-    # extracted for this column, so there is no migration to backfill it and
-    # there should not be -- the same rule as job_events.rank, where a guessed
-    # value is worse than a missing one.
+    # ~~role_track is NULL on every existing row and stays NULL until task 12
+    # re-extracts.~~ TASK 12 IS DONE and this sentence stopped being true with
+    # it; the rule below still holds and is why it is struck rather than
+    # deleted. Nothing has ever been backfilled for this column and nothing
+    # should be -- the same rule as job_events.rank, where a guessed value is
+    # worse than a missing one. What is NULL now is the genuine "no track fits
+    # this", plus rows stranded below FACTS_VERSION.
+    #
+    # A corpus statistic here has a shelf life of one night
+    # (docs/facts-v3-diff.md). Measure it through jobs_app, not this table --
+    # the view inner-joins job_matches and applies four completeness
+    # predicates, so what reaches a Builder is a strict subset.
     dbconn.add_missing_columns(conn, FACTS_TABLE, [
         ("extraction_passes", "INTEGER"),
         ("vote_unanimity", "REAL"),
@@ -1176,7 +1183,16 @@ SELECT j.id,
        s.primary_track,
        s.gap_bridging_angle,
        s.risk_factors,
-       s.key_technologies
+       s.key_technologies,
+       -- LAST, and it must stay last. CREATE OR REPLACE VIEW can only APPEND
+       -- columns; inserting this next to f.role_archetype where it reads
+       -- naturally is a reorder, which raises InvalidTableDefinition and sends
+       -- ensure_app_view down its DROP fallback (below) -- and DROP VIEW takes
+       -- every GRANT on jobs_app with it. Nothing in this repo re-grants; the
+       -- statement is hand-typed in webapp/README.md. The failure surfaces as
+       -- verify_schema() refusing to start the webapp with "no SELECT", on the
+       -- next nightly run, pointing nowhere near the commit that caused it.
+       f.role_track
 FROM {TABLE} j
 JOIN {MATCHES_TABLE} m ON m.job_id = j.id
 LEFT JOIN {FACTS_TABLE} f ON f.job_id = j.id

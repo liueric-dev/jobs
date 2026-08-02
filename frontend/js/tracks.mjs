@@ -2,7 +2,9 @@
 //
 // THE VOCABULARY IS extract.ROLE_TRACK (backend/extract.py:305-308), DEC-77.
 // Nine snake_case values, and they are what is actually stored on
-// jobs.role_track (backend/schema.py:542). Rejected: score.TRACKS
+// job_facts.role_track (backend/schema.py:740 -- NOT jobs.role_track at :542,
+// which is the profiles DDL and was wrong about the table as well as the
+// line). Rejected: score.TRACKS
 // (backend/score.py:281-282), the five Title Case values that arrive on every
 // row as `primary_track`. Reason: ROLE_TRACK is the stored value and is
 // already slug-shaped, so grouping by it needs no mapping layer and invents no

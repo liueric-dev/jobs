@@ -98,7 +98,18 @@ entry-level roles fill fast.
 - The within-band experiment is run against task 29's labels and its result recorded.
 - A written decision on buckets vs score, justified by that result.
 - Bucket thresholds derived from labels, not chosen.
-- List groups by `role_track`.
+- List groups by `role_track`. **The data half is done 2026-08-02, and it was the
+  blocker.** `role_track` existed on `job_facts` and `jobs_app` did not select it, so
+  it reached no response body and every posting bucketed to `UNTRACKED`.
+  `f.role_track` is now the last column of the view and `"role_track"` the last of
+  `webapp/jobs.py`'s `LIST_COLUMNS`; `js/tracks.mjs`'s `groupByTrack()` was already
+  written against it and needed no edit. Measured through the view: **134 of 166
+  visible `pursuit` rows carry a track, all nine values present** — re-measure before
+  quoting, `docs/facts-v3-diff.md` gives a corpus statistic here a shelf life of one
+  night. **What remains is the display decision, and it is gated on something else**:
+  `config/pursuit-persona.json`'s `_no_buckets_comment` records that `score.TRACKS`'
+  five names "do not describe this population" and makes naming them this task's.
+  Building the grouping is ungated; choosing the track names is not.
 - `gap_bridging_angle` is the primary narrative element; `risk_factors` visible.
 - Within-bucket ordering by freshness.
 - Precision@20 reported per track, with a paired bootstrap against the pre-refactor

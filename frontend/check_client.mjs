@@ -286,21 +286,35 @@ it("every track in the vocabulary has plain-language copy", () => {
   }
 });
 
-it("the shipped payload carries no role_track, so every row is UNTRACKED", () => {
-  // THE FINDING THIS PINS. `role_track` is on jobs (backend/schema.py:542) and
-  // is NOT in the jobs_app view, so it is in no response body. If this ever
-  // starts failing, the field has landed and grouping begins working on its
-  // own -- which is the point of writing it this way round.
+it("the shipped payload carries role_track, and grouping runs on it", () => {
+  // THIS TEST USED TO PIN THE OPPOSITE, and the inversion is the deliverable.
+  // It read "the shipped payload carries no role_track, so every row is
+  // UNTRACKED", because role_track sat on job_facts (backend/schema.py:733 --
+  // the old cite said `jobs` at :542 and was wrong about the table as well as
+  // the line) and jobs_app did not select it, so it reached no response body.
+  // It closed: "If this ever starts failing, the field has landed and grouping
+  // begins working on its own -- which is the point of writing it this way
+  // round." The field has landed. Nothing in tracks.mjs changed.
   const body = fixture("GET_v1_jobs.json");
   for (const job of body.jobs) {
-    assert.ok(!("role_track" in job), `${job.id} now has role_track; update README`);
-    assert.equal(tracks.trackOf(job), tracks.UNTRACKED);
+    assert.ok("role_track" in job, `${job.id} lost role_track`);
   }
+  // A null track is a real answer and not a gap -- "no track fits this" has to
+  // be representable (backend/schema.py:715-723), and one row in every four is
+  // roughly the live rate through the view. It buckets to UNTRACKED, which is
+  // why UNTRACKED needs copy as good as any named track's.
+  const seen = body.jobs.map((j) => tracks.trackOf(j));
+  assert.ok(seen.includes(tracks.UNTRACKED), "no untracked row left to exercise");
+  assert.ok(seen.some((t) => t !== tracks.UNTRACKED), "no tracked row to group");
+
   const groups = tracks.groupByTrack(body.jobs.map((j) => ({ ...j })));
-  assert.equal(groups.length, 1);
-  assert.equal(groups[0].track, tracks.UNTRACKED);
-  assert.deepEqual(groups[0].jobs.map((j) => j.rank), [1, 2, 3, 4],
-                   "grouping must not reorder rows");
+  assert.ok(groups.length > 1, "grouping collapsed to one bucket");
+  assert.deepEqual(groups.flatMap((g) => g.jobs.map((j) => j.rank)).sort(),
+                   [1, 2, 3, 4], "grouping must not drop or duplicate a row");
+  for (const g of groups) {
+    assert.deepEqual(g.jobs.map((j) => j.rank), [...g.jobs.map((j) => j.rank)].sort(),
+                     `${g.track} reordered its rows`);
+  }
 });
 
 it("grouping keys off role_track the moment it appears", () => {
@@ -317,8 +331,8 @@ it("grouping keys off role_track the moment it appears", () => {
                    "groups order by their best rank, and by nothing else");
   assert.deepEqual(groups[0].jobs.map((j) => j.id), ["a", "c"]);
   // A null track and a track outside the closed vocabulary land in the same
-  // place. Neither is dropped -- schema.py:534 says role_track is NULL on
-  // every pre-task-11 row, which is most of the table.
+  // place. Neither is dropped -- schema.py:715-723 makes role_track NULLABLE
+  // BY DESIGN, so "no track fits this" is an answer and not an absence.
   assert.deepEqual(groups[1].jobs.map((j) => j.id), ["b", "e"]);
 });
 
@@ -686,17 +700,27 @@ it("an empty schedule_constraints is sent, because {} is not NULL", () => {
   assert.deepEqual(ticked.schedule_constraints, ["no_overnight"]);
 });
 
-it("the seed draw spreads across tracks, and is rank order while it cannot", () => {
-  // TODAY: role_track is in no response body (see the assertion above), so
+it("the seed draw spreads across tracks", () => {
+  // ~~and is rank order while it cannot~~ -- IT CAN NOW, and this test passed
+  // for the wrong reason on the day it started to. Its old body asserted the
+  // draw was `[1, 2, 3]` because "role_track is in no response body, so
   // trackOf() puts every row in one bucket and the draw is the payload order
-  // unchanged -- match_score order, never re-sorted by fit_score.
+  // unchanged". The field landed, the round-robin went live, and the
+  // assertion still held -- the top three shipped rows happen to sit in three
+  // different buckets, so spread order and payload order coincide on exactly
+  // this fixture. A green test whose stated premise is false is worth less
+  // than a red one, so this asserts the PROPERTY instead of the sequence.
   const flat = fixture("GET_v1_jobs.json").jobs;
-  assert.deepEqual(onboardingView.pickSeed(flat, 3).map((j) => j.rank), [1, 2, 3]);
+  const drawn = onboardingView.pickSeed(flat, 3);
+  const drawnTracks = drawn.map((j) => tracks.trackOf(j));
+  assert.equal(new Set(drawnTracks).size, drawn.length,
+               "the draw repeated a track while an unused one was available");
 
-  // THE DAY IT LANDS: round-robin across buckets, so a Builder reacts to a
-  // spread rather than to four near-identical top-of-list postings. Same
-  // property tracks.mjs's grouping has and for the same reason -- written to
-  // start working on its own rather than to be revisited.
+  // Round-robin across buckets, so a Builder reacts to a spread rather than to
+  // four near-identical top-of-list postings. Same property tracks.mjs's
+  // grouping has and for the same reason -- written to start working on its
+  // own rather than to be revisited. This arm is synthetic because it needs a
+  // bucket with three members, which the shipped payload does not have.
   const tracked = [
     { id: "a", rank: 1, role_track: "software_engineering" },
     { id: "b", rank: 2, role_track: "software_engineering" },

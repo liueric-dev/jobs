@@ -99,6 +99,14 @@ IMPRESSION_DEDUP_HOURS = 24
 #: `summary` from job_facts for exactly this purpose. Names match the view's
 #: own column names; the frontend does not exist yet to have an opinion, and a
 #: translation layer between two things that agree is pure maintenance.
+#:
+#: ORDER IS PART OF THE CONTRACT, not a style choice. frontend/verify_fixtures.py
+#: parses this tuple out of this file with `ast` and asserts the exact key set
+#: AND key order of every job object in frontend/fixtures/shipped/. So appending
+#: here means hand-editing five fixture files in the same commit -- there is no
+#: generator, and the backend suite is red in between. role_track is last for
+#: the separate reason recorded beside it in schema._APP_VIEW_SQL: the view can
+#: only append, and a reorder there costs the view its GRANTs.
 LIST_COLUMNS = (
     "id", "platform", "company_name", "title", "job_url", "location_raw",
     "location_is_nyc", "location_is_remote", "department", "seniority_guess",
@@ -107,7 +115,7 @@ LIST_COLUMNS = (
     "tech_stack", "ai_involvement", "remote_policy", "employment_type",
     "visa_sponsorship", "gap_friendly_language", "summary", "match_score",
     "match_reasons", "fit_score", "primary_track", "gap_bridging_angle",
-    "risk_factors", "key_technologies",
+    "risk_factors", "key_technologies", "role_track",
 )
 
 DETAIL_COLUMNS = LIST_COLUMNS + ("description_text",)

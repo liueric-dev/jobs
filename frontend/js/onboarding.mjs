@@ -192,19 +192,20 @@ function reset() {
 /**
  * Pick the postings to react to, spread as widely as the payload allows.
  *
- * 26 asks for postings "drawn across `role_track`s" and THERE IS NO
- * role_track TO DRAW ACROSS. It is a column on job_facts (backend/schema.py:542)
- * that the `jobs_app` view does not select (:779-825), so it is in no response
- * body and tracks.trackOf() resolves every row to UNTRACKED -- the finding
- * frontend/README.md § "What building against these fixtures turned up" opens
- * with, and the one check_client.mjs already pins.
+ * 26 asks for postings "drawn across `role_track`s". ~~THERE IS NO role_track
+ * TO DRAW ACROSS~~ -- THERE IS, as of the commit that added `f.role_track` to
+ * the `jobs_app` view. The column is on job_facts (backend/schema.py:740; the
+ * old cite here said :542, which is the profiles DDL and was wrong about the
+ * table as well as the line), and the view not selecting it was the finding
+ * frontend/README.md § "What building against these fixtures turned up" opened
+ * with.
  *
- * So the draw is written round-robin over trackOf() anyway. TODAY that
- * degenerates to exactly the first N in rank order, because there is one
- * bucket; the day role_track reaches the payload it becomes the diverse draw
- * the task asked for, with no edit here. Written this way round for the same
- * reason tracks.mjs groups by a field that is always null: the alternative is
- * a comment promising to do it later.
+ * The draw was written round-robin over trackOf() anyway, against a field that
+ * was always null, so that it would start working on its own rather than be
+ * revisited. THAT IS WHAT HAPPENED: not one line in this file changed and the
+ * draw became diverse. The bet is worth recording because the cost of losing
+ * it was one degenerate bucket and the alternative was a comment promising to
+ * do it later.
  *
  * RANK ORDER IS PRESERVED INSIDE EVERY BUCKET and the buckets are visited in
  * best-rank order, so with one bucket the output is the payload order
