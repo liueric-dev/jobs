@@ -48,6 +48,21 @@ globalThis.addEventListener = (type, fn) => listeners.push([type, fn]);
 globalThis.removeEventListener = () => {};
 globalThis.document = { visibilityState: "visible", getElementById: () => null };
 globalThis.CSS = { escape: (s) => s };
+// search.mjs routes on the hash rather than on a second ROUTES row, so it needs
+// one. Assigning to it is also how the client navigates after a submit.
+globalThis.location = { hash: "" };
+
+/** Every element handed to an IntersectionObserver, with the arguments
+ *  events.observe() recorded against it. The impression path is 32's one
+ *  non-negotiable requirement, so a screen claiming to be a render has to be
+ *  shown wiring one up rather than merely rendering `data-rank` attributes. */
+let observedCards = [];
+globalThis.IntersectionObserver = class {
+  constructor(callback, options) { this.callback = callback; this.options = options; }
+  observe(element) { observedCards.push(element); }
+  unobserve() {}
+  disconnect() {}
+};
 
 /** Every request the client makes, in order. Set per-case. */
 let sent = [];
@@ -60,13 +75,15 @@ globalThis.fetch = async (url, options = {}) => {
   };
 };
 
-const { parseJobRow, ApiError } = await import("./js/api.mjs");
+const api = await import("./js/api.mjs");
+const { parseJobRow, ApiError } = api;
 const tracks = await import("./js/tracks.mjs");
 const format = await import("./js/format.mjs");
 const ui = await import("./js/ui.mjs");
 const events = await import("./js/events.mjs");
 const detailView = await import("./js/detail.mjs");
 const onboardingView = await import("./js/onboarding.mjs");
+const searchView = await import("./js/search.mjs");
 
 // -- helpers ----------------------------------------------------------------
 
@@ -198,6 +215,61 @@ async function renderOnboarding(body) {
   } finally {
     globalThis.fetch = before;
   }
+}
+
+/**
+ * Render one of the search screen's two views and return its HTML.
+ *
+ * SAME ARRANGEMENT AS renderDetail AND renderOnboarding: the real show() with a
+ * stubbed root and a fetch that answers from the frozen fixtures, so the
+ * assertions run against the code path the browser takes rather than against an
+ * exported fragment. `hash` selects the view, because search.mjs reads the query
+ * id out of the hash rather than taking a second ROUTES row.
+ *
+ * The root grows `querySelectorAll` here, which the other two harnesses do not
+ * need: the results list is a REAL render and paints impressions onto its
+ * cards, and a stub returning nothing would let that wiring rot unnoticed.
+ */
+async function renderSearch(hash, { cards = [], respond = searchFixtureFetch } = {}) {
+  const beforeFetch = globalThis.fetch;
+  const beforeHash = globalThis.location.hash;
+  let html = "";
+  observedCards = [];
+  globalThis.location = { hash };
+  globalThis.fetch = async (url, options = {}) => ({
+    ok: true, status: 200, json: async () => respond(String(url), options),
+  });
+  const root = {
+    set innerHTML(v) { html = v; }, get innerHTML() { return html; },
+    addEventListener() {}, removeEventListener() {},
+    querySelector: () => null, querySelectorAll: () => cards,
+  };
+  try {
+    const teardown = await searchView.show(root);
+    teardown();
+    return html;
+  } finally {
+    globalThis.fetch = beforeFetch;
+    globalThis.location = { hash: beforeHash };
+  }
+}
+
+/** The six routes, answered from fixtures/shipped/. ORDER MATTERS TWICE:
+ *  `/unwatch` contains `/watch`, and both are longer than the bare id. */
+function searchFixtureFetch(url) {
+  if (url.includes("scope=suggested")) return fixture("GET_v1_searches.suggested.json");
+  if (url.includes("scope=mine")) return fixture("GET_v1_searches.mine.json");
+  if (url.includes("/unwatch")) return fixture("POST_v1_searches_unwatch.json");
+  if (url.includes("/watch")) return fixture("POST_v1_searches_watch.json");
+  if (url.includes("/results")) return fixture("GET_v1_searches_results.json");
+  if (/\/v1\/searches\/[^/?]+/.test(url)) return fixture("GET_v1_searches_by_id.json");
+  if (url.includes("/v1/searches")) return fixture("POST_v1_searches.response.json");
+  throw new Error(`no fixture for ${url}`);
+}
+
+/** A stand-in for one rendered card, carrying only what paint() reads off it. */
+function cardStub(jobId, rank) {
+  return { dataset: { jobId, rank: String(rank) } };
 }
 
 // -- the four JSON-string columns -------------------------------------------
@@ -796,6 +868,270 @@ it("completed_at carries no zone, because onboarded_at is TEXT", () => {
     assert.match(stamp, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/,
                  `${name}: completed_at is not utc_now_str()'s format`);
   }
+});
+
+// -- search --------------------------------------------------------------------
+//
+// TASK 25's SIX ROUTES, FROM THE CLIENT SIDE. verify_fixtures.py checks that the
+// eleven search fixtures still describe search.py; this is the other direction.
+// What it covers that a shape check cannot: a path typo is a 404 nobody sees
+// until a Builder taps something, a suppressed watcher count is a correctly
+// shaped null that is still a privacy failure if anything renders it as a zero,
+// and "never an empty search box" is a product requirement that no key set can
+// express.
+
+it("the client calls every route search.py declares, and no other", async () => {
+  // DERIVED FROM THE DECORATORS, because a path is the one part of an endpoint
+  // a client can get wrong silently: a typo is a 404, and a 404 on a POST is
+  // indistinguishable from "that search does not exist" in the error shape.
+  const source = fs.readFileSync(path.join(REPO, "backend/webapp/search.py"), "utf8");
+  const declared = [...source.matchAll(/@router\.(get|post)\("([^"]+)"\)/g)]
+    .map((m) => [m[1].toUpperCase(), m[2]]);
+  assert.equal(declared.length, 6, `search.py declares ${declared.length} routes`);
+
+  // Every request the client makes, across the two views plus the three writes
+  // no view issues on load.
+  const seen = [];
+  const record = (url, options = {}) => {
+    seen.push([(options.method || "GET").toUpperCase(),
+               String(url).split("?")[0]]);
+    return searchFixtureFetch(String(url), options);
+  };
+  await renderSearch("/search", { respond: record });
+  await renderSearch("/search/4", { respond: record });
+
+  const before = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => ({
+    ok: true, status: 200, json: async () => record(url, options),
+  });
+  try {
+    await api.createSearch({ text: "grants operations automation" });
+    await api.watchSearch(9);
+    await api.unwatchSearch(9);
+  } finally {
+    globalThis.fetch = before;
+  }
+
+  const asPattern = (template) =>
+    new RegExp(`^${template.replace(/\{[a-z_]+\}/g, "[^/]+")}$`);
+  for (const [method, template] of declared) {
+    assert.ok(
+      seen.some(([m, p]) => m === method && asPattern(template).test(p)),
+      `nothing in the client calls ${method} ${template}`);
+  }
+  for (const [method, path_] of seen) {
+    assert.ok(
+      declared.some(([m, t]) => m === method && asPattern(t).test(path_)),
+      `the client calls ${method} ${path_}, which search.py does not route`);
+  }
+});
+
+it("a null watcher_bucket renders NOTHING -- never a zero, never 'fewer than'",
+   async () => {
+  // THE FAILURE THIS PREVENTS, and it is a sharper version of the cohort_signal
+  // one. null covers 0, 1, 2 AND 3 watchers indistinguishably, because
+  // search_query_signal holds NO ROW below schema.SEARCH_MIN_WATCHERS = 4. The
+  // floor is 4 rather than cohort_signal's 3 because a search query is
+  // ATTACKER-CHOSEN -- an observer who suspects what someone is looking for can
+  // type it, create the row and watch its bucket -- and because the planter is
+  // always a watcher (DEC-85). Any copy that makes an absent badge readable as
+  // "one to three" hands back exactly what the threshold withholds.
+  for (const bucket of [null, undefined, "", 0]) {
+    assert.equal(searchView._badge({ watcher_bucket: bucket }), "",
+                 `a ${JSON.stringify(bucket)} bucket produced a badge`);
+  }
+  const forbidden =
+    /\b0 watchers|no one|nobody|fewer than|be the first|less than \w+ watch/i;
+  for (const hash of ["/search", "/search/4"]) {
+    const html = await renderSearch(hash);
+    assert.ok(!forbidden.test(html),
+              `${hash}: a suppressed watcher count leaked into the copy`);
+  }
+  // And nothing on the screen offers a raw number of watchers under any name.
+  const suppressed = fixture("GET_v1_searches.suggested.json").searches
+    .filter((q) => q.watcher_bucket === null);
+  assert.ok(suppressed.length, "no suppressed query left in the fixture");
+  for (const query of suppressed) {
+    assert.ok(!/watching this/.test(searchView._queryRow(query)),
+              `query ${query.id} has no bucket and still claims watchers`);
+  }
+});
+
+it("a populated bucket renders the bucket, and says Builders not others", async () => {
+  const html = await renderSearch("/search");
+  assert.match(html, /<strong>4-6 Builders<\/strong>\s*are watching this/,
+               "the bucket string is rendered as the bucket string");
+  // "other Builders" would be wrong by one whenever the reader is one of them,
+  // and wrong in the flattering direction -- the same rule the cohort save
+  // badge follows.
+  assert.ok(!/other Builders/.test(html),
+            "the count includes the reader, so 'other' overstates it");
+  assert.ok(!/\bexactly\b|computed|first_requested/.test(html),
+            "never an exact count, never a recency, never an identity");
+});
+
+it("the screen never opens on an empty search box", async () => {
+  // 32-frontend.md § Design constraints: "Task 25 seeds search_queries from
+  // role_track precisely because someone who does not know what role they want
+  // cannot write a good query. Open on suggested tracks and seeded searches,
+  // not a blank input." So the seeded catalogue is ABOVE the form in document
+  // order, and it is there before anything is typed.
+  const html = await renderSearch("/search");
+  const suggested = html.indexOf("Suggested searches");
+  const form = html.indexOf("<form");
+  assert.ok(suggested !== -1, "the catalogue is not on the screen at all");
+  assert.ok(form !== -1, "there is no way to type a search");
+  assert.ok(suggested < form,
+            "the input box is above the suggestions; a Builder with no "
+            + "vocabulary for the role they want reaches the box first");
+  for (const query of fixture("GET_v1_searches.suggested.json").searches) {
+    assert.ok(html.includes(format.esc(query.text)),
+              `the suggestion "${query.text}" is not rendered`);
+  }
+  // Empty on BOTH scopes is still not blank: the form and an explanation stay.
+  const bare = await renderSearch("/search", {
+    respond: (url) => (url.includes("scope=suggested")
+      ? { searches: [], scope: "suggested" }
+      : fixture("GET_v1_searches.mine.empty.json")),
+  });
+  assert.ok(/<form/.test(bare) && /No suggestions yet/.test(bare),
+            "with both scopes empty the screen has nothing on it but a box");
+});
+
+it("the results list is a real render: every row is observed at its own rank",
+   async () => {
+  // THE REQUIREMENT THAT CANNOT BE ADDED LATER (32 § Non-negotiable). Unlike
+  // the Saved crawl -- which fetches rows nobody saw and deliberately emits no
+  // impressions -- these rows were genuinely put in front of a person in this
+  // order, so they get real impressions under the server's own request_id.
+  const body = fixture("GET_v1_searches_results.json");
+  const cards = body.jobs.map((job) => cardStub(job.id, job.rank));
+  const html = await renderSearch("/search/4", { cards });
+  assert.deepEqual(observedCards, cards,
+                   "the results screen rendered rows and observed none of them");
+  for (const job of body.jobs) {
+    assert.ok(html.includes(`data-rank="${job.rank}"`),
+              `rank ${job.rank} is not on the card; events would have none`);
+  }
+  // rank is the SERVER's, never a DOM index: the ranks in the payload are what
+  // every event echoes.
+  assert.deepEqual(body.jobs.map((j) => j.rank), [1, 2]);
+});
+
+it("a search result is the same object a job list row is", () => {
+  // search.py imports LIST_COLUMNS, STATE_FIELDS, COHORT_FIELDS and the joins
+  // from jobs.py rather than restating them, so ONE renderer serves both lists.
+  // The day these key sets diverge is the day the client needs two.
+  const fromList = fixture("GET_v1_jobs.json").jobs[0];
+  const fromSearch = fixture("GET_v1_searches_results.json").jobs[0];
+  assert.deepEqual(Object.keys(fromSearch), Object.keys(fromList),
+                   "the two lists have drifted into two shapes");
+  assert.equal(fromSearch.id, fromList.id);
+  // Rendered by the literally same function, and the output agrees.
+  assert.equal(ui.jobCard(parseJobRow({ ...fromSearch })),
+               ui.jobCard(parseJobRow({ ...fromList })));
+});
+
+it("no 0-100 score reaches the search results either", async () => {
+  const html = await renderSearch("/search/4", {
+    cards: fixture("GET_v1_searches_results.json").jobs
+      .map((job) => cardStub(job.id, job.rank)),
+  });
+  for (const forbidden of ["match_score", "fit_score", "primary_track"]) {
+    assert.ok(!html.includes(forbidden), `the results screen names ${forbidden}`);
+  }
+});
+
+it("an empty result set says which of the two empties it is", async () => {
+  // A query that has never run and a query that ran and found nothing are
+  // different facts. No provider is called on the submit (search.py,
+  // create_search), so "hasn't run yet" is the honest state of EVERY search the
+  // moment it is created, and showing it as "found nothing" would read as a
+  // verdict on the words the Builder chose.
+  const neverRun = fixture("POST_v1_searches.response.json");
+  assert.equal(neverRun.last_run_at, null);
+  const fresh = await renderSearch("/search/57", {
+    respond: (url) => (url.includes("/results")
+      ? fixture("GET_v1_searches_results.empty.json") : neverRun),
+  });
+  assert.match(fresh, /hasn't run yet/i);
+  assert.ok(!/found nothing|Nothing from this search/i.test(fresh),
+            "a search that has never run was reported as having found nothing");
+
+  const ran = { ...fixture("GET_v1_searches_by_id.json") };
+  const empty = await renderSearch("/search/4", {
+    respond: (url) => (url.includes("/results")
+      ? fixture("GET_v1_searches_results.empty.json") : ran),
+  });
+  assert.match(empty, /Nothing from this search yet/);
+  // Never blank, either way: 32 § Definition of done, "empty states are seeded".
+  for (const html of [fresh, empty]) {
+    assert.match(html, /href="#\//, "an empty state with nowhere to go");
+  }
+});
+
+it("every refusal a Builder can cause has copy, derived from Python", () => {
+  // A code with no entry falls through to the server's own message, which is
+  // written for a log line and not for a person -- "query text normalises to
+  // nothing" is a sentence about a normaliser. Both files are read because
+  // search.py re-raises searchnorm.InvalidQuery as a ContractError carrying the
+  // exception's own code, so four of the five appear as a literal only in the
+  // top-level pipeline module.
+  const codes = new Set();
+  for (const relative of ["backend/webapp/search.py", "backend/searchnorm.py"]) {
+    const source = fs.readFileSync(path.join(REPO, relative), "utf8");
+    for (const m of source.matchAll(/(?:ContractError|InvalidQuery)\(\s*"([a-z_]+)"/g)) {
+      codes.add(m[1]);
+    }
+  }
+  assert.ok(codes.size >= 5, `only found ${codes.size} search error codes`);
+  const source = fileText("js", "search.mjs");
+  const map = source.match(/function searchErrorText[\s\S]*?\n}/);
+  assert.ok(map, "searchErrorText is no longer a function in search.mjs");
+  for (const code of codes) {
+    assert.ok(new RegExp(`^\\s*${code}:`, "m").test(map[0]),
+              `'${code}' is a refusal this client can cause and has no copy`);
+  }
+});
+
+it("a query's role_track and a posting's are kept apart", () => {
+  // ONE VOCABULARY, TWO SUBJECTS. search_queries.role_track is why a seeded
+  // suggestion exists; job_facts.role_track is a posting's family. Both are
+  // extract.ROLE_TRACK slugs and they never share a JSON object, so nothing
+  // structural stops them being conflated -- only the copy does.
+  assert.deepEqual(searchView.QUERY_TRACK_VOCABULARY, tracks.ROLE_TRACK,
+                   "the search screen invented a second track vocabulary");
+  const seeded = fixture("GET_v1_searches.suggested.json").searches[0];
+  const row = searchView._queryRow(seeded);
+  assert.match(row, /For roles like:/,
+               "a seeded suggestion does not say what it is for");
+  assert.ok(row.includes(tracks.labelFor(seeded.role_track).label),
+            "the query's track is not rendered with tracks.mjs's own copy");
+  // A builder-created query has role_track null and must claim no track.
+  const mine = fixture("GET_v1_searches.mine.json").searches
+    .find((q) => q.source === "builder");
+  assert.equal(mine.role_track, null);
+  assert.ok(!/For roles like:/.test(searchView._queryRow(mine)),
+            "a query the Builder typed was given a track it does not have");
+});
+
+it("the search screen renders no timestamp a person's action produced", () => {
+  // `first_requested_at` is deliberately not in any response: it is the moment
+  // one identifiable person typed something, and timing is the strongest
+  // deanonymiser available in a cohort who sit in a room together (search.py's
+  // module docstring). `last_run_at` IS exposed and IS rendered, because that
+  // is the pipeline's clock and no person's act. This asserts the client did
+  // not reach for the other one under either spelling.
+  const source = codeOnly(fileText("js", "search.mjs"));
+  for (const forbidden of ["first_requested_at", "computed_at", "watcher_count"]) {
+    assert.ok(!source.includes(forbidden),
+              `search.mjs reads ${forbidden}, which no response carries`);
+  }
+  assert.match(searchView._lastRunLabel({ last_run_at: null }), /Hasn't run yet/);
+  assert.match(
+    searchView._lastRunLabel({ last_run_at: "2026-08-02T04:12:44",
+                              result_count_last_run: 9 }),
+    /9 postings/);
 });
 
 // -- the router ----------------------------------------------------------------

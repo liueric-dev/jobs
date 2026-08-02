@@ -2,14 +2,19 @@
   "_comment": "What each fixture in this directory is. Everything here is the TARGET shape from docs/tasks/refactor/API-CONTRACT-v1.md. None of it is what the API returns today -- see ../shipped/ for that, and ../../README.md for which of the differences are blocked rather than merely unbuilt. Nothing in this directory is verified by frontend/verify_fixtures.py, deliberately: there is no code to verify it against.",
   "_source": "docs/tasks/refactor/API-CONTRACT-v1.md, written 2026-07-28, kind: contract",
   "_status": "TARGET. Build the client against these; expect the shipped shapes at runtime until tasks 28, 30 and 32 land.",
+  "_status_correction_2026_08_02": "28 and 32 have landed and 25 landed alongside them, so 'the shipped shapes' are now the only shapes a client sees for everything except `bucket` and `tracks[]`, which remain task 30's and remain blocked. Three files in this directory describe an endpoint that ships and describes it WRONGLY -- the three ASPIRATIONAL_*searches* ones -- and their differences are enumerated in _searches_deviations rather than resolved. Do not build a parser against them; ../shipped/ has eleven files for the same feature.",
 
   "_endpoint_reality": {
     "GET /v1/jobs": "route exists (jobs.py:310), shape differs",
     "GET /v1/jobs/{id}": "route exists (jobs.py:413), shape differs",
     "POST /v1/events": "route exists (jobs.py:641), request shape agrees, response is undocumented in the contract",
     "GET /v1/me": "route exists (auth.py:450); the onboarding block is aspirational",
-    "GET /v1/searches": "NO ROUTE, NO TABLE. search_queries exists nowhere -- re-grepped 2026-08-02, still zero hits across backend/. Task 25.",
-    "POST /v1/searches": "NO ROUTE, NO TABLE.",
+    "GET /v1/searches": "WAS 'NO ROUTE, NO TABLE … re-grepped 2026-08-02, still zero hits across backend/' AND THAT WENT FALSE IN e3abd6e, ON THE DAY IT WAS RE-GREPPED. Task 25 landed four tables (search_queries, search_query_watchers, search_query_signal, search_query_results) and six routes in backend/webapp/search.py. This one and the four below it are real. Shape differs -- see _searches_deviations.",
+    "POST /v1/searches": "ROUTE AND TABLE, same commit. Shape differs -- see _searches_deviations.",
+    "GET /v1/searches/{id}": "ROUTE, and it is not in API-CONTRACT-v1.md at all. ../shipped/GET_v1_searches_by_id.json.",
+    "POST /v1/searches/{id}/watch": "ROUTE, not in the contract. ../shipped/POST_v1_searches_watch.json.",
+    "POST /v1/searches/{id}/unwatch": "ROUTE, not in the contract. A POST rather than a DELETE because app.py's CORS middleware allows GET, POST and OPTIONS only.",
+    "GET /v1/searches/{id}/results": "ROUTE, not in the contract, and the one that carries the postings. Returns /v1/jobs' shape field for field. ../shipped/GET_v1_searches_results.json.",
     "POST /v1/onboarding": "MOVED TO ../shipped/ ON 2026-08-02. It has a route (onboarding.py) and builder_profiles is a real table (schema_web.py), so the two ASPIRATIONAL_POST_v1_onboarding.* files that used to live here are now shipped/POST_v1_onboarding.{request,response}.json and are checked by verify_fixtures.py. One deviation was found on the way and the FIXTURE was wrong: completed_at carried a trailing 'Z' this endpoint never sends.",
     "GET /v1/onboarding": "HAS A ROUTE AND IS NOT IN THE CONTRACT AT ALL. See ../shipped/GET_v1_onboarding.json. The contract covers reading onboarding state with an invented block on GET /v1/me (ASPIRATIONAL_GET_v1_me.json, edge-cases/06); the code answers it with its own route instead, and onboarding.py says why. The two must never both exist with different shapes."
   },
@@ -50,14 +55,39 @@
     "notes": ["The onboarding block is invented. The contract has POST /v1/onboarding and no way to READ onboarding state, and a first-run client needs one. See edge-cases/06."]
   },
 
-  "ASPIRATIONAL_GET_v1_searches.json": {
-    "shows": "suggested[] and mine[], verbatim from API-CONTRACT-v1.md § GET /v1/searches.",
-    "notes": ["watcher_count is exposed; watcher identities never are. No route, no table, task 25."]
+  "_searches_deviations": {
+    "_comment": "WHAT THE CONTRACT ASKED FOR AND WHAT SHIPPED, recorded 2026-08-02 by task 32's stream on building the search screen against the real routes. These three files STAY here rather than moving to ../shipped/ -- unlike the two onboarding fixtures, which moved because the shape they described turned out to be the shape that shipped. These describe a shape that was never built, and the difference is the artifact. The shipped API was NOT changed to match them.",
+
+    "1_watcher_count_vs_watcher_bucket": "ASPIRATIONAL_GET_v1_searches.json exposes `watcher_count: 7` and `watcher_count: 1`. The shipped field is `watcher_bucket`, which is a LABEL ('4-6' / '7-10' / '11+') or null, and null covers 0, 1, 2 and 3 indistinguishably because search_query_signal holds no row below schema.SEARCH_MIN_WATCHERS = 4. THE CONTRACT'S OWN FIXTURE CONTAINS THE THING THE SUPPRESSION EXISTS TO PREVENT: `watcher_count: 1` on query 51 is one identifiable person, in a thirty-person cohort who sit in a room together, on a query anyone can create by typing it. DEC-85 sets out why the floor is 4 here where cohort_signal's is 3 -- the observed object is attacker-chosen and the planter is always a watcher -- and DEC-87 why the count is a separate table rather than a column the service could write. This is the one deviation where the contract is not merely unbuilt but wrong, and it must not be 'fixed' towards the fixture.",
+
+    "2_one_nested_response_vs_two_scoped_requests": "The contract returns ONE body nesting {suggested, mine}. The shipped route returns {searches, scope} and takes a `scope` parameter, so a client that wants both makes two requests -- js/search.mjs issues them together with Promise.all. Two consequences worth stating: the two scopes OVERLAP (a seeded query the caller watches is in both, byte for byte), which a nested shape would have hidden; and there is deliberately no third scope, because the TEXT of a builder-created query is often self-identifying and a browsable list of everyone's would hand an observer the whole population to plant against.",
+
+    "3_202_with_a_queue_position_vs_200_with_the_query": "ASPIRATIONAL_POST_v1_searches.response.json is a 202 carrying `status: 'queued'`, `queue_position: 4` and `estimated_ready_at`. The shipped route answers 200 with the query object. None of the three invented fields has a column and nothing computes a queue depth: searchqueries.py picks up whatever is due on the nightly cycle, so there is no position in a queue to report. The shipped answer to 'when will this run' is `last_run_at` being null, which the client renders as \"This one hasn't run yet\". Honest, and cheaper than a number that would have to be made up.",
+
+    "4_the_request_carries_no_watching_flag": "ASPIRATIONAL_POST_v1_searches.request.json sends `watching: true`. SearchRequest has three fields -- text, location, chips -- and no such flag, and it could not have one: the submitter is registered as a watcher unconditionally, which is what makes tranche_four/25's 'a query submitted by two Builders creates one row with two watchers' true. A flag would make it optional and the cost argument would stop holding.",
+
+    "5_the_contract_covers_two_of_six_routes": "It has GET and POST /v1/searches and nothing else. GET /v1/searches/{id}, the watch/unwatch pair and GET /v1/searches/{id}/results are all shipped and all absent from API-CONTRACT-v1.md -- and the last of those is the one that actually carries postings, so the contract as written describes a search feature with no way to read a result."
   },
 
-  "ASPIRATIONAL_POST_v1_searches.request.json": { "notes": ["Request shape is inferred; the contract shows only the GET response."] },
+  "ASPIRATIONAL_GET_v1_searches.json": {
+    "shows": "suggested[] and mine[], verbatim from API-CONTRACT-v1.md § GET /v1/searches.",
+    "notes": [
+      "~~watcher_count is exposed; watcher identities never are. No route, no table, task 25.~~ THE ROUTE AND THE TABLES EXIST as of e3abd6e; see _endpoint_reality above and ../shipped/GET_v1_searches.{suggested,mine}.json.",
+      "The struck sentence was also wrong in a way worth keeping: exposing a raw `watcher_count` is not 'identities never are'. A count of one IS close to an identity here, which is the whole of _searches_deviations item 1."
+    ]
+  },
+
+  "ASPIRATIONAL_POST_v1_searches.request.json": {
+    "notes": [
+      "Request shape is inferred; the contract shows only the GET response.",
+      "The inference was wrong in one field and right in two: `watching` does not exist and cannot (_searches_deviations item 4), and there is no `chips` here, which the shipped model does have."
+    ]
+  },
   "ASPIRATIONAL_POST_v1_searches.response.json": {
-    "notes": ["202 with a queue position, per the contract. Searches are asynchronous -- never block a Builder on a scrape; results appear on the next list."]
+    "notes": [
+      "202 with a queue position, per the contract. Searches are asynchronous -- never block a Builder on a scrape; results appear on the next list.",
+      "THE ASYNCHRONY IS RIGHT AND THE SHAPE IS NOT. Shipped is 200 with the query object, whose null `last_run_at` says the same thing without inventing a queue nobody measures. _searches_deviations item 3."
+    ]
   },
 
   "errors/error_envelope.json": {
@@ -71,7 +101,7 @@
     "02-job-with-null-comp.json": "comp is null outright, not an object of nulls. Distinguishing 'no salary stated' from 'salary of zero' is the whole point.",
     "03-comp-is-estimated.json": "comp.is_estimated true. Adzuna predicts salary; showing a prediction as though the employer stated it is a trust problem, not a formatting one (contract, task 35).",
     "04-cohort-signal-null.json": "cohort_signal null, which is what fewer than three saves looks like. Never an exact count, never a recency, never an identity -- the suppression is a privacy control, enforced server-side (task 28).",
-    "05-empty-mine-search-list.json": "mine is [] while suggested is populated. GET /v1/searches shape; aspirational.",
+    "05-empty-mine-search-list.json": "mine is [] while suggested is populated. GET /v1/searches shape; aspirational in its NESTING but the state itself is real and is now frozen as ../../shipped/GET_v1_searches.mine.empty.json. It is the state every Builder starts in, and the reason the client renders the seeded catalogue above 'Your searches' rather than beside it.",
     "06-first-run-user-no-onboarding.json": "onboarding.completed false with prior_domain NULL. NULL is not the same as the domain literally named 'none': schema_web.py:136-141 makes that distinction load-bearing -- 'none' is a real answer about a real person, NULL means nobody asked. A first-run user is NULL."
   }
 }

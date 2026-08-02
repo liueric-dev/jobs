@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "empty_query",
+    "message": "query text normalises to nothing; type some words",
+    "request_id": null
+  }
+}

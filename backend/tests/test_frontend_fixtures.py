@@ -67,9 +67,9 @@ VERIFY = os.path.join(FRONTEND, "verify_fixtures.py")
 CHECK_CLIENT = os.path.join(FRONTEND, "check_client.mjs")
 NODE = shutil.which("node")
 
-def _webapp_sources():
-    """The `backend/webapp/*.py` modules verify_fixtures.py parses, read out of
-    verify_fixtures.py itself.
+def _verifier_sources():
+    """The `backend/` modules verify_fixtures.py parses, read out of
+    verify_fixtures.py itself. Paths relative to `backend/`.
 
     DERIVED RATHER THAN LISTED, AND THE LIST IS WHY. This was the literal
     ``("jobs.py", "auth.py", "schema_web.py")``. On 2026-08-02 the verifier
@@ -83,19 +83,31 @@ def _webapp_sources():
     exactly where its hardcoding starts, and that is where the next file lands.
     So the list is read from the source of truth, and a fifth module costs
     nothing here.
+
+    AND IT LANDED AGAIN, ONE DIRECTORY UP, ON 2026-08-02. The pattern above was
+    ``= REPO / "backend" / "webapp" / "<file>"`` -- derived in the filename and
+    HARDCODED IN THE DIRECTORY. Task 32's search screen made the verifier read
+    ``backend/searchnorm.py`` and ``backend/schema.py``, which are top-level
+    pipeline modules on purpose (one normaliser and one bucket vocabulary,
+    shared by both processes), and neither matched. Exactly the same failure
+    mode as the one this docstring already described, displaced by one path
+    segment: the seam moved from the filename to the directory. So the pattern
+    now reads any depth under ``backend/``.
     """
     source = open(VERIFY, encoding="utf-8").read()
-    names = re.findall(r'= REPO / "backend" / "webapp" / "([\w.]+)"', source)
-    assert names, (
-        "verify_fixtures.py no longer names its webapp sources as "
-        '`REPO / "backend" / "webapp" / "<file>"`, so this test cannot build a '
+    matches = re.findall(r'= REPO / "backend"((?: / "[\w.]+")+)', source)
+    assert matches, (
+        "verify_fixtures.py no longer names its sources as "
+        '`REPO / "backend" / ... / "<file>"`, so this test cannot build a '
         "tree containing them. Fix the pattern above, do not delete the check.")
-    return tuple(dict.fromkeys(names))
+    paths = [tuple(re.findall(r'"([\w.]+)"', tail)) for tail in matches]
+    return tuple(dict.fromkeys(p for p in paths if p[-1].endswith(".py")))
 
 
-#: The modules verify_fixtures.py parses. Copied into the synthetic tree below
-#: so the second test exercises the real comparison rather than a stub.
-WEBAPP_SOURCES = _webapp_sources()
+#: The modules verify_fixtures.py parses, as path tuples relative to `backend/`.
+#: Copied into the synthetic tree below so the second test exercises the real
+#: comparison rather than a stub.
+VERIFIER_SOURCES = _verifier_sources()
 
 
 def _run(script):
@@ -116,7 +128,7 @@ class TestVerifyFixturesIsWiredIn(unittest.TestCase):
         self.assertEqual(
             0, result.returncode,
             "frontend/fixtures/shipped/ no longer describes "
-            f"backend/webapp/{{{','.join(n[:-3] for n in WEBAPP_SOURCES)}}}.py.\n\n"
+            f"backend/{{{', '.join('/'.join(p) for p in VERIFIER_SOURCES)}}}.\n\n"
             f"{result.stdout}{result.stderr}\n"
             "Either a fixture is stale or a response shape changed by accident. "
             "There is no generator: fix the JSON by hand and re-run "
@@ -130,13 +142,12 @@ class TestVerifyFixturesIsWiredIn(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as root:
             frontend = os.path.join(root, "frontend")
-            webapp = os.path.join(root, "backend", "webapp")
             shutil.copytree(FRONTEND, frontend,
                             ignore=shutil.ignore_patterns("__pycache__"))
-            os.makedirs(webapp)
-            for name in WEBAPP_SOURCES:
-                shutil.copy(os.path.join(REPO, "backend", "webapp", name),
-                            os.path.join(webapp, name))
+            for parts in VERIFIER_SOURCES:
+                destination = os.path.join(root, "backend", *parts)
+                os.makedirs(os.path.dirname(destination), exist_ok=True)
+                shutil.copy(os.path.join(REPO, "backend", *parts), destination)
 
             # THE COPY MUST BE GREEN BEFORE IT IS BROKEN, and this line is here
             # because its absence let a real bug through on 2026-08-02: the

@@ -190,6 +190,111 @@ export function postOnboarding(body) {
   });
 }
 
+// -- searches (task 25's six routes) ---------------------------------------
+//
+// SIX THIN WRAPPERS AND NOT ONE LINE OF PARSING, and that is the whole point.
+// backend/webapp/search.py IMPORTS LIST_COLUMNS, STATE_FIELDS, COHORT_FIELDS,
+// the three joins and the cursor codec from jobs.py rather than restating
+// them, so /v1/searches/{id}/results returns /v1/jobs' shape field for field --
+// same keys, same order, its own request_id and its own 1-based rank. So
+// searchResults() below is listJobs() with a different path, parseJobRow does
+// the same four JSON columns, and ui.jobCard renders the rows unchanged. If
+// this file ever needs a second row parser, the two endpoints have drifted and
+// that is the bug.
+//
+// A QUERY OBJECT IS NOT A JOB OBJECT AND SHARES NOTHING WITH ONE. Its twelve
+// keys are RESPONSE_NAMES + _SIGNAL_FIELDS (search.py) and only `chips` is
+// JSON -- which the SERVER parses (search.py's _row_to_query), unlike the four
+// job columns it does not. So no query route goes through parseJobRow.
+//
+// `role_track` MEANS TWO DIFFERENT THINGS ACROSS THESE TWO SHAPES. On a job row
+// it is job_facts.role_track, the posting's family. On a query object it is
+// search_queries.role_track, the track this SUGGESTION was seeded from --
+// "why does this search exist", not "what kind of job is this". They never
+// share a JSON object, and search.mjs keeps the two readings apart in its copy.
+
+/**
+ * POST /v1/searches. Register a search and become a watcher of it.
+ *
+ * ASYNCHRONOUS, AND THE RESPONSE SAYS SO RATHER THAN PRETENDING. No provider
+ * is called on this request (search.py, create_search): the query is
+ * registered and results appear when the nightly cycle runs it. So the object
+ * that comes back has `last_run_at: null` and `run_count: 0`, and a client that
+ * renders it as a result list would be showing an empty list as if it were an
+ * answer.
+ *
+ * IDEMPOTENT ON THE NORMALISED KEY, so submitting a search someone else
+ * already created returns THEIR row -- same id, their `display_text` spelling,
+ * and whatever run history it already has. That is the cache working
+ * (searchnorm.REGISTER_QUERY_SQL, first-writer-wins on the spelling), not a
+ * bug, and the copy on the screen has to survive it.
+ */
+export function createSearch({ text, location = null, chips = null } = {}) {
+  return request("/v1/searches", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, location, chips }),
+  });
+}
+
+/**
+ * GET /v1/searches?scope=… Returns {searches, scope}.
+ *
+ * TWO SCOPES AND NO THIRD, AND THE ABSENCE IS A PRIVACY CONTROL RATHER THAN A
+ * missing feature (search.py, list_searches): the TEXT of a builder-created
+ * query is often self-identifying in a thirty-person cohort, so there is no
+ * "everything anyone searched for" listing to browse. A client must not
+ * simulate one by concatenating anything.
+ */
+export function listSearches({ scope = "mine", limit = 25 } = {}) {
+  const params = new URLSearchParams({ scope, limit: String(limit) });
+  return request(`/v1/searches?${params}`);
+}
+
+/** GET /v1/searches/{id}. A 404 for "not yours" and for "does not exist"
+ *  alike -- the id space is a small integer sequence, so enumeration is
+ *  trivial and the two must be indistinguishable (search.py, get_search). */
+export function getSearch(queryId) {
+  return request(`/v1/searches/${encodeURIComponent(queryId)}`);
+}
+
+/** POST /v1/searches/{id}/watch. Returns the query, re-read after the write. */
+export function watchSearch(queryId) {
+  return request(`/v1/searches/${encodeURIComponent(queryId)}/watch`,
+                 { method: "POST" });
+}
+
+/** POST /v1/searches/{id}/unwatch.
+ *
+ *  A POST AND NOT A DELETE, AND IT IS NOT A STYLE CHOICE: app.py's CORS
+ *  middleware allows GET, POST and OPTIONS only, so a DELETE from the browser
+ *  would be refused at the preflight with no error anyone would see
+ *  (search.py, unwatch_search). That is the silent-failure mode this repo
+ *  alerts on, arriving through a verb. */
+export function unwatchSearch(queryId) {
+  return request(`/v1/searches/${encodeURIComponent(queryId)}/unwatch`,
+                 { method: "POST" });
+}
+
+/**
+ * GET /v1/searches/{id}/results. One page of one render, exactly like listJobs.
+ *
+ * THE JOIN IS THE GATE. The route reads `jobs_app JOIN search_query_results`,
+ * never `jobs` and never the results table alone (search.py, search_results),
+ * so a posting only appears if match.py wrote it a job_matches row. Google Jobs
+ * is where the relister junk originates and config/relevance.json already
+ * carries six excluded relist sites BECAUSE this source fed them in. Nothing on
+ * the client re-filters, and nothing on the client may.
+ */
+export async function searchResults(queryId, { limit = 25, cursor = null } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  const body = await request(
+    `/v1/searches/${encodeURIComponent(queryId)}/results?${params}`);
+  body.jobs.forEach(parseJobRow);
+  return body;
+}
+
 /**
  * POST /v1/events. One request_id per batch, which is why events.js groups.
  *

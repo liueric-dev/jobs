@@ -19,7 +19,7 @@ problem**.
 ```
 index.html app.css   the client. One page, hash routes, no build step.
 js/*.mjs             api, events, tracks, format, ui, today, saved, detail,
-                     onboarding, app.
+                     search, onboarding, app.
 serve.py             dev launcher: this directory + the API on one origin.
 fixtures/shipped/    what the API returns TODAY. Derived from the code.
 fixtures/contract/   the target shape in API-CONTRACT-v1.md. Derived from the doc.
@@ -32,7 +32,15 @@ takes one row — `{name, pattern, show}`, where `show(root)` returns the
 screen's teardown — and `index.html` takes one `<a data-tab="…">` whose value
 is that same `name`, because `markTab()` matches on it. `check_client.mjs`
 asserts the two lists agree, so a screen added to one and not the other goes
-red. Search (task 25) is the next row; it has no route and no table yet.
+red. ~~Search (task 25) is the next row; it has no route and no table yet.~~
+
+> **Search landed 2026-08-02** and the recipe was exact: one row, one `<a>`, one
+> module, and nothing else in `app.mjs` or the shell changed. It takes **one row
+> for two views** — `/^\/search/` matches both `#/search` (the seeded catalogue)
+> and `#/search/<id>` (one query's results), and `js/search.mjs` reads the id out
+> of the hash itself rather than claiming a second row for a distinction only it
+> cares about. **Contribute (task 24) is the next row**, and is the last of the
+> six surfaces in `docs/tasks/refactor/tranche_six/32-frontend.md`.
 
 Build the client's types against `contract/`. Build the client's **parser**
 against `shipped/`, because that is what the server sends.
@@ -45,8 +53,12 @@ against `shipped/`, because that is what the server sends.
 | `GET /v1/jobs/{id}` | yes, `jobs.py:440` | both — shapes differ |
 | `POST /v1/events` | yes, `jobs.py:753` | both — **request shapes agree** |
 | `GET /v1/me` | yes, `auth.py:450` | both — contract adds an onboarding block |
-| `GET /v1/searches` | **no route, no table** | `contract/` only |
-| `POST /v1/searches` | **no route, no table** | `contract/` only |
+| `GET /v1/searches` | ~~**no route, no table**~~ **yes, `search.py`** | **both — shapes differ** |
+| `POST /v1/searches` | ~~**no route, no table**~~ **yes, `search.py`** | **both — shapes differ** |
+| `GET /v1/searches/{id}` | **yes, `search.py`** | `shipped/` only — not in the contract |
+| `POST /v1/searches/{id}/watch` | **yes, `search.py`** | `shipped/` only — not in the contract |
+| `POST /v1/searches/{id}/unwatch` | **yes, `search.py`** | `shipped/` only — not in the contract |
+| `GET /v1/searches/{id}/results` | **yes, `search.py`** | `shipped/` only — not in the contract |
 | `POST /v1/onboarding` | ~~**no route, no table**~~ **yes, `onboarding.py:534`** | ~~`contract/` only — **and nothing checks it**~~ **`shipped/`, 2026-08-02** |
 | `GET /v1/onboarding` | **yes, `onboarding.py:517`** | ~~**no fixture at all**~~ **`shipped/`, two of them** |
 
@@ -58,10 +70,19 @@ are not "unimplemented endpoints", they are a feature with no storage.~~
 > landed, and the sentence has to be split rather than corrected, because the
 > three endpoints it grouped no longer share a state.
 >
-> **`search_queries` still exists nowhere** — grepped 2026-08-02, zero hits
+> ~~**`search_queries` still exists nowhere** — grepped 2026-08-02, zero hits
 > across `backend/`. `GET /v1/searches` and `POST /v1/searches` are unchanged
 > and the two rows above are still right: a feature with no storage, waiting on
-> task 25.
+> task 25.~~
+>
+> **FALSIFIED THE SAME DAY IT WAS GREPPED, by `e3abd6e` (task 25).** All four
+> tables exist in `backend/schema.py` — `search_queries`,
+> `search_query_watchers`, `search_query_signal`, `search_query_results` — and
+> `backend/webapp/search.py` carries **six** routes, four more than the contract
+> ever described. So all three of this document's "BLOCKED" entries and all
+> three of its "no storage" claims were falsified inside forty-eight hours, and
+> the sentence further down that calls this "the fastest-rotting sentence in this
+> file" is now measured twice rather than once.
 >
 > **`builder_profiles` has storage.** It is a real table in
 > `backend/webapp/schema_web.py`, declared `("SELECT", "INSERT", "UPDATE")` in
@@ -107,7 +128,50 @@ are not "unimplemented endpoints", they are a feature with no storage.~~
 
 Everything in `shipped/` is real, has a route today, and is checked by
 `verify_fixtures.py`. Nothing in `contract/` is checked by anything, because
-there is no code to check it against.
+there is no code to check it against — ~~and for the two search files that is
+still literally true~~ **and that is now false for five of its files.** Three
+describe `/v1/searches`, which ships, and two describe onboarding, which moved.
+The three that stayed **stay deliberately**, because they describe a shape that
+was never built and the difference is the artifact; see the next section.
+
+## Where the search contract and the shipped API differ
+
+Task 25's six routes landed on 2026-08-02 and this client was built against
+them. The contract's three `ASPIRATIONAL_*searches*` fixtures were **not**
+moved into `shipped/` and the shipped API was **not** changed to match them.
+`fixtures/contract/MANIFEST.json` § `_searches_deviations` carries the full
+list; these are the three that change what a client does.
+
+**1. `watcher_count: 7` vs `watcher_bucket: "4-6"` or null — and the contract's
+version is not merely unbuilt, it is wrong.** The shipped field is a label or
+`null`, and `null` covers 0, 1, 2 **and** 3 watchers indistinguishably, because
+`search_query_signal` holds no row below `schema.SEARCH_MIN_WATCHERS = 4`. The
+contract fixture contains the exact thing the suppression exists to prevent:
+`watcher_count: 1` on one query, which is one identifiable person in a
+thirty-person cohort who sit in a room together, on a query **anyone can create
+by typing it**. `DEC-85` sets out why the floor is 4 where `cohort_signal`'s is
+3 — the observed object is attacker-chosen and the planter is always a watcher —
+and `DEC-87` why the count is a separate table rather than a column the service
+could write. Do not "fix" the API towards this fixture.
+
+**2. One nested `{suggested, mine}` vs two scoped requests.** The shipped route
+returns `{searches, scope}` and takes a `scope` parameter, so `js/search.mjs`
+issues both with `Promise.all`. Two things the nested shape would have hidden:
+the scopes **overlap** — a seeded query the caller watches is in both, byte for
+byte — and there is deliberately **no third scope**, because the text of a
+builder-created query is often self-identifying and a browsable list of
+everyone's would hand an observer the whole population to plant against.
+
+**3. 202 with `queue_position` vs 200 with the query object.** Nothing computes
+a queue depth: the nightly cycle picks up whatever is due, so there is no
+position to report. The shipped answer to "when will this run" is `last_run_at`
+being `null`, which the client renders as *"This one hasn't run yet."*
+
+Two smaller ones, recorded without ceremony: the contract's request carries a
+`watching` flag that cannot exist — the submitter is registered as a watcher
+unconditionally, which is what makes *"one row, two watchers"* true — and the
+contract covers **two of the six** routes, missing the one that actually returns
+postings.
 
 ## Verifying and regenerating `shipped/`
 
@@ -264,6 +328,24 @@ Everything else the contract adds — `tracks[]`, `posting_age_days`,
   greyed zero, or "fewer than three"** — absence must not be readable as
   *exactly* one or two. At today's cohort size every value is null, so null is
   the case the UI has to handle well, not the edge case.
+- **A `watcher_bucket` is a label or nothing, and it is nothing far more often
+  than the save badge is.** Same shape of rule as `cohort_signal` and a
+  **higher** floor: `search_query_signal.watcher_bucket` is `NOT NULL` and the
+  row is *absent* below `schema.SEARCH_MIN_WATCHERS = 4`, so `null` is the
+  answer for zero, one, two and three watchers alike. Render it as **no badge**
+  — never a zero, never a greyed dash, never "fewer than four", never "be the
+  first to watch this". The labels are `4-6` / `7-10` / `11+` and, unlike
+  `COHORT_BUCKETS`, they do not overlap. At today's cohort size every value is
+  null.
+- **`role_track` means two different things and this feature is where both
+  appear.** On a **job row** it is `job_facts.role_track` — the posting's
+  family, the axis `js/tracks.mjs` groups Today by. On a **query object** it is
+  `search_queries.role_track` — the track a *seeded suggestion* was generated
+  from, i.e. why that row exists. Same closed vocabulary out of
+  `backend/extract.py`, two different subjects, and they never share a JSON
+  object. Nothing structural stops them being conflated; only the copy does,
+  which is why a suggestion reads *"For roles like: Working with data"* and
+  nothing groups search **results** by track at all.
 - **And the bucket counts the reader.** The fold is
   `COUNT(DISTINCT app_user_id)` over the whole profile (`backend/cohort.py:113`),
   which includes whoever is looking at the page. So the copy is "3-5 Builders
@@ -300,9 +382,16 @@ Everything else the contract adds — `tracks[]`, `posting_age_days`,
 
 ## What building against these fixtures turned up
 
-The fixtures had never been used. Six things were found by using them, in
-descending order of how much they cost. Every one was **re-checked against the
-running API on 2026-08-02**, not inferred from the JSON.
+The fixtures had never been used. ~~Six~~ **Ten** things were found by using
+them, in descending order of how much they cost. Items 1–6 were **re-checked
+against the running API on 2026-08-02**, not inferred from the JSON. **Items
+7–10 were not, and could not be**: they came from building the search screen,
+and the live database is missing task 25's five search objects entirely — the
+four tables and the id sequence — plus `cohort_signal`'s `GRANT`, so
+`verify_schema()` fails on exactly those and creating them needs an admin
+credential. They were checked against the source and against the frozen
+fixtures, which is a weaker instrument, and it is named here rather than left
+to be assumed.
 
 **1. ~~`role_track` is in no response body, so DEC-77's grouping has nothing to
 group by.~~ CLOSED — the field landed.** It is a column on `job_facts`
@@ -405,6 +494,50 @@ Two smaller ones, recorded without ceremony: `GET /v1/jobs/{id}` returns no
 event needs one (`RANK_REQUIRED_EVENTS`, `jobs.py:90`), which is why the client
 skips `open` rather than inventing a position when it has none.
 
+### And four more, from building the search screen (2026-08-02)
+
+**7. The search results list needed no new client code at all, which was the
+test of item 5's claim.** `backend/webapp/search.py` imports `LIST_COLUMNS`,
+`STATE_FIELDS`, `COHORT_FIELDS`, all three joins and the cursor codec from
+`jobs.py` rather than restating them, so `GET /v1/searches/{id}/results` returns
+`/v1/jobs`' shape field for field with its own `request_id` and `rank`.
+`api.parseJobRow`, `ui.jobCard`, `ui.askReason`, `events.observe` and
+`renders.remember` were reused unchanged, and `check_client.mjs` asserts the
+stronger property directly: `ui.jobCard` produces **identical output** from a
+search-result row and from the `/v1/jobs` row for the same posting. The day
+those key sets diverge is the day this client needs two renderers, and that is
+the assertion that will say so.
+
+**8. It also needed no `js/crawl.mjs` workaround, and the contrast is the
+point.** Saved crawls the whole list because there is no state filter (item 2)
+and a cold detail page crawls it to obtain a `request_id` (item 3). A search
+results page is a **real render**: the server mints the id and the ranks, the
+rows were genuinely put in front of a person in that order, so they get real
+impressions. That is why `crawl.mjs` deliberately emits none and this screen
+deliberately does.
+
+**9. `verify_fixtures.py` would have re-opened `D70` in a new file.**
+`_KNOWN_JOBS_TUPLES` closed the class for `jobs.py`; `search.py` then landed
+with `QUERY_COLUMNS` and `RESPONSE_NAMES` and **no guard at all**, so a new
+response-key group there would have arrived exactly the way `cohort_signal`
+did — into a checker that had already learned the lesson in the file next door.
+*A guard that protects one file is a guard against one instance.* `search.py`
+now has the same treatment. One thing is better here than on the list endpoint:
+the query object has **no `rank`-shaped residue**, because `_row_to_query()`
+composes it as `RESPONSE_NAMES + _SIGNAL_FIELDS` and assigns no key inside a
+handler. The *results* row inherits `jobs.py`'s residue verbatim, since
+`search_results()` does its own `item["rank"] = …`.
+
+**10. And the same seam sat one directory up, in the test that wires the
+verifier in.** `backend/tests/test_frontend_fixtures.py` derived its module list
+from the literal pattern `REPO / "backend" / "webapp" / "<file>"` — derived in
+the filename and **hardcoded in the directory**. Reading two top-level modules
+matched nothing, so the synthetic tree in the mutation test would have been
+missing them and the "it goes red" assertion would have passed for the wrong
+reason again, which is the failure that file's own docstring already describes
+once. The pattern now reads any depth under `backend/`. Third instance of the
+same shape in three days, in three different files.
+
 ## Running it
 
 ```bash
@@ -438,6 +571,15 @@ Both are wired into `backend/tests/test_frontend_fixtures.py`, so
 `docs/DOCS-POLICY.md` rule 7's actual bar — *"fails a suite someone is already
 running"* — and neither had met it. The node one skips where node is absent; it
 is not a dependency of this repo.
+
+`verify_fixtures.py` reads **seven** modules, and two of them are **not** under
+`backend/webapp/`. `backend/searchnorm.py` owns the `InvalidQuery` codes a
+client can receive from `POST /v1/searches` — `search.py` re-raises them as
+`ContractError(bad.code, str(bad))`, so four of the five search error codes
+appear as a literal nowhere in `webapp/` — and `backend/schema.py` owns
+`SEARCH_MIN_WATCHERS` and `SEARCH_WATCHER_BUCKETS`, because it generates the
+`CHECK` constraint from the same tuple the writer reads. Both are read rather
+than restated.
 
 `check_client.mjs` re-derives ~~three vocabularies~~ **nine names** out of
 Python and fails when they drift: `ROLE_TRACK` from `backend/extract.py`;

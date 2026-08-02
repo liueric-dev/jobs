@@ -1,0 +1,33 @@
+{
+  "searches": [
+    {
+      "id": 4,
+      "text": "technical support specialist",
+      "location": "New York, NY",
+      "chips": null,
+      "source": "track",
+      "role_track": "technical_support",
+      "last_run_at": "2026-08-02T04:12:44",
+      "run_count": 6,
+      "result_count_last_run": 9,
+      "retired_at": null,
+      "watcher_bucket": "4-6",
+      "watching": true
+    },
+    {
+      "id": 51,
+      "text": "clinical operations coordinator AI",
+      "location": "New York, NY",
+      "chips": null,
+      "source": "builder",
+      "role_track": null,
+      "last_run_at": "2026-08-02T04:13:02",
+      "run_count": 2,
+      "result_count_last_run": 3,
+      "retired_at": null,
+      "watcher_bucket": null,
+      "watching": true
+    }
+  ],
+  "scope": "mine"
+}

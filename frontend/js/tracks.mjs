@@ -10,14 +10,24 @@
 // already slug-shaped, so grouping by it needs no mapping layer and invents no
 // second vocabulary.
 //
-// AND YET NOTHING IN THIS FILE HAS A TRACK TO GROUP BY TODAY. `role_track` is
-// NOT in the jobs_app view (backend/schema.py:779-825 selects f.role_archetype
-// and never f.role_track) and therefore not in LIST_COLUMNS
-// (backend/webapp/jobs.py:102-111) and therefore not in any response body.
-// Adding it is a one-line change to two files that two other streams own, so
-// this client is written to group by the field the moment it appears and to
-// degrade honestly until it does: every row resolves to `null` and lands in
-// UNTRACKED. See frontend/README.md § "The track axis".
+// ~~AND YET NOTHING IN THIS FILE HAS A TRACK TO GROUP BY TODAY.~~ THERE IS ONE
+// NOW, and not one line of this file changed to make it work -- which was the
+// bet. The paragraph here used to read: `role_track` is not in the jobs_app
+// view, therefore not in LIST_COLUMNS, therefore not in any response body, so
+// every row resolves to null and lands in UNTRACKED. Both of those two lines
+// are now written -- `f.role_track` is the last entry of schema._APP_VIEW_SQL
+// and "role_track" the last of jobs.LIST_COLUMNS, both LAST because
+// CREATE OR REPLACE VIEW can only append and a reorder sends ensure_app_view
+// down a DROP VIEW that takes every GRANT with it. This file was written to
+// group by the field the moment it appeared, and it did.
+// See frontend/README.md § "What building against these fixtures turned up",
+// item 1.
+//
+// THE SEARCH SCREEN READS THE SAME VOCABULARY FOR A DIFFERENT SUBJECT, and the
+// two must not be conflated. `search_queries.role_track` is why a SEEDED QUERY
+// exists; `job_facts.role_track` -- everything in this file -- is what kind of
+// job a POSTING is. Same nine slugs, and they never share a JSON object.
+// js/search.mjs's header states the rule; nothing here groups a query.
 //
 // THE AXIS IS NOT A FACT ABOUT A POSTING, and the UI must not present it as
 // one. docs/ingestion_tests/selfcheck-n120-2026-08-02.md owns the figures:

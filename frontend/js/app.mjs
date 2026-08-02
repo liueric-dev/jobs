@@ -19,6 +19,7 @@ import { esc } from "./format.mjs";
 import * as today from "./today.mjs";
 import * as saved from "./saved.mjs";
 import * as detail from "./detail.mjs";
+import * as search from "./search.mjs";
 import * as onboarding from "./onboarding.mjs";
 
 const view = document.getElementById("view");
@@ -103,11 +104,18 @@ async function sendFirstRunToOnboarding() {
  * ORDER MATTERS: first match wins, so `/job/:id` sits above the prefix
  * patterns. The last row is the fallback and its pattern must match anything.
  *
- * TO ADD Search (task 25's screen, which has no route and no table yet): write
- * js/search.mjs exporting `show(root)`, import it, add
- * `{ name: "search", pattern: /^\/search/, show: (root) => search.show(root) }`
- * above the fallback, and add one <a data-tab="search"> to index.html. Nothing
- * else in this file changes.
+ * ~~TO ADD Search (task 25's screen, which has no route and no table yet)~~ —
+ * DONE 2026-08-02. The recipe was exact and is left here as the worked example
+ * for the sixth surface (Contribute, task 24): write js/<name>.mjs exporting
+ * `show(root)`, import it, add a row above the fallback, and add one
+ * <a data-tab="<name>"> to index.html. Nothing else in this file changes, and
+ * check_client.mjs fails if only one of the two lands — its last assertion is
+ * that the tabless-route set is exactly ["job"].
+ *
+ * SEARCH TAKES ONE ROW FOR TWO VIEWS. `/^\/search/` matches both `#/search`
+ * (the catalogue) and `#/search/<id>` (one query's results); search.mjs reads
+ * the id out of the hash itself. A second row would put that screen's internal
+ * structure in the one file that has no other reason to know it.
  */
 const ROUTES = [
   {
@@ -116,6 +124,7 @@ const ROUTES = [
     show: (root, match) => detail.show(root, decodeURIComponent(match[1])),
   },
   { name: "saved", pattern: /^\/saved/, show: (root) => saved.show(root) },
+  { name: "search", pattern: /^\/search/, show: (root) => search.show(root) },
   {
     name: "onboarding",
     pattern: /^\/onboarding/,

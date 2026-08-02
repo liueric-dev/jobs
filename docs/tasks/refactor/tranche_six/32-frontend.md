@@ -184,6 +184,70 @@ is an artifact somebody has to produce.
 no framework, no npm, no `package.json`. The modules are `.mjs` so the same
 files load in a browser and under `node` with nothing installed.
 
+## What the search screen turned up
+
+Written 2026-08-02, on landing the last code row of the table above.
+`frontend/README.md` § *What building against these fixtures turned up* items
+7–10 carries the same list with the `file:line` for each, and its new section
+§ *Where the search contract and the shipped API differ* owns the deviation
+list. This is the short version.
+
+**The surfaces table's "watcher counts" is the one line in it that had to be
+rewritten rather than implemented.** This file says Search shows *"seeded
+suggestions, then their own queries; watcher counts"*, and
+`API-CONTRACT-v1.md`'s fixture spells that as `watcher_count: 7` and
+`watcher_count: 1`. A raw count is not what shipped and must not be: the
+exposed field is `watcher_bucket`, a label or `null`, suppressed below
+`schema.SEARCH_MIN_WATCHERS = 4`. **The contract's own fixture contains the
+thing the suppression exists to prevent** — a count of one, in a thirty-person
+cohort who sit in a room together, on a query anyone can create by typing it.
+`DEC-85` is why the floor is 4 where `cohort_signal`'s is 3. So the phrase in
+the table stands as a description of the surface and is wrong as a description
+of the payload, and the client renders **no badge at all** for the suppressed
+case, which is every case at today's cohort size.
+
+**`role_track` now means two different things, and this feature is the first
+place both appear.** On a job row it is `job_facts.role_track`, the posting's
+family — landed at the read edge earlier the same day, which is what made this
+task's *Today grouped by track* row work at all. On a query object it is
+`search_queries.role_track`, the track a seeded suggestion was generated from.
+Same closed vocabulary, two different subjects, and **they never share a JSON
+object**, so nothing structural stops them being conflated — only the copy
+does. A suggestion says *"For roles like: …"*; nothing groups search **results**
+by track.
+
+**The results list needed no new client code, which was the test of a claim
+made a day earlier.** `backend/webapp/search.py` imports `LIST_COLUMNS`, the
+three joins and the cursor codec from `jobs.py` rather than restating them, so
+`GET /v1/searches/{id}/results` is `/v1/jobs`' shape field for field.
+`parseJobRow`, `jobCard`, `askReason`, `observe` and `remember` were reused
+unchanged, and the checker asserts the stronger property: `jobCard` produces
+**byte-identical output** from a search-result row and from the `/v1/jobs` row
+for the same posting. It also needed no `js/crawl.mjs` workaround — a search
+results page is a real render, so its rows get real impressions, where the
+Saved crawl deliberately emits none.
+
+**`D70` would have re-opened in a new file, and then again one directory up.**
+`verify_fixtures.py`'s `_KNOWN_JOBS_TUPLES` closed the class for `jobs.py`;
+`search.py` arrived with two module-level tuples and no guard, so a new
+response-key group there would have landed exactly the way `cohort_signal` did,
+in a checker that had already learned the lesson next door. *A guard that
+protects one file is a guard against one instance.* And
+`backend/tests/test_frontend_fixtures.py` derived its module list from a
+pattern that was derived in the filename and **hardcoded in the directory**, so
+the two top-level modules the verifier now reads matched nothing — which would
+have made its mutation test pass for the wrong reason, the exact failure its own
+docstring already records once. Both are fixed. Third instance of one shape in
+three days.
+
+**End-to-end verification was not available and nothing here claims it.** The
+live database is missing task 25's five search objects entirely — the four
+tables and the id sequence — and `cohort_signal`'s `GRANT`; `verify_schema()`
+fails on exactly those and creating them needs an admin credential this stream
+does not hold. Every claim above is checked against the source and against the
+frozen fixtures, which is a weaker instrument than the round trip items 1–6 of
+`frontend/README.md`'s list got.
+
 ## Definition of done
 
 - Signs in, lists, opens, saves, dismisses with reason, applies, searches.
@@ -200,11 +264,11 @@ files load in a browser and under `node` with nothing installed.
 | item | state |
 |---|---|
 | signs in, lists, opens, saves, dismisses with reason, applies | **done** |
-| searches | **not done** — no route and no `search_queries` table (task 25) |
+| searches | ~~**not done** — no route and no `search_queries` table (task 25)~~ **done 2026-08-02.** Task 25 landed four tables and **six** routes; `frontend/js/search.mjs` is the screen — seeded catalogue, watch/unwatch, submit, and one query's results as a real render. One `ROUTES` row covers both views. |
 | every render issues a `request_id`; every event echoes it with the correct `rank` | **done** — one render across pages, `js/events.mjs` groups by render id and never merges two |
 | impressions fire on visibility, not on payload receipt | **done** — IntersectionObserver, 50% for 500ms |
 | no 0–100 score displayed | **done** — and asserted, including that the `match_reasons` deltas never reach a chip, since they sum to `match_score` |
-| empty states are seeded, never blank | **done** for Today and Saved |
+| empty states are seeded, never blank | **done** for Today, Saved **and Search** — and Search is the one this bullet was written about (§ *Design constraints*, "never an empty search box"). The screen opens on `GET /v1/searches?scope=suggested` with the form **below** the suggestions, and `check_client.mjs` asserts the document order rather than the presence, because a catalogue underneath the box is a blank box. |
 | works on a phone, **tested on a real one** | **not done.** Built mobile-first — 44px targets, bottom sheet, sticky action bar, safe-area insets — and rendered against live payloads, but no phone was in the loop. This one needs a person. |
 | onboarding completes without manual DB work | ~~**not done** — out of scope for this stream; `POST /v1/onboarding` is another stream's~~ **done 2026-08-02, by task 26's stream** — `frontend/js/onboarding.mjs`, two screens, routed at `#/onboarding` and reached automatically on first run. See `tranche_five/26-profile-creation.md` § *What the work turned up*. |
 | live Google login round trip verified by hand | **not done** — needs an interactive browser session |

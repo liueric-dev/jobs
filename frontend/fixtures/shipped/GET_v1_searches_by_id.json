@@ -1,0 +1,14 @@
+{
+  "id": 4,
+  "text": "technical support specialist",
+  "location": "New York, NY",
+  "chips": null,
+  "source": "track",
+  "role_track": "technical_support",
+  "last_run_at": "2026-08-02T04:12:44",
+  "run_count": 6,
+  "result_count_last_run": 9,
+  "retired_at": null,
+  "watcher_bucket": "4-6",
+  "watching": true
+}

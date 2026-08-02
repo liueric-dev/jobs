@@ -1,0 +1,47 @@
+{
+  "searches": [
+    {
+      "id": 3,
+      "text": "junior software engineer",
+      "location": "New York, NY",
+      "chips": null,
+      "source": "track",
+      "role_track": "software_engineering",
+      "last_run_at": "2026-08-02T04:12:31",
+      "run_count": 6,
+      "result_count_last_run": 14,
+      "retired_at": null,
+      "watcher_bucket": null,
+      "watching": false
+    },
+    {
+      "id": 4,
+      "text": "technical support specialist",
+      "location": "New York, NY",
+      "chips": null,
+      "source": "track",
+      "role_track": "technical_support",
+      "last_run_at": "2026-08-02T04:12:44",
+      "run_count": 6,
+      "result_count_last_run": 9,
+      "retired_at": null,
+      "watcher_bucket": "4-6",
+      "watching": true
+    },
+    {
+      "id": 9,
+      "text": "data analyst",
+      "location": "New York, NY",
+      "chips": null,
+      "source": "track",
+      "role_track": "data_and_analytics",
+      "last_run_at": null,
+      "run_count": 0,
+      "result_count_last_run": null,
+      "retired_at": null,
+      "watcher_bucket": null,
+      "watching": false
+    }
+  ],
+  "scope": "suggested"
+}

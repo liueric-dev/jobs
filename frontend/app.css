@@ -496,6 +496,47 @@ button {
 .signin { text-align: center; padding: 3rem 1rem; }
 .signin .btn { margin-top: 1rem; }
 
+/* -- search -------------------------------------------------------------- */
+
+/* A query is rendered as a card so it inherits the 44px tap targets and reads
+   as the same kind of object a posting does. It carries one action where a
+   posting carries two, and the button keeps a thumb-sized width rather than
+   stretching across the card. */
+.query-card .actions .btn { flex: 0 1 12rem; }
+
+/* "For roles like: Working with data". THE TRACK OF THE SEARCH, NOT OF THE
+   POSTINGS — search_queries.role_track is why a seeded suggestion exists, and
+   job_facts.role_track is a posting's family. Same vocabulary, two subjects;
+   the copy is what keeps them apart, so it is deliberately not styled like the
+   group headings on Today. */
+.query-track {
+  margin: 0.35rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+/* The watcher badge, which is absent far more often than it is present: below
+   schema.SEARCH_MIN_WATCHERS there is no row at all, so there is nothing to
+   grey out and no placeholder to reserve space for. Styling an empty state
+   here would be the first step towards rendering one. */
+.watchers { color: var(--ink); }
+
+/* The text inputs. `.field select` and `.field input[type="number"]` above are
+   the onboarding form's controls; this adds the one type this screen uses
+   rather than widening that selector, so a change here cannot move onboarding. */
+.search-form { margin-top: 0.25rem; }
+
+.search-form .field input[type="text"] {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+
 /* -- desktop adaptation -------------------------------------------------- */
 
 @media (min-width: 40rem) {

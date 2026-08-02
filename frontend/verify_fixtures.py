@@ -20,6 +20,13 @@ constants out with `ast` means this runs under the top level's bare system
 python3 with no venv and no dependency, which is the only way it gets run
 often enough to be worth having.
 
+IT READS TWO TOP-LEVEL MODULES AS WELL AS THE FOUR IN webapp/, and that is not
+sprawl. `backend/searchnorm.py` and `backend/schema.py` are where task 25 put
+the two things a search response is checked against -- the InvalidQuery codes a
+client can receive, and the watcher-bucket vocabulary -- precisely so that one
+definition serves both processes. Reading them here rather than restating four
+codes and three labels is the same rule the rest of this file follows.
+
     python3 frontend/verify_fixtures.py
 
 Exit status 0 if every fixture matches, 1 otherwise, listing everything wrong
@@ -28,6 +35,7 @@ verify_schema() collects problems instead of raising on the first.
 """
 
 import ast
+import base64
 import json
 import pathlib
 import re
@@ -39,6 +47,20 @@ JOBS_PY = REPO / "backend" / "webapp" / "jobs.py"
 SCHEMA_WEB_PY = REPO / "backend" / "webapp" / "schema_web.py"
 AUTH_PY = REPO / "backend" / "webapp" / "auth.py"
 ONBOARDING_PY = REPO / "backend" / "webapp" / "onboarding.py"
+SEARCH_PY = REPO / "backend" / "webapp" / "search.py"
+#: NOT under backend/webapp/. searchnorm.py is a TOP-LEVEL pipeline module that
+#: both processes import, for the reason its own docstring gives: a second
+#: `normalize()` in webapp/ would not fail loudly, it would quietly halve the
+#: cache hit rate. Its InvalidQuery codes reach a client through search.py's
+#: `raise ContractError(bad.code, str(bad))`, so the error fixtures below need
+#: it -- see _contract_codes().
+SEARCHNORM_PY = REPO / "backend" / "searchnorm.py"
+#: Also top-level: the suppression threshold and the bucket vocabulary live
+#: beside COHORT_MIN_SAVERS in schema.py rather than in searchnorm.py, because
+#: schema.py generates the CHECK constraint from the same tuple the writer
+#: reads (searchnorm.py's own docstring says so). So the labels a
+#: `watcher_bucket` may carry are derived from there and never listed here.
+SCHEMA_PY = REPO / "backend" / "schema.py"
 SHIPPED = HERE / "fixtures" / "shipped"
 
 
@@ -164,6 +186,52 @@ def _dict_literal(path, name):
                       f"dict of string literals")
 
 
+def _literal(path, name):
+    """A module-level NAME = <any literal>, whatever its shape.
+
+    _tuples() above is deliberately narrow -- tuples of strings only -- and
+    schema.SEARCH_WATCHER_BUCKETS is `((6, "4-6"), (10, "7-10"), (None, "11+"))`,
+    which is neither. Rather than widen the narrow reader (whose narrowness is
+    what makes an unrecognised form fail loudly), this is the general one, used
+    only where the shape is known and named.
+    """
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == name):
+            try:
+                return ast.literal_eval(node.value)
+            except (ValueError, TypeError, SyntaxError):
+                break
+    raise LookupError(f"{path.name}: {name} is no longer a module-level literal")
+
+
+def _contract_codes(*paths):
+    """Every `code` a ContractError or an InvalidQuery can be raised with.
+
+    TWO CALL SHAPES, ONE VOCABULARY, AND THE SECOND ONE IS WHY THIS IS NOT A
+    ONE-LINER. jobs.py and search.py raise `ContractError("some_code", ...)`
+    with the code as a literal, which is readable directly. But search.py also
+    raises `ContractError(bad.code, str(bad))` where `bad` is a
+    searchnorm.InvalidQuery -- so four of the codes a client can receive from
+    POST /v1/searches appear NOWHERE in backend/webapp/ as a constant, and a
+    reader that only looked there would report them as "raised nowhere" and
+    fail on a fixture that is correct. Reading InvalidQuery's own first
+    arguments out of searchnorm.py is the derivation; hardcoding the four here
+    would be the seam D70 came through, one file to the left.
+    """
+    codes = set()
+    for path in paths:
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id in ("ContractError", "InvalidQuery")
+                    and node.args and isinstance(node.args[0], ast.Constant)):
+                codes.add(node.args[0].value)
+    return codes
+
+
 def _int_literal(path, name):
     """A module-level NAME = <int>."""
     tree = ast.parse(path.read_text())
@@ -210,9 +278,32 @@ _KNOWN_JOBS_TUPLES = {
 }
 
 
+#: The same treatment for search.py, and it is here BECAUSE D70 WOULD OTHERWISE
+#: HAVE HAPPENED TWICE. `_KNOWN_JOBS_TUPLES` above closed the class for one
+#: file; task 25 then landed a second router with its own module-level tuples
+#: -- QUERY_COLUMNS and RESPONSE_NAMES -- and no guard at all, so a new group
+#: there would have arrived exactly the way `cohort_signal` did, into a checker
+#: that had already learned the lesson in the next file over. A guard that
+#: protects one file is a guard against one instance.
+#:
+#: THE QUERY ROW HAS NO `rank`-SHAPED RESIDUE, which is worth saying because
+#: the list row does. _row_to_query() (search.py) composes the object as
+#: `RESPONSE_NAMES + _SIGNAL_FIELDS` and assigns no key inside the handler, so
+#: the expectation below is derived end to end. The results row is a different
+#: story and inherits jobs.py's residue verbatim: search_results() does its own
+#: `item["rank"] = first_rank + offset`, so `rank` is a literal there for the
+#: same reason and with the same two uncovered cases.
+_KNOWN_SEARCH_TUPLES = {
+    "QUERY_COLUMNS":   "the search_queries columns SELECTed; the storage half",
+    "RESPONSE_NAMES":  "response keys, query object; the rendered half",
+    "_SIGNAL_FIELDS":  "response keys, query object -- appended by _row_to_query",
+}
+
+
 def check(problems):
     jobs = _tuples(JOBS_PY)
     web = _tuples(SCHEMA_WEB_PY)
+    search = _tuples(SEARCH_PY)
 
     # THE GUARD THAT CLOSES D70 AS A CLASS. A new tuple in jobs.py is either a
     # new response-key group -- in which case the composition below is now
@@ -227,6 +318,14 @@ def check(problems):
             f"composition in check(); if not, add it to _KNOWN_JOBS_TUPLES saying "
             f"so. This guard exists because cohort_signal (D70) arrived exactly "
             f"this way and nothing noticed.")
+
+    unknown = sorted(set(search) - set(_KNOWN_SEARCH_TUPLES))
+    if unknown:
+        problems.append(
+            f"search.py declares tuple(s) {unknown} that verify_fixtures.py does "
+            f"not know about. Same rule as jobs.py above: if any is a "
+            f"response-key group, add it to the query-row composition in "
+            f"check(); if not, add it to _KNOWN_SEARCH_TUPLES saying so.")
 
     # DERIVED, NOT LITERAL, except for `rank` -- SEE THE NEXT COMMENT.
     # The endpoint builds the list row as LIST_COLUMNS + STATE_FIELDS +
@@ -301,7 +400,6 @@ def check(problems):
 
     # The cursor is opaque but it is not arbitrary: decoding it must yield the
     # last row of page 1, the render, and the rank page 2 starts at.
-    import base64
     raw = page1["next_cursor"]
     payload = json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
     last = page1["jobs"][-1]
@@ -450,16 +548,191 @@ def check(problems):
             problems.append(f"VERDICT_EVENTS[{verdict!r}] = {event!r}, which is "
                             f"not in CLIENT_EVENT_NAMES")
 
+    # -- searches -----------------------------------------------------------
+    #
+    # TASK 25's SIX ROUTES. The query object is fully derived -- see
+    # _KNOWN_SEARCH_TUPLES on why there is no `rank`-shaped residue on this
+    # half -- and the RESULTS object is jobs.py's list row, imported rather
+    # than restated (search.py imports LIST_COLUMNS, STATE_FIELDS,
+    # COHORT_FIELDS and the joins), so the same `list_row` above is the
+    # expectation here. That is the property worth freezing: a client renders
+    # both lists with ONE renderer, and the day the two shapes drift is the day
+    # it needs two.
+    query_row = tuple(search["RESPONSE_NAMES"]) + tuple(search["_SIGNAL_FIELDS"])
+
+    # THE RENAME IS POSITIONAL, SO THE TWO TUPLES MUST STAY THE SAME LENGTH.
+    # _row_to_query() zips RESPONSE_NAMES against a row SELECTed as
+    # QUERY_COLUMNS, so adding a column to one and not the other does not raise
+    # -- zip() stops at the shorter -- it silently drops a field or shifts
+    # every name onto the wrong value. Nothing else in either process notices.
+    if len(search["QUERY_COLUMNS"]) != len(search["RESPONSE_NAMES"]):
+        problems.append(
+            f"search.py: QUERY_COLUMNS has {len(search['QUERY_COLUMNS'])} entries "
+            f"and RESPONSE_NAMES has {len(search['RESPONSE_NAMES'])}. _row_to_query() "
+            f"zips one against the other, so an unequal pair silently mislabels "
+            f"columns rather than raising.")
+
+    sources = _tuples(SCHEMA_PY)["SEARCH_SOURCES"]
+    buckets = tuple(label for _, label in _literal(SCHEMA_PY, "SEARCH_WATCHER_BUCKETS"))
+
+    def check_query(where, item):
+        keyset(where, item, query_row)
+        # THE TWO FIELDS THAT MUST NEVER APPEAR, and their absence is the whole
+        # privacy argument rather than an oversight. `first_requested_at` is the
+        # moment one identifiable person typed something, and timing is the
+        # strongest deanonymiser available in a cohort who sit in a room
+        # together (search.py's module docstring, tranche_five/28).
+        # `computed_at` moves when the underlying watcher set moves, which hands
+        # back the recency channel the bucketing exists to close -- the same
+        # column jobs._COHORT_COLUMNS refuses for the same reason.
+        for forbidden in ("first_requested_at", "computed_at", "watcher_count",
+                          "watchers", "app_user_id"):
+            if forbidden in item:
+                problems.append(f"{where}: carries {forbidden!r}, which no "
+                                f"search response may (search.py's docstring)")
+        if item.get("source") not in sources:
+            problems.append(f"{where}: source {item.get('source')!r} is not in "
+                            f"schema.SEARCH_SOURCES {list(sources)}")
+        # NULL OR A LABEL, NEVER A NUMBER. watcher_bucket is NOT NULL on
+        # search_query_signal (schema.py) and the row is ABSENT below
+        # SEARCH_MIN_WATCHERS, so the LEFT JOIN yields exactly two kinds of
+        # value. A fixture carrying an integer, a zero or a "fewer than four"
+        # string would be teaching a client author to render the suppression as
+        # a count, which is the one thing DEC-85 exists to prevent.
+        bucket = item.get("watcher_bucket")
+        if bucket is not None and bucket not in buckets:
+            problems.append(
+                f"{where}: watcher_bucket {bucket!r} is not null and is not one "
+                f"of schema.SEARCH_WATCHER_BUCKETS {list(buckets)}. Below "
+                f"SEARCH_MIN_WATCHERS there is NO ROW, so null is the only "
+                f"other legal value -- never a count, never a floor.")
+        if not isinstance(item.get("watching"), bool):
+            problems.append(f"{where}: `watching` is the caller's own fact and "
+                            f"is a bool, not {item.get('watching')!r}")
+
+    for name in ("GET_v1_searches.suggested.json", "GET_v1_searches.mine.json",
+                 "GET_v1_searches.mine.empty.json"):
+        body = _load(name)
+        keyset(f"{name} (top level)", body,
+               _returned_dict_keys(SEARCH_PY, "list_searches"))
+        for i, item in enumerate(body["searches"]):
+            check_query(f"{name} searches[{i}]", item)
+        # `scope` is echoed, and the endpoint's own Query pattern is the closed
+        # set: there is deliberately no third scope (search.py, list_searches).
+        if body["scope"] not in ("mine", "suggested"):
+            problems.append(f"{name}: scope {body['scope']!r} is outside the "
+                            f"endpoint's ^(mine|suggested)$ pattern")
+
+    # The suggested catalogue is `source IN ('seeded','track') AND retired_at IS
+    # NULL` by the WHERE clause, and every row carries a role_track because the
+    # seeder writes one per track. THAT role_track IS THE QUERY'S, NOT A
+    # POSTING'S -- see the note in fixtures/shipped/MANIFEST.json. The two never
+    # share a JSON object and conflating them is the mistake this feature makes
+    # available for the first time.
+    for i, item in enumerate(_load("GET_v1_searches.suggested.json")["searches"]):
+        if item["source"] not in ("seeded", "track"):
+            problems.append(f"GET_v1_searches.suggested.json searches[{i}]: "
+                            f"source {item['source']!r}; the suggested scope "
+                            f"selects seeded and track rows only")
+        if item["role_track"] is None:
+            problems.append(f"GET_v1_searches.suggested.json searches[{i}]: "
+                            f"role_track is null on a seeded query")
+        if item["retired_at"] is not None:
+            problems.append(f"GET_v1_searches.suggested.json searches[{i}]: "
+                            f"retired_at is set; the scope filters those out")
+
+    for name in ("POST_v1_searches.response.json", "GET_v1_searches_by_id.json",
+                 "POST_v1_searches_watch.json", "POST_v1_searches_unwatch.json"):
+        check_query(name, _load(name))
+
+    keyset("POST_v1_searches.request.json", _load("POST_v1_searches.request.json"),
+           _model_fields(SEARCH_PY, "SearchRequest"))
+
+    # ONE QUERY CANNOT HAVE TWO ANSWERS, the same rule the cohort_signal pair is
+    # held to. Query 4 appears in three fixtures and a badge is a fact about the
+    # query, not about which route you asked.
+    listed = [q for q in _load("GET_v1_searches.suggested.json")["searches"]
+              if q["id"] == 4]
+    mine = [q for q in _load("GET_v1_searches.mine.json")["searches"]
+            if q["id"] == 4]
+    by_id = _load("GET_v1_searches_by_id.json")
+    if not (listed and mine and listed[0] == mine[0] == by_id):
+        problems.append(
+            "query 4 differs between GET_v1_searches.suggested.json, "
+            "GET_v1_searches.mine.json and GET_v1_searches_by_id.json. All three "
+            "are _select_queries() over the same row.")
+
+    # WATCH AND UNWATCH DIFFER IN ONE FIELD AND ONLY ONE. Unwatching is an
+    # UPDATE setting removed_at, never a delete (searchnorm.UNWATCH_SQL), and
+    # the response is the same row re-read -- so anything else moving between
+    # this pair means the fixtures invented a side effect the route has not got.
+    watched, unwatched = (_load("POST_v1_searches_watch.json"),
+                          _load("POST_v1_searches_unwatch.json"))
+    differ = sorted(k for k in query_row if watched.get(k) != unwatched.get(k))
+    if differ != ["watching"]:
+        problems.append(
+            f"watch and unwatch differ in {differ}, expected ['watching'] alone. "
+            f"Unwatch is an UPDATE of removed_at and a re-read of the same row; "
+            f"it changes nothing else, and in particular does not move a bucket "
+            f"the service holds no grant to write.")
+
+    # -- search results -----------------------------------------------------
+    #
+    # THE SHAPE IS /v1/jobs' SHAPE, FIELD FOR FIELD, and that is the point
+    # rather than a coincidence: a search result list is a rendered list,
+    # position bias applies identically, and task 27's instrumentation is
+    # unusable if half the renders in the product report positions in a
+    # different vocabulary. `list_row` here is the SAME variable the /v1/jobs
+    # fixtures are checked against, so the two cannot pass while disagreeing.
+    for name in ("GET_v1_searches_results.json", "GET_v1_searches_results.page2.json",
+                 "GET_v1_searches_results.empty.json"):
+        body = _load(name)
+        keyset(f"{name} (top level)", body,
+               _returned_dict_keys(SEARCH_PY, "search_results"))
+        for i, row in enumerate(body["jobs"]):
+            keyset(f"{name} jobs[{i}]", row, list_row)
+
+    r1, r2 = (_load("GET_v1_searches_results.json"),
+              _load("GET_v1_searches_results.page2.json"))
+    ranks = [r["rank"] for r in r1["jobs"]] + [r["rank"] for r in r2["jobs"]]
+    if ranks != list(range(1, len(ranks) + 1)):
+        problems.append(f"search results: rank is not 1..N across the two "
+                        f"pages: {ranks}")
+    if r1["request_id"] != r2["request_id"]:
+        problems.append("search results page 2 has a different request_id; a "
+                        "render spans pages here exactly as it does on /v1/jobs")
+    if r1["query_id"] != r2["query_id"]:
+        problems.append("search results page 2 belongs to a different query_id")
+    raw = r1["next_cursor"]
+    payload = json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
+    last = r1["jobs"][-1]
+    expected = {"v": 2, "s": last["match_score"], "t": last["posted_at_ts"],
+                "i": last["id"], "r": r1["request_id"], "k": last["rank"] + 1}
+    if payload != expected:
+        problems.append(f"search results next_cursor decodes to {payload}, "
+                        f"expected {expected}")
+
+    # ONE POSTING CANNOT HAVE TWO ANSWERS EITHER. Mount Sinai is in the /v1/jobs
+    # fixture and in this one; cohort_signal is a fact about the posting, not
+    # about which list surfaced it.
+    listed_job = _load("GET_v1_jobs.json")["jobs"][0]
+    found = [j for j in r1["jobs"] if j["id"] == listed_job["id"]]
+    if found and found[0]["cohort_signal"] != listed_job["cohort_signal"]:
+        problems.append(
+            f"{listed_job['id']} carries cohort_signal "
+            f"{found[0]['cohort_signal']!r} in the search results and "
+            f"{listed_job['cohort_signal']!r} in the job list")
+
     # -- errors -------------------------------------------------------------
     # Every enveloped fixture's code must be one the validator can actually
     # raise, and the two vocabularies must not overlap.
-    raised = set()
-    tree = ast.parse(JOBS_PY.read_text())
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and node.func.id == "ContractError" and node.args
-                and isinstance(node.args[0], ast.Constant)):
-            raised.add(node.args[0].value)
+    #
+    # THREE FILES, NOT ONE, AND THE THIRD IS NOT UNDER webapp/. search.py
+    # re-raises searchnorm.InvalidQuery as a ContractError carrying the
+    # exception's own `code`, so `empty_query` and its three neighbours are
+    # reachable by a client and appear as a literal only in
+    # backend/searchnorm.py. See _contract_codes().
+    raised = _contract_codes(JOBS_PY, SEARCH_PY, SEARCHNORM_PY)
 
     for path in sorted((SHIPPED / "errors").glob("*.json")):
         body = json.loads(path.read_text())
@@ -492,7 +765,8 @@ def main():
               "fixtures are stale or the change was unintended.")
         return 1
     print("fixtures/shipped/ matches "
-          "backend/webapp/{jobs,auth,schema_web,onboarding}.py")
+          "backend/webapp/{jobs,auth,schema_web,onboarding,search}.py "
+          "and backend/{searchnorm,schema}.py")
     return 0
 
 

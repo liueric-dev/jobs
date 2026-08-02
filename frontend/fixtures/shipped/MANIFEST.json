@@ -1,6 +1,7 @@
 {
   "_comment": "What each fixture in this directory is, and the file:line it was derived from. It is a sidecar rather than a `_comment` key inside each fixture because these bodies are meant to be byte-faithful: a client that parses one must see exactly what the API sends, and an extra key would be a lie in the shape of documentation. `python3 frontend/verify_fixtures.py` re-derives every claim below from the source and fails if one has gone stale.",
-  "_derived_from": "backend/webapp/jobs.py, backend/webapp/auth.py, backend/webapp/schema_web.py, backend/webapp/onboarding.py, backend/schema.py. The job/event/me fixtures were derived from the working tree at 2026-08-01, one commit past da47503; the four onboarding fixtures were derived on 2026-08-02, at 43f95c0.",
+  "_derived_from": "backend/webapp/jobs.py, backend/webapp/auth.py, backend/webapp/schema_web.py, backend/webapp/onboarding.py, backend/webapp/search.py, backend/searchnorm.py, backend/schema.py. The job/event/me fixtures were derived from the working tree at 2026-08-01, one commit past da47503; the four onboarding fixtures were derived on 2026-08-02, at 43f95c0; the eleven search fixtures on 2026-08-02, at aa1d837.",
+  "_two_of_the_sources_are_not_under_webapp": "backend/searchnorm.py and backend/schema.py are TOP-LEVEL pipeline modules and are read here on purpose. searchnorm.py owns the InvalidQuery codes a client can receive from POST /v1/searches -- search.py re-raises them as `ContractError(bad.code, str(bad))`, so four of the five search error codes appear as a literal nowhere in backend/webapp/. schema.py owns SEARCH_MIN_WATCHERS and SEARCH_WATCHER_BUCKETS, beside their cohort_signal equivalents, because it generates the CHECK constraint from the same tuple the writer reads. verify_fixtures.py reads both rather than restating four codes and three labels.",
   "_line_numbers": "READ THE CODE, NOT THE CITE -- docs/ingest/DEFECTS.md's own instruction, and it applies here for a concrete reason: jobs.py moved ~26 lines while these fixtures were being written (the D66/D67 fix). The line numbers below were re-derived after that landed and are correct as of then. verify_fixtures.py resolves everything by NAME and never by line, so it stays right when these drift; it is the authority, this is the map.",
   "_status": "REAL. Every endpoint here has a route today. These are what the API returns, not what it should return.",
 
@@ -174,6 +175,138 @@
     ]
   },
 
+  "_searches": {
+    "_comment": "Task 25's six routes, frozen 2026-08-02. Eleven files: two list scopes plus an empty one, a request and a response for POST, one by-id, a watch/unwatch pair, and three results pages. They replace nothing -- fixtures/contract/ASPIRATIONAL_*_searches.* stay where they are, because they describe a shape that was never built and the deviation list between the two is an artifact somebody has to be able to read. See ../contract/MANIFEST.json and ../../README.md § 'Where the search contract and the shipped API differ'.",
+
+    "_role_track_means_two_different_things_in_this_feature": "AND THIS IS THE NOTE TO READ BEFORE WRITING ANY COPY. On a JOB row (GET_v1_searches_results.json, GET_v1_jobs.json) `role_track` is job_facts.role_track -- the posting's family, the axis tracks.mjs groups Today by, one of extract.ROLE_TRACK's nine. On a QUERY object (every other search fixture here) `role_track` is search_queries.role_track -- the track a SEEDED suggestion was generated from, i.e. why that row exists at all. Same closed vocabulary, two different subjects, and they NEVER share a JSON object: a query object carries no posting fields and a job row carries no query fields. Nothing structural stops the two being conflated -- only the copy does, which is why the client says 'For roles like: …' on a suggestion and renders no track heading at all over search results.",
+
+    "_watcher_bucket_is_null_or_a_label_and_never_a_number": "The single most misreadable field in these fixtures, and a sharper case than cohort_signal's. search_query_signal.watcher_bucket is NOT NULL and the row is ABSENT below schema.SEARCH_MIN_WATCHERS = 4, so the LEFT JOIN in search._SIGNAL_JOIN yields null for 0, 1, 2 AND 3 watchers indistinguishably. A client must render null as NO BADGE -- never a zero, never a greyed dash, never 'fewer than four', never 'be the first'. The floor is 4 where cohort_signal's is 3 for two reasons DEC-85 sets out and neither applies to a save count: the observed object is ATTACKER-CHOSEN (anyone can create the query they want to watch the bucket of, which is a chosen-plaintext capability), and THE PLANTER IS ALWAYS A WATCHER (POST /v1/searches registers its caller, so a floor of 3 gives an anonymity set of two). The labels are '4-6' / '7-10' / '11+' and deliberately do not overlap, unlike COHORT_BUCKETS' '3-5' / '6-10' / '10+'. At today's cohort size -- two labellers, docs/labelling-report-2026-08-02.md -- EVERY value is null, so null is the case the UI has to handle well, not the edge case. One fixture row carries '4-6' so a client author sees the populated shape once.",
+
+    "_what_is_deliberately_absent": "first_requested_at is NOT in QUERY_COLUMNS and its absence is the point rather than an oversight: it is the timestamp at which one identifiable person typed something, and timing is the strongest deanonymiser available in a cohort who sit in a room together (search.py's module docstring, tranche_five/28). last_run_at IS exposed, because that is the pipeline's clock and no person's act. search_query_signal.computed_at is not selected either, for the same reason jobs._COHORT_COLUMNS refuses it: a per-row timestamp that moves when the underlying set moves is the recency channel the bucketing exists to close. And there is no watcher_count anywhere -- DEC-87, the count is a separate table precisely so the service cannot write one. verify_fixtures.py fails on any of the four appearing in a fixture."
+  },
+
+  "GET_v1_searches.suggested.json": {
+    "endpoint": "GET /v1/searches?scope=suggested",
+    "derived_from": [
+      "search.py -- list_searches()'s return: {searches, scope}",
+      "search.py -- QUERY_COLUMNS / RESPONSE_NAMES: the ten stored columns and their names in the response. `display_text` is `text` and `display_location` is `location`; the column names record that they are the raw spelling rather than the key, which is a storage concern",
+      "search.py -- _SIGNAL_FIELDS = ('watcher_bucket', 'watching'), appended by _row_to_query, so the key order is RESPONSE_NAMES then those two",
+      "search.py -- the suggested WHERE: source IN ('seeded','track') AND retired_at IS NULL",
+      "backend/schema.py -- SEARCH_SOURCES, the CHECK on search_queries.source"
+    ],
+    "notes": [
+      "THE CATALOGUE IS WHY THIS ROUTE EXISTS. tranche_four/25 seeds one query per role_track 'precisely because someone who does not know what role they want cannot write a good query', and 32-frontend.md turns that into a client rule: never an empty search box. Every row here has a non-null role_track, which is what makes 'one seeded query per track' checkable by set equality against extract.ROLE_TRACK.",
+      "Seeded and track queries NEVER decay (searchnorm.UNDECAYABLE_SOURCES) -- a suggestion nobody has watched yet cannot be retired for having no watchers, or the seeding feature would switch itself off after two weeks.",
+      "Query 4 carries watcher_bucket '4-6' and is the only populated badge in this directory. Everything else is null. It appears in three fixtures and reads the same in all three, because one query cannot have two answers.",
+      "Query 9 has last_run_at null and result_count_last_run null: a registered query the nightly cycle has not reached. That is the state of EVERY search the moment it is created -- no provider is called on the submit -- so it is the state the client's copy has to be honest about.",
+      "`chips` is null on every row here and is parsed SERVER-side (search.py's _row_to_query does json.loads), unlike the four job columns which arrive as JSON strings. A client must not JSON.parse it a second time."
+    ]
+  },
+
+  "GET_v1_searches.mine.json": {
+    "endpoint": "GET /v1/searches?scope=mine",
+    "derived_from": ["search.py -- the mine WHERE: mine.query_id IS NOT NULL, i.e. the caller's own live watch rows"],
+    "notes": [
+      "TWO SCOPES AND NO THIRD, AND THE ABSENCE IS A PRIVACY CONTROL. There is deliberately no 'everything anyone has ever searched for' listing: search_queries carries no identity, but the TEXT of a builder-created query is often self-identifying in a thirty-person cohort ('bilingual healthcare operations Brooklyn'), and a browsable list would hand an observer the whole population to plant against.",
+      "The two scopes OVERLAP and that is normal, not a bug: query 4 is a seeded suggestion this Builder watches, so it is in both lists, byte for byte. A client showing both sections shows it twice, which is correct -- it is a suggestion and it is one of theirs.",
+      "Query 51 is source 'builder' with role_track NULL. Only seeded rows carry a track; a query somebody typed has no track and must not be shown as having one.",
+      "`watching` is true on every row by construction here -- it IS the filter. It is the caller's OWN fact, resolved by a single-row lookup on app_user_id, and is the only thing this service reads out of search_query_watchers. It leaks nothing about anyone else."
+    ]
+  },
+
+  "GET_v1_searches.mine.empty.json": {
+    "endpoint": "GET /v1/searches?scope=mine",
+    "derived_from": ["search.py -- _select_queries returns [] when the caller watches nothing"],
+    "notes": ["The state every Builder starts in. There is no 404 and no error: watching nothing is an answer. It is also the state the 'empty states are seeded, never blank' rule bites hardest on, which is why the client renders the suggested catalogue above this section rather than beside it."]
+  },
+
+  "POST_v1_searches.request.json": {
+    "endpoint": "POST /v1/searches (request body)",
+    "derived_from": [
+      "search.py -- SearchRequest: text, location, chips, in that order",
+      "backend/searchnorm.py -- validate(): MAX_QUERY_CHARS = 200 on the raw text, MAX_LOCATION_CHARS = 120 on the raw location, emptiness checked on the NORMALISED form"
+    ],
+    "notes": [
+      "THERE IS NO `profile` FIELD AND THERE MUST NEVER BE ONE, for the reason POST /v1/onboarding's fixture gives: the cohort comes from the session, and a `?profile=` parameter would turn one forgotten check into a cross-user data leak. There is no `watching` field either -- the contract's request fixture has one, and it cannot exist: the submitter is registered as a watcher unconditionally, which is what makes 'one row, two watchers' true.",
+      "`chips` is a free-form object passed through to the provider, validated only as 'is it an object'. Google Jobs' chip vocabulary is the provider's and changes without notice, so a whitelist here would be a second place to update every time it moved. Stored as TEXT, never interpolated.",
+      "A location of null is not an empty location: searchnorm.DEFAULT_LOCATION ('New York, NY') is substituted, because '' would make 'any location' and 'the field was never filled in' the same cache key."
+    ]
+  },
+
+  "POST_v1_searches.response.json": {
+    "endpoint": "POST /v1/searches (response)",
+    "derived_from": ["search.py -- create_search returns items[0], the same query object every other route in this group returns"],
+    "notes": [
+      "200 AND THE QUERY OBJECT, NOT THE CONTRACT'S 202 WITH A QUEUE POSITION. The contract fixture invents `status`, `queue_position` and `estimated_ready_at`; none has a column and nothing computes a queue depth. The shipped answer to 'when will this run' is `last_run_at` being null, which is honest and is what the client renders.",
+      "ASYNCHRONOUS, AND THE BODY SAYS SO WITHOUT A STATUS FIELD: run_count 0, last_run_at null, result_count_last_run null. No provider is called on this request. A client that rendered this as a result list would be showing an empty list as though it were an answer.",
+      "IDEMPOTENT ON THE NORMALISED KEY, so this may be somebody else's row coming back -- same id, THEIR display_text spelling (first-writer-wins, searchnorm.REGISTER_QUERY_SQL), and whatever run history it already has. That is the cache working, and the copy on the screen has to survive it.",
+      "watching is true: the submitter becomes a watcher in the same request, which is half of why the watcher floor is 4 rather than 3 (DEC-85)."
+    ]
+  },
+
+  "GET_v1_searches_by_id.json": {
+    "endpoint": "GET /v1/searches/{query_id}",
+    "derived_from": ["search.py -- get_search, _select_queries over one id"],
+    "notes": [
+      "Byte-identical to query 4 in both list fixtures. Same _select_queries() over the same row, so a badge is a fact about the query and not about which route you asked. verify_fixtures.py asserts the three agree.",
+      "A 404 rather than a 403 for a query that exists and is not yours -- and here the id space is a small integer sequence, so enumeration is trivial and the rule matters more, not less. See errors/NOT-ENVELOPED-404_no_such_search.json."
+    ]
+  },
+
+  "POST_v1_searches_watch.json": {
+    "endpoint": "POST /v1/searches/{query_id}/watch",
+    "derived_from": ["search.py -- watch_search: REGISTER_WATCHER_SQL, then the same _select_queries re-read"],
+    "notes": [
+      "Query 9 after watching it: `watching` true and NOTHING ELSE MOVED. In particular watcher_bucket is still null -- the bucket is computed by the nightly fold, the service holds SELECT ONLY on search_query_signal, and a client that incremented a count locally would be writing a suppression rule into a renderer.",
+      "This pair and POST_v1_searches_unwatch.json differ in exactly one key, and verify_fixtures.py asserts that. Anything else moving between them would mean a fixture invented a side effect the route has not got."
+    ]
+  },
+
+  "POST_v1_searches_unwatch.json": {
+    "endpoint": "POST /v1/searches/{query_id}/unwatch",
+    "derived_from": ["search.py -- unwatch_search: searchnorm.UNWATCH_SQL sets removed_at, then the same re-read"],
+    "notes": [
+      "A POST AND NOT A DELETE, and that is not a style choice: app.py's CORS middleware allows GET, POST and OPTIONS only, so a DELETE from the browser client would be refused at the preflight with no error anyone would see -- the silent-failure mode this repo alerts on, arriving through a verb.",
+      "An UPDATE setting removed_at, never a row deletion. Same treatment as builder_job_state and for the reason tranche_six/31 gives about undismiss: the fact that someone reversed something is itself signal. The surviving row is also what makes re-watching idempotent rather than a second INSERT.",
+      "Idempotent on a second call: UNWATCH_SQL matches `removed_at IS NULL`, so unwatching twice does not move the timestamp -- otherwise 'when did they stop watching' would be a value a client could rewrite at will."
+    ]
+  },
+
+  "GET_v1_searches_results.json": {
+    "endpoint": "GET /v1/searches/{query_id}/results",
+    "derived_from": [
+      "search.py -- search_results()'s return: {request_id, query_id, jobs, next_cursor, profile}",
+      "search.py -- the row is jobs.LIST_COLUMNS + jobs.STATE_FIELDS + jobs.COHORT_FIELDS + rank, IMPORTED from jobs.py rather than restated",
+      "search.py -- `FROM jobs_app v JOIN search_query_results r`, plus the same three joins the list endpoint uses",
+      "jobs.py -- encode_cursor / decode_cursor and new_request_id, both imported"
+    ],
+    "notes": [
+      "THE SHAPE IS /v1/jobs' SHAPE, FIELD FOR FIELD, AND THAT IS DELIBERATE. A search result list is a rendered list, position bias applies to it identically, and tranche_five/27's instrumentation is unusable if half the renders in the product report positions in a different vocabulary. Every column, join and field name is imported, so the two lists cannot drift into two shapes -- a client rendering both would then need two renderers for one kind of thing. The rows here are the same three postings as GET_v1_jobs.json, which is what lets check_client.mjs assert ui.jobCard produces identical output from either source.",
+      "THE JOIN IS THE GATE. A posting appears only if match.py wrote it a job_matches row, which it does only for postings passing relevance.union_sql, and only if it satisfies jobs_app's four completeness predicates. Google Jobs is precisely where the relister junk originates -- config/relevance.json already carries six excluded relist sites and a description_exclude for the 'reputed company' placeholder BECAUSE this source fed them in. A route that read `jobs` directly would surface the exact postings the curated pipeline exists to suppress, to people with no industry pattern-matching to catch it.",
+      "`query_id` is echoed and is the ONLY thing this envelope says about the query -- not its text, not its watch state, not whether it has ever run. A client needs GET /v1/searches/{id} as well to render a heading, and that is not a wasted round trip.",
+      "cohort_signal on Mount Sinai is {'save_bucket': '3-5'}, the same value GET_v1_jobs.json carries. One posting cannot have two answers, whichever list surfaced it.",
+      "Dismissed postings are hidden by default here too (`bs.dismissed_at IS NULL` unless include_dismissed), so no row carries dismissed=true."
+    ]
+  },
+
+  "GET_v1_searches_results.page2.json": {
+    "endpoint": "GET /v1/searches/{query_id}/results?cursor=…",
+    "derived_from": ["search.py -- a call WITH a cursor continues the render the cursor names: decode_cursor returns the request_id and the rank page two starts at"],
+    "notes": [
+      "Same request_id as page 1 and rank starts at 3, not 1. This is frozen HERE as well as on the /v1/jobs pair because it is the property that makes a search results list usable as instrumentation at all, and because it rides on imported code -- a regression in jobs.encode_cursor would break both, and only two fixtures can say so.",
+      "The next_cursor in GET_v1_searches_results.json is a real base64 payload and decodes to {v:2, s:92, t:'2026-07-24T00:00:00+00:00', i:'e04a6d1b93f27c85ae1f0b32', r:<request_id>, k:3}. verify_fixtures.py asserts it."
+    ]
+  },
+
+  "GET_v1_searches_results.empty.json": {
+    "endpoint": "GET /v1/searches/{query_id}/results",
+    "derived_from": ["search.py -- next_cursor stays None when items is empty; a new render id is still minted"],
+    "notes": [
+      "TWO DIFFERENT FACTS PRODUCE THIS BODY and a client must not collapse them. A query that has never run has nothing to say yet, which is the state of every search the moment it is created. A query that HAS run and returned nothing is a verdict -- most likely that nothing it found passed the pipeline's gate. The difference is not in this response at all; it is `last_run_at` on the query object, which is the other half of why that object is fetched separately.",
+      "This one is query 9, which has last_run_at null: the first case."
+    ]
+  },
+
   "errors/": {
     "derived_from": [
       "jobs.py:131-157 -- ContractError and contract_error_handler: {'error': {code, message, request_id}}",
@@ -182,7 +315,10 @@
     ],
     "notes": [
       "Every message is the exact string the code produces, including Python list repr inside the f-strings (jobs.py:526, 551).",
-      "Files prefixed NOT-ENVELOPED- are NOT in the contract's envelope. They are bare HTTPExceptions and FastAPI's default handler wraps them as {'detail': ...}: malformed cursor (jobs.py:235), 404 (jobs.py:468), 401 (auth.py:92, 107), 403 (auth.py:117). This inconsistency is real and a client must handle both shapes."
+      "Files prefixed NOT-ENVELOPED- are NOT in the contract's envelope. They are bare HTTPExceptions and FastAPI's default handler wraps them as {'detail': ...}: malformed cursor (jobs.py:235), 404 (jobs.py:468), 401 (auth.py:92, 107), 403 (auth.py:117). This inconsistency is real and a client must handle both shapes.",
+      "THE THREE SEARCH ERRORS WERE ADDED 2026-08-02 AND ONE OF THEM COMES FROM OUTSIDE webapp/. search.py raises ContractError('too_many_searches', …) directly, and re-raises searchnorm.InvalidQuery as `ContractError(bad.code, str(bad))` -- so empty_query, empty_location, query_too_long and location_too_long are codes a client receives that appear as a literal only in backend/searchnorm.py. verify_fixtures.py's `raised` set now reads all three files; a reader that only looked under webapp/ would have reported a correct fixture as 'raised nowhere'.",
+      "request_id is null on both search envelopes, and that is what the code produces rather than an omission: ContractError's third argument defaults to None and search.py passes two. The events validator threads a real one through because it has a batch to name; a rejected search submission belongs to no render.",
+      "too_many_searches is the cap searchnorm.MAX_QUERIES_PER_BUILDER = 20 enforces, counted over WATCHES rather than over rows created -- a Builder watching twenty searches other people created spends the same nightly quota as one who typed twenty. So the remedy in the message is 'stop watching one', not 'delete one'."
     ]
   }
 }
