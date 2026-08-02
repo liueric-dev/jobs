@@ -302,19 +302,37 @@ which is what the catalogue costs.
 |---|---|
 | Tables exist; normalisation deterministic and tested | **Done.** Four tables (`schema.ensure_search_query_schema`). `searchnorm.normalize()` is pure and swept by two tables of cases — the pairs that must collapse and the pairs that must not. |
 | Two Builders → one row, two watchers, one provider call | **Done.** `tests/test_search_queries.py` `TestTwoBuildersOneRow` against the shipped SQL; `webapp/tests/test_search_signal.py` repeats it through the route. |
-| Cache hit rate after two weeks | **Needs elapsed time.** Blocked twice over: nothing has run, and nothing *can* run until 23 lands a provider. `run_count` / `result_count_last_run` / `last_result_at` are recorded so the measurement is a query when the time comes. |
+| Cache hit rate after two weeks | **Needs elapsed time — and it is now blocked ONCE, not twice.** 23 landed 2026-08-02, so the runner dispatches and the clock has started; what remains is two weeks of it. Note which cache the bullet means: `serp/cache.py` keys `(normalized_query, location, date)` at a 24h TTL, so its hit rate answers *"did two Builders ask the same thing on the same day"* — the row-level dedup this task is really about is `search_queries`' UNIQUE on the normalized pair, and that one needs no elapsed time at all. `run_count` / `result_count_last_run` / `last_result_at` are recorded so both measurements are a query when the time comes. |
 | Watcher counts exposed, identities never | **Done.** Bucket only, from the materialised table; `search_query_watchers` reaches no response. |
 | A seeded query for every `role_track` | **Done.** `config/search-queries.json`, nine entries; the test asserts set equality against `extract.ROLE_TRACK` rather than a subset. |
-| Results route through the full gate | **Done for the read path, deferred for the write path.** The join is the gate and is tested both ways. Nothing populates `search_query_results` in production until 23. |
+| Results route through the full gate | ~~**Done for the read path, deferred for the write path.**~~ **Done for both, 2026-08-02.** The join is still the gate and is still tested both ways; what changed is that `search_query_results` now has a writer — `serp.dispatch.SearchQueryProvider`, handed to `run_due()` by `searchqueries.build_provider()`. Asserted end to end against a real scratch schema from recorded SerpApi bytes: `tests/test_serp.py::TestTheSeamIsClosed`. |
 | Decay implemented | **Done.** `searchnorm.should_retire()` is pure and swept; `searchqueries.apply_decay()` is the I/O around it. |
 
-**Deferred on 23, precisely two bullets:** *"costs one provider call"* (the
-dedup that makes it true is built and tested; the call itself has nowhere to
-go) and the write half of *"results route through the full gate"*. The smallest
-thing that unblocks both is a callable taking a due-query dict and returning
-`jobs.id` values it wrote — `run_due(conn, provider=…)` already takes exactly
-that and is tested against a stub. `ingest/google-serpapi.py:273`'s
-`serpapi_search()` is that function with its query source hard-wired to
-`config/google-queries.json`; lifting it behind an interface is 23's job. The
-record shape needs nothing: `google_jobs.py` owns it and must not be
-re-defined.
+~~**Deferred on 23, precisely two bullets:**~~ **BOTH LANDED 2026-08-02 with task 23.**
+The paragraph below is kept because it was right about the shape of the fix, and because
+one line of it was wrong in a way worth keeping visible.
+
+> *"costs one provider call"* (the
+> dedup that makes it true is built and tested; the call itself has nowhere to
+> go) and the write half of *"results route through the full gate"*. The smallest
+> thing that unblocks both is a callable taking a due-query dict and returning
+> `jobs.id` values it wrote — `run_due(conn, provider=…)` already takes exactly
+> that and is tested against a stub. `ingest/google-serpapi.py:273`'s
+> `serpapi_search()` is that function with its query source hard-wired to
+> `config/google-queries.json`; lifting it behind an interface is 23's job. The
+> record shape needs nothing: `google_jobs.py` owns it and must not be
+> re-defined.
+
+**What it got right:** the seam, the return contract, and that the record shape needed
+nothing. `serp/dispatch.py` is that callable and `google_jobs.normalize_job` was not
+touched.
+
+**What it got wrong, and it cost the fix an extra move:** *"the record shape needs
+nothing"* was true and *"lifting `serpapi_search()`"* was not the whole lift.
+**`choose_date_chip()` had to move first.** It lived in `ingest/google-serpapi.py` — a
+file whose name has a hyphen and which therefore cannot be imported — so the date policy
+was unreachable from here at any price, and a dispatcher without it re-asks Google the
+same unfiltered question every night and pays for the same relevance-ranked page. It is
+now `serp/datechip.py`. **And `due_queries()` selected `last_run_at` and dropped it from
+the dict it built**, so even a reachable policy had nothing to compute from. Two small
+things, neither visible from this file, and the second one is in code this task shipped.

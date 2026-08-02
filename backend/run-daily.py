@@ -183,12 +183,20 @@ STEPS = [
     # the same extract pass -- a search whose results waited a day for facts
     # would take two nights to reach a Builder, not one.
     #
-    # IT DOES NOT FETCH ANYTHING TODAY, and says so on stderr every run. There
-    # is no provider to dispatch to: tranche_four/23 (`backend/serp/`) is
-    # descoped and ingest/google-serpapi.py reads its queries from
-    # config/google-queries.json rather than from the table. The step still
-    # earns its place tonight -- seeding, folding and decay all run, and the
-    # fold is the only writer of the exposed watcher bucket.
+    # ~~IT DOES NOT FETCH ANYTHING TODAY~~ IT FETCHES, as of 2026-08-02
+    # (tranche_four/23). backend/serp/ exists and searchqueries.build_provider()
+    # hands run_due() a real dispatcher, so this step now writes `jobs` rows --
+    # which is what the placement above was already anticipating, and why the
+    # step was put at the end of ingest rather than after match.py.
+    #
+    # IT CAN STILL DISPATCH NOTHING, and it says which of the three reasons on
+    # stderr every run: --dry-run, no credential, or no query was due. That line
+    # is not decoration -- a runner that quietly did nothing is indistinguishable
+    # from one whose key was revoked, and both spend the night looking healthy.
+    #
+    # It has a volume floor as of the same day (config/volume-floors.json,
+    # `searchqueries`), which is the check that answers "did it get anything"
+    # rather than "did it run".
     "searchqueries.py",
     "extract.py",
     "match.py",

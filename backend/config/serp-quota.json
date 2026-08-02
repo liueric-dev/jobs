@@ -1,0 +1,69 @@
+{
+  "_comment": [
+    "Per-provider allowances for backend/serp/quota.py. Task 23, descoped:",
+    "DECISIONS.md 'EXP -- Build task 23, sharply descoped' keeps the quota",
+    "ledger and cuts six of the eight adapters, so only the two that survive",
+    "have rows here.",
+    "",
+    "THE NUMBERS BELOW ARE NOT THE AUTHORITY AND MUST NOT BE READ AS ONE.",
+    "They are seeded from docs/tasks/refactor/ADDENDUM-google-jobs-providers.md",
+    "section 2, whose own note says several entries are reported secondhand,",
+    "and 23-serp-abstraction.md says to verify each against the provider on",
+    "first integration. quota.Ledger asks the PROVIDER how much is left and",
+    "treats these as a description, because the reason this file exists at all",
+    "is a measurement in the other direction: DECISIONS.md, 'EXP -- The repo's",
+    "own SerpApi ledger undercounts real spend by 3.3x'. google_jobs_query_stats",
+    "implied 41 searches used this month; the SerpApi account itself read 137.",
+    "A ledger that counts rows this pipeline remembered to write is a memory of",
+    "intentions, and its first symptom is a month that goes dark early with no",
+    "error anywhere.",
+    "",
+    "WHY THE UNITS DIFFER AND ARE NOT CONVERTED. SerpApi bills one search per",
+    "call against a monthly search allowance. Apify bills per RESULT out of a",
+    "dollar balance, so a 10-result query costs ten times a 1-result one and",
+    "its account endpoint answers in USD. Converting would need a per-result",
+    "price that is a property of the actor and the plan, so reconcilable=false",
+    "says the comparison is not available rather than inventing a rate. This is",
+    "D37 from the other end.",
+    "",
+    "REJECTED: a `daily_budget` here. config/google-queries.json already carries",
+    "per-bucket daily budgets for the nightly bank, and a second daily number in",
+    "a second file would be two schedulers disagreeing. This file answers 'how",
+    "much does the account hold', never 'how much may tonight use'."
+  ],
+  "providers": {
+    "serpapi": {
+      "unit": "searches",
+      "allowance": 250,
+      "renews": "monthly",
+      "reconcilable": true,
+      "reserve": 0,
+      "_reserve_comment": [
+        "Searches held back from this pipeline. 0 = no reserve, which is the",
+        "honest default: picking a number here is a policy call the owner has",
+        "not made, and D71 is the standing example of what filing an invented",
+        "ceiling looks like. It is not decoration -- THREE other things spend",
+        "this same account: tools/verify-date-filter.py (~3 credits),",
+        "api/contributor-worker/google-serpapi-worker.py, and any second machine",
+        "running the nightly bank. Set it if the month starts going dark early."
+      ],
+      "_verified": "not verified against the vendor; seeded from ADDENDUM section 2"
+    },
+    "apify": {
+      "unit": "results",
+      "allowance": null,
+      "renews": "monthly",
+      "reconcilable": false,
+      "reserve": 0,
+      "_allowance_comment": [
+        "null, deliberately, and NOT 50. The addendum's '~50 equivalent' is $5",
+        "divided by ~$0.01/job divided by 10 jobs per query -- a derived",
+        "estimate of QUERIES from a dollar balance, and writing it here as an",
+        "allowance in `results` would be a third unit pretending to be the",
+        "second. The account endpoint answers in USD; that is what reconcile()",
+        "reports and it is reported as USD."
+      ],
+      "_verified": "not verified against the vendor; seeded from ADDENDUM section 2"
+    }
+  }
+}

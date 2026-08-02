@@ -654,6 +654,30 @@ class TestSeedingAndDecayAgainstTheSchema(unittest.TestCase):
             ).fetchall()}
             self.assertEqual(tracks, set(extract.ROLE_TRACK))
 
+    def test_a_dry_seed_counts_what_it_would_create_and_writes_nothing(self):
+        """--dry-run became a SPEND ESTIMATE when task 23 gave run_due() a real
+        provider, and skipping the seed made that estimate wrong in the
+        expensive direction. A seeded query has never run; searchnorm.is_due()
+        makes a never-run query due immediately whatever its source; every due
+        query is one metered provider call. So a dry run against an unseeded
+        database answered `due=0` for a night that would have dispatched the
+        whole catalogue -- measured on the live database on 2026-08-02, which
+        held zero search_queries rows at the time.
+        """
+        with scratchdb.scratch_schema() as (conn, _name):
+            would_create = searchqueries.seed(conn, SEED_FILE,
+                                              now="2026-08-02T00:00:00",
+                                              dry_run=True)
+            self.assertEqual(would_create, len(extract.ROLE_TRACK))
+            self.assertEqual(
+                conn.execute("SELECT count(*) FROM search_queries")
+                .fetchone()[0], 0,
+                "a dry seed wrote rows")
+            # And the count it reported is the count a real seed then creates.
+            self.assertEqual(
+                searchqueries.seed(conn, SEED_FILE, now="2026-08-02T00:00:00"),
+                would_create)
+
     def test_seeding_does_not_steal_a_builder_query(self):
         # If someone typed "data analyst" before the catalogue landed, the row
         # is theirs. Upgrading it to source='track' would make it undecayable

@@ -49,6 +49,12 @@ tmp/
 evals/.cache/
 backend/evals/.cache/
 
+# Cached SERP responses (backend/serp, task 23). Same argument one word over:
+# they are third-party job postings fetched from a metered account. serp/cache.py
+# writes its own .gitignore too, so a relocated SERP_CACHE_DIR stays covered.
+serp/.cache/
+backend/serp/.cache/
+
 # Agent worktrees and scratch state. CLAUDE.md is the deliberate exception: it
 # is the project brief every session reads before doing anything, and while it
 # was ignored it was machine-local -- so a correction to it could be made and

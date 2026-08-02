@@ -16,26 +16,25 @@ Four things, in that order, and the order is not arbitrary:
              query is not run one last time on the night it retires.
   4. RUN     dispatch the due queries to a provider.
 
-WHAT STEP 4 DOES NOT DO YET, AND THE BLOCKER BY NAME. There is no provider to
-dispatch to. tranche_four/23 is the provider abstraction (`backend/serp/`) and
-is descoped; `ingest/google-serpapi.py` is the only thing in this repo that
-talks to SerpApi and it reads its queries from config/google-queries.json, not
-from a database table. So run_due() SELECTS and REPORTS and does not fetch.
+~~WHAT STEP 4 DOES NOT DO YET, AND THE BLOCKER BY NAME.~~ STEP 4 DISPATCHES, as
+of 2026-08-02. tranche_four/23 landed `backend/serp/`, and build_provider()
+below hands run_due() a serp.dispatch.SearchQueryProvider -- the callable this
+docstring used to describe as missing, which it named correctly: it takes a due
+query and returns the jobs.id values it wrote.
 
-That is a deferral and it is loud rather than silent, which matters more here
-than anywhere: ".claude/CLAUDE.md" says silence is this system's failure mode
+IT CAN STILL DISPATCH NOTHING, and the reason is printed on stderr every run:
+--dry-run, no credential for the chosen provider, or nothing due. That line is
+not decoration. ".claude/CLAUDE.md" says silence is this system's failure mode
 -- exhausted keys and changed endpoints all return zero rows rather than
-raising -- and a search runner that quietly did nothing would be
-indistinguishable from one whose provider had been cut off. main() prints the
-due count and the reason it did not spend it, every run.
+raising -- and a search runner that quietly did nothing is indistinguishable
+from one whose provider had been cut off.
 
-THE SMALLEST THING THAT UNBLOCKS IT: a callable taking (text, location,
-chips, date_chip) and returning normalized Google Jobs records. The record
-shape already exists and is deliberately de-duplicated -- google_jobs.py, and
-`.claude/CLAUDE.md` forbids a second definition of it -- so the missing piece
-is the dispatcher, not the parser. ingest/google-serpapi.py:273's
-serpapi_search() is that function with its query source hard-wired to a config
-file; lifting it behind an interface is task 23.
+STEP 4 NOW SPENDS METERED CREDIT, WHICH CHANGES WHAT --dry-run IS FOR. It was a
+report; it is now also an estimate of what the next real run will cost, one
+provider call per due query. That is why seed() takes a dry_run flag rather
+than being skipped: an unseeded catalogue is nine never-run queries, is_due()
+says a never-run query is due immediately, and a dry run that skipped the seed
+answered `due=0` for a night that would have dispatched nine.
 
 THIS IS cohort.py's SIBLING AND IS SHAPED LIKE IT ON PURPOSE. Both fold a
 per-Builder fact into a suppressed, bucketed, per-cohort aggregate that the
@@ -95,7 +94,7 @@ def load_seeds(path=None):
     return seeds
 
 
-def seed(conn, path=None, now=None):
+def seed(conn, path=None, now=None, dry_run=False):
     """Insert the catalogue. Idempotent, and returns how many rows are new.
 
     ON CONFLICT DO UPDATE assigning a column to itself, via the same statement
@@ -104,6 +103,15 @@ def seed(conn, path=None, now=None):
     is theirs, keeps source='builder', and the seed is a no-op on it. The
     alternative -- upgrading it to source='track' -- would make it undecayable
     for having been typed early, which is a rule nobody would guess.
+
+    `dry_run` counts what WOULD be created and writes nothing. It exists
+    because --dry-run became a spend estimate the day task 23 gave run_due() a
+    real provider: a seeded query has never run, searchnorm.is_due() says a
+    never-run query is due immediately whatever its source, and every due query
+    is now one metered provider call. A dry run that skipped seeding reported
+    `due=0` on a fresh database while the next real run would have dispatched
+    the whole catalogue -- an estimate that is wrong in the expensive direction
+    on exactly the night it is most likely to be consulted.
     """
     now = now or utc_now_str()
     created = 0
@@ -114,13 +122,15 @@ def seed(conn, path=None, now=None):
             "SELECT id FROM search_queries "
             "WHERE normalized_text = %s AND normalized_location = %s",
             (normalized_text, normalized_location)).fetchone()
-        conn.execute(searchnorm.REGISTER_QUERY_SQL,
-                     (normalized_text, normalized_location,
-                      entry["text"], entry["location"], None,
-                      "track", entry["role_track"], now))
+        if not dry_run:
+            conn.execute(searchnorm.REGISTER_QUERY_SQL,
+                         (normalized_text, normalized_location,
+                          entry["text"], entry["location"], None,
+                          "track", entry["role_track"], now))
         if before is None:
             created += 1
-    conn.commit()
+    if not dry_run:
+        conn.commit()
     return created
 
 
@@ -323,6 +333,12 @@ def due_queries(conn, now=None):
                 "text": display_text,
                 "location": display_location,
                 "chips": json.loads(chips) if chips else None,
+                # Selected all along and dropped on the floor until task 23.
+                # serp/datechip.py needs it to narrow the run to the window
+                # that actually elapsed for THIS query; without it every run
+                # re-asks Google the same unfiltered question and pays for the
+                # same relevance-ranked page again.
+                "last_run_at": last_run_at,
                 "source": source,
                 "watchers": watchers.get(query_id, 0),
             })
@@ -414,6 +430,36 @@ def run_due(conn, provider=None, now=None):
     return dispatched, len(due)
 
 
+def build_provider(conn, *, dry_run=False, provider=None):
+    """The dispatch callable for run_due(), or (None, why not).
+
+    A PAIR RATHER THAN None ALONE, because "no provider" has three causes and
+    the operator has to act differently on each: nothing is configured, the key
+    is missing, or this is a dry run. All three used to print the same
+    hard-coded sentence about task 23 being descoped -- which was true until
+    today and would have gone on being printed after it stopped being true.
+
+    The import is inside the function for the same reason `import profiles` is
+    (see main): webapp/tests/test_search_signal.py imports this module from the
+    other venv for the SQL and the constants, and serp/ reaches google_jobs.py
+    and the pipeline's config.
+    """
+    if dry_run:
+        return None, "--dry-run, so no credit was spent"
+    from serp import cache, dispatch, quota  # noqa: PLC0415 -- see the docstring
+    name = provider or os.environ.get("SEARCH_QUERY_PROVIDER") or None
+    try:
+        fn = dispatch.SearchQueryProvider(
+            conn, provider=name, debug=DEBUG_PRINT_KEYS,
+            cache=cache, ledger=quota.Ledger())
+    except ValueError as e:
+        return None, str(e)
+    if not fn.configured:
+        return None, (f"{fn.name} has no credential -- set "
+                      f"{dispatch.CRED_ENV[fn.name]} in backend/.env")
+    return fn, f"{fn.name} is configured"
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -440,7 +486,7 @@ def main():
         active = profiles.load_active(conn)
 
     now = utc_now_str()
-    seeded = 0 if args.dry_run else seed(conn, now=now)
+    seeded = seed(conn, now=now, dry_run=args.dry_run)
 
     parts = []
     for prof in active:
@@ -449,22 +495,45 @@ def main():
         parts.append(line + (f", {removed} withdrawn" if removed else ""))
 
     retired = [] if args.dry_run else apply_decay(conn, now=now)
-    dispatched, due = run_due(conn, now=now)
+
+    # THE PROVIDER IS BUILT HERE AND NOWHERE ELSE. --dry-run must not spend a
+    # metered credit, and a missing key is a deferral rather than a failure:
+    # build_provider() returns None and the loud stderr line below says which
+    # of the two it was.
+    provider, why_not = build_provider(conn, dry_run=args.dry_run)
+    dispatched, due = run_due(conn, provider=provider, now=now)
 
     # ALERT ON VOLUME, NOT ERRORS (.claude/CLAUDE.md). Every number is printed
     # every run, including the zeros, so a run that stopped seeding or stopped
     # folding is visible as a number that changed rather than as an absent line.
+    # ON A DRY RUN, `due` UNDER-REPORTS AND THE ARITHMETIC IS SPELLED OUT.
+    # Nothing was seeded, so run_due() could not see the rows the seed would
+    # have created -- and every one of those is a never-run query, which
+    # is_due() makes due immediately, which is now one metered provider call
+    # each. Printing the sum is the difference between a report and an estimate.
+    would_be_due = f" (+{seeded} once seeded)" if args.dry_run and seeded else ""
     print(f"search-queries{' [dry run]' if args.dry_run else ''}: "
-          f"seeded={seeded} retired={len(retired)} due={due} "
+          f"seeded={seeded} retired={len(retired)} due={due}{would_be_due} "
           f"dispatched={dispatched}"
+          + (f" via {provider.name}" if provider else "")
           + ("; " + "; ".join(parts) if parts else "; no active profiles"))
+    if provider is not None and getattr(provider, "stats", None):
+        # The spend, in the provider's own unit, every run. A search that costs
+        # nothing is a cache hit or a query that did not run, and both are
+        # things an operator should be able to see without turning on debug.
+        print(f"search-queries spend: {provider.stats}")
+        # And the vendor's own answer beside it, which is the whole point of
+        # the ledger: DECISIONS.md records this pipeline's view of its SerpApi
+        # spend being wrong by 3.3x in the dangerous direction, and it stayed
+        # wrong because nothing ever printed the two numbers next to each other.
+        if provider.ledger is not None:
+            print(provider.ledger.report([provider.name]))
     if due and not dispatched:
         # Loud, on stderr, every single run. run-daily.py treats stdout as the
         # report and stderr as detail; a deferral that printed nothing would be
         # indistinguishable from a provider whose key had been revoked.
-        print(f"search-queries: {due} queries are due and NO PROVIDER IS "
-              f"CONFIGURED -- tranche_four/23 (backend/serp/) is descoped, so "
-              f"nothing was fetched. This is a deferral, not a failure.",
+        print(f"search-queries: {due} queries are due and NOTHING WAS "
+              f"DISPATCHED -- {why_not}. This is a deferral, not a failure.",
               file=sys.stderr)
     if DEBUG_PRINT_KEYS and retired:
         print(f"[debug] retired query ids: {retired}", file=sys.stderr)

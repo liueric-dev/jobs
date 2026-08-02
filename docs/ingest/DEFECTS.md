@@ -83,7 +83,8 @@ else does.** Decisions are `DEC-<n>` and live in
 [`DECISIONS.md`](../tasks/refactor/DECISIONS.md); task numbers live in
 [`tasks/refactor/README.md`](../tasks/refactor/README.md).
 
-**Next free: `D75`.** Allocated `D01`–`D45` and `D66`–`D74`; **`D46`–`D65` are burnt and
+**Next free: ~~`D75`~~ `D77`.** Allocated `D01`–`D45`, `D66`–`D74` and **`D76`**;
+**`D75` is RESERVED, not free** (see below); **`D46`–`D65` are burnt and
 must never be issued.** They are not defects and never were — `DECISIONS.md` continued this register's
 count when it started allocating decision IDs mid-file, so those twenty numbers circulate
 in eighty-odd places meaning *decisions*. Task 39 re-prefixed the live sites to `DEC-46`–
@@ -92,6 +93,18 @@ deliberately left unswept, so the old spelling survives in the tree on purpose. 
 defect `D52` would make it ambiguous against those, which is the exact failure rule 6
 exists to prevent. Skipping twenty integers is cheap; a number that resolves two ways is
 not.
+
+**`D75` is RESERVED and the hole is deliberate, 2026-08-02.**
+[`../tasks/refactor/HANDOFF.md`](../tasks/refactor/HANDOFF.md) § *What is next* already
+cites *"`OQ-2`/`D75` — the impression dedup key"*, and
+[`sessions/2026-08-02-four-streams-and-the-five-decisions.md`](../tasks/refactor/sessions/2026-08-02-four-streams-and-the-five-decisions.md)
+suggested that disposition. Nothing has been written up under it, because the question is
+the owner's and the entry does not exist yet. Task 23 therefore took **`D76`** rather than
+`D75`. **A documented reservation, not a gap**: issuing `D75` to something else would have
+silently re-pointed a citation on the page every session reads first, which is the same
+class of harm as the burnt range above and is why the same treatment applies. If the owner
+settles `OQ-2` some other way, `D75` becomes free again — and that release has to be
+recorded here, because a reservation nobody can see is indistinguishable from an oversight.
 
 **Cross-register references are written out** — *"defect D45"*, *"decision DEC-52"* —
 because a bare `D45` in a code comment cannot be resolved by a reader who does not already
@@ -241,6 +254,7 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D71](#d71) | cosmetic (while undeployed) | **open** — fix before opening to more than a handful of contributors; the ceiling is a policy number nobody has picked | Contributor API: concurrent claims per contributor are uncapped — one worker can hold the entire 32-slug bank while inside its daily allowance |
 | [D72](#d72) | cosmetic — a testing gap, not a defect in the code | **fixed** — 2026-08-02, task 24 — `backend/api/tests/test_claim_protocol.py`, on a scratch schema, skipping where no database is available | the claim protocol had no test: `backend/api/tests/fakedb.py` dispatches on SQL text and cannot falsify the `WHERE` clauses `try_claim_query` and `holds_claim` consist of |
 | [D73](#d73) | information disclosure | **fixed** — 2026-08-02, task 24 — `app._validation_detail()` builds the detail from `loc` and `type` alone, both whitelisted | `submit`'s `detail=f"malformed body: {e}"` echoed the offending input back to the caller through a pydantic `ValidationError`; for a syntactically broken body that input is the **whole request body** |
+| [D76](#d76) | silent under-counting of metered spend | **fixed** — 2026-08-02, task 23 — `serp/quota.py` asks the vendor and reconciles per run; the table stays, still not a ledger. **Re-measured on the way in and the gap is wider than `DEC`'s 3.3x, though not comparably**: `google_jobs_query_stats` holds **18** rows this calendar month against SerpApi's own **193 used, 57 left of 250** | `google_jobs_query_stats` cannot answer "how much has this account spent": it records no provider, its month is not the vendor's billing period, and a row is written only after a query has already succeeded end to end |
 | [D74](#d74) | cosmetic (this file only) | **fixed** — 2026-08-02 — ~~19~~ **22** rows, one `<a id>` each; no code change, and a test | **~~19~~ 22 of this index's own links resolved to nothing.** A row links `[D01](#d01)` while the heading is `### D01 — fixed`, which slugs to `#d01-fixed`. `audit-doc-links.py` strips fragments by design, so nothing could see it — now `tests/test_defect_register.py` does. The count moved from 19 to 22 inside the session that filed it, via `e79448c` |
 
 ~~**`D71` has no row in this index.**~~ **It has one, at the row above, added the same
@@ -1451,6 +1465,24 @@ Written by both `google-serpapi.py:334` and `google-apify.py:240`; the
 adaptive-cadence logic it was built for was never implemented
 (`backend/google_jobs.py:68-74`). Nothing prunes it; 32 rows currently.
 
+**AMENDED 2026-08-02 by task 23, and the amendment is a warning rather than progress.**
+Still open, still task 25's, and the row count above is stale — it holds **85** rows
+(2026-07-26 onwards, 18 of them this calendar month), which is what a re-read costs.
+Two things changed underneath it:
+
+- **The line cites are wrong**, in this file's most familiar way. The INSERT is at
+  `ingest/google-serpapi.py:193` and `ingest/google-apify.py:118`, not `:334` and `:240`.
+- **"Read by nothing" became actively dangerous before it became useful.** Being unread is
+  harmless; being read as the wrong quantity is not, and it was — see **D76**, where this
+  table's row count stood in for metered spend and the account was 3.3x past where the
+  inference put it. **A table nobody reads is a table with no stated meaning, and the first
+  reader to arrive supplies one.** That is the reusable half of D76 and it is why this
+  entry now says what the table is FOR: per-query yield history for an adaptive cadence,
+  which is a rate, not a bill. It cannot be a bill — it records no provider and a row
+  exists only after a query has already succeeded end to end.
+
+Deleting it still destroys the input the cadence needs, and wiring it is still task 25's.
+
 ### D34
 
 **22 orphaned `job_ingest_state` watermark rows** keyed
@@ -2359,3 +2391,76 @@ not worth a commit of its own.~~ **fixed 2026-08-02** — twenty-two `<a id>` ta
 change, **and a test after all**. The entry's own "no test" call was made before the count
 went stale; once it had, the argument changed. `backend/tests/test_defect_register.py`
 fails against this file as it stood, and was watched doing so before the anchors landed.
+
+### D76 — fixed
+
+<a id="d76"></a>
+
+**`google_jobs_query_stats` was being read as a spend ledger and cannot be one.**
+Filed and closed 2026-08-02 by task 23, which needed a quota ledger and found this
+underneath it. The observation itself is older and is recorded in
+[`DECISIONS.md`](../tasks/refactor/DECISIONS.md) § *EXP — The repo's own SerpApi ledger
+undercounts real spend by 3.3x*, where it is called *"not reversible; it is a defect"* —
+**and it was never given a number, so nothing scanned it.** That is this register's own
+recurring failure (§ *the index is the part anyone scans*) in its earliest form: not an
+entry missing from the index, but a defect that never became an entry.
+
+**What was measured then.** Before authorising the Google Jobs experiment the orchestrator
+read `google_jobs_query_stats`, found 41 searches used that month and inferred 209
+remaining. The account itself read **137** used, and 153 after the experiment — **97 left,
+not 209.** Wrong by 3.3x, in the dangerous direction.
+
+**What was measured on 2026-08-02, on the way into the fix.** Two instruments, side by
+side, both free:
+
+```
+python3 -c "... conn.execute('SELECT count(*) FROM google_jobs_query_stats
+                              WHERE run_at >= date_trunc(\'month\', now())::text')"
+                                                       -> 18 rows this month, 85 all time
+                                                          (first row 2026-07-26T08:14:10)
+serp.quota.Ledger().account("serpapi")                 -> used 193, left 57, allowance 250
+```
+
+**DO NOT QUOTE "18 AGAINST 193" AS A RATIO.** It is not one, and the reasons are the
+defect rather than a caveat on it — the two numbers count different things over different
+periods:
+
+- **The table records no provider.** `ingest/google-serpapi.py:193` and
+  `ingest/google-apify.py:118` both INSERT into it, and neither writes which one it was, so
+  a row is *"some Google Jobs query ran"* and never *"one SerpApi search was billed"*.
+- **Its month is not the vendor's.** `date_trunc('month')` is the calendar; SerpApi's
+  `this_month_usage` is a billing period that starts when the plan did.
+- **A row exists only for a query that succeeded end to end.** It is written after the
+  upsert, so every search that was billed and then failed to parse, failed to upsert, or
+  crashed the process is spend the table never hears about — and those are exactly the
+  failures worth counting.
+- **Three other things spend the same account.**
+  `api/contributor-worker/google-serpapi-worker.py`, `backend/tools/verify-date-filter.py`
+  (~3 credits per run, by its own docstring) and any second machine, which
+  `ingest/google-serpapi.py`'s MULTI-MACHINE SAFE BY DESIGN section says is a supported
+  deployment. No count derived inside one process can see them.
+
+**The fix, and what it deliberately does not do.** `backend/serp/quota.py` makes the
+**vendor** the authority: `check()` reads the provider's own counter before the first
+search and refuses when it says the plan is spent; `reconcile()` re-reads it afterwards and
+reports **what the vendor billed over this run against what the run believed it spent**.
+A closing read minus an opening read taken minutes apart is one number about one run, where
+*"used minus everything we think we have ever spent"* is a sum of the four unknowns above —
+which is the calculation that was out by 3.3x. `searchqueries.py` prints the line every
+run.
+
+It does **not** delete or rewrite `google_jobs_query_stats`, and it does not touch either
+ingest script. The table is fine at the job it was built for — per-query yield history for
+an adaptive cadence, which is `D33` — and the defect was never the table, it was reading a
+yield log as a bill. `D33`'s note is amended rather than closed.
+
+**Tests.** `backend/tests/test_serp.py::TestQuotaLedger`, nine cases, including the two
+that matter most: the delta is measured over the run rather than over the month, and a
+reconciliation that could not happen reports `NOT RECONCILED` with a reason instead of a
+zero delta. A zero that means *"we never compared"* is the same defect one level up.
+
+**What is still true and unfixed.** The reconciliation is *reported*, not *alerted on* —
+nothing exits non-zero when the delta is large, because nobody has picked the threshold and
+picking one here would be `D71`'s mistake. And Apify cannot be reconciled at all: it bills
+dollars where this pipeline counts results, so `serp/providers/apify.py` declares
+`RECONCILABLE = False` and the report says so out loud. That is `D37` from the other end.

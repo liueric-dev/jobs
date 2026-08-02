@@ -56,6 +56,12 @@
       "floor": 3,
       "window_days": 3,
       "_comment": "ingest/google-apify.py. Measured 5, 7, 8, 5, 7; worst three consecutive nights 17. Small numbers by design -- the actor bills per result against the operator's own account, so the step is deliberately capped. Floor 3 over three nights: below that the token has been revoked or the actor has changed shape."
+    },
+
+    "searchqueries": {
+      "floor": 1,
+      "window_days": 7,
+      "_comment": "searchqueries.py, the search-query runner (tranche_four/25, dispatching through 23's backend/serp/). NO HISTORY EXISTS FOR THIS SOURCE and this floor is therefore NOT derived the way the eight above are -- it was added on 2026-08-02, the day the step first became able to write anything at all, so the `_instrument` journalctl line returns nothing for it. Read it as the weakest number in this file, weaker than workday's, and re-derive it first.\n\nWHAT 1 OVER SEVEN DAYS IS DEFENSIBLE AS. Exactly the failure `_n` says these floors are for: 'set to catch a source that has gone to ZERO or near it'. In a week, with nine seeded track queries at searchnorm.RERUN_HOURS = 20, at least one search should have written at least one posting. It does not pretend to detect a dip, and a larger number chosen without a measurement would be a guess wearing a floor's clothes.\n\nSEVEN DAYS AND NOT THREE, and the reason is a property of THIS source rather than a copy of workday's. Its yield is bounded by how many queries are DUE, which searchnorm.is_due() decides from watchers and last_run_at, and by searchnorm.DECAY_DAYS = 14 retiring queries nobody watches. A cohort of thirty who search nothing for two days is a normal weekend here, not an outage, and a three-day window would call it one.\n\nWHAT IT CANNOT SEE, STATED SO NOBODY READS MORE INTO IT: `written` counts new + updated rows in `jobs`, so a provider returning postings this pipeline already holds still clears the floor. The quantity that detects a dead key or a drained plan is the reconciliation in serp/quota.py, which compares the vendor's OWN counter against what the run believes it spent -- see DECISIONS.md, 'the repo's own SerpApi ledger undercounts real spend by 3.3x'."
     }
   },
 

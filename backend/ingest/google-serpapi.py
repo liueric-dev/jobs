@@ -159,6 +159,7 @@ from lib import dbconn, http, state, text  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
 from lib.upsert import (UpsertErrorRate, UpsertResult, check_error_rate,  # noqa: E402
                         upsert_checked)
+from serp import datechip  # noqa: E402  (../serp/datechip.py -- see choose_date_chip)
 
 SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY")
 GOOGLE_JOBS_QUERIES_FILE = os.environ.get(
@@ -286,26 +287,19 @@ def pick_stale_queries_by_bucket(conn, buckets):
     return picked
 
 
-def choose_date_chip(last_run_str):
-    """None (query has never run before) -> no chip at all -- this is the
-    deliberate backfill case, grab whatever Google currently shows. Every
-    subsequent run narrows to the chip bucket that covers the actual gap
-    since that query's last run, not always "today" -- see DATE FILTER in
-    the module docstring."""
-    if not last_run_str:
-        return None
-    try:
-        last_run = datetime.strptime(last_run_str, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-    except ValueError:
-        return None
-    elapsed = datetime.now(timezone.utc) - last_run
-    if elapsed <= timedelta(days=1):
-        return "today"
-    if elapsed <= timedelta(days=3):
-        return "3days"
-    if elapsed <= timedelta(days=7):
-        return "week"
-    return "month"
+#: MOVED to serp/datechip.py 2026-08-02 (task 23) and re-exported here under
+#: its original name, which this module's docstring, tools/verify-date-filter.py
+#: and schema.py:97 all cite.
+#:
+#: It MOVED rather than being copied: task 25's run_due() needs the same policy
+#: and could not reach a function defined in a file whose name has a hyphen in
+#: it, so the alternative was a second definition of the one thing that decides
+#: how far back this pipeline asks Google. Behaviour is unchanged -- None for a
+#: query that has never run (the deliberate backfill), otherwise the bucket
+#: covering the actual gap since that query's last run, not always "today". See
+#: DATE FILTER above, and serp/datechip.py for why api/query_claims.py holds a
+#: THIRD copy on purpose.
+choose_date_chip = datechip.choose
 
 
 def serpapi_search(query, location, date_chip=None):

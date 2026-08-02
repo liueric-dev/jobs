@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-97`.** Allocated `DEC-46`–`DEC-96`. The count starts at 46 rather than at
+**Next free: `DEC-100`.** Allocated `DEC-46`–`DEC-99`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -3348,3 +3348,89 @@ half-finished.
 part that should not be reverted casually is the fourth row of that table, which is why it
 is pinned by a test that passes against the pre-decision tree
 (`backend/tests/test_ingest_retry.py`) rather than only by this paragraph.
+
+---
+
+## DEC-97 — the quota ledger's authority is the vendor, and the delta is over the RUN
+
+**2026-08-02, task 23, `D76`.**
+
+The descope kept the quota ledger. The obvious implementation is a local tally — count what
+this pipeline spends and subtract from an allowance — and that is precisely the design
+already measured wrong: `google_jobs_query_stats` implied 41 searches used against the
+account's own 137.
+
+**Decided: `check()` asks the provider's own counter before the first search, and
+`reconcile()` re-reads it afterwards.** What is reported is *what the vendor billed over
+this run* against *what this run believed it spent*.
+
+**The alternative rejected is not "a sloppier local tally" but "a careful one".** No amount
+of care inside one process can see the other spenders of one SerpApi account:
+`api/contributor-worker/google-serpapi-worker.py`, `tools/verify-date-filter.py`, a second
+machine (which `ingest/google-serpapi.py`'s own docstring calls a supported deployment),
+and every crash between spending a credit and recording it. So a month-scale figure is a
+sum of four unknowns, and a run-scale delta is one number about one run.
+
+**A negative delta is expected sometimes and is not a bug**: SerpApi does not bill cached
+searches, so a query it serves from its own cache is spent here and not billed there.
+
+**`check()` ALLOWS when the vendor is unreachable.** Refusing would turn a network blip
+into a night with no searches, and the case it would be defending against is already
+handled one layer down — an exhausted account refuses the search itself, which arrives as
+`ProviderRefused` and is deliberately not swallowed per query. The unavailability is
+printed, never silent.
+
+**Reversible.** It is one module and two free HTTP calls per run. What is not reversible is
+the finding: `google_jobs_query_stats` is a yield log and cannot be read as a bill, which
+`D33` now says on its own row.
+
+---
+
+## DEC-98 — `D75` is reserved rather than issued, and the register says so
+
+**2026-08-02, task 23.**
+
+`DEFECTS.md` said *"Next free: `D75`"*. But `HANDOFF.md` § *What is next* already cites
+*"`OQ-2`/`D75` — the impression dedup key"*, and a session record suggested that
+disposition — while no entry has ever been written under it, because the question is the
+owner's.
+
+**Decided: task 23's defect took `D76`, and `D75` is recorded in the allocator as
+RESERVED.**
+
+**Rejected: taking `D75` because it was formally free.** It would have silently re-pointed
+a citation on the page every session reads first — the same class of harm as the burnt
+`D46`–`D65` range two paragraphs above it in that file, and the same remedy.
+
+**Rejected: leaving the hole undocumented.** A reservation nobody can see is
+indistinguishable from an oversight, and the next allocator would either reissue it or
+waste a session working out why it was skipped.
+
+**Reversible.** If the owner settles `OQ-2` another way, `D75` becomes free — and the
+release has to be written into the allocator, for the same reason the reservation was.
+
+---
+
+## DEC-99 — the two ingest scripts do NOT route through `serp/` yet
+
+**2026-08-02, task 23.**
+
+Building the interface and moving the live nightly path onto it are two changes. The second
+is what finally makes *"no second definition exists"* true of the fetch path as well as of
+the record shape, and it was deliberately not done in the same pass.
+
+**Why.** `ingest/google-serpapi.py` carries claim and watermark semantics the new interface
+does not model — `try_claim_query`, `CLAIM_TTL_MINUTES`, the release-on-failure path, and
+the multi-machine safety its docstring is explicit about. Moving it in the same commit as
+the interface's first appearance would have made the first failure ambiguous between "the
+interface is wrong" and "the migration is wrong", on the one path in this system that
+spends metered credits nightly.
+
+**What DID move, and the distinction matters.** `choose_date_chip()` — a pure function with
+no I/O — moved to `serp/datechip.py` and is re-exported under its old name, because it was
+unreachable from anywhere else at any price: its file's name has a hyphen in it. A pure
+function moving is not the migration; it is the thing that made the migration optional
+rather than mandatory.
+
+**Reversible**, and the follow-up is recorded in `23-serp-abstraction.md` § *Deliberately
+NOT done*.

@@ -51,6 +51,14 @@ interpreter you ran**. A skip is not a failure.
 **Read [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) first.** Six of its eight rows are open and
 every one is the owner's; a session cannot close them. What a session *can* do is below.
 
+**Check [`README.md`](README.md)'s status column before believing any sentence on this
+page about there being nothing to do.** On 2026-08-02 this section said a session should
+expect to find nothing it could start alone, while the index listed **task 23** as `todo`
+— named as a blocker by two other tasks, needing no credential, no person and no device.
+Both documents were correct; *"the product/API track has nothing left"* simply reads as
+*"the run has nothing left"* to anyone skimming. **The status column is where the answer
+lives.** ([record](sessions/2026-08-02-task-23-the-provider-seam.md))
+
 **The product/API track has no session-doable work left.** 24's deploy half, 33's machine
 half, and 32's phone test and live Google login all need a person, an account or a device.
 `Contribute` is 32's sixth surface and is blocked on `OQ-1`'s ownership question rather than
@@ -71,7 +79,19 @@ it can start alone.**
    mixed disposition, not a migration — and wrong about the count: four sites, not three.
 2. **`OQ-2`/`D75` — the impression dedup key**, if the owner takes it. It is one predicate
    (`webapp/jobs.py:934-937`), and `job_events` is append-only, so every day it runs adds
-   rows whose meaning has to be caveated permanently. **This is the only row left here.**
+   rows whose meaning has to be caveated permanently. ~~**This is the only row left here.**~~
+   **It was not** — see 3. `D75` is now formally **reserved** for this in the register's
+   allocator rather than merely spoken for (`DEC-98`), so nothing else can take the number.
+3. ~~**Task 23 — the SERP abstraction.**~~ **DONE 2026-08-02**
+   (`DEC-97`–`DEC-99`, [record](sessions/2026-08-02-task-23-the-provider-seam.md)).
+   `backend/serp/` exists, `searchqueries.run_due()` has a real provider, and
+   `search_query_results` has a writer — so 32's search screen reads a table something
+   fills. Two of its DoD lines are reported unmet on purpose. **The follow-up it names is
+   session-doable and is the next thing on this list**: `ingest/google-serpapi.py` and
+   `ingest/google-apify.py` still talk to their providers directly, and moving them onto
+   `serp/` is what closes *"no second definition exists"* for the fetch path. It was held
+   back deliberately — that is the live nightly path and it carries claim and watermark
+   semantics the interface does not model yet (`DEC-99`).
 
 **`facts_version` on `eval_labels` landed 2026-08-02** (`DEC-95`,
 [record](sessions/2026-08-02-label-provenance.md)), before round 2 rather than
