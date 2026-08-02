@@ -38,5 +38,8 @@
   "applied": false,
   "dismissed": false,
   "saved": true,
-  "dismiss_reason": null
+  "dismiss_reason": null,
+  "cohort_signal": {
+    "save_bucket": "3-5"
+  }
 }

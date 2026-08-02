@@ -234,7 +234,7 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D67](#d67) | silent data loss | **fixed** — 2026-08-01 — same column, same join; dedup key deliberately untouched | `applied` likewise, contradicting the `private` visibility on its own event row |
 | [D68](#d68) | silent data loss | **fixed** — 2026-08-01 — both halves; two conjuncts, one on each end of the derivation | `derive_skips` reads *and* is vetoed by another Builder's events if the client echoes their `request_id` |
 | [D69](#d69) | check with a blind spot | **PARTIALLY fixed** — 2026-08-02 — `_JOIN_CLAUSE` closes the join-fragment case; **three-part residue, recorded not closed** | `test_grants` kept only strings containing a statement keyword, so a table named solely in a hoisted `JOIN … ON` fragment was never checked for a GRANT |
-| [D70](#d70) | check with a blind spot | **open** — found 2026-08-02 | `frontend/verify_fixtures.py` hardcodes the tail of the expected key list, so a new response field is invisible: fixtures and verifier agree with each other and both disagree with the code |
+| [D70](#d70) | check with a blind spot | **fixed** — 2026-08-02, task 32 — `COHORT_FIELDS` derived, fixtures re-frozen, and `_KNOWN_JOBS_TUPLES` fails on a group it does not know; **two-part residue, measured and recorded not closed** — renaming `rank` still exits 0 | `frontend/verify_fixtures.py` hardcodes the tail of the expected key list, so a new response field is invisible: fixtures and verifier agree with each other and both disagree with the code |
 
 **D66 and D67 were absent from this index entirely** until they were closed — added
 2026-08-01, on the lesson D45's row records four paragraphs above: *"the index is the part
@@ -1465,7 +1465,7 @@ without addressing (1), or restating (2) and (3) as accepted limits.**
 
 ---
 
-### D70 — open
+### D70 — fixed
 
 <a id="d70"></a>
 
@@ -1504,3 +1504,47 @@ stated in the docstring, since it is the seam this defect came through.
 
 **Not a task-28 defect.** The field was added correctly and its position is pinned by two
 tests on the endpoint side; the checker on the other side could not see it.
+
+**FIXED 2026-08-02, task 32.** All three things the disposition asked for, in that order.
+
+**The instance.** The composition now derives all three groups
+(`verify_fixtures.py:155-158`), and the verifier was watched going red against the
+then-current fixtures before they were touched — which is the step that distinguishes a
+checker from a checker-shaped file. The fixtures are re-frozen with the key in the position
+the endpoint actually produces, and the position differs between the two endpoints for a
+reason worth keeping: `GET_v1_jobs.json` carries `cohort_signal` **between `dismiss_reason`
+and `rank`**, because the handler pops the raw `save_bucket` and re-assigns the nested field,
+and that re-assignment appends; `GET_v1_jobs_by_id.json` carries it **last**, because there
+is no `rank` after it to displace it.
+
+**The class, which is the part worth more.** `_KNOWN_JOBS_TUPLES`
+(`verify_fixtures.py:119`) names every module-level tuple `jobs.py` declares and what this
+file does with each. A tuple that is not in the map fails the run
+(`verify_fixtures.py:140-146`), so a **fourth** response-key group cannot arrive the way
+`cohort_signal` did — it either gets added to the composition or gets a line saying why it is
+not a response shape. Either way a person has looked.
+
+**RESIDUE, MEASURED RATHER THAN REASONED, AND NOT CLOSED.** The guard covers the arrival of
+a new *group*, because a group comes with a module-level tuple and an unrecognised name is
+loud. It does not cover two narrower cases:
+
+1. **Renaming `rank` is still silent.** Changing `item["rank"]` to `item["position"]` in
+   `jobs.py` and running the verifier against the current fixtures **exits 0** — tested on a
+   throwaway copy, 2026-08-02. That is this defect's own sentence with one field substituted:
+   fixtures and expectation agree with each other and both disagree with the source. `rank`
+   stays literal because there is no constant for `ast` to read — the handler assigns it
+   inside the loop — and deriving it would mean pattern-matching a subscript in a function
+   body, which breaks on a rename of `item` and passes on a rename of `rank`. Accepted, and
+   stated at the seam (`verify_fixtures.py:160-186`) per the disposition's own condition.
+2. **A response key added as a bare subscript with no module-level constant at all** is
+   invisible to the guard for the same reason.
+
+Both are strictly narrower than what `D70` was. They are written into the file itself rather
+than left here alone, because the absence of exactly that sentence is what produced this
+defect.
+
+**Now wired into a suite, which is the other half of the fix.** `verify_fixtures.py` had held
+for one day and only because a person typed the command — the rule 7 decay
+[`DOCS-POLICY.md`](../DOCS-POLICY.md) names. `backend/tests/test_frontend_fixtures.py` runs
+it, and asserts it can still go **red** by breaking a fixture in a throwaway copy of the tree.
+A green checker nobody has seen fail is the state this defect was found in.

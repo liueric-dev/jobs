@@ -540,7 +540,7 @@ flowchart LR
 
     V --> API["<b>GET /v1/jobs</b><br/>ORDER BY match_score DESC,<br/>posted_at_ts DESC, id ASC<br/>keyset cursor, column names unchanged"]
 
-    API --> UI["frontend/<br/><i>.gitkeep only —<br/>nothing renders yet</i>"]
+    API --> UI["frontend/<br/><i>Today · Job detail · Saved<br/>no 0–100 score rendered</i>"]
 
     UI -.->|"POST /v1/events"| EV[("job_events<br/>snapshots BOTH scores<br/>server-side at impression")]
     EV -.->|"future training labels"| LR["learned ranker<br/><i>probed, not shipped</i>"]
@@ -577,10 +577,24 @@ translation layer (`jobs.py:52-54`), so `match_score`, `match_reasons`,
 `fit_score`, `gap_bridging_angle` and `risk_factors` all appear verbatim in
 the JSON response of `GET /v1/jobs` and `GET /v1/jobs/{id}`.
 
-**Does the user see the raw score? Today, technically yes and practically no.**
+~~**Does the user see the raw score? Today, technically yes and practically no.**
 The raw integers are in the API payload. `frontend/` contains one file,
 `.gitkeep` — nothing renders a job to a human yet, so no decision has been made
-about whether to surface 62/100 or hide it.
+about whether to surface 62/100 or hide it.~~
+
+> **ANSWERED 2026-08-02, task 32: no, and it is now asserted rather than merely
+> absent.** The raw integers are still in the API payload — that half is
+> unchanged and deliberate. What changed is that a client exists and **displays
+> no 0–100 score**: `frontend/check_client.mjs` § *no 0-100 score anywhere*
+> fails if `match_score`, `fit_score` or `primary_track` appears in a rendered
+> card, and — the less obvious half — **fails if any reason chip carries a
+> digit**, because `match_reasons` deltas *sum to* `match_score` and a chip
+> reading "+18" leaks the number the card refused to print. `base` is dropped
+> for the same reason it is not a reason a person would give.
+>
+> So the decision is made, and in the direction this document's own § *A score
+> is not a probability* argues for: reasons a person can act on, never a
+> cardinal number they will read as odds.
 
 `match_reasons` is stored as JSON alongside every row (`match.py:292`), so
 "why is this ranked 8th" is answerable per row without recomputation — which is

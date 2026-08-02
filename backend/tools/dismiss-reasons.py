@@ -194,8 +194,13 @@ def report(rows, undone, days):
 
     if not rows:
         # The correct output today, and it should not be made to look like
-        # data. frontend/ holds one .gitkeep, so nothing has ever posted a
-        # dismiss from a real screen.
+        # data. The reason CHANGED on 2026-08-02 (task 32) and the check below
+        # matters more now, not less: it used to be that frontend/ held one
+        # .gitkeep and no screen could post a dismiss at all. A screen now can
+        # -- today.mjs:175 and saved.mjs:123-129 post `dismiss` with an
+        # optional reason -- so zero has stopped meaning "impossible" and
+        # started meaning "no Builder has done it yet", which is a reading that
+        # can also be produced by a client that is broken or unreachable.
         print("    none.")
         print()
         print("    Zero is a reading, not a failure. Check that anything is")

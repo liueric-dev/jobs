@@ -2582,9 +2582,38 @@ a *prevalence*, which is a different quantity from the *instability* and does no
 **So a track is presented as an aid to scanning, never as a fact about the posting**, and
 nothing may sort on it until task 30 says what a group means.
 
-Reversible: yes. The grouping key is one field read from the payload; both vocabularies ship
-in every response. What is not cheaply reversible is a *stored* choice, which is why this
+~~Reversible: yes. The grouping key is one field read from the payload; both vocabularies ship
+in every response.~~ What is not cheaply reversible is a *stored* choice, which is why this
 decision deliberately does not write one.
+
+> **AMENDED 2026-08-02, THE SAME DAY, AND THE STRUCK SENTENCE IS THE ERROR.** Both
+> vocabularies do **not** ship in every response. **`role_track` is in no response body at
+> all.** The `jobs_app` view selects `f.role_archetype` (`backend/schema.py:908`) and never
+> `f.role_track`, so the field is absent from `LIST_COLUMNS`
+> (`backend/webapp/jobs.py:102-111`) and therefore from `GET /v1/jobs` and
+> `GET /v1/jobs/{id}`. Only `primary_track` — the **rejected** `score.TRACKS` vocabulary —
+> actually arrives on a row.
+>
+> **The decision stands; the claim that it was free did not.** `extract.ROLE_TRACK` is still
+> the right axis for the reasons above, and exposing it is a one-line change in two files —
+> the view, then `LIST_COLUMNS`. But it *is* a change, in two processes' files, and it had
+> been presented as a choice between two fields already in hand.
+>
+> **How the error was made is the part worth keeping.** The evidence cited for this decision
+> was `jobs.role_track` at `backend/schema.py:542` — the **column**.
+> [`../../../.claude/CLAUDE.md`](../../../.claude/CLAUDE.md)'s first architectural note reads
+> *"Read through the `jobs_app` view, not the `jobs` table"*, and the reason it gives is that
+> the two differ deliberately. Checking the table and reporting on the API is precisely the
+> substitution that instruction exists to prevent, and it was made by the session quoting the
+> instruction. **A column existing is not a field shipping.**
+>
+> Found by task 32's client author, who built to this decision and found nothing to group by.
+> The client degrades honestly rather than silently substituting `primary_track`: every row
+> resolves to `null` and lands in an `UNTRACKED` bucket deliberately not spelled like one of
+> the nine, and it groups by `role_track` the moment the field appears. **That is the correct
+> handling** — substituting the rejected vocabulary would have produced a working screen
+> resting on a decision nobody took, which is the failure mode this register exists to make
+> visible.
 
 ## DEC-78 — C4's compliance lookahead is evaluated against the sentence, and a struck figure is exempt
 

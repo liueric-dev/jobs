@@ -41,6 +41,9 @@
       "dismissed": false,
       "saved": true,
       "dismiss_reason": null,
+      "cohort_signal": {
+        "save_bucket": "3-5"
+      },
       "rank": 1
     },
     {
@@ -83,6 +86,7 @@
       "dismissed": false,
       "saved": false,
       "dismiss_reason": null,
+      "cohort_signal": null,
       "rank": 2
     },
     {
@@ -125,6 +129,7 @@
       "dismissed": false,
       "saved": true,
       "dismiss_reason": null,
+      "cohort_signal": null,
       "rank": 3
     },
     {
@@ -167,6 +172,7 @@
       "dismissed": false,
       "saved": false,
       "dismiss_reason": null,
+      "cohort_signal": null,
       "rank": 4
     }
   ],

@@ -11,6 +11,9 @@
       "jobs.py:102-111 -- LIST_COLUMNS, the 34 view columns in each row, in this order",
       "jobs.py:320-329 -- _STATE_COLUMNS / STATE_FIELDS: seen, applied, dismissed, saved, dismiss_reason",
       "jobs.py:416-417 -- names = list(LIST_COLUMNS) + list(STATE_FIELDS); dict(zip(...)) fixes key order",
+      "jobs.py:493, :500 -- the zip names end with the raw save_bucket, which is then popped and re-assigned as the nested `cohort_signal`; because that re-assignment APPENDS, the key lands after dismiss_reason",
+      "jobs.py:367 -- COHORT_FIELDS = ('cohort_signal',), the third response-key group",
+      "jobs.py:370 -- cohort_signal(save_bucket) returns {'save_bucket': ...} or None",
       "jobs.py:423-424 -- rank is appended last, 1-based, first_rank + offset",
       "jobs.py:370 / 164-179 -- request_id is 'req_' + uuid4().hex, minted server-side",
       "jobs.py:124 -- ORDER BY v.match_score DESC, coalesce(posted_at_ts,'-infinity') DESC, v.id ASC",
@@ -24,7 +27,10 @@
       "Rent the Runway has fit_score, primary_track, gap_bridging_angle, risk_factors and key_technologies all null: jobs_app LEFT JOINs job_scores (schema.py:768) and scoring is budget-limited, so an unscored posting is normal, not an error.",
       "Con Edison has posted_at_ts null and still ranks above Rent the Runway, because match_score leads the sort and only the tie-break coalesces to -infinity.",
       "primary_track values are Title Case from score.TRACKS (score.py:281-282). They are NOT the contract's track slugs.",
-      "seen and applied became PER-BUILDER on 2026-08-01 (defects D66 and D67, docs/ingest/DEFECTS.md). They are resolved from job_events by app_user_id (jobs.py:286-291), not by profile. The response SHAPE did not change -- only which rows the join matches -- so these fixtures were unaffected. An event written before job_events.app_user_id existed carries NULL and resolves both to false for everyone, which is the safe direction."
+      "seen and applied became PER-BUILDER on 2026-08-01 (defects D66 and D67, docs/ingest/DEFECTS.md). They are resolved from job_events by app_user_id (jobs.py:286-291), not by profile. The response SHAPE did not change -- only which rows the join matches -- so these fixtures were unaffected. An event written before job_events.app_user_id existed carries NULL and resolves both to false for everyone, which is the safe direction.",
+      "cohort_signal LANDED 2026-08-02 (task 28) and these fixtures were re-frozen for it. Key ORDER is load-bearing and is asserted: LIST_COLUMNS, STATE_FIELDS, cohort_signal, rank. Mount Sinai carries {'save_bucket': '3-5'} so a client author sees the populated shape once; every other row is null.",
+      "null IS A SUPPRESSION, NOT 'NO DATA', and this is the single most misreadable field in the payload. The count is withheld below three Builders, so null is the answer for BOTH 'nobody saved this' and 'one or two did' -- the row does not exist and the endpoint cannot tell them apart either (jobs.py:370). In a thirty-person cohort who see each other in a classroom, a count of one is close to an identifier. A client must NEVER render it as '0 saves' or a greyed zero: absence of a badge must not be readable as 'exactly one or two'. At today's cohort size EVERY value is null, so null is the case the UI has to handle well, not the edge case.",
+      "save_bucket is one of '3-5', '6-10', '10+' -- schema.py:564 (NOT NULL on the table) and the cohort_signal_bucket CHECK at schema.py:567."
     ]
   },
 
@@ -51,10 +57,11 @@
     "endpoint": "GET /v1/jobs/{id}",
     "derived_from": [
       "jobs.py:113 -- DETAIL_COLUMNS = LIST_COLUMNS + ('description_text',)",
-      "jobs.py:469-470 -- names = list(DETAIL_COLUMNS) + list(STATE_FIELDS)"
+      "jobs.py:562, :564 -- names = DETAIL_COLUMNS + STATE_FIELDS + the raw save_bucket, then the same pop-and-re-assign the list does"
     ],
     "notes": [
       "NO rank key. Rank is a property of a render and a detail request is not one (jobs.py:423 adds it only in the list handler).",
+      "cohort_signal IS here and lands LAST, because there is no rank after it to displace it. Same posting as GET_v1_jobs.json jobs[0], so it carries the same {'save_bucket': '3-5'} -- one posting cannot have two answers.",
       "description_text is plain text, not HTML. The contract's description_html does not exist.",
       "Requesting this is not an impression -- the contract's client rule, and nothing here writes one."
     ]

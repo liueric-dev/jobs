@@ -1,0 +1,414 @@
+/*
+  One stylesheet, hand-written, no preprocessor.
+
+  MOBILE FIRST. Every rule here is the phone rule; the two media queries at the
+  bottom are the desktop adaptation. Tap targets are 44px minimum, which is the
+  size a thumb actually hits, and the dismiss/save row is inside that budget
+  even at the narrowest width this supports (320px).
+*/
+
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --line: #dfe3e8;
+  --ink: #14171a;
+  --ink-soft: #5b6570;
+  --ink-faint: #8a939c;
+  --accent: #1b4dd8;
+  --accent-ink: #ffffff;
+  --warn-bg: #fff5e6;
+  --warn-ink: #6b4a05;
+  --danger: #a11b1b;
+  --radius: 12px;
+  --tap: 44px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a;
+    --surface: #1d2126;
+    --line: #2e343b;
+    --ink: #eef1f4;
+    --ink-soft: #a8b2bc;
+    --ink-faint: #78828c;
+    --accent: #7ea2ff;
+    --accent-ink: #10131a;
+    --warn-bg: #33280f;
+    --warn-ink: #f0d9a5;
+    --danger: #ff8f8f;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+a { color: var(--accent); }
+
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0.75rem 1rem 5rem;
+}
+
+/* -- top bar ------------------------------------------------------------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.tabs a {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 0.75rem;
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.tabs a[aria-current="page"] {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* -- generic ------------------------------------------------------------- */
+
+h1 { font-size: 1.35rem; margin: 0.75rem 0 0.25rem; }
+h2 { font-size: 1.05rem; margin: 0; }
+
+.lede { color: var(--ink-soft); margin: 0 0 1rem; }
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: var(--tap);
+  padding: 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.btn[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  text-decoration: none;
+}
+
+.btn.wide { width: 100%; }
+
+.linkish {
+  min-height: var(--tap);
+  padding: 0 0.5rem;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.linkish.wide { width: 100%; }
+
+.muted { color: var(--ink-soft); }
+.small { font-size: 0.85rem; }
+
+/* -- track groups -------------------------------------------------------- */
+
+.group { margin: 1.5rem 0 0; }
+
+.group-head {
+  padding: 0 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.75rem;
+}
+
+.group-head .blurb {
+  margin: 0.15rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+/* The one sentence that keeps a track from reading as a fact about a posting.
+   docs/ingestion_tests/selfcheck-n120-2026-08-02.md owns the figures. */
+.group-caveat {
+  margin: 0.35rem 0 0;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+}
+
+/* -- job card ------------------------------------------------------------ */
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.9rem;
+  margin-bottom: 0.75rem;
+  background: var(--bg);
+}
+
+.card.is-dismissed { opacity: 0.55; }
+
+.card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.card-company {
+  margin: 0.1rem 0 0;
+  color: var(--ink-soft);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+.age { font-weight: 600; color: var(--ink); }
+.age.is-old { color: var(--danger); }
+
+.estimated {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  border-radius: 6px;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.angle {
+  margin: 0.6rem 0 0;
+  color: var(--ink);
+}
+
+/* The summary, shown when no fit story has been written. Full-strength ink --
+   on an unscored posting this is the only prose on the card -- with a marker
+   that says whose words they are. */
+.angle.from-posting::before {
+  content: "From the posting — ";
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+}
+
+.actions .btn { flex: 1; }
+
+/* -- detail -------------------------------------------------------------- */
+
+.back { display: inline-block; margin: 0.25rem 0 0.5rem; }
+
+.detail-block { margin: 1.25rem 0 0; }
+.detail-block h2 { margin-bottom: 0.35rem; }
+
+.risks { margin: 0.35rem 0 0; padding-left: 1.15rem; }
+.risks li { margin: 0.25rem 0; }
+
+.description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 0.9rem;
+  margin: 0.35rem 0 0;
+}
+
+.detail-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  margin-top: 1.5rem;
+}
+
+.detail-actions .btn { flex: 1; }
+
+.banner {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+}
+
+/* -- reason sheet -------------------------------------------------------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.sheet {
+  width: 100%;
+  max-width: 30rem;
+  background: var(--bg);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.sheet h2 { margin: 0 0 0.15rem; }
+.sheet-sub { margin: 0 0 0.75rem; color: var(--ink-soft); font-size: 0.9rem; }
+
+.reasons {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.reasons .btn { justify-content: flex-start; }
+
+/* -- toast --------------------------------------------------------------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.toast button {
+  min-height: var(--tap);
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--bg);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+/* -- states -------------------------------------------------------------- */
+
+.empty {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.error {
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  padding: 0.9rem;
+  margin: 1rem 0;
+}
+
+.error code { word-break: break-all; }
+
+.signin { text-align: center; padding: 3rem 1rem; }
+.signin .btn { margin-top: 1rem; }
+
+/* -- desktop adaptation -------------------------------------------------- */
+
+@media (min-width: 40rem) {
+  main { padding: 1rem 1.5rem 4rem; }
+  h1 { font-size: 1.6rem; }
+  .actions .btn { flex: 0 1 auto; min-width: 9rem; }
+  .detail-actions { position: static; border: 0; }
+  .sheet-backdrop { align-items: center; }
+  .sheet { border-radius: var(--radius); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card { transition: opacity 0.15s ease; }
+}

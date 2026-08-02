@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!--
+  The whole client. One page, hash routes, no build step, no framework, no npm.
+
+  WHY THERE IS NO TOOLCHAIN. .claude/CLAUDE.md states the repo's intent to stay
+  at one third-party dependency, and the API this talks to is served by the
+  FastAPI app on :8421 -- FRONTEND_ORIGIN and ALLOWED_ORIGINS are both set to
+  exactly that origin (backend/webapp/.env), so this is same-origin and the
+  session cookie rides along without any CORS preflight at all. ES modules are
+  native in every browser this ships to; `type="module"` is the build step.
+
+  MOBILE FIRST, GENUINELY. tranche_six/32-frontend.md's design constraints:
+  many Builders are phone-primary, so the daily list, the dismiss action and
+  the reason picker are laid out for a thumb and the desktop view is the
+  adaptation, not the other way round.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Jobs</title>
+  <link rel="stylesheet" href="./app.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+
+<header class="topbar" id="topbar" hidden>
+  <a class="brand" href="#/today">Jobs</a>
+  <nav class="tabs">
+    <a href="#/today" data-tab="today">Today</a>
+    <a href="#/saved" data-tab="saved">Saved</a>
+  </nav>
+  <button class="linkish" id="signout" type="button">Sign out</button>
+</header>
+
+<main id="view" aria-live="polite"></main>
+
+<!--
+  The dismiss reason picker. A sheet rather than a dropdown because it has to
+  work with a thumb, and the reasons are chips rather than free text because
+  27-event-schema.md's enum is the only thing that makes them aggregatable.
+  Skippable on purpose: a dismiss the Builder abandoned because the form was
+  tedious is worth less than a dismiss with no reason on it.
+-->
+<div class="sheet-backdrop" id="reason-sheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="reason-title">
+    <h2 id="reason-title">Why isn't this one for you?</h2>
+    <p class="sheet-sub">This is only used to send you better postings.</p>
+    <div class="reasons" id="reason-list"></div>
+    <button class="linkish wide" type="button" data-reason-skip>Skip this question</button>
+    <button class="linkish wide" type="button" data-reason-cancel>Never mind, keep it</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="./js/app.mjs"></script>
+</body>
+</html>

@@ -170,10 +170,18 @@ Builder volunteers, not from whoever wrote the harness. This is where they make
 them.
 
 **It is server-rendered HTML with no JavaScript.** Not a JSON endpoint: a
-volunteer cannot use one, and `frontend/` currently contains a single file
-called `.gitkeep`, so there is nothing to render a form. A `<form>`, a POST and
+volunteer cannot use one. ~~`frontend/` currently contains a single file called
+`.gitkeep`, so there is nothing to render a form.~~ A `<form>`, a POST and
 a 303 to the next posting works today and keeps working when `frontend/` is
 eventually filled with something opinionated.
+
+> **`frontend/` was filled 2026-08-02 (task 32), and the decision above is
+> unchanged — now by choice rather than by absence.** That client has Today, Job
+> detail and Saved and **no labelling screen**, and one is not planned there: the
+> golden set is an operator-and-volunteer surface, not a Builder one. The last
+> clause is now testable rather than hypothetical, and it holds — the client is
+> plain HTML/CSS/ES-modules with no build step, so nothing about it makes a
+> `<form>` and a 303 any harder to keep.
 
 ### What a Builder actually does
 

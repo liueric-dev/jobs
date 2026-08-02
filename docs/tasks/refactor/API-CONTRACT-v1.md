@@ -33,7 +33,21 @@ describes were never created.~~
 > `frontend/verify_fixtures.py` re-derives every shape claim in `shipped/` from
 > `backend/webapp/{jobs,auth,schema_web}.py` and currently exits 0. **Nothing checks
 > `contract/`, because there is no code to check it against** — that is what makes it a
-> specification rather than a description. Still true: there is no application code.
+> specification rather than a description. ~~Still true: there is no application code.~~
+>
+> **AND A CLIENT WAS BUILT AGAINST THEM THE SAME DAY (task 32).** Today, Job detail and
+> Saved, in plain HTML/CSS/ES-modules with no build step. It parses `shipped/`, and
+> `frontend/check_client.mjs` now checks that direction too — both checkers run in the
+> backend suite (`tests/test_frontend_fixtures.py`) rather than waiting for someone to
+> type the command.
+>
+> **Two corrections this document owes its own readers.** `verify_fixtures.py` exited 0
+> while missing a field — defect **`D70`**, `cohort_signal`, since fixed and the fixtures
+> re-frozen. And the claim that nothing checks `contract/` **has one exception now**:
+> `POST /v1/onboarding` shipped in task 26, so
+> `fixtures/contract/ASPIRATIONAL_POST_v1_onboarding.*` describe a route that exists and
+> the `ASPIRATIONAL_` prefix is false on those two files. They were built against, so what
+> is owed is a deviation list, not a rename. That belongs to task 26's stream.
 
 **Three of six endpoints exist, by path only.** `GET /v1/searches`, `POST /v1/searches`
 and `POST /v1/onboarding` have no route and no backing table (`search_queries`,

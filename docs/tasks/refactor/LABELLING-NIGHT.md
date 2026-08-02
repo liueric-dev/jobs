@@ -328,9 +328,19 @@ it — `RedirectResponse(config.FRONTEND_ORIGIN + safe_next_path(next_path))`
 valid session cookie, and is then sent to `:5173`.
 
 **Nothing is served on `:5173`.** `/v1/label` is served by **this** service, on
-**`:8421`** (`GOOGLE_REDIRECT_URI`, and `PORT` defaults to 8421), and `frontend/` in
+**`:8421`** (`GOOGLE_REDIRECT_URI`, and `PORT` defaults to 8421), and ~~`frontend/` in
 this repo contains exactly one file: `.gitkeep`. There is no dev server to start —
-the port is a leftover from a frontend that does not exist yet.
+the port is a leftover from a frontend that does not exist yet.~~
+
+> **`frontend/` is a client as of 2026-08-02 (task 32), and this section's conclusion
+> gets *stronger*, not weaker.** There is still nothing on `:5173`, and there is still
+> no separate dev server to start: `frontend/serve.py` mounts the page on **this
+> service's own port** — `config.PORT`, 8421 — precisely so that the session cookie is
+> never cross-origin (`serve.py:15-22`). A static server on `:5173` would be a third
+> origin that neither `FRONTEND_ORIGIN` nor `ALLOWED_ORIGINS` names, and the browser's
+> failure mode for that is to drop the cookie silently rather than say why. So `:5173`
+> is still a leftover, and the fix below is still the fix — it now has a server behind
+> it. `serve.py` warns at startup if either variable disagrees with the port it is on.
 
 **The fix is one line, made at the same time as the secrets:**
 

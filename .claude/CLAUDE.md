@@ -58,7 +58,25 @@ at runtime and nowhere else.
 the top level, `api/` (the contributor work queue, expected to be deprecated) and
 `webapp/` (the frontend's backend). Each has its own `.env`, its own venv and its own
 Postgres role, and **none imports another**; they share only `schema.py` and `lib/`,
-reached by a one-level-up `sys.path` insert. `frontend/` is empty.
+reached by a one-level-up `sys.path` insert. ~~`frontend/` is empty.~~
+
+**`frontend/` is a client, as of 2026-08-02 (task 32).** Plain HTML, one stylesheet, ES
+modules — **no build step, no framework, no npm, no `package.json`**, and that is a
+constraint to keep, not an accident. The modules are `.mjs` so the same files load in a
+browser and under `node` with nothing installed. Run it with `frontend/serve.py`, which
+mounts the page on the **API's own origin** (`config.PORT`, 8421) rather than a second
+dev server, because the session cookie is the client's only credential and a third origin
+neither `FRONTEND_ORIGIN` nor `ALLOWED_ORIGINS` names gets dropped silently by the browser:
+
+```bash
+cd backend/webapp && .venv/bin/python ../../frontend/serve.py   # then http://localhost:8421/
+python3 frontend/verify_fixtures.py    # fixtures still describe the server
+node frontend/check_client.mjs         # client still agrees with the fixtures
+```
+
+Both checkers run in the backend suite (`tests/test_frontend_fixtures.py`); the node one
+skips where node is absent. Today, Job detail and Saved are built; search, onboarding and
+the phone test are not — `docs/tasks/refactor/tranche_six/32-frontend.md` has the table.
 
 **Read through the `jobs_app` view, not the `jobs` table.** The base table is
 deliberately unfiltered — `ingest/ats.py` pulls entire company boards, so roughly two

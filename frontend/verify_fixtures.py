@@ -103,12 +103,86 @@ def _load(name):
     return json.loads((SHIPPED / name).read_text())
 
 
+#: Every module-level tuple-of-strings jobs.py declares, and what this file
+#: does with it. Anything NOT here fails the run rather than being ignored --
+#: which is the whole of defect D70.
+#:
+#: D70: cohort_signal (task 28) landed as a THIRD response-key group,
+#: COHORT_FIELDS, between STATE_FIELDS and rank. The row composition below read
+#: two groups and hardcoded the tail, so the new key was invisible to it: the
+#: fixtures omitted cohort_signal, this file's expectation omitted it too, the
+#: two agreed with each other, and BOTH disagreed with the source. A verifier
+#: stops being a derivation exactly where its hardcoding starts, and that is
+#: where the next field always lands. Adding COHORT_FIELDS to the composition
+#: fixes the instance; this map is what fixes the class, because a fourth group
+#: cannot arrive without a name that is not in it.
+_KNOWN_JOBS_TUPLES = {
+    "LIST_COLUMNS":          "row keys, list",
+    "DETAIL_COLUMNS":        "row keys, detail",
+    "STATE_FIELDS":          "row keys, both",
+    "COHORT_FIELDS":         "row keys, both -- task 28",
+    "CLIENT_EVENT_NAMES":    "event vocabulary",
+    "SERVER_EVENT_NAMES":    "event vocabulary",
+    "RANK_REQUIRED_EVENTS":  "event vocabulary",
+    "COHORT_VISIBLE_EVENTS": "not a response shape; visibility, checked nowhere here",
+}
+
+
 def check(problems):
     jobs = _tuples(JOBS_PY)
     web = _tuples(SCHEMA_WEB_PY)
 
-    list_row = tuple(jobs["LIST_COLUMNS"]) + tuple(jobs["STATE_FIELDS"]) + ("rank",)
-    detail_row = tuple(jobs["DETAIL_COLUMNS"]) + tuple(jobs["STATE_FIELDS"])
+    # THE GUARD THAT CLOSES D70 AS A CLASS. A new tuple in jobs.py is either a
+    # new response-key group -- in which case the composition below is now
+    # wrong and silently passing -- or it is not, in which case saying so here
+    # costs one line. Either way it must not be possible to add one and have
+    # this file keep exiting 0 without a person having looked.
+    unknown = sorted(set(jobs) - set(_KNOWN_JOBS_TUPLES))
+    if unknown:
+        problems.append(
+            f"jobs.py declares tuple(s) {unknown} that verify_fixtures.py does not "
+            f"know about. If any is a response-key group, add it to the row "
+            f"composition in check(); if not, add it to _KNOWN_JOBS_TUPLES saying "
+            f"so. This guard exists because cohort_signal (D70) arrived exactly "
+            f"this way and nothing noticed.")
+
+    # DERIVED, NOT LITERAL, except for `rank` -- SEE THE NEXT COMMENT.
+    # The endpoint builds the list row as LIST_COLUMNS + STATE_FIELDS +
+    # cohort_signal + rank (jobs.py, list_jobs: the zip names, then the pop and
+    # re-assign that moves cohort_signal to the end, then the rank loop). The
+    # detail row is the same without rank, because a detail request is not a
+    # render and has no position.
+    list_row = (tuple(jobs["LIST_COLUMNS"]) + tuple(jobs["STATE_FIELDS"])
+                + tuple(jobs["COHORT_FIELDS"]) + ("rank",))
+    detail_row = (tuple(jobs["DETAIL_COLUMNS"]) + tuple(jobs["STATE_FIELDS"])
+                  + tuple(jobs["COHORT_FIELDS"]))
+
+    # `rank` IS STILL A LITERAL AND THAT SEAM IS STILL OPEN, narrowly. There is
+    # no module-level constant naming it: the endpoint assigns
+    # `item["rank"] = first_rank + offset` inside the handler, so there is
+    # nothing for _tuples() to read. Deriving it would mean pattern-matching a
+    # subscript assignment in a function body, which is a worse trade -- it
+    # would break on a rename of `item` and pass on a rename of `rank`.
+    #
+    # WHAT THE RESIDUE ACTUALLY IS, MEASURED RATHER THAN REASONED. Renaming
+    # `item["rank"]` to `item["position"]` in jobs.py and running this file
+    # against the current fixtures exits 0. Tested 2026-08-02 on a throwaway
+    # copy. The fixtures still say "rank", the expectation below still says
+    # "rank", the two agree with each other and both disagree with the source
+    # -- which is D70's exact sentence with one field substituted.
+    #
+    # So the guard above does NOT cover `rank`. What it covers is the arrival
+    # of a new response-key GROUP, because a group comes with a module-level
+    # tuple and an unrecognised name fails the run. Two things remain uncovered
+    # and both need a person:
+    #
+    #   * renaming `rank`, per the measurement above;
+    #   * a new response key added as a bare subscript assignment with no
+    #     module-level constant at all.
+    #
+    # Both are narrower than what D70 was, and neither is closed. Written out
+    # rather than left to be rediscovered, because the absence of exactly this
+    # sentence is what produced D70.
     client_events = set(jobs["CLIENT_EVENT_NAMES"])
     server_events = set(jobs["SERVER_EVENT_NAMES"])
     reasons = set(web["DISMISS_REASONS"])

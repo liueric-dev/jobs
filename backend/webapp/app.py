@@ -98,8 +98,11 @@ app.add_exception_handler(jobs.ContractError, jobs.contract_error_handler)
 # -- one error shape per API, which is what API-CONTRACT-v1.md specifies.
 app.include_router(onboarding.router)
 # The golden-set labelling surface. Server-rendered HTML rather than JSON,
-# because the people it exists for are ~10 Builder volunteers and frontend/
-# holds one file called .gitkeep -- see label.py.
+# because the people it exists for are ~10 Builder volunteers -- see label.py.
+# The premise here USED to be that frontend/ held one .gitkeep. It no longer
+# does (task 32, 2026-08-02), and the decision is unchanged: that client has no
+# labelling screen and is not in scope for one. A <form> and a 303 needs no
+# client at all, which is still the right trade for ten volunteers.
 app.include_router(label.router)
 
 

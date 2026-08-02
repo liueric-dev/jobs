@@ -41,6 +41,7 @@
       "dismissed": false,
       "saved": false,
       "dismiss_reason": null,
+      "cohort_signal": null,
       "rank": 5
     }
   ],

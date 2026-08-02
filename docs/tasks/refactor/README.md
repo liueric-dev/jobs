@@ -101,7 +101,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 
 | | Task | Lands | |
 |---|---|---|---|
-| 32 | [Frontend](tranche_six/32-frontend.md) | against the endpoints that already exist | todo |
+| 32 | [Frontend](tranche_six/32-frontend.md) | against the endpoints that already exist. **Today, Job detail and Saved are built 2026-08-02** — plain HTML/CSS/ES-modules, no build step, no npm, `serve.py` mounting the page on the API's own origin so the session cookie is never cross-origin. **Three DoD items are not done and two of them have no backing table**: search needs task 25's `search_queries`, onboarding is task 26's stream, and the phone test and the live Google login round trip both need a person. It also falsified two of `frontend/README.md`'s three BLOCKED entries within the day, found **D70**, and forced the `DEC-77` amendment — `role_track` is on the table and **not in the `jobs_app` view**, so it ships in no response body and the client buckets to `UNTRACKED` rather than substitute the rejected vocabulary | in progress |
 | 33 | [Deployment](tranche_six/33-deployment.md) | Cloudflare Tunnel; pipeline split from app | todo |
 
 ## Cross-cutting

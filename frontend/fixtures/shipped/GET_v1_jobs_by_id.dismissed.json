@@ -38,5 +38,6 @@
   "applied": false,
   "dismissed": true,
   "saved": false,
-  "dismiss_reason": "wrong_role"
+  "dismiss_reason": "wrong_role",
+  "cohort_signal": null
 }
