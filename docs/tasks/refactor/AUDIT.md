@@ -60,13 +60,14 @@ instrument, and every other document cites this one rather than restating them.
 | per-source volume floors | **wired, and firing correctly on no data** — it reports `no_history` as a *finding* rather than exiting clean, which is the disposition the whole check exists for. Exits 1 on findings; `jobs-volume-check.service` carries `OnFailure=` | `python3 backend/tools/volume-check.py`, and `--self-test` |
 | broken doc links | **0** | `python3 backend/tools/audit-doc-links.py` |
 | documentation policy | ~~**all six checks 0**~~ ~~**C1 2, C4 2 — 4 findings, red on purpose**~~ **all six checks 0 again, exit 0, on the widened set** — tasks [45](tranche_seven/45-declare-kind-on-the-roots.md) and [46](tranche_seven/46-sentence-scope-the-c4-lookahead.md) closed all four 2026-08-02. **The baseline was never grown and is still empty**, which is phase 9's exit gate | `python3 backend/tools/audit-docs.py`; wired into `backend/tests/test_docs_policy.py` |
-| defect register | ~~45 entries, `D01`–`D45`~~ ~~**48 entries — `D01`–`D45` and `D66`–`D68`**~~ **`D01`–`D45` and `D66`–`D72`**; `D46`–`D65` are burnt, re-prefixed to `DEC-` by task 39. **No count is typed here** — the register owns it, per rule 2. Next free `D73` | [`../../ingest/DEFECTS.md`](../../ingest/DEFECTS.md) |
-| decision register | `DEC-46`–`DEC-93`. Next free `DEC-94`; **thirteen were added on 2026-08-02** by four parallel streams | [`DECISIONS.md`](DECISIONS.md) |
+| defect register | ~~45 entries, `D01`–`D45`~~ ~~**48 entries — `D01`–`D45` and `D66`–`D68`**~~ ~~**`D01`–`D45` and `D66`–`D72`**~~ **`D01`–`D45` and `D66`–`D74`**; `D46`–`D65` are burnt, re-prefixed to `DEC-` by task 39. **No count is typed here** — the register owns it, per rule 2. Next free `D75` | [`../../ingest/DEFECTS.md`](../../ingest/DEFECTS.md) |
+| decision register | `DEC-46`–~~`DEC-93`~~ **`DEC-94`**. Next free `DEC-95`; **thirteen were added on 2026-08-02** by four parallel streams, **and one more by the second such session the same day** | [`DECISIONS.md`](DECISIONS.md) |
 | human labels | ~~186 rows / 31 postings / **one** labeller~~ **271 rows / 36 postings / two labellers**, round 1 (2026-08-02) | `python3 backend/tools/label-findings.py` |
 | model vs human | **measured 2026-08-02, and the ceiling is below the floor on all five fields** — owned by [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md), which carries the table and the reasons not to tune on it | the command in that document; every input is committed |
 | labelling rate | 93 s median (n=29) | `python3 backend/tools/label-findings.py --timing` |
 | model self-consistency | **three named metrics** — [§ *The three self-consistency metrics*](#the-three-self-consistency-metrics) below owns them | task 06; the command in that section |
 | cohort corpus | 940 rows at `facts_version = 3`; `role_archetype = other` on 31.3% | `python3 backend/tools/derive-role-tracks.py --archetypes` |
+| `role_track` at the read edge | **landed 2026-08-02 (`DEC-94`)** — it had been on `job_facts` since task 11 and in no response body. 134 of 166 visible `pursuit` rows carry a track, all nine values present. **Measure through the view, never the table**: `jobs_app` inner-joins `job_matches` and applies four completeness predicates, so what reaches a Builder is a strict subset of `job_facts`, and `docs/facts-v3-diff.md` gives a corpus statistic here a shelf life of one night | the query in [`tranche_six/30-within-track-ordering.md`](tranche_six/30-within-track-ordering.md); `SELECT v.profile, count(*), count(f.role_track), count(DISTINCT f.role_track) FROM jobs_app v JOIN job_facts f ON f.job_id = v.id GROUP BY 1` |
 
 **No test count is written above, deliberately.** It was written as three different values in
 three live documents on 2026-08-01 and none of them was what the runner printed; each was
@@ -169,6 +170,11 @@ to do:
 `3ad38dd`, 26's backend half is `4c874e7`, 32's client is `681c2a1`. What remains on the
 track is **24, 25, 33, and two screens** (26's onboarding, 32's search — and the search one
 is blocked on 25, which does not exist in code at all). Its
+**2026-08-02, second parallel session: the search screen shipped, so 32 is five of six
+surfaces and `Contribute` is the last — and it is `DEC-84`'s ownership question, not
+effort.** What remains a session's work on this track is now **nothing**: 24's deploy half,
+33's machine half, 32's phone test and login round trip all need a person, an account or a
+device. Its
 premises were audited on 2026-07-31 and several were stale — **and 27's own dependency line
 was one of them**, declaring `Depends on: 26` while 26's Definition of done needs 27's
 `visibility` column. The corrections are in the task files themselves and in

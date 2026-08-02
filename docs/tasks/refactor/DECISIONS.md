@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-94`.** Allocated `DEC-46`–`DEC-93`. The count starts at 46 rather than at
+**Next free: `DEC-95`.** Allocated `DEC-46`–`DEC-93`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -3195,3 +3195,46 @@ alert channel meaning both very quickly means neither.
 **The floors are provisional and say so.** Five nightly runs is the whole history the journal
 held. The config's `_n` field records that and names re-derivation from a longer
 `.run-volumes.jsonl` as the next step.
+
+## DEC-94 — a column added to `jobs_app` goes LAST, and the reason is the GRANTs
+
+**2026-08-02, the `role_track` read-edge change.**
+
+`role_track` had been on `job_facts` since task 11 and `jobs_app` never selected it, so it
+reached no response body and every posting bucketed to `UNTRACKED`. Adding it is one line
+in `_APP_VIEW_SQL` and one in `webapp/jobs.py`'s `LIST_COLUMNS`. **Where in the list is not
+a style question.**
+
+**Rejected: placing it next to `f.role_archetype`**, which is where it reads naturally —
+same table, same grain, adjacent concepts. That placement is a **column reorder**.
+`CREATE OR REPLACE VIEW` can only *append*; a reorder raises `InvalidTableDefinition`,
+which `ensure_app_view` catches and answers by dropping the view and recreating it
+(`backend/schema.py`, the `except` under `_APP_VIEW_SQL`). **`DROP VIEW` destroys every
+GRANT on the view, and nothing in this repo re-grants** — the statement is hand-typed in
+`backend/webapp/README.md` for an operator to run.
+
+So the readable placement costs `jobs_web` its `SELECT` on `jobs_app`, and the failure does
+not appear at the commit. It appears on the next nightly run as `verify_schema()` refusing
+to start the webapp with `public.jobs_app: no SELECT` — an error about grants, arriving
+hours later, pointing nowhere near the change that caused it.
+
+**Decided: append at the end of the SELECT list, and keep `LIST_COLUMNS` in the same
+order.** Verified against the live database rather than reasoned about: grants captured
+before and after are identical, `jobs_web` keeps `SELECT`, `role_track` lands as column 37,
+and the `CREATE OR REPLACE` path is the one that ran — the `DROP` fallback never fired.
+
+**The general rule this encodes:** the view's column *order* is an append-only contract,
+not a formatting choice, and `ensure_app_view`'s DROP fallback is a one-way door with an
+uninstrumented cost. The comment recording this lives at the site in `schema.py`, because
+that is where someone about to make the mistake will be looking. `LIST_COLUMNS` carries the
+matching note for a second reason: `frontend/verify_fixtures.py` asserts the exact key
+*order* of every shipped fixture, so appending there means hand-editing five fixture files
+in the same commit — there is no state in which the field is in `LIST_COLUMNS` and the
+suite is green.
+
+**What this did NOT need:** any change to `js/tracks.mjs`, `js/onboarding.mjs`'s
+`pickSeed()`, or `backend/webapp/search.py`. All three were written against the field
+before it existed — `search.py` imports `LIST_COLUMNS` and builds its column list
+dynamically, and the two client modules round-robin over a value that was always null. The
+bet those were written on paid, and it is worth recording as a bet that paid rather than
+as a coincidence.

@@ -6,8 +6,15 @@ generator: none
 
 # 32 — Frontend
 
-**Status:** ~~todo~~ **Today, Job detail and Saved are built (2026-08-02). Search,
-Onboarding and Contribute are not, and two of the three have no backing table.**
+**Status:** ~~todo~~ ~~**Today, Job detail and Saved are built (2026-08-02). Search,
+Onboarding and Contribute are not, and two of the three have no backing table.**~~
+**Five of six surfaces are built (2026-08-02): Today, Job detail, Saved, Onboarding
+and Search. Contribute is the one left, and it is blocked on an ownership decision
+rather than on effort (`DEC-84`, open question 1).** Both "no backing table" claims
+were falsified within the day — task 26 landed `builder_profiles`, task 25 landed
+four search tables. **Every remaining DoD item needs a person, not a session**: the
+phone test needs a device *and* one line in `serve.py` (it binds `127.0.0.1`), and
+the Google login round trip needs an interactive browser.
 **Depends on:** 26, 27, 28, 30, 31. **Blocks:** nothing.
 
 Build `frontend/`. ~~It is currently a single `.gitkeep`.~~

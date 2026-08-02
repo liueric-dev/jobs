@@ -83,7 +83,7 @@ else does.** Decisions are `DEC-<n>` and live in
 [`DECISIONS.md`](../tasks/refactor/DECISIONS.md); task numbers live in
 [`tasks/refactor/README.md`](../tasks/refactor/README.md).
 
-**Next free: `D74`.** Allocated `D01`–`D45` and `D66`–`D73`; **`D46`–`D65` are burnt and
+**Next free: `D75`.** Allocated `D01`–`D45` and `D66`–`D74`; **`D46`–`D65` are burnt and
 must never be issued.** They are not defects and never were — `DECISIONS.md` continued this register's
 count when it started allocating decision IDs mid-file, so those twenty numbers circulate
 in eighty-odd places meaning *decisions*. Task 39 re-prefixed the live sites to `DEC-46`–
@@ -236,15 +236,16 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D69](#d69) | check with a blind spot | **PARTIALLY fixed** — 2026-08-02 — `_JOIN_CLAUSE` closes the join-fragment case; part 3 landed the same day (`schema_web.py` scanned, catalog predicate, `cascade`; re-measured, 6 names, 0 undeclared). **Two-part residue: (1) non-join fragments still open, (2) view expansion permanent. Not closed — the entry's condition names (1)** | `test_grants` kept only strings containing a statement keyword, so a table named solely in a hoisted `JOIN … ON` fragment was never checked for a GRANT |
 | [D70](#d70) | check with a blind spot | **fixed** — 2026-08-02, task 32 — `COHORT_FIELDS` derived, fixtures re-frozen, and `_KNOWN_JOBS_TUPLES` fails on a group it does not know; **two-part residue, measured and recorded not closed** — renaming `rank` still exits 0 | `frontend/verify_fixtures.py` hardcodes the tail of the expected key list, so a new response field is invisible: fixtures and verifier agree with each other and both disagree with the code |
 | [D71](#d71) | cosmetic (while undeployed) | **open** — fix before opening to more than a handful of contributors; the ceiling is a policy number nobody has picked | Contributor API: concurrent claims per contributor are uncapped — one worker can hold the entire 32-slug bank while inside its daily allowance |
-| [D72](#d72) | cosmetic (a testing gap) | **open** — fix with the scratch-schema fixture, before the service is exposed beyond the tailnet | Contributor API: the claim protocol has no test — `fakedb.py` dispatches on SQL text and cannot falsify a `WHERE` clause |
-
 | [D72](#d72) | cosmetic — a testing gap, not a defect in the code | **fixed** — 2026-08-02, task 24 — `backend/api/tests/test_claim_protocol.py`, on a scratch schema, skipping where no database is available | the claim protocol had no test: `backend/api/tests/fakedb.py` dispatches on SQL text and cannot falsify the `WHERE` clauses `try_claim_query` and `holds_claim` consist of |
 | [D73](#d73) | information disclosure | **fixed** — 2026-08-02, task 24 — `app._validation_detail()` builds the detail from `loc` and `type` alone, both whitelisted | `submit`'s `detail=f"malformed body: {e}"` echoed the offending input back to the caller through a pydantic `ValidationError`; for a syntactically broken body that input is the **whole request body** |
+| [D74](#d74) | cosmetic (this file only) | **open** — 19 rows, one `<a id>` each; no code change | **19 of this index's own links resolve to nothing.** A row links `[D01](#d01)` while the heading is `### D01 — fixed`, which slugs to `#d01-fixed`. `audit-doc-links.py` strips fragments by design, so nothing can see it |
 
-**`D71` has no row in this index.** Filed 2026-08-02 and still open, and the body below is
-the only place it exists. Left as-is here rather than fixed in passing because another
-stream owns it this session — recorded so that the gap is a finding rather than an
-oversight, which is the entire lesson of the paragraph below.
+~~**`D71` has no row in this index.**~~ **It has one, at the row above, added the same
+afternoon by the stream that owned it.** The struck sentence was true in the tree it was
+written in and false in the tree it merged into — which is the fourth instance of this
+file's own lesson and the first to arrive through *parallelism* rather than through time.
+Kept struck under `DOCS-POLICY.md` rule 4, because what it records is a real hazard of
+splitting one register across concurrent streams. See the D74 paragraph below.
 
 **D66 and D67 were absent from this index entirely** until they were closed — added
 2026-08-01, on the lesson D45's row records four paragraphs above: *"the index is the part
@@ -2180,3 +2181,68 @@ verified by monkeypatching the old behaviour back in rather than by reasoning ab
 Class: **information disclosure**. Disposition: **fixed before deploy**, which is where it
 belonged: the fix is one function, and the alternative was carrying a "do not log response
 bodies" instruction into every future proxy configuration.
+
+---
+
+### D74 — open
+
+<a id="d74"></a>
+
+**Nineteen of this index's own links resolve to nothing, and no checker can see it.**
+A row reads `[D01](#d01)`; the heading it points at is `### D01 — fixed`, which slugs to
+`#d01-fixed`. The anchor `#d01` exists nowhere, so the link lands at the top of a
+1,900-line file instead of at the entry. Eight defects carry an explicit `<a id="dNN">`
+and resolve; the rest resolve only when their heading happens to be bare (`### D04`).
+
+**Measured, not estimated** — 52 index links against every heading slug plus every
+explicit anchor:
+
+```bash
+python3 - <<'PY'
+import re
+t = open('docs/ingest/DEFECTS.md').read()
+ok = set(re.findall(r'<a id="(d\d+)"></a>', t))
+slug = lambda h: re.sub(r'\s+','-',re.sub(r'[^\w\s-]','',h.strip().lower())).strip('-')
+ok |= {slug(h) for h in re.findall(r'^#{2,4}\s+(D\d+.*)$', t, re.M)}
+print(sorted({l for l in re.findall(r'\]\(#(d\d+)\)', t)} - ok, key=lambda s:int(s[1:])))
+PY
+```
+
+**The nineteen:** D01, D02, D03, D05, D08, D09, D11, D13, D15, D16, D23, D25, D41, D43,
+D44, D45, D66, D67, D68. Every one is a defect whose heading gained a ` — fixed` or
+` — open` suffix after the link was written; the suffix is what breaks it.
+
+**WHY NOTHING CATCHES THIS, and it is a deliberate choice rather than a gap in the
+tool.** `audit-doc-links.py` strips `#fragment` before resolving, on the stated reasoning
+that *a wrong anchor lands the reader on the right document*. That is correct for links
+**between** documents and wrong for an index **inside** one, where the whole value of the
+link is the jump. Widening the checker to resolve intra-document fragments would be a
+real fix and is not in scope here; the cheap fix is nineteen `<a id>` tags matching the
+convention D69–D73 already use.
+
+**It matters here more than it would elsewhere**, by this file's own rule four
+paragraphs above D66's note: *"the index is the part anyone scans."* An index whose links
+silently do not work is the same class of failure as an index row that disagrees with its
+body — the reader is sent to the wrong place, with nothing marking it.
+
+Found 2026-08-02 by the parallel session, while checking a stream's claim of ~24 broken
+rows. **That claim was an overcount**: it included defects with bare headings, which
+resolve fine. The number is 19, and it was arrived at by computing GitHub's slug for every
+heading rather than by reading the list.
+
+**A SECOND FINDING FROM THE SAME MERGE, recorded here rather than as its own number
+because the fix is the same afternoon's discipline and not code.** Two concurrent streams
+were given disjoint regions of this file — one owned the index table, the other owned
+`D73` and `D72`'s closure. Both obeyed. The merge still produced **two index rows for
+D72**, one reading `open` and one reading `fixed`, because "add the missing index row" and
+"close this defect in the index" are the same line of the same table reached from two
+directions, and the blank line between them meant git saw no conflict. **`audit-docs.py`
+C5 did not catch it**: C5 forbids defining one identifier twice, and it reads `### D`
+headings, not index rows. It was caught by reading the table. The lesson is not "do not
+parallelise this file" — three streams touched it and two seams held — it is that a
+register's *index* is a single shared surface even when its bodies are not, and one stream
+should own the whole table.
+
+Class: **cosmetic (this file only)**. Disposition: **open** — nineteen `<a id>` tags, no
+code change, no test. Worth doing next time this file is opened for another reason;
+not worth a commit of its own.

@@ -28,7 +28,52 @@ on it — the instrument is named in each case.*
 ### ~~**THE LABELLING NIGHT HAPPENED AND THE REPORT PRINTED** — and the answer is "not yet".~~ Rolled forward 2026-08-02.
 ### ~~**THE `role_track` GROUPING AXIS HAS THREE INDEPENDENT PROBLEMS, AND THE TREE IS UNCOMMITTED.**~~ Rolled forward 2026-08-02 — **the tree is committed; the three `role_track` problems all stand and are restated under task 30 below.**
 
-### **THE PRODUCT/API TRACK IS FOUR TASKS FURTHER ON. 2026-08-02, a second four-stream session — 24, 25, 33 and 26's screen, each in its own worktree.**
+### **THE PRODUCT/API TRACK HAS NO SESSION-DOABLE WORK LEFT. 2026-08-02, a THIRD parallel session — `role_track` to the read edge, then four streams.**
+
+> **Everything is committed and all three suites are green.** No count is typed here;
+> [`AUDIT.md`](AUDIT.md) owns the figures and names the command for each. **Read all three
+> `Ran N tests` lines** — they moved in three different directions this session.
+>
+> **What landed, in merge order.** One serial change first, because it moved a surface every
+> stream would otherwise have collided on: **`role_track` reaches the read edge** (`DEC-94`)
+> — it had been on `job_facts` since task 11 and `jobs_app` never selected it, so it was in
+> no response body and every posting bucketed to `UNTRACKED`. Then four worktrees:
+> **D18–D21** (per-unit isolation in four ingest scripts and the match stage), **the register
+> reconciled** against the code with D69's third residue closed, **task 24's `submission_log`
+> report plus D72 and D73**, and **the search screen** — which makes 32 five of six surfaces.
+> One new defect, `D74`, open and cosmetic.
+>
+> **WHAT IS LEFT ON THIS TRACK IS NOTHING A SESSION CAN DO.** 24's deploy half, 33's machine
+> half, 32's phone test and its live Google login all need a person, an account or a device.
+> `Contribute` is the sixth surface and is blocked on `DEC-84`'s ownership question rather
+> than on effort. **Do not open this track expecting to write code.**
+>
+> **THE PROCESS LESSON, AND IT IS A NEW ONE — the old one was fixed and a different seam
+> opened.** Last session's failure was stale worktrees; this session branched all four from
+> one printed SHA, handed every stream the floor rather than letting it measure its own, and
+> gated in the primary tree after **each** merge. That held: three streams touched
+> `docs/ingest/DEFECTS.md` and every rebase applied with zero conflicts.
+>
+> **What still got through was a duplicate index row.** Two streams were given disjoint
+> regions of that file — one owned the index table, one owned `D73` and `D72`'s closure. Both
+> obeyed. The merge still produced **two index rows for `D72`, one reading `open` and one
+> reading `fixed`**, because "add the missing row" and "close this defect in the table" are
+> the same line reached from two directions, and a blank line between them meant git saw no
+> conflict. **`audit-docs.py` C5 did not catch it** — C5 forbids defining an identifier twice
+> and reads `### D` headings, not index rows. **It was caught by reading the table.** The
+> lesson is not "do not parallelise this file": it is that a register's *index* is a single
+> shared surface even when its bodies are not, and one stream should own the whole table.
+> Recorded under `D74`.
+>
+> **A second thing worth carrying: a stream's report is not evidence.** One stream's
+> broken-anchor count was an overcount (~24 against a measured 19) because it read the list
+> instead of computing the slugs; another never sent a report at all and its work was
+> accepted only after reverting two of its fixes and watching **12 tests** go red. Both
+> streams did good work. Neither claim would have been safe to quote.
+>
+> ~~**THE PRODUCT/API TRACK IS FOUR TASKS FURTHER ON. 2026-08-02, a second four-stream
+> session — 24, 25, 33 and 26's screen, each in its own worktree.**~~ Rolled forward; what
+> that session landed is below.
 
 > **Everything is committed and both — now three — suites are green.** No count is typed
 > here; [`AUDIT.md`](AUDIT.md) owns the figures under rule 2 and names the command for each.
@@ -61,7 +106,9 @@ full argument; this table is an index and deliberately does not restate the reas
 |---|---|---|---|
 | 1 | **Who issues a contributor credential?** Grant `jobs_web` INSERT on `jobs_api`'s tables / a server-to-server mint / a request queue the owner services by hand | `DEC-84`, [`24`](tranche_four/24-revive-contributor-api.md) | 24's *"a Builder onboards without the author"* cannot be met, and the page stays unbuilt. **This is a product call about how long `backend/api/` is expected to live** |
 | 2 | **Is the impression dedup key `(profile, job_id)` or `(profile, job_id, request_id)`?** One line of code; it changes the documented meaning of *"a list re-render is not new information"* | [`27`](tranche_five/27-event-schema.md), [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), [`engagement-events.md`](../../ingest/engagement-events.md) | **skips stay a first-render-per-day signal**, and every skip-derived figure quietly means that instead of what it says |
-| 3 | **More labellers on the SAME ten overlap rows**, and round 2 (~2026-08-09) | [`AUDIT.md`](AUDIT.md) § *What is open*, [`labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md) | tasks **30**, 13's weights and 12's next bump stay gated. More *postings* do nothing — 25 of 36 carry one labeller and add zero to the ceiling |
+| 3 | **More labellers on the SAME ten overlap rows**, and round 2 (~2026-08-09) | [`AUDIT.md`](AUDIT.md) § *What is open*, [`labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md) | tasks **30**, 13's weights and 12's next bump stay gated. More *postings* do nothing — 25 of 36 carry one labeller and add zero to the ceiling. **Task 30's data half is now unblocked and its label half is not**, so this row is the whole remaining blocker there |
+| 7 | **The live database is missing task 25's five search objects and `cohort_signal`'s GRANT.** `verify_schema()` fails on exactly those; `manage_app_users.py init-schema` with `JOBS_ADMIN_DATABASE_URL` is the fix | [`33`](tranche_six/33-deployment.md), `backend/webapp/schema_web.py` | **the search screen cannot be exercised end to end at all** — it is proven against fixtures and three suites and against no running server. Nothing else on the webapp is affected today |
+| 8 | **Name the tracks, or decide the grouping ships with the vocabulary it has** | `config/pursuit-persona.json`'s `_no_buckets_comment`, [`30`](tranche_six/30-within-track-ordering.md) | grouping works and its headings use `extract.ROLE_TRACK`'s nine slugs with hand-written plain-language copy. The persona config records that `score.TRACKS`' five names "do not describe this population" and makes naming task 30's — **building the mechanism was ungated; choosing the names is not** |
 | 4 | **The machine half of 33** — Cloudflare account and `cloudflared login`, the OAuth redirect URI, `systemctl --user enable`, an off-machine backup destination, and **the one verified restore** | [`33`](tranche_six/33-deployment.md) § the command list, [`RUNBOOK.md`](../../RUNBOOK.md) | nothing is reachable by a Builder, and **there is no proven backup** — the script and its verify timer are written and have never run |
 | 5 | **Apply the `revenue_commercial` archetype?** Proposed and deliberately unapplied | `DEC-64`/`DEC-65`, [`11`](tranche_two/11-archetype-superset-role-track.md) | `role_archetype = other` stays where it is. It is a `FACTS_VERSION` bump and `pursuit-v1` is mid-labelling, which is why it waits |
 | 6 | **`D31`** needs a decision, not a fix | [`DEFECTS.md`](../../ingest/DEFECTS.md) | stays open, correctly |
