@@ -151,6 +151,49 @@ HEADING_ID = re.compile(r"^#{1,6}\s+\*{0,2}(DEC-\d+|D\d+)\b")
 #: Fence open/close for skipping code blocks. Both ``` and ~~~, three or more.
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 
+#: C4's unit of a CLAIM, which is the sentence and not the physical line (task 46).
+#:
+#: The rows in doc-figures.json license a figure by a lookahead: a line that names
+#: its metric, or cites the owning document, is compliant with rule 2 and rule 3's
+#: corollary. That lookahead was scoped to the physical line, and `.claude/CLAUDE.md`
+#: is hard-wrapped at ~88 columns, so a compliant sentence can put `94.8%` on one
+#: line and the `agree2` that licenses it on the next. The prose satisfied the rule
+#: exactly as written and C4 could not see it. Task 38's design was right against the
+#: corpus it was measured on -- `docs/`, where no registered figure straddled a wrap;
+#: widening the scanned set to the two roots is what moved the population.
+#:
+#: SENTENCE, NOT PARAGRAPH. Both clear the finding, and the sentence is the smaller
+#: window: task 46 says in terms that if a widening clears anything real the answer is
+#: a narrower rule and not a bigger one, so the narrowest unit that clears the false
+#: positive is the one to take. Measured 2026-08-02 over docs/ plus the two roots, both
+#: with the licence test of `figure_hits()`: the sentence licenses 3 lines, the
+#: paragraph licenses 7. The extra 4 are licensed by a token in a DIFFERENT SENTENCE of
+#: the same paragraph -- `docs/ingestion_tests/README.md:141` and `:172`,
+#: `docs/archive/README.md:43` -- which is not a claim citing its metric, it is two
+#: claims that happen to be adjacent.
+#:
+#: A boundary is `.`, `!` or `?` followed by whitespace. Nothing narrower survives
+#: this corpus: `AUDIT.md`, `1,960`, `94.8%` and `docs/ingest/*.md` all carry a `.`
+#: with a non-space after it, and requiring the space is what keeps them whole.
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+#: A struck figure is not a restatement (task 46, and `DOCS-POLICY.md` rule 4).
+#:
+#: Rule 4 mandates struck-and-kept -- "tidying by deletion removes the only evidence a
+#: number was ever wrong" -- and 235 struck spans across 48 documents under docs/ are
+#: doing exactly that (measured 2026-08-02 with this regex; `grep -o '~~'` counts 470,
+#: which is the same 235 spans seen as opening and closing markers -- a marker count is
+#: not a span count and the two get quoted interchangeably).
+#: `.claude/CLAUDE.md:190` reads `~~**1182** as of
+#: 2026-07-31~~` and the sentence around it exists to say the number was wrong. A check
+#: that reports a figure whose own sentence disowns it is penalising the behaviour the
+#: policy requires, which is the one way to make people stop doing it.
+#:
+#: IMPLEMENTED BY MASKING, not by a second exemption list: the span is blanked to
+#: spaces of the same length before the compliance test, so offsets are untouched and
+#: a struck figure simply has nothing left to match. See `figure_hits()`.
+STRIKETHROUGH = re.compile(r"~~(?!~).+?~~", re.S)
+
 #: C6: a provenance header is a blockquote in the opening lines of the file that
 #: carries a date and says what superseded it. The prose inside it is not checked --
 #: only that all three components are present.
@@ -300,6 +343,131 @@ def outside_fences(lines):
                 continue
         if fence is None:
             yield lineno, text
+
+
+def paragraphs(lines):
+    """Yield [(lineno, text), ...] -- runs of consecutive non-blank unfenced lines.
+
+    Built on `outside_fences()` rather than beside it, so C4's fence-skipping is the
+    same fence-skipping every other check uses. A gap in the line numbers means a
+    fenced block was skipped, and that ENDS the run: joining across a fence would let
+    a shell transcript license the prose under it.
+    """
+    run, prev = [], None
+    for lineno, text in outside_fences(lines):
+        if not text.strip() or (prev is not None and lineno != prev + 1):
+            if run:
+                yield run
+            run = []
+        if text.strip():
+            run.append((lineno, text))
+        prev = lineno
+    if run:
+        yield run
+
+
+def _joined(run):
+    """(block, [(offset, lineno, text), ...]) for one paragraph.
+
+    JOINED WITH A SPACE, NEVER WITH A NEWLINE, and this is the trap in the whole
+    change. Every pattern in doc-figures.json uses `^` WITHOUT `re.MULTILINE` and
+    `[^\\n]*`. Join on `\\n` and `^` still anchors only at the block's start while
+    `[^\\n]*` confines BOTH the lookahead and the match to the block's first line --
+    the check would report fewer findings and look fixed, while having gone blind to
+    every figure that is not on a paragraph's first line. A space is what actually
+    widens these regexes.
+    """
+    parts, placed, pos = [], [], 0
+    for lineno, text in run:
+        placed.append((pos, lineno, text))
+        parts.append(text)
+        pos += len(text) + 1
+    return " ".join(parts), placed
+
+
+def _mask(block):
+    """`block` with every `~~struck~~` span blanked to spaces of the same length."""
+    out = list(block)
+    for m in STRIKETHROUGH.finditer(block):
+        for i in range(m.start(), m.end()):
+            out[i] = " "
+    return "".join(out)
+
+
+def _sentences(block, masked):
+    """Yield (offset, masked_text) for each sentence of one paragraph.
+
+    Split on the RAW block and slice the masked one at the same offsets: masking is
+    length-preserving, and a `.` inside a struck span must still end a sentence.
+    """
+    start = 0
+    for m in SENTENCE_END.finditer(block):
+        yield start, masked[start:m.start()]
+        start = m.end()
+    yield start, masked[start:]
+
+
+def figure_hits(pattern, lines):
+    """Yield (lineno, match) for every occurrence of `pattern` that is a finding.
+
+    THREE FILTERS, AND THE ORDER IS THE DESIGN.
+
+      1. THE LINE MUST MATCH, on the raw text, exactly as before. This is the base
+         set and it is unchanged, which is what makes this change incapable of
+         inventing a finding -- see below, because task 46 asserts that for the wrong
+         reason.
+      2. THE FIGURE MUST NOT BE STRUCK. Per occurrence, by span containment on the
+         match END: rule 4's struck-and-kept is a property of the number, not of the
+         sentence around it, and a sentence may hold a struck figure beside a live one.
+      3. THE ENCLOSING SENTENCE MUST STILL MATCH SOMEWHERE, on the masked text. This
+         one is DELIBERATELY BINARY rather than per-occurrence. Eight of the nine rows
+         license compliance with a `^(?!...)` lookahead; falsify it and the anchored
+         pattern matches NOWHERE in that sentence, so "matches nowhere" is exactly
+         "the sentence named its metric or cited its owner".
+
+    WHY 3 IS BINARY, which cost a rewrite to learn. Matching the sentence per
+    occurrence and intersecting on the end offset looks equivalent and is not:
+    `[^\\n]*` is greedy, so where a sentence holds the same figure twice the sentence
+    match lands on the LATER one and the earlier occurrence looks licensed. Measured
+    2026-08-02, that silently cleared `docs/ingestion_tests/README.md:268` -- a real
+    `85.7%` restatement in a gate table, licensed by nothing, shadowed by a second
+    `85.7%` two lines down. A check cleared for that reason is the exact failure task
+    46 warns about, arriving through the fix rather than through the bug.
+
+    WHY AN INTERSECTION RATHER THAN A RE-SCOPE. Task 46 argues "widening a match can
+    only ever CLEAR findings, never add them" and uses it to justify measuring only
+    what the change clears. THAT IS FALSE FOR THESE PATTERNS. The webapp, labelling-
+    rate and labelled-36 rows are PROXIMITY patterns -- `\\bwebapp\\b` within 60
+    characters of `93`, `\\bai_involvement\\b` within 60 of `50%` -- and running one of
+    those against a joined paragraph pairs a keyword on one line with a number on the
+    next, which is a match that does not exist today. Measured 2026-08-02 over docs/
+    plus the two roots: a naive paragraph re-scope of all nine patterns INVENTS 2
+    matches while clearing 10.
+
+    AND BOTH INVENTED MATCHES ARE REAL, which is the part worth the next reader's
+    time. `29-labelling-session.md:792` is the webapp suite count with `backend/webapp/`
+    ending the line above it, and `LABELLING-NIGHT.md:508-509` is the labelling rate
+    split as `93` / `s/posting` across the wrap. So the line scope has false NEGATIVES
+    of exactly the shape it has false positives, and widening the match body would find
+    two of them -- both in files these rows already allow, so neither is a finding
+    today. That is a real follow-up with its own measurement and its own decision; it
+    is not this change. Keeping the match line-scoped and widening only the LICENCE
+    makes the new finding set a strict subset of the old one BY CONSTRUCTION, so the
+    property task 46 assumes of the regexes becomes true of the implementation instead.
+    """
+    for run in paragraphs(lines):
+        block, placed = _joined(run)
+        masked = _mask(block)
+        struck = [(m.start(), m.end()) for m in STRIKETHROUGH.finditer(block)]
+        scopes = [(offset, offset + len(sentence), pattern.search(sentence) is not None)
+                  for offset, sentence in _sentences(block, masked)]
+        for offset, lineno, text in placed:
+            for m in pattern.finditer(text):
+                end = offset + m.end() - 1
+                if any(a <= end < b for a, b in struck):
+                    continue
+                if any(a <= end <= b and live for a, b, live in scopes):
+                    yield lineno, m
 
 
 def link_grammar():
@@ -519,6 +687,10 @@ def check_figures(root, files):
     SCOPED HONESTLY. A general duplicate-number detector is not possible and is not
     attempted. This checks a DECLARED list in config/doc-figures.json, it will never
     be complete, and the declaration is as much the deliverable as the code is.
+
+    THE UNIT OF THE CLAIM IS THE SENTENCE, and a struck figure is not a restatement.
+    Both live in `figure_hits()`, with the reasoning at `SENTENCE_END` and
+    `STRIKETHROUGH`.
     """
     figures = load_figures(root).get("figures", [])
     for fig in figures:
@@ -530,10 +702,7 @@ def check_figures(root, files):
                 continue
             if any(fnmatch.fnmatch(rel, pat) for pat in allowed):
                 continue
-            for lineno, text in outside_fences(read(root, rel)):
-                m = pattern.search(text)
-                if not m:
-                    continue
+            for lineno, m in figure_hits(pattern, read(root, rel)):
                 yield Finding(
                     "C4", rel, lineno,
                     f"{fig['name']!r} ({m.group(0)!r}) is owned by {owner}",
@@ -742,6 +911,9 @@ the checks, all six by name:
                           itself last did                                (rule 4)
   C4  one figure, one     a figure in backend/config/doc-figures.json matched
       owner               outside its owning document                (rules 2, 3)
+                          a row's compliance lookahead is satisfied by the whole
+                          SENTENCE, not the physical line, and a ~~struck~~ figure
+                          is exempt: rule 4 asks for struck-and-kept  (task 46)
   C5  register prefixes   D<n> defined outside docs/ingest/DEFECTS.md, DEC-<n>
                           outside DECISIONS.md, or an identifier defined twice in
                           one register                                   (rule 6)

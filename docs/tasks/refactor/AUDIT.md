@@ -253,8 +253,9 @@ the declared roots is the obvious next check and is not written. Until it is, **
 4. Read [`DECISIONS.md`](DECISIONS.md) for anything that looks arbitrary. Most arbitrary-
    looking choices have a measured reason and a rejected alternative recorded beside them.
 5. Read [`../../MEASUREMENT-TRAPS.md`](../../MEASUREMENT-TRAPS.md) before believing any
-   quality figure, including the ones above. Three of its seven entries were found only
-   *after* the conclusions they invalidated had been written down as fact.
+   quality figure, including the ones above. ~~Three of its seven entries~~ **Several of its
+   entries — that file owns its own count, per rule 2** were found only *after* the
+   conclusions they invalidated had been written down as fact.
 
 ## The known weaknesses, stated rather than discovered
 

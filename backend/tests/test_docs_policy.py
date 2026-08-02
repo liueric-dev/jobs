@@ -36,7 +36,7 @@ task 39. Tasks 37-40 prune it as they land, and phase 9 exits when `findings` is
 empty everywhere. If you are reading this and the baseline is still non-empty
 after tranche seven closed, that is the finding.
 
-WHY THE SUBSET TEST IS RED TODAY, 2026-08-02
+WHY THE SUBSET TEST WAS RED ON 2026-08-02, AND WHAT CLEARED IT
 
 `audit-docs.py` was widened to scan the declared roots outside `docs/` -- the root
 `README.md` and `.claude/CLAUDE.md` -- which closes the rule 7 gap `AUDIT.md` s
@@ -45,28 +45,29 @@ and were read by NO other check, C4 included, while both carry figures.
 
 **It landed red, on purpose, and the baseline was NOT grown to hide it.** That is
 task 36's own precedent -- it landed red with real C5 failures -- and growing the
-baseline here would be worse than the finding, because `doc-policy-baseline.json`
+baseline would have been worse than the finding, because `doc-policy-baseline.json`
 was pruned empty at the close of tranche seven and its `_why` says in terms: do not
 add to it. Run `python3 backend/tools/audit-docs.py` for the current set; it is
-deliberately not typed here (rule 3). The findings are of two kinds and only one is
-a defect in a document:
+deliberately not typed here (rule 3). The four findings were of two kinds, only one
+of them a defect in a document, and tasks 45 and 46 cleared them on 2026-08-02:
 
-  C1  neither root declares `kind:` in frontmatter. REAL, and rule 1 says every
-      document declares one. Both read as `contract` by that table. The fix is two
-      frontmatter blocks and it is the owner's, not a session's: `.claude/CLAUDE.md`
-      is harness configuration and the root `README.md` is the repo's front page.
+  C1  neither root declared `kind:` in frontmatter. REAL, and rule 1 says every
+      document declares one. Both read as `contract` by that table. TASK 45 declared
+      them, rejecting an exemption in the checker -- see
+      `TestTheReachabilityRootsAreDeclared`, and `DEC-76`.
 
-  C4  two hits in `.claude/CLAUDE.md`, and BOTH ARE THE INSTRUMENT, NOT THE FILE.
-      The row patterns in `doc-figures.json` make a line compliant when it names its
-      metric or cites the owner, and that lookahead is scoped to the PHYSICAL LINE.
-      This file is hard-wrapped at ~88 columns, so `94.8%` sits one line above
-      `agree2` and `~~1182~~` one line above `AUDIT.md` -- the prose satisfies rule
-      3's corollary exactly as written and C4 cannot see it. Task 38 measured every
-      one of those patterns line-by-line over `docs/`, where no registered figure
-      happened to straddle a wrap; the widening is what surfaced that the unit of
-      the claim is the sentence and the unit of the check is the line. Fixing it
-      means re-deciding task 38's measured design and re-recording its
-      `_pattern_note`s, which is a task, not a side effect of this one.
+  C4  two hits in `.claude/CLAUDE.md`, and BOTH WERE THE INSTRUMENT, NOT THE FILE.
+      TASK 46, with one of its two premises wrong. It held that both findings had the
+      same cause -- a compliance lookahead scoped to the PHYSICAL LINE, on a file
+      hard-wrapped at ~88 columns, so `94.8%` sits one line above the `agree2` that
+      licenses it. That is true of `:121` and FALSE of `:190`: the `main suite test
+      count` row is the one row of the nine carrying NO lookahead, so joining its
+      paragraph still matched `1182` and re-scoping alone could never have cleared
+      it. Its real licence is that the figure is STRUCK -- `~~**1182** as of
+      2026-07-31~~` -- and the sentence around it exists to say the number was wrong,
+      which is rule 4's struck-and-kept and the one behaviour the policy mandates
+      outright. So there were two independent fixes, both landed, both measured, and
+      the tests for them are in `TestSyntheticTree`.
 
 WHAT THESE TESTS DO NOT ASSERT
 
@@ -155,6 +156,31 @@ class TestPolicyBaseline(unittest.TestCase):
     def test_baseline_is_declared_for_every_check(self):
         baseline = audit_docs.load_baseline(ROOT)["checks"]
         self.assertEqual(sorted(audit_docs.CHECKS), sorted(baseline))
+
+
+class TestTheReachabilityRootsAreDeclared(unittest.TestCase):
+    """Task 45, on the real tree: the two roots declare a kind like every other doc.
+
+    REJECTED, and recorded as `DEC-76`: exempting `.claude/CLAUDE.md` in
+    `audit-docs.py`, the way `docs/archive/README.md` is exempt from C6. An exemption
+    is a thing to remember, and rule 7's entire argument is that this repo's
+    documentation rules hold only for as long as a script holds them. The cost of the
+    other answer is four lines at the top of the file every session reads first.
+
+    Both read as `contract` by rule 1's table: they state what is true of the system
+    now, they are edited in place by the commit that changes the behaviour they
+    describe, and a stale line in either is a defect rather than history. Neither is
+    dated-and-frozen, which is what would make it a `record`.
+    """
+
+    def test_both_external_roots_declare_kind_contract(self):
+        roots = audit_docs.external_roots(ROOT)
+        self.assertEqual([".claude/CLAUDE.md", "README.md"], roots)
+        for rel in roots:
+            fm, present = audit_docs.frontmatter(audit_docs.read(ROOT, rel))
+            self.assertTrue(present, f"{rel}: no frontmatter block. `---` must be the "
+                                     "literal first line of the file")
+            self.assertEqual("contract", fm.get("kind"), f"{rel}: wrong kind")
 
 
 class TestC5DoesNotFireOnProse(unittest.TestCase):
@@ -347,6 +373,133 @@ class TestSyntheticTree(unittest.TestCase):
         self.write("docs/quoted.md", "# quoted\n\n```\n$ echo 42\n```\n")
         found, _ = self.run_check("C4")
         self.assertEqual(["docs/copy.md"], [f.path for f in found])
+
+    #: C4's unit of a claim is the SENTENCE, and a struck figure is not a
+    #: restatement (task 46). This lookahead is the shape seven of the nine real rows
+    #: use: a line naming its metric, or citing its owner, is compliant.
+    LICENCE = r"^(?![^\n]*(?:agree2|AUDIT\.md))[^\n]*(?<![\d.:\-])94\.8(?![\d])"
+
+    def agree2_row(self):
+        self.figures([{"name": "agree2", "owner": "docs/owner.md",
+                       "pattern": self.LICENCE, "allowed": []}])
+        self.write("docs/owner.md", "# owner\n\n`agree2` is 94.8%\n")
+
+    def test_c4_scopes_the_licence_to_the_sentence_and_not_to_the_line(self):
+        """The defect task 46 exists for, and it is the check that is wrong.
+
+        `.claude/CLAUDE.md` is hard-wrapped at ~88 columns, so a compliant sentence
+        puts `94.8%` on one line and the `agree2` that licenses it on the next. The
+        prose satisfies rule 3's corollary exactly as written; the line-scoped check
+        could not see it.
+        """
+        self.agree2_row()
+        self.write("docs/wrapped.md",
+                   "# wrapped\n\nit does not agree with itself, 94.8% on\n"
+                   "`ai_involvement`, n=115, both `agree2` (task 06).\n")
+        self.assertEqual([], [f.line() for f in self.run_check("C4")[0]])
+
+    def test_c4_still_fires_when_the_licence_is_in_a_different_sentence(self):
+        """SENTENCE, not paragraph. Two adjacent claims are not one claim.
+
+        The paragraph is the bigger window and clears this too. Measured on the real
+        tree it clears four more lines than the sentence does, every one of them a
+        figure licensed by a token belonging to a different claim.
+        """
+        self.agree2_row()
+        self.write("docs/adjacent.md",
+                   "# adjacent\n\nthe `agree2` column is the one to read. A later\n"
+                   "sentence then restates 94.8% with no metric beside it.\n")
+        self.assertEqual(["docs/adjacent.md"],
+                         [f.path for f in self.run_check("C4")[0]])
+
+    def test_c4_exempts_a_struck_figure_and_only_the_struck_one(self):
+        """Rule 4 mandates struck-and-kept; C4 reported it as a restatement.
+
+        A number whose own sentence disowns it is the behaviour the policy requires,
+        and 235 struck spans under docs/ are doing it. Flagging them penalises the
+        one thing rule 4 asks for -- while a LIVE figure beside a struck one still
+        fires, which is why the exemption is per occurrence and not per sentence.
+        """
+        self.figures([{"name": "suite count", "owner": "docs/owner.md",
+                       "pattern": r"(?<![\d.\-])1[0-9]{3}(?![\d.\-])", "allowed": []}])
+        self.write("docs/owner.md", "# owner\n\nread the `Ran N tests` line\n")
+        self.write("docs/struck.md",
+                   "# struck\n\n~~1182 as of 2026-07-31~~ was correct the day it\n"
+                   "was typed, and is not what the runner prints now.\n")
+        self.write("docs/mixed.md",
+                   "# mixed\n\n~~1182~~ is superseded by 1233, which is live.\n")
+        self.assertEqual(["docs/mixed.md"],
+                         [f.path for f in self.run_check("C4")[0]])
+
+    def test_c4_sees_a_figure_below_a_paragraphs_first_line(self):
+        """The join trap, pinned: a paragraph is joined with a SPACE, never `\\n`.
+
+        Every pattern in doc-figures.json uses `^` without `re.MULTILINE` and
+        `[^\\n]*`. Join on `\\n` and both the licence and the match stay on the
+        block's first line -- the check reports fewer findings and looks fixed, while
+        having gone blind to every figure below a paragraph's first line, which is
+        most of them. It also pins that the finding still carries a real line number.
+        """
+        self.agree2_row()
+        self.write("docs/below.md",
+                   "# below\n\na first line carrying no figure at all,\n"
+                   "and the restatement 94.8% down here.\n")
+        found = self.run_check("C4")[0]
+        self.assertEqual(["docs/below.md"], [f.path for f in found])
+        self.assertEqual(4, found[0].lineno)
+
+    def test_c4_does_not_invent_a_proximity_match_across_a_wrap(self):
+        """Only the LICENCE widened. The match stays on the physical line.
+
+        Task 46 argues that widening a match can only clear findings and never add
+        them, and that is false for the proximity rows -- `webapp` within 60
+        characters of `93`. Run one against a joined paragraph and a keyword on one
+        line pairs with a number on the next. On the real tree a naive paragraph
+        re-scope invents two such matches while clearing ten, so the new finding set
+        is kept a strict subset of the old one by construction instead.
+        """
+        self.figures([{"name": "webapp suite", "owner": "docs/owner.md",
+                       "pattern": r"^(?![^\n]*AUDIT\.md)[^\n]*\bwebapp\b"
+                                  r"[^\n]{0,60}?(?<![\d.:\-])93(?![\d])",
+                       "allowed": []}])
+        self.write("docs/owner.md", "# owner\n\nthe webapp suite prints 93\n")
+        self.write("docs/wrapped.md",
+                   "# wrapped\n\nand `backend/webapp/` under its own venv:\n"
+                   "`Ran 93 tests`, `OK`, untouched by this change.\n")
+        self.assertEqual([], [f.line() for f in self.run_check("C4")[0]])
+
+    def test_c4_does_not_let_a_later_occurrence_shadow_an_earlier_one(self):
+        """Why the sentence licence is binary rather than per occurrence.
+
+        `[^\\n]*` is greedy, so where a sentence holds the same figure twice the
+        sentence match lands on the LATER one. Testing the licence per occurrence and
+        intersecting on the end offset therefore clears the earlier line for a reason
+        that has nothing to do with compliance -- the first implementation of this
+        change did exactly that to `docs/ingestion_tests/README.md:268`, a real
+        restatement in a gate table, shadowed by a second copy two lines below.
+        """
+        self.agree2_row()
+        self.write("docs/twice.md",
+                   "# twice\n\nthe aggregate is 94.8% on one pair of runs,\n"
+                   "and 94.8% again here, with no metric named anywhere.\n")
+        found = self.run_check("C4")[0]
+        self.assertEqual(["docs/twice.md"], [f.path for f in found])
+        self.assertEqual(3, found[0].lineno,
+                         "the earlier occurrence is the one reported")
+
+    def test_c4_does_not_join_a_paragraph_across_a_fenced_block(self):
+        """Fence-skipping survives the paragraph grouping.
+
+        A gap in the line numbers `outside_fences()` yields means a fence was
+        skipped, and that ends the run: joining across one would let a shell
+        transcript license the prose under it.
+        """
+        self.agree2_row()
+        self.write("docs/fenced.md",
+                   "# fenced\n\nthe restatement 94.8% sits here\n"
+                   "```\n$ grep agree2 .\n```\nand the token is only in the fence.\n")
+        self.assertEqual(["docs/fenced.md"],
+                         [f.path for f in self.run_check("C4")[0]])
 
     def test_the_declared_roots_outside_docs_are_scanned_for_figures(self):
         """The rule 7 gap `AUDIT.md` named: roots were C2 roots and nothing else.

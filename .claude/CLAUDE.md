@@ -1,3 +1,9 @@
+---
+kind: contract
+written: 2026-08-02
+generator: none
+---
+
 # CLAUDE.md
 
 Context for Claude Code sessions in this repo. Read before starting any task.
@@ -130,9 +136,9 @@ in older documents, so check the n before reusing either pair.
 
 ## Measurement discipline
 
-Read `docs/MEASUREMENT-TRAPS.md` (promoted from `HANDOFF-match-quality.md` §4). Three
-of its seven entries were found only after the conclusions they invalidated had been
-written down as fact.
+Read `docs/MEASUREMENT-TRAPS.md` (promoted from `HANDOFF-match-quality.md` §4). ~~Three
+of its seven entries~~ **Several of its entries — the file owns the count** were found only
+after the conclusions they invalidated had been written down as fact.
 
 **Never evaluate on the layer you trained on.** L0 is human labels (never train), L1
 is `fit_score`, L2 is `job_events`.

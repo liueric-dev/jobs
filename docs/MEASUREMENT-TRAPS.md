@@ -84,7 +84,7 @@ model or product. The dated narrative they were extracted from is at
 
 ---
 
-## 4. Measurement traps — all seven of these bit on this codebase
+## 4. Measurement traps — every one of these bit on this codebase
 
 These cost more time than the actual engineering. Every one produced a
 plausible-looking number that was wrong. 4.1–4.5 were found during the scoring
@@ -160,3 +160,36 @@ the same size as the effects this tool exists to detect, so a real +0.007 and
 a row-order shuffle are indistinguishable. Both tools now sort by `job_id`
 before anything indexes into the list. If you add a third, sort it too — a
 pinned seed over an unpinned sequence is not a pinned experiment.
+
+### 4.8 An instrument's blind spot is not created by the population that reveals it
+
+Task 46 argued that C4's line-scoped compliance lookahead was a correct design that a moved
+population broke: *"38 measured every one of these patterns line-by-line over `docs/`, and
+no registered figure there happened to straddle a wrap. The design was correct against the
+corpus it was measured on… the instrument was fine until the population moved."*
+
+**It was not fine.** `docs/tasks/refactor/DECISIONS.md:72-73` is a second instance of the
+identical defect, *inside `docs/`*, and had been there the whole time — a registered figure
+on one line and the token licensing it on the line above. Task 38's line-by-line sweep could
+not see it for the same reason C4 could not: **the sweep and the check shared the defect**,
+so measuring one with the other returned a clean result and the clean result was read as
+evidence the design held.
+
+Widening the scanned set to `.claude/CLAUDE.md` made the defect **visible, not true**.
+
+The generalisation, and it is the sharpest form of this file's recurring lesson: **a check
+that measures its own correctness with the same instrument it is checking will always report
+that it is correct.** When an instrument is validated by a sweep built on the same
+assumption, a green tells you the assumption is self-consistent — not that it is right. The
+question to ask is not *"did the population change?"* but *"what would this instrument have
+been unable to see all along, and did I look for that with a different tool?"*
+
+The same episode produced the mirror-image finding. Task 46's stated law — *"widening a
+match can only ever CLEAR findings, never add them"* — is false for any pattern that uses
+**proximity as a proxy for aboutness**. Widening a proximity match invents matches, and when
+it was measured it invented two, **both genuine**: figures hard-wrapped away from the token
+identifying them, invisible to the line scope. So the same wrap that produced C4's false
+positives was producing false negatives nobody had looked for.
+[`tasks/refactor/tranche_seven/47-widen-the-c4-match-body.md`](tasks/refactor/tranche_seven/47-widen-the-c4-match-body.md)
+owns that, and `DEC-78` records why the two halves were separated rather than fixed
+together.

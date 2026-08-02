@@ -1,3 +1,9 @@
+---
+kind: contract
+written: 2026-08-02
+generator: none
+---
+
 # jobs
 
 Daily job-discovery automation, split into two halves.

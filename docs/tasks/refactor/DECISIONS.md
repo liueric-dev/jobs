@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-76`.** Allocated `DEC-46`–`DEC-75`. The count starts at 46 rather than at
+**Next free: `DEC-79`.** Allocated `DEC-46`–`DEC-78`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -2513,3 +2513,144 @@ which is to name the corpus as well as the metric.
 Reversible: yes, and cheaply — a later n=120 selfcheck covering `role_track` replaces the
 `--selfcheck` argument and the report re-runs from committed files in seconds. Nothing was
 tuned against this floor, which is what keeps it reversible.
+
+## DEC-76 — `.claude/CLAUDE.md` declares `kind: contract`, like every other document
+
+**2026-08-02, task 45.**
+
+Widening `audit-docs.py` to scan the two declared reachability roots produced two C1
+findings: neither `.claude/CLAUDE.md` nor the repo root `README.md` carries frontmatter, so
+neither declares a `kind:` under `DOCS-POLICY.md` rule 1. The root `README.md` is
+uncontroversial. `.claude/CLAUDE.md` is not, because it is **not only a document** — it is
+the instruction file every session loads, and a `---` block at the top is content the model
+reads before anything else.
+
+**Decided: declare both `contract`.** Both read as `contract` by every line of rule 1's
+table — they state what is true of the system now, they are edited in place by the commit
+that changes the behaviour, and a stale line in either is a defect rather than history.
+`.claude/CLAUDE.md` already carries struck-and-kept corrections, which is a contract's
+signature and not a record's.
+
+**Rejected: exempt `.claude/CLAUDE.md` explicitly in `audit-docs.py`**, the way
+`CLAUDE_UPDATES.md` and `docs/archive/` are exempted from task 39's namespace sweep. It is
+defensible — the file belongs to the repo owner in a way no other document does — and it was
+rejected because **an exemption is a thing to remember, and rule 7 is the argument that this
+repo's documentation rules only hold when a script holds them.** An exemption list is also
+the second hand-written list that `external_roots()` was deliberately written to avoid.
+
+The cost is four lines of YAML at the top of the file every session opens first, and that
+cost is real rather than nominal. It is accepted because the alternative cost — a figure in
+the most-read file in the repo on the honour system — is what the widening existed to end.
+
+Reversible: yes, trivially. Deleting the block restores the finding; adding the exemption is
+six lines. Nothing downstream reads the frontmatter.
+
+## DEC-77 — the frontend groups by `extract.ROLE_TRACK`, not `score.TRACKS`
+
+**2026-08-02, task 32.**
+
+Two different vocabularies share the field name `role_track` and the documents did not
+notice. `API-CONTRACT-v1.md`'s only example, `ai_operations`, is neither of them — it is a
+`role_archetype` value in `config/pursuit-criteria.json`. `frontend/README.md` recorded the
+collision and handed the choice to whoever implements task 32: *"whoever implements task 32
+has to actually decide this."*
+
+| | | |
+|---|---|---|
+| `extract.ROLE_TRACK` | nine snake_case values (`backend/extract.py:305-308`) | stored on `jobs.role_track` (`backend/schema.py:542`) by extraction |
+| `score.TRACKS` | five Title Case values (`backend/score.py:281-282`) | emitted as `primary_track`, NULL on any unscored posting |
+
+**Decided: `extract.ROLE_TRACK`.** It is the value actually stored on the posting, it is
+already slug-shaped so no mapping layer is invented, and it is a fact about the posting
+rather than about the cohort's framing of it — which is the same reason task 11 made
+`role_track` a fact rather than eight profiles.
+
+**Rejected: `score.TRACKS`.** Fewer and coarser buckets, needs slugification, and it is NULL
+on every posting the budget-limited nightly run has not scored — so grouping by it would
+hide postings for a reason that has nothing to do with the posting. The `contract/` fixtures
+slugify it, and that was a fixture author's placeholder rather than a decision; it is
+superseded by this entry.
+
+**Three caveats travel with this choice and none of them is a reason to re-open it.**
+`role_track` is NULL on every pre-task-11 row, so the display needs a home for an untracked
+posting before it needs grouping at all. The axis is **unstable exactly at the boundary that
+matters** — `agree2` 88.7% at n=115, but 11.3% of postings change whether they belong to
+*any* track between runs, against 6.1% moving between two named tracks
+([`../../ingestion_tests/selfcheck-n120-2026-08-02.md`](../../ingestion_tests/selfcheck-n120-2026-08-02.md)
+owns those figures). And the humans rejected the vocabulary on 15 of 36 labelled postings —
+a *prevalence*, which is a different quantity from the *instability* and does not bound it.
+**So a track is presented as an aid to scanning, never as a fact about the posting**, and
+nothing may sort on it until task 30 says what a group means.
+
+Reversible: yes. The grouping key is one field read from the payload; both vocabularies ship
+in every response. What is not cheaply reversible is a *stored* choice, which is why this
+decision deliberately does not write one.
+
+## DEC-78 — C4's compliance lookahead is evaluated against the sentence, and a struck figure is exempt
+
+**2026-08-02, task 46.**
+
+C4 reported two findings on `.claude/CLAUDE.md` and **the file was right both times.** The
+task file diagnosed one cause; there are two, and separating them is most of the work.
+
+**Decided: the licence is evaluated against the enclosing SENTENCE, and a figure inside a
+`~~…~~` span is exempt. The match itself stays line-scoped**, so the finding set is a strict
+subset of the previous one by construction — the check can only get quieter, never blinder
+in a way that hides a new figure.
+
+A sentence is a maximal run of consecutive non-blank unfenced lines joined **with a space**,
+split at `.`/`!`/`?` followed by whitespace. The whitespace requirement is load-bearing:
+`AUDIT\.md` is itself a compliance token, so a naive split on `.` would destroy the thing
+being tested for.
+
+**Rejected, each with the failure it produces:**
+
+- **Re-scope the whole pattern to the paragraph.** Licenses four more lines than the
+  sentence, and each of the four is licensed by a token belonging to a *different* sentence
+  in the same paragraph — two adjacent claims, not one claim citing its metric. Rule 7's
+  answer to over-clearing is a narrower rule, so the narrowest unit that clears the false
+  positive is what landed.
+- **Join paragraphs with `\n`.** Clears the findings for the wrong reason and goes green by
+  going blind: `^` has no `re.MULTILINE` and `[^\n]*` would confine both the lookahead *and*
+  the match to the block's first line.
+- **Test the licence per occurrence and intersect end offsets.** Greedy `[^\n]*` lets a
+  later copy of a figure shadow an earlier one. This one is not hypothetical — the first
+  implementation **cleared a real restatement** at `docs/ingestion_tests/README.md:268`, an
+  unlicensed `hn_whoishiring` cell with an identical cell two lines below it. Exactly the
+  failure task 46 warns about, arriving through the fix rather than the bug. The licence is
+  now binary per sentence: falsify the lookahead and an anchored pattern matches *nowhere*
+  in the sentence, so "matches nowhere" is precisely "the sentence named its metric or cited
+  its owner". Strikethrough stays per-occurrence, so a live figure beside a struck one still
+  fires.
+- **Exempt `.claude/CLAUDE.md` from C4 altogether.** The widening existed to end exactly
+  that.
+- **Give `main suite test count` the owner-citation clause the other eight rows carry.**
+  It is the one row of nine with no lookahead, and that is deliberate: rule 3 means that
+  figure should never be typed into prose *at all*, so there is no compliant form containing
+  the digits and adding the clause would manufacture one. With no lookahead the row is the
+  strictest of the nine — every unallowed match fires — and the strikethrough exemption
+  removed nothing from it except numbers whose own prose says they are wrong. **Nothing
+  became uncaught.**
+
+**Why:** the unit of a rule-2 claim is the sentence, not the line; and rule 4 mandates
+struck-and-kept, so reporting a figure whose own sentence disowns it penalises the one
+behaviour the policy requires outright.
+
+**The finding that outlived the task, and it inverts the task's own premise.** Task 46
+argued the instrument was fine until the population moved — *"no registered figure in
+`docs/` happened to straddle a wrap"*. **False:** `DECISIONS.md:72-73` is a second instance
+of the identical defect, inside `docs/`, which task 38's line-by-line sweep also could not
+see. Widening the scanned set made the defect **visible, not true**. Promoted to
+[`../../MEASUREMENT-TRAPS.md`](../../MEASUREMENT-TRAPS.md).
+
+And the corollary task 46 states as a law — *"widening a match can only ever CLEAR
+findings, never add them"* — **is false for the three proximity rows.** A paragraph-scoped
+*match* invents two, and **both are real**: `LABELLING-NIGHT.md:508-509` and
+`29-labelling-session.md:791-792` are genuine cross-wrap figures the line scope cannot see.
+So the line scope has false negatives of exactly the shape as its false positives. That is
+[`tranche_seven/47-widen-the-c4-match-body.md`](tranche_seven/47-widen-the-c4-match-body.md),
+opened rather than absorbed, because it is a second measurement and a second decision.
+
+Reversible: yes — confined to `figure_hits()` and two module constants in
+`backend/tools/audit-docs.py`. Eight tests state what would be lost, each failing against
+the specific implementation it rules out.
