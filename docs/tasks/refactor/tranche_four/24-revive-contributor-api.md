@@ -6,9 +6,11 @@ generator: none
 
 # 24 — Revive the contributor API
 
-**Status:** todo. **Depends on:** 23, 33 (tunnel). **Blocks:** 25.
+**Status:** the pre-deploy half landed 2026-08-02; the deploy half is still
+todo. **Depends on:** 23, 33 (tunnel). **Blocks:** 25.
 
-Deploy `backend/api/`. It is written, ~~tested~~ and has never run.
+Deploy `backend/api/`. It is written, ~~tested~~ **tested as of 2026-08-02** and
+has never run.
 
 > **CORRECTED 2026-07-31 (task 34): there are ZERO tests for `backend/api/`.**
 > No file in `backend/tests/` imports `api/app.py` or `api/query_claims.py`; the two
@@ -17,6 +19,20 @@ Deploy `backend/api/`. It is written, ~~tested~~ and has never run.
 > for this task's shape: deploying code with no tests is a bigger job than deploying
 > tested code, and three defects (D08, D09, D41) are dispositioned *fix before deploy*
 > against it with nothing to catch a regression in the fix.
+>
+> **CLOSED 2026-08-02.** `backend/api/tests/` now exists — 35 tests, the service's
+> first, run by api's own venv:
+>
+> ```bash
+> cd backend/api && .venv/bin/python -m unittest discover -s tests
+> ```
+>
+> A **third suite**, not an addition to `backend/tests/`, and that was forced rather
+> than chosen: `backend/api/.venv/pyvenv.cfg` sets
+> `include-system-site-packages = false`, so the system `python3` the pipeline suite
+> runs under cannot import `app.py` at all — it needs `fastapi`. Verified, not assumed:
+> `python3 -c "import fastapi"` raises `ModuleNotFoundError` at the top level.
+> The command is recorded in `.claude/CLAUDE.md` beside the other two.
 
 ## Reversing a decision
 
@@ -43,8 +59,12 @@ by an order of magnitude.
 
 ## What already works
 
-Read `docs/ingest/contributor-api.md` before touching anything — it is a generated
-audit of this exact service.
+Read `docs/ingest/contributor-api.md` before touching anything — it is a
+~~generated~~ **hand-written and hand-maintained** audit of this exact service.
+Its frontmatter says `generator: none` and always meant it
+(`docs/ingest/contributor-api.md:1-15`); `.claude/CLAUDE.md` records that
+"never hand-edit" applies only to a generator that exists, which for this repo is
+none of them.
 
 - FastAPI app object at `backend/api/app.py:152`; `uvicorn app:app --port 8420`
 - **Startup is gated**: a `lifespan` context manager runs `verify_schema()` before
@@ -90,19 +110,43 @@ is contributing" without a terminal session with the author.
 ### Query source
 
 Contributors claim from a queue. Task 25 fills that queue from `search_queries`, seeded
-by `role_track`. Until then, seed manually from task 05's vocabulary so the service has
-something to serve.
+by `role_track`. ~~Until then, seed manually from task 05's vocabulary so the service has
+something to serve.~~
+
+**CORRECTED 2026-08-02: there is nothing to seed.** `backend/config/google-queries.json`
+already holds **4 buckets and 32 slugs**, with `daily_budget` per bucket (2, 3, 2, 1) and
+a `mode` of `nyc` or `remote` on every query. `query_claims.load_query_buckets()` reads it
+(`backend/api/query_claims.py:401-403`) and `pick_stale_queries_by_bucket()` serves from it
+(`:406-453`). It is the same file `ingest/google-serpapi.py` uses — deliberately one file
+since slice D, because the API's private copy had been free to diverge and nothing was
+keeping the two identical. `GOOGLE_QUERIES_FILE` overrides the path if a curated public
+subset is ever wanted.
+
+The queue is therefore not empty and never was. What task 25 changes is where the bank
+comes *from* — a static committed file becomes rows in `search_queries` keyed by
+`role_track` — not whether one exists.
 
 ### Fairness and abuse
 
-- Rate-limit claims per contributor so one worker cannot drain the queue
-- Expire unclaimed-but-checked-out queries so a worker that dies does not block a
-  query forever
-- Cap submissions per contributor per day — a contributor with 250/month should not
-  spend it in an hour
+- ~~Rate-limit claims per contributor so one worker cannot drain the queue~~ **Done
+  2026-08-02 (defect D41)**, per day. `claim` writes one `submission_log` row per query
+  granted and `claims_today()` counts `action = 'claim'`. **Per-day only** — nothing caps
+  how many a contributor holds *concurrently*, and 50 outstanding claims is inside the
+  daily cap and most of a 32-slug bank. See "What the work turned up".
+- ~~Expire unclaimed-but-checked-out queries so a worker that dies does not block a
+  query forever~~ **Already true and was when this was written**:
+  `try_claim_query`'s `WHERE claimed_at IS NULL OR claimed_at < ttl_cutoff`
+  (`backend/api/query_claims.py:256-281`) makes expiry a property of the claim statement
+  rather than a sweeper that has to run. `CLAIM_TTL_MINUTES` defaults to 15.
+- ~~Cap submissions per contributor per day~~ **Already true**:
+  `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` (`backend/api/app.py:52-54`, enforced `:296-301`).
+  It was the *claim* side that was uncapped, which is what D41 was about.
 - Track contribution counts per Builder. Anonymously in the UI (per the visibility
   decision), but attributably in the database, because a contributor whose submissions
-  are consistently empty is a broken worker, not a lazy person
+  are consistently empty is a broken worker, not a lazy person. **Partly done**: an empty
+  submit now writes a `submission_log` row saying so (`backend/api/app.py:405-407`)
+  instead of being indistinguishable from a successful one, so "consistently empty" is a
+  query. Nothing surfaces it — there is no report and no UI.
 
 ### Register it in the router
 
@@ -118,17 +162,252 @@ deprecated.~~ **Half right, corrected 2026-07-31: `backend/api/README.md` does n
 contain the word "deprecat" anywhere.** Its `:32` says the service has *never been
 deployed*, which is a different claim and is still true. The deprecation sentence is in
 `docs/tasks/README.md` only. That one is now marked; this task still owns un-marking it
-when the service actually deploys. Both are now wrong. Correct them as part of this task rather than leaving
-it to task 34 — a doc that actively contradicts a running service is worse than a
-stale one.
+when the service actually deploys. ~~Both are now wrong. Correct them as part of this
+task~~ — **there is one notice, not two**, and un-striking it belongs to deploy day, not
+to the pre-deploy work: a doc that says "expected to be deprecated" about a service that
+is still not running is stale, and a doc that says the opposite about the same service
+would be false.
 
 ## Definition of done
 
-- Service running behind the tunnel; `verify_schema()` passes at startup.
-- A Builder can onboard end-to-end without the author's involvement.
-- At least three contributors submitting successfully.
-- Rate limits, claim expiry and per-contributor caps in place.
-- Registered in task 23's router as a deferred provider.
-- Contribution counts tracked; empty-submission workers detectable.
-- The two deprecation notices corrected.
-- `docs/ingest/contributor-api.md` regenerated.
+Status as of 2026-08-02, after the pre-deploy half. The deploy half is gated on
+task 33's tunnel and on a running service, and is untouched.
+
+- **Service running behind the tunnel; `verify_schema()` passes at startup.**
+  Split. The tunnel half is task 33's and is not done. `verify_schema()` is
+  *stronger* than when this was written — it now checks required **columns** as
+  well as tables, privileges and sequences (`backend/api/app.py:143-154`), which
+  it needed to, because `submission_log.action` is new and `init-schema` is a
+  separate admin command. Not verified against a live database; no database this
+  service can reach has been initialised.
+- **A Builder can onboard end-to-end without the author's involvement.** Not
+  done, and the blocking piece is a decision rather than code — see
+  *A credential-issuing page needs an ownership decision* below.
+- **At least three contributors submitting successfully.** Not done; needs the
+  service to run.
+- **Rate limits, claim expiry and per-contributor caps in place.** Claim expiry
+  and the per-contributor daily cap were already in place before this task and
+  are now pinned by tests; the claim rate limit landed with D41. **Concurrency is
+  still uncapped** — see below.
+- **Registered in task 23's router as a deferred provider.** Not possible.
+  `backend/serp/` does not exist; task 23 is descoped.
+- **Contribution counts tracked; empty-submission workers detectable.**
+  Detectable, not surfaced. `submission_log` now records an empty submit as an
+  empty submit with `action` on every row, so the query exists. No report reads
+  it.
+- **The ~~two~~ one deprecation notice corrected.** Deferred to deploy day on
+  purpose — see the Documentation section above.
+- **`docs/ingest/contributor-api.md` regenerated.** Done, where "regenerated"
+  means **hand-edited**: that file is `generator: none` and always was
+  (`docs/ingest/contributor-api.md:1-15`), and `.claude/CLAUDE.md` records that
+  "never hand-edit" applies only to a generator that exists, which for this repo
+  is none of them. Rewritten for the three fixes and re-cited throughout: the
+  D01 fix had shifted `app.py` by eight lines and roughly thirty citations in
+  that document had gone stale, including the two this task's own defects were
+  filed against.
+
+---
+
+## What the work turned up
+
+Everything below is from the pre-deploy half, 2026-08-02. **Decision text is
+written out in full with no number allocated** — four agents were running in
+parallel and `DECISIONS.md` cannot take four appends. The owner numbers and
+lands these.
+
+### Proposed decision — `backend/api/` gets its own test suite, run by its own venv
+
+**Context.** `backend/api/` had zero tests. The two files in `backend/tests/`
+that mention it name `api/app.py` and `api/query_claims.py` as *paths* in a
+parametrised list over `schema.google_spec()`
+(`backend/tests/test_upsert_checked.py:133-134`) and in a comment
+(`backend/tests/test_lib_contract.py:331`); neither imports the service, and the
+first says so in its own docstring at `:20-28`. Three defects dispositioned *fix
+before deploy* were pointed at it with nothing to catch a regression in the fix.
+
+**Decision.** Tests live in `backend/api/tests/` and are run by api's own venv:
+
+```bash
+cd backend/api && .venv/bin/python -m unittest discover -s tests
+```
+
+That is a **third suite** the repo now has, alongside `backend/tests/` and
+`backend/webapp/tests/`, and the discovery command is recorded in
+`.claude/CLAUDE.md`.
+
+**Why this and not `backend/tests/`.** It is not a preference.
+`backend/api/.venv/pyvenv.cfg` sets `include-system-site-packages = false`, and
+`app.py` imports `fastapi`; the top level runs on system `python3` with no venv
+at all, where `import fastapi` raises `ModuleNotFoundError`. Verified directly
+rather than inferred. Putting these tests in `backend/tests/` would mean either
+adding `fastapi` to the pipeline's dependency set — which `.claude/CLAUDE.md`
+states as a constraint to keep, `psycopg[binary]` being the only third-party
+dependency — or a suite that skips everywhere, which is worse than no suite
+because it reports a number.
+
+**What was rejected.** Importing `app.py` by path with `importlib` the way
+`evals/ingest_modules.py` imports the hyphenated ingest scripts. That solves the
+filename problem, which `api/` does not have, and not the dependency problem,
+which is the actual one.
+
+**Consequence to accept.** Three suites means three `Ran N tests` lines and
+three chances to read the wrong one. The three are independent by construction —
+separate processes, separate venvs, separate Postgres roles — so this is the
+cost of that separation showing up in the test story, not a new problem.
+
+### Proposed decision — an empty submission does not advance the watermark, and the pipeline's opposite rule stays
+
+**Context.** Defect D08. `submit` called `mark_success` unconditionally, so
+`{"jobs": []}` marked a query covered for `GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS`
+with nothing stored.
+
+**Decision.** An empty payload short-circuits: no `mark_success`, no
+`google_jobs_query_stats` row, the claim is **released**, a `submission_log` row
+is written anyway, and the response carries `watermark_advanced: false`. The
+pipeline's `ingest/google-serpapi.py:335-351` keeps doing the opposite —
+advancing on zero results — and the asymmetry is deliberate.
+
+**Why the two differ.** The pipeline made the SerpApi call itself, so an empty
+array there is evidence: the fetch succeeded and the window is genuinely quiet.
+This endpoint sees only an array, from a caller its own module docstring calls
+untrusted. An empty one is what an exhausted key, a blocked worker, a wrong chip
+and a quiet query all look like from here. "Silence is this system's failure
+mode" is a named invariant, and this was its instance.
+
+**What was rejected.**
+
+- **A `fetch_ok: true` flag in the payload.** It moves the assertion to the side
+  that has the bug, and a buggy worker sends it by default.
+- **400 on an empty submit.** The honest "my search returned nothing" worker then
+  retries forever, reports failures to its owner, and leaves the claim locked for
+  the full TTL.
+- **Holding the claim rather than releasing it.** Holding throttles a broken
+  worker, which is a real benefit, but it also blocks the contributor with a
+  *different* SerpApi account who could succeed on it right now.
+
+**The cost, stated rather than hidden.** A genuinely-empty query is handed out
+and fetched again — one SerpApi credit, bounded by the per-contributor daily cap
+and the per-bucket budgets. The other direction is a posting nobody ever sees
+and no counter records, which is unbounded and undetectable.
+
+### Proposed decision — `submission_log.action`, and a daily cap that counts what its name says
+
+**Context.** Defect D41. `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` was enforced by
+`claims_today()`, which counted `submission_log` rows — and `claim`, the only
+endpoint that takes a query out of the pool, wrote none.
+
+**Decision.** `claim` writes one `submission_log` row **per query granted**, and
+`claims_today()` counts rows with `action = 'claim'` and nothing else. That
+needed a new nullable `submission_log.action` column, created by
+`query_claims.ensure_schema()` through `dbconn.add_missing_columns` and declared
+in a new `query_claims.REQUIRED_COLUMNS` that `verify_schema()` checks at
+startup. `SUBMISSION_ACTIONS` is the closed set; `log_submission()` is the only
+writer of the table.
+
+**Why both halves.** Writing the rows without filtering the count would charge an
+honest submit and an honest release against a cap whose name is about claims —
+doing the work would reduce how much work you were allowed, which is a worse
+defect than the one being fixed and would have looked like the fix working.
+
+**Why per query and not per request.** The endpoint already computed
+`remaining = MAX - used` and passed it to `max_queries`, so the number had always
+been read as a count of queries. It now is one.
+
+**Why a request granted nothing writes nothing.** It locked no query and cost
+nothing. Metering it would make "the bank is fully fresh today" indistinguishable
+from abuse and would spend an honest daily cron's allowance on exactly the days
+there is no work — the worker prints "nothing to do" and exits 0 on those.
+
+**Why a column and not a `reason` prefix or a second table.** `reason` is free
+text a caller partially controls; a quota that parses it is a quota an input can
+influence. A second table doubles the grants this role holds. The column costs
+nothing to add because the service has never been deployed, so there is no
+migration and no backfill — a NULL `action` honestly means "written before this
+column existed" and is never counted as a claim.
+
+**Why `CHECK` was rejected.** It would need DDL rights this service deliberately
+does not hold, plus a migration to widen the set. The closed tuple in code is the
+same shape `webapp/jobs.py`'s `EVENT_NAMES` uses for `job_events.event`, for the
+same reason.
+
+### Proposed defect — concurrent claims per contributor are still uncapped
+
+*(Described, not numbered. `docs/ingest/DEFECTS.md` owns the `D` prefix.)*
+
+D41's fix caps claims **per day**. Nothing caps how many a contributor may hold
+**at once**. `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` defaults to 50 and the
+committed query bank has 32 slugs, so one worker can be inside its daily
+allowance and holding the entire bank, each row locked for `CLAIM_TTL_MINUTES`
+(default 15). That is the second half of the original claim-loop threat and it
+survives the fix.
+
+It is cheap to close: `job_ingest_state.claimed_by` is already set by
+`try_claim_query`, so "how many does this contributor hold right now" is one
+`SELECT COUNT(*) WHERE claimed_by = %s AND claimed_at >= ttl_cutoff`. It was left
+out of this tranche because the right ceiling is a policy number nobody has
+picked — it interacts with `MAX_QUERIES_PER_CLAIM` (5), with the per-bucket
+budgets, and with how many Builders are actually running workers, and picking it
+before any of the three is observable would be inventing a constant.
+
+Class: **cosmetic** while the service is undeployed, on the same reasoning D41
+carried. Disposition: **fix before opening to more than a handful of
+contributors** — not before deploy, since a tailnet-only phase 1 has no
+adversary.
+
+### Proposed defect — the claim protocol has no test
+
+`try_claim_query`'s conditional update and `holds_claim`'s three conditions are
+this service's subtlest reasoning — particularly the `claim_granted_at` takeover
+guard, which exists because the pipeline's own claim statement sets `claimed_at`
+without knowing about `claimed_by` and therefore leaves it stale
+(`backend/api/query_claims.py:287-308`). All of it is SQL semantics, and
+`backend/api/tests/fakedb.py` dispatches on SQL text and cannot falsify a `WHERE`
+clause.
+
+`backend/webapp/tests/test_event_replay.py` is the worked pattern for closing
+this: a scratch schema from `evals/scratchdb`, skipped where no database is
+available. It is not built here because `scratchdb.create()` calls
+`schema.ensure_schema()`, which needs CREATE — and `api/`'s `.env` holds
+`jobs_api`, which by design has none, so the fixture would need the same
+`JOBS_SCRATCH_DATABASE_URL` indirection `test_event_replay.py:48-77` documents at
+length. That is a real piece of work, not a line.
+
+Class: **cosmetic** (a testing gap, not a defect in the code). Disposition: fix
+with the scratch-schema fixture, before the service is exposed beyond the
+tailnet.
+
+### A credential-issuing page needs an ownership decision — proposed decision, NOT built
+
+The task's "Builder onboarding" section asks for "a page, behind the existing
+Google SSO, that issues a contributor credential". **This was deliberately not
+built**, and the reason is an ownership boundary rather than effort.
+
+That page would live in `backend/webapp/`, which runs as `jobs_web`. Issuing a
+credential means `INSERT` on `contributors` and `api_keys` — two of the six
+tables `jobs_api` owns, and two that `jobs_web` is granted nothing on.
+`docs/tasks/README.md:40-52` states the boundary and states that task 24 reverses
+the *deprecation* half and explicitly **not** the import half: "the two services
+hold different Postgres roles... so `webapp/` importing from `api/` would relax
+the property this section exists to defend, whatever happens to the deprecation
+plan."
+
+Three ways to satisfy the requirement without breaking that, for the owner to
+choose between:
+
+1. **Grant `jobs_web` INSERT on `contributors` and `api_keys`.** Simplest, and it
+   widens the blast radius of a webapp session-hijacking bug from "reads and
+   event rows" to "mint yourself a contributor credential". It also makes two
+   roles writers of one table, which is the thing role separation buys.
+2. **A server-to-server call: webapp asks api to mint a key**, over the tailnet,
+   with a shared secret. Keeps every table single-writer. Adds a synchronous
+   dependency between two processes that currently cannot reach each other at
+   all, and a second credential to rotate.
+3. **Keep issuance in `manage_users.py` and make the page a request queue** — the
+   Builder asks, the owner runs one command, the key is delivered out of band.
+   Does not meet the DoD's "without the author's involvement", and is the only
+   option that changes no grant and no boundary.
+
+The honest reading is that (2) is right if this service is really being revived
+and (3) is right if it is a stopgap for one cohort. That is a product call about
+how long `backend/api/` is expected to live, which is exactly what "expected to
+be deprecated" was about, and it is the owner's.

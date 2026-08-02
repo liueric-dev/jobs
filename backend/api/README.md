@@ -93,20 +93,57 @@ python3 manage_users.py revoke --key-hash <prefix>
 The raw key prints **once** and is never stored — only `sha256(key)`. If a key
 is lost, revoke it and mint a new one; there is no recovery command by design.
 
+## Tests
+
+```bash
+cd backend/api
+.venv/bin/python -m unittest discover -s tests
+```
+
+**A third suite, not part of `backend/tests/`, and that is a constraint rather
+than a preference.** This venv sets `include-system-site-packages = false`, so
+the system `python3` the pipeline suite runs under cannot import `app.py` at all
+— it needs `fastapi`, which the top level does not have and (per
+`.claude/CLAUDE.md`) is not getting. `backend/tests/test_upsert_checked.py` names
+`api/app.py` and `api/query_claims.py` as *paths* and says in its own docstring
+that importing them would buy nothing there; it parametrises over
+`schema.google_spec()`. So until 2026-08-02 nothing anywhere imported this
+service. These are its first tests.
+
+No database and no network: `tests/fakedb.py` is a fake connection that dispatches
+on SQL text, the same line `backend/webapp/tests/` draws between its unit files
+and `test_event_replay.py`. What that cannot falsify — the claim-protocol SQL in
+`try_claim_query` and `holds_claim` — is not covered and is called out as such.
+
 ## API
 
 All endpoints require `Authorization: Bearer <key>`.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /v1/queries/claim` | `{"max": N}` → stalest unclaimed queries, each with a `date_chip` |
-| `POST /v1/queries/{dataset}/submit` | `{"jobs": [...raw SerpApi objects...]}` → stores results, advances watermark |
+| `POST /v1/queries/claim` | `{"max": N}` → stalest unclaimed queries, each with a `date_chip`. One `submission_log` row per query granted |
+| `POST /v1/queries/{dataset}/submit` | `{"jobs": [...raw SerpApi objects...]}` → stores results. Advances the watermark **only if the payload was non-empty** — see below |
 | `POST /v1/queries/{dataset}/release` | give a claim back after a failed fetch, watermark untouched |
 | `GET /v1/health` | liveness |
 
 Only SerpApi-backed buckets are offered. The Apify source bills the operator's
 own account per result, so it stays in the private pipeline — contributors
 spend their own SerpApi quota, which is the point.
+
+**`submit` with an empty `jobs` array does not advance the watermark**
+(defect D08, fixed 2026-08-02). It releases the claim, logs the submission and
+returns `watermark_advanced: false`. The pipeline's own
+`ingest/google-serpapi.py` *does* advance on zero results and is right to: it
+made the SerpApi call itself, so it knows the fetch succeeded. This service only
+ever sees an array, and an empty one is what an exhausted key, a blocked worker,
+a wrong chip and a genuinely quiet query all look like from here. A worker whose
+search legitimately returned nothing loses nothing — the query is simply handed
+out again.
+
+**`submit` against a slug the server's query bank does not contain returns
+409**, and one whose bank cannot be read returns **500** (defect D09). Neither
+stores anything. `mode` drives `location_is_remote`, so guessing it is a wrong
+stored fact that nothing downstream can distinguish from a right one.
 
 ## Security model
 
@@ -171,6 +208,29 @@ which made it the one documented grant whose absence surfaced as a 500 on a
 contributor's first submit rather than as a refusal to start; slice D added
 `REQUIRED_SEQUENCES` and a `has_sequence_privilege()` check to close that.
 
+`tests/test_grants.py` now keeps this table honest in both directions: it parses
+every SQL literal out of `app.py`, `query_claims.py` and `manage_users.py` and
+asserts that no table is queried without being declared, **and** that no table is
+declared without being queried. A privilege held for no reason is a hole in a
+security posture whose whole claim is "this role can do exactly six things."
+
+### Required columns
+
+`query_claims.REQUIRED_COLUMNS` is a third map, checked at startup by the same
+`verify_schema()`, and it exists for the third instance of the same argument. A
+table can exist, be granted correctly, and still be missing a column every
+`INSERT` names — `init-schema` is a deliberately separate admin command this
+service holds no rights to run, so shipping the code ahead of it is one `git
+pull` away. Today it holds one entry: `submission_log.action`, added 2026-08-02
+so `claims_today()` can count claims rather than log rows (defect D41).
+
+`action` is one of `claim`, `submit`, `release` — free `TEXT` with the closed set
+in `query_claims.SUBMISSION_ACTIONS`, because a `CHECK` constraint would need DDL
+rights this service does not have and a migration to widen. It is nullable with
+no default: this service has never been deployed, so there is no existing row
+whose action anyone could infer, and a NULL honestly reads as "written before
+this column existed" — which `action = 'claim'` never counts.
+
 ## Deployment (manual — not automated by this repo)
 
 **No credential is stored in this repo.** `DATABASE_URL`'s default is
@@ -234,13 +294,22 @@ inbound servers.
 
 ### Before opening this up — known gaps
 
-Both are harmless among trusted devices and real once strangers can call it:
+~~**Claiming is unmetered.**~~ **Closed 2026-08-02, task 24 (defect D41).**
+`POST /v1/queries/claim` now writes one `submission_log` row per query it
+grants, and `claims_today()` counts rows with `action = 'claim'` and nothing
+else — so the daily cap means *queries claimed today*, which is what
+`MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` always said. Counting every row instead
+would have charged an honest submit and an honest release against the same cap.
+A request granted nothing writes nothing: it locked no query, and metering it
+would spend an honest daily cron's allowance on the days the bank is fresh.
 
-- **Claiming is unmetered.** `claims_today()` counts `submission_log` rows,
-  but `POST /v1/queries/claim` writes none. A caller who claims and never
-  submits is never metered, and each claim locks its row for
-  `CLAIM_TTL_MINUTES` — so a claim-loop could hold the whole query bank
-  locked, starving other contributors *and* the owner's own nightly pipeline.
+Two of these are still open, and both are real once strangers can call it:
+
+- **Concurrency is uncapped.** The fix above bounds claims *per day*, not how
+  many a contributor may hold *at once*. Fifty outstanding claims is inside the
+  daily cap and is most of a 32-slug bank, each locked for `CLAIM_TTL_MINUTES`.
+  `job_ingest_state.claimed_by` makes the check one query; it is not built. See
+  `docs/tasks/refactor/tranche_four/24-revive-contributor-api.md`.
 - **No provenance.** Rows submitted through this API are indistinguishable
   from locally-ingested ones, and `submission_log` records counts, not job
   ids. There is no way to trace or purge one contributor's rows if they turn

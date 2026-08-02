@@ -192,8 +192,8 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D05](#d05) | silent data loss | **fixed** — task 42, 2026-08-01 — 3 named drop counters + a separate dedupe count, in the summary | `weworkremotely.py` drops items with zero counters at any verbosity |
 | [D06](#d06) | silent data loss | won't-fix (documented) | `weworkremotely.py` all-feeds-empty indistinguishable from a quiet day |
 | [D07](#d07) | silent data loss | won't-fix (mitigated) | Google sources: non-English relative dates silently lose `posted_at` |
-| [D08](#d08) | silent data loss | fix before deploy — task 24 | Contributor API: empty submit still advances the watermark |
-| [D09](#d09) | silent data loss | fix before deploy — task 24 | Contributor API: unreadable query bank silently mislabels `mode` |
+| [D08](#d08) | silent data loss | **fixed** — task 24, 2026-08-02 — no `mark_success`, claim released, still logged | Contributor API: empty submit still advances the watermark |
+| [D09](#d09) | silent data loss | **fixed** — task 24, 2026-08-02 — 500 on an unreadable bank, 409 on an unknown slug | Contributor API: unreadable query bank silently mislabels `mode` |
 | [D10](#d10) | silent data loss | **fixed** — task 34, 2026-07-31 — now reported, still `[]` | `match.py`: bad `tech_stack` JSON silently becomes `[]` |
 | [D11](#d11) | silent data loss | **fixed** — task 42, 2026-08-01 — ids logged at `DEBUG_PRINT_KEYS`, `DEC-69` | `match.py`: demoted/orphaned rows deleted with no recoverable log |
 | [D12](#d12) | silent data loss | **fixed** — task 34, 2026-07-31 — `check_criteria_sections()`, 4 tests | `match.py`: a typo'd `criteria.json` section silently disables itself |
@@ -225,7 +225,7 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D38](#d38) | cosmetic | won't-fix (harmless) | `POST /v1/events` impression-dedup race under concurrent requests |
 | [D39](#d39) | cosmetic | fix opportunistically | `extract.py`: concurrent runs would double-spend LLM calls (no lock) |
 | [D40](#d40) | cosmetic | fix opportunistically | `score.py`: login-triggered and nightly runs can double-spend |
-| [D41](#d41) | cosmetic | fix before deploy — task 24 | Contributor API: `claim` is unmetered beyond the daily cap (self-documented gap) |
+| [D41](#d41) | cosmetic | **fixed** — task 24, 2026-08-02 — one log row per granted query; the cap counts `action = 'claim'`. Concurrency still uncapped | Contributor API: `claim` is unmetered beyond the daily cap (self-documented gap) |
 | [D42](#d42) | cosmetic | **fixed** — task 34, 2026-07-31 — marked seen, counted, reported | `hn-hiring.py`: null comment items re-fetched forever (audit item 5) |
 | [D43](#d43) | silent data loss | **fixed** — task 08 | `score.py`: a tombstone left the previous score in place, and `has_fields` let an all-null answer through |
 | [D44](#d44) | loud failure | **fixed** — task 08 | `evals/__main__.py`: `evals run` raised `UnboundLocalError` for every task |
@@ -415,26 +415,56 @@ params on every call. Blast radius: google sources
 Disposition: **won't-fix**, currently mitigated; revisit if the query
 parameters are ever dropped or a non-US locale is added.
 
-### D08
+### D08 — fixed
 
 **A contributor submitting `jobs: []` still advances the query's
 watermark.** `submit` performs no non-empty check; `qc.upsert(conn, [])`
 writes nothing, then `mark_success` runs unconditionally
-(`backend/api/app.py:336-341`), marking the query covered for the next 20
-hours. A buggy or lazy contributor worker can silently mark a query "done"
-with zero rows collected. Blast radius: one source (contributor API; never
-deployed). Disposition: **fix before deploy** — `docs/tasks/refactor/README.md`
-Phase 4 task 24 revives this service; this should be closed as part of that
-work, not before.
+(`backend/api/app.py:344-348` — this entry said `:336-341` until 2026-08-02;
+the D01 fix had moved the block eight lines and nothing re-read it), marking
+the query covered for the next 20 hours. A buggy or lazy contributor worker
+can silently mark a query "done" with zero rows collected. Blast radius: one
+source (contributor API; never deployed). Disposition: **fix before deploy** —
+`docs/tasks/refactor/README.md` Phase 4 task 24 revives this service; this
+should be closed as part of that work, not before.
 
-### D09
+**Fixed, task 24, 2026-08-02.** An empty payload now short-circuits before
+`mark_success`: the claim is **released** (same shape as `/release`, so the
+query returns to the pool immediately rather than staying locked for
+`CLAIM_TTL_MINUTES`), a `submission_log` row is written anyway so a
+consistently-empty worker is detectable, `google_jobs_query_stats` is **not**
+written — zero rows from a fetch that may never have happened is not a data
+point about that query's yield — and the response carries
+`watermark_advanced: false` so a worker author can tell the two outcomes
+apart. `backend/api/tests/test_watermark.py`.
+
+The asymmetry with the pipeline is deliberate and is recorded at the fix site:
+`ingest/google-serpapi.py:335-351` *does* advance the watermark on zero
+results, correctly, because it made the SerpApi call itself and knows the
+fetch succeeded. This endpoint only ever sees an array, and an empty one is
+what an exhausted key, a blocked worker, a wrong chip and a genuinely quiet
+query all look like from here. A `fetch_ok` flag in the payload would only
+move the assertion to the side that has the bug.
+
+### D09 — fixed
 
 **`_mode_for_slug` silently returns `"unknown"`** when the query bank is
-unreadable at submit time (`backend/api/app.py:389-401`), which feeds
+unreadable at submit time (`backend/api/app.py:399-411` — this entry said
+`:389-401` until 2026-08-02, stale for the same reason as D08), which feeds
 `location_is_remote` via `normalize_job`'s `mode` parameter — a config read
 failure at exactly the wrong moment quietly corrupts a stored fact rather
 than rejecting the submission. Blast radius: one source (contributor API;
 never deployed). Disposition: **fix before deploy** — task 24.
+
+**Fixed, task 24, 2026-08-02.** `_mode_for_slug` raises instead of returning
+a sentinel. An unreadable bank is a **500** carrying the same "query bank
+unavailable" wording `claim` already used for the identical failure — one
+failure, one status, whichever endpoint meets it — and nothing is stored, the
+watermark stands and the claim is deliberately kept, so the contributor's
+SerpApi credit is re-spendable on a retry. A slug simply **absent** from a
+bank that read fine is a different fact and gets a **409**: `claim` only ever
+issues slugs from this bank, so the only route there is a dataset withdrawn
+between claim and submit. `backend/api/tests/test_query_bank.py`.
 
 ### D10
 
@@ -1092,7 +1122,7 @@ prevents an error but not the duplicate LLM call. Depends on deployment,
 which has not happened. Disposition: fix opportunistically, same shape of
 fix as D39.
 
-### D41
+### D41 — fixed
 
 **Contributor API's `claim` endpoint has no rate limit beyond the daily
 per-contributor cap.** `backend/api/README.md:214-224` names this as a known
@@ -1101,6 +1131,38 @@ bank and starve the operator's own nightly pipeline. The daily cap counts
 `submission_log` rows, and a claim that is never submitted writes no such
 row, so a pure claim-loop is uncapped by that mechanism. Blast radius: one
 source, never deployed. Disposition: **fix before deploy** — task 24.
+
+**Fixed, task 24, 2026-08-02.** Two halves, and either alone would have been
+wrong.
+
+1. `claim` writes **one `submission_log` row per query it grants**
+   (`backend/api/app.py`, the `log_submission` loop in `claim`). Per query,
+   not per request: the endpoint already computed `remaining = MAX - used` and
+   passed it to `max_queries`, so that number had always been read as a count
+   of queries and now is one. A request granted **nothing** writes nothing —
+   it locked no row, and charging for it would exhaust an honest daily cron's
+   allowance on exactly the days the bank is fresh.
+2. `claims_today()` counts `action = 'claim'` and nothing else. Without the
+   filter, an honest submit and an honest release would each burn a claim from
+   a cap whose name is about claims, so doing the work would reduce how much
+   work you were allowed — a worse defect than the one being closed, and one
+   that would have looked like the fix working.
+
+That needed a new nullable `submission_log.action` column, added by
+`query_claims.ensure_schema()` through `dbconn.add_missing_columns` and
+declared in a new `query_claims.REQUIRED_COLUMNS` that `verify_schema()`
+checks at startup — otherwise shipping the code ahead of `init-schema` is a
+500 on a contributor's first claim, which is the same failure
+`REQUIRED_SEQUENCES` exists to prevent one level down. Tests:
+`backend/api/tests/test_claim_metering.py` and `test_grants.py`.
+
+**What this does NOT do**, and it is the reason the README's gap paragraph is
+narrowed rather than deleted: it caps claims per contributor per day. It does
+not cap request rate, and it does not cap how many queries one contributor may
+hold **concurrently** — 50 outstanding claims is within the daily cap and
+still most of a 32-slug bank. `job_ingest_state.claimed_by` makes a
+concurrency cap a one-query check; it is not built and is written up in task
+24's "What the work turned up".
 
 ### D42
 

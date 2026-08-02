@@ -46,6 +46,18 @@ cd backend/webapp
 .venv/bin/uvicorn app:app --port 8421
 ```
 
+So is the contributor API, and **its tests are a third suite, not part of the first**
+(task 24, 2026-08-02). They live in `backend/api/tests/` and must be run by api's own
+interpreter: `backend/api/.venv/pyvenv.cfg` sets `include-system-site-packages = false`,
+so system `python3` cannot import `api/app.py` at all — it needs `fastapi`, which the
+top level does not have and is not getting.
+
+```bash
+cd backend/api
+.venv/bin/python -m unittest discover -s tests
+.venv/bin/uvicorn app:app --port 8420
+```
+
 There is no linter and no formatter configured. `psycopg[binary]` is the pipeline's
 only third-party dependency and the intent is that it stays that way; the top level
 uses system `python3` with no venv at all. Only `api/` and `webapp/` have venvs, and

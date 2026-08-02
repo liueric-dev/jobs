@@ -103,6 +103,12 @@ def verify_schema():
     grant was in README's privilege table and in nothing that ran, which made
     it the one documented requirement a startup check could not catch -- it
     would have surfaced as a 500 on a contributor's first submit instead.
+
+    And the columns, for the third instance of the same argument. A table can
+    exist, be granted, and still be missing a column every INSERT names --
+    init-schema is a separate admin command, so shipping this code ahead of it
+    is one `git pull` away. qc.REQUIRED_COLUMNS lists only columns this service
+    WRITES; reads that lose a column fail visibly at the query.
     """
     problems = []
     with db() as conn:
@@ -133,6 +139,19 @@ def verify_schema():
             ]
             if lacking:
                 problems.append(f"{qualified}: no {', '.join(lacking)}")
+
+        for table, columns in qc.REQUIRED_COLUMNS.items():
+            qualified = f"public.{table}"
+            if conn.execute("SELECT to_regclass(%s)", (qualified,)).fetchone()[0] is None:
+                continue        # already reported as missing above
+            present = {r[0] for r in conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND table_name = %s", (table,)
+            ).fetchall()}
+            absent = [c for c in columns if c not in present]
+            if absent:
+                problems.append(
+                    f"{qualified}: missing column(s) {', '.join(absent)}")
     if problems:
         raise RuntimeError(
             "database is not ready for this service -- "
@@ -185,10 +204,27 @@ def authenticate(conn, authorization):
 def claims_today(conn, contributor_id):
     """Daily volume check, counted from the audit log rather than tracked in
     a counter -- one less piece of mutable state to get out of sync, and the
-    log is written on every submit anyway."""
+    log is written on every claim anyway.
+
+    COUNTS CLAIM ROWS, NOT ALL ROWS (defect D41). It used to count every
+    submission_log row for the contributor, and `claim` wrote none -- so the
+    only endpoint that locks a query was the one endpoint the cap could not
+    see, and a worker that claimed and never submitted was unmetered while
+    holding rows out of the pool for CLAIM_TTL_MINUTES apiece. `claim` now
+    writes one row per query it hands out (see the endpoint), and this counts
+    exactly those.
+
+    Filtering on the action is the other half of the fix and not decoration: if
+    this still counted every row, an honest submit and an honest release would
+    each burn a claim from a cap whose name is about CLAIMS, so doing the work
+    would reduce how much work you were allowed. The
+    callers below already read this number as a count of QUERIES -- `remaining
+    = MAX - used` is passed straight to max_queries -- which is what it now is.
+    """
     day_start = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00")
     row = conn.execute(
-        "SELECT COUNT(*) FROM submission_log WHERE contributor_id = %s AND submitted_at >= %s",
+        "SELECT COUNT(*) FROM submission_log WHERE contributor_id = %s "
+        "AND submitted_at >= %s AND action = 'claim'",
         (contributor_id, day_start),
     ).fetchone()
     return row[0] if row else 0
@@ -230,6 +266,22 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
     contributors trigger it would spend the operator's money on someone else's
     request. Contributors spend their own SerpApi quota, which is the whole
     point of the arrangement.
+
+    EVERY GRANTED QUERY IS METERED (defect D41). One submission_log row per
+    query handed out, written before the response is built, because a claim is
+    the thing that costs: it takes a row out of the pool for CLAIM_TTL_MINUTES
+    whether or not anything is ever submitted against it. Until this was here,
+    claims_today() counted a table `claim` never wrote, so a pure claim-loop
+    could hold the whole query bank locked and starve the operator's own
+    nightly pipeline -- README's own "known gaps" section said so, and nothing
+    checked it.
+
+    A request that is granted NOTHING writes nothing, deliberately. There is no
+    row to meter: it locked no query and cost no contributor anything, so
+    charging for it would make "the bank is fully fresh today" indistinguishable
+    from abuse and would exhaust an honest cron's daily allowance on the
+    (common) days there is no work. Polling volume is a request-rate concern for
+    whatever terminates TLS, not something this cap can express.
     """
     with db() as conn:
         contributor_id = authenticate(conn, authorization)
@@ -251,6 +303,12 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
             conn, buckets, claimed_by=contributor_id,
             max_queries=min(req.max, remaining),
         )
+
+        for q, _ in picked:
+            qc.log_submission(conn, "claim", contributor_id,
+                              f"google_jobs:query:{q['slug']}")
+        if picked:
+            conn.commit()
 
         return {
             "queries": [
@@ -305,19 +363,53 @@ async def submit(
             )
 
         if len(payload.jobs) > MAX_JOBS_PER_SUBMIT:
-            conn.execute(
-                """
-                INSERT INTO submission_log (contributor_id, dataset, submitted_at,
-                    fetched_count, accepted_count, rejected_count, reason)
-                VALUES (%s, %s, %s, %s, 0, %s, 'too many jobs')
-                """,
-                (contributor_id, dataset, qc.utc_now_str(), len(payload.jobs), len(payload.jobs)),
-            )
+            qc.log_submission(conn, "submit", contributor_id, dataset,
+                              fetched_count=len(payload.jobs),
+                              rejected_count=len(payload.jobs),
+                              reason="too many jobs")
             conn.commit()
             raise HTTPException(
                 status_code=400,
                 detail=f"too many jobs (max {MAX_JOBS_PER_SUBMIT})",
             )
+
+        # AN EMPTY SUBMISSION DOES NOT ADVANCE THE WATERMARK (defect D08).
+        #
+        # mark_success used to run unconditionally, so `{"jobs": []}` marked the
+        # query covered for GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS with zero rows
+        # collected -- and every posting published in that window was skipped by
+        # every path, permanently, with the run reporting success.
+        #
+        # WHY THIS IS NOT THE PIPELINE'S RULE. ingest/google-serpapi.py:335-351
+        # DOES advance the watermark on zero results, correctly: it made the
+        # SerpApi call itself, so it knows the fetch succeeded and the window is
+        # genuinely empty. This endpoint knows nothing of the sort. An empty
+        # array is what an exhausted key, a blocked worker, a wrong chip and a
+        # genuinely quiet query all look like from here -- "silence is this
+        # system's failure mode", and the caller is untrusted besides, so a
+        # `fetch_ok: true` flag in the payload would just move the assertion to
+        # the side that has the bug.
+        #
+        # So the claim is RELEASED rather than held: same shape as /release,
+        # which exists for exactly "the fetch produced nothing usable, don't
+        # advance the watermark". The query returns to the pool immediately for
+        # a contributor with a different SerpApi account instead of being locked
+        # for CLAIM_TTL_MINUTES.
+        #
+        # THE COST, STATED: a query that is honestly empty gets re-handed-out
+        # and re-fetched. That is a credit, bounded by the per-contributor daily
+        # cap (which D41's fix makes real) and by the per-bucket budgets. The
+        # other direction is a posting nobody ever sees and no counter records.
+        if not payload.jobs:
+            qc.release_claim(conn, dataset)
+            qc.log_submission(conn, "submit", contributor_id, dataset,
+                              reason="empty submission -- watermark not advanced")
+            conn.commit()
+            return {
+                "accepted": 0, "rejected": 0, "dropped": 0,
+                "new": 0, "updated": 0, "unchanged": 0,
+                "watermark_advanced": False,
+            }
 
         slug = dataset.replace("google_jobs:query:", "")
         mode = _mode_for_slug(slug)
@@ -348,22 +440,19 @@ async def submit(
         qc.mark_success(conn, dataset, qc.utc_now_str())
         qc.log_query_stats(conn, slug, new, len(payload.jobs), text.days_since(last_run))
 
-        conn.execute(
-            """
-            INSERT INTO submission_log (contributor_id, dataset, submitted_at,
-                fetched_count, accepted_count, rejected_count, reason)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (contributor_id, dataset, qc.utc_now_str(), len(payload.jobs),
-             len(records) - dropped, rejected,
-             f"{dropped} record(s) failed to write" if dropped else None),
-        )
+        qc.log_submission(
+            conn, "submit", contributor_id, dataset,
+            fetched_count=len(payload.jobs),
+            accepted_count=len(records) - dropped,
+            rejected_count=rejected,
+            reason=f"{dropped} record(s) failed to write" if dropped else None)
         conn.commit()
 
         return {
             "accepted": len(records) - dropped, "rejected": rejected,
             "dropped": dropped,
             "new": new, "updated": updated, "unchanged": unchanged,
+            "watermark_advanced": True,
         }
 
 
@@ -380,14 +469,8 @@ def release(dataset: str, req: ReleaseRequest, authorization: str = Header(defau
                 status_code=409, detail="you do not hold a live claim on this dataset"
             )
         qc.release_claim(conn, dataset)
-        conn.execute(
-            """
-            INSERT INTO submission_log (contributor_id, dataset, submitted_at,
-                fetched_count, accepted_count, rejected_count, reason)
-            VALUES (%s, %s, %s, 0, 0, 0, %s)
-            """,
-            (contributor_id, dataset, qc.utc_now_str(), (req.reason or "released")[:500]),
-        )
+        qc.log_submission(conn, "release", contributor_id, dataset,
+                          reason=(req.reason or "released")[:500])
         conn.commit()
         return {"released": True}
 
@@ -399,16 +482,40 @@ def release(dataset: str, req: ReleaseRequest, authorization: str = Header(defau
 def _mode_for_slug(slug):
     """'mode' drives the location_is_remote heuristic in normalize_job. It's
     looked up from the server's own query bank rather than taken from the
-    request, so a contributor can't mislabel a query's results."""
+    request, so a contributor can't mislabel a query's results.
+
+    RAISES RATHER THAN RETURNING A SENTINEL (defect D09). This used to swallow
+    OSError/ValueError/KeyError and return "unknown", which normalize_job reads
+    as `mode != "remote"` (google_jobs.py:99) -- so a config file that was
+    briefly unreadable at submit time did not fail the request, it stored a
+    batch of remote postings marked non-remote, and the rows are then
+    indistinguishable from correct ones forever. A config read failure is the
+    server's fault and the server's to report: refusing the submission leaves
+    the claim held, the watermark unadvanced and the contributor's SerpApi
+    credit re-spendable on a retry, which is recoverable. A wrong stored fact
+    is not.
+
+    500 and the same "query bank unavailable" wording as `claim`'s handler
+    above, on purpose: one failure, one status, whichever endpoint meets it.
+
+    A slug that is simply ABSENT from a readable bank is a different thing and
+    keeps a different answer -- 409, because `claim` only ever issues slugs from
+    this bank, so the only way to reach here is a dataset that was withdrawn
+    between claim and submit (or a hand-crafted one). That is a claim that is no
+    longer live, which is what 409 already means on this endpoint.
+    """
     try:
         buckets = qc.load_query_buckets()
-    except (OSError, ValueError, KeyError):
-        return "unknown"
+    except (OSError, ValueError, KeyError) as e:
+        raise HTTPException(status_code=500, detail=f"query bank unavailable: {e}")
     for bucket in buckets.values():
         for q in bucket["queries"]:
             if q["slug"] == slug:
                 return q["mode"]
-    return "unknown"
+    raise HTTPException(
+        status_code=409,
+        detail=f"{slug!r} is not in the server's query bank",
+    )
 
 
 def _last_success(conn, dataset):

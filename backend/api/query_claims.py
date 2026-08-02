@@ -111,6 +111,35 @@ REQUIRED_TABLES = {
 REQUIRED_SEQUENCES = {
     "submission_log_id_seq": ("USAGE", "SELECT"),
 }
+
+#: Columns this service WRITES that were not in submission_log's original
+#: CREATE TABLE, and which therefore exist only where `manage_users.py
+#: init-schema` has run since they were added.
+#:
+#: WHY A COLUMN CHECK, when the table check above already passes. This service
+#: holds no DDL rights: init-schema is a separate, deliberately-invoked admin
+#: command, so a deploy that ships app.py ahead of it finds a submission_log
+#: that exists, is granted correctly, and is missing the column every INSERT
+#: names -- a 500 on a contributor's first claim, which is precisely the shape
+#: of failure verify_schema() exists to convert into a refusal to start. It is
+#: the same argument REQUIRED_SEQUENCES above is annotated with, one level down.
+#: backend/webapp/schema_web.py carries the identical map for the same reason.
+REQUIRED_COLUMNS = {
+    "submission_log": ("action",),
+}
+
+#: The closed vocabulary of submission_log.action. Free TEXT with a closed set
+#: in code, the same shape webapp/jobs.py uses for job_events.event, because the
+#: alternative -- a CHECK constraint -- would need DDL rights this service does
+#: not have and a migration to widen.
+#:
+#: `claim` is the one that matters: claims_today() counts rows with that action
+#: and nothing else, so the daily cap means "queries claimed today" rather than
+#: "log rows written today". Counting every row would meter a submit and a
+#: release against a cap whose name says claims, and would have made the cap
+#: tighten as an honest worker did more work (defect D41).
+SUBMISSION_ACTIONS = ("claim", "submit", "release")
+
 #: One level up, because the query bank is shared with the pipeline's
 #: ingest/google-serpapi.py. Until slice D this file had its own byte-identical
 #: copy -- two files that had to agree and nothing making them.
@@ -200,9 +229,19 @@ def ensure_schema(conn):
             fetched_count INTEGER NOT NULL,
             accepted_count INTEGER NOT NULL,
             rejected_count INTEGER NOT NULL,
-            reason TEXT
+            reason TEXT,
+            action TEXT
         )
     """)
+    # `action` was added after this table's first CREATE. add_missing_columns
+    # rather than ADD COLUMN IF NOT EXISTS, for the reason given above the
+    # job_ingest_state call: the IF NOT EXISTS form still takes an ACCESS
+    # EXCLUSIVE lock when it is a no-op. Nullable and with no default because
+    # this service has never been deployed, so there is no existing row whose
+    # action anyone could infer -- a NULL action is honestly "written before
+    # this column existed", and claims_today() counts `action = 'claim'`, which
+    # NULL never satisfies.
+    dbconn.add_missing_columns(conn, "submission_log", [("action", "TEXT")])
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_submission_log_contrib_time "
         "ON submission_log(contributor_id, submitted_at)"
@@ -316,6 +355,35 @@ def release_claim(conn, dataset):
         (dataset,),
     )
     conn.commit()
+
+
+def log_submission(conn, action, contributor_id, dataset, fetched_count=0,
+                   accepted_count=0, rejected_count=0, reason=None):
+    """The one writer of submission_log, for all four call sites in app.py.
+
+    ONE FUNCTION BECAUSE THE COLUMN LIST IS LOAD-BEARING. This table is the
+    audit trail AND the quota counter -- claims_today() reads it -- so a call
+    site that forgot `action` would not fail, it would write a row the daily cap
+    silently ignores. That is the same class of defect D41 was: a cap that reads
+    a table nothing writes. Four hand-written INSERTs that must agree on a
+    column list is a rule a person has to remember; one function is a rule the
+    interpreter enforces.
+
+    Does NOT commit. Callers are inside `db()`'s `with conn:` and several of
+    them raise an HTTPException immediately afterwards; committing here would
+    decide for them whether the surrounding work is kept.
+    """
+    if action not in SUBMISSION_ACTIONS:
+        raise ValueError(f"unknown submission action {action!r}")
+    conn.execute(
+        """
+        INSERT INTO submission_log (contributor_id, dataset, submitted_at,
+            fetched_count, accepted_count, rejected_count, reason, action)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (contributor_id, dataset, utc_now_str(), fetched_count, accepted_count,
+         rejected_count, reason, action),
+    )
 
 
 def log_query_stats(conn, slug, new_count, total_fetched, days_since_last_run):
