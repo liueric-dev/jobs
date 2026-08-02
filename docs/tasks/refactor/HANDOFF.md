@@ -48,6 +48,10 @@ interpreter you ran**. A skip is not a failure.
 
 ## What is next
 
+**PAUSED at tag `refactor-freeze-2026-08-02`.** [Tranche nine](tranche_nine/README.md) retires
+this documentation system and runs strictly in order from [task 48](tranche_nine/48-stop-clean.md);
+start there, not here ([record](sessions/2026-08-02-the-freeze.md)).
+
 **Read [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) first.** Six of its eight rows are open and
 every one is the owner's; a session cannot close them. What a session *can* do is below.
 
