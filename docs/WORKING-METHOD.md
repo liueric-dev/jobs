@@ -36,6 +36,18 @@ happened to this codebase rather than a principle someone liked the sound of.
 
 ## How this run works
 
+**A session appends to its OWN record and edits only the entry point's live state.** Added
+2026-08-02 by task 47. `docs/tasks/refactor/sessions/YYYY-MM-DD-<slug>.md` is `kind: record` —
+frozen on write, so it never accretes strikes — and it is where *what landed*, *the process
+lesson* and *the finding to carry forward* go. **`HANDOFF.md` gets the state table and nothing
+else**, and it declares a `budget:` that `audit-docs.py` C7 enforces.
+
+This is a convention with a measurement behind it rather than a preference. Task 44 archived
+`HANDOFF.md` from 2771 lines to 2272; **thirty-six hours later it was 2669**, with all six
+doc checks green throughout, because `DOCS-POLICY.md` rule 4's *mark, do not delete* makes
+appending the **correct** response to every correction — so a rolling file carrying narrative
+can only grow. An archival is a one-time cut. A record that cannot be edited is a floor.
+
 **One fresh subagent per task; the orchestrator verifies and commits.** Nothing is
 committed by a subagent. The orchestrator checks each Definition of done against the
 files, writes the decision-log entries, and commits with the task number.

@@ -34,6 +34,11 @@
       "_cleared_by": "Never had findings. docs/archive/README.md was already being followed, and task 40 (6b6ae71) added a file that satisfies it.",
       "count": 0,
       "findings": []
+    },
+    "C7": {
+      "_cleared_by": "Added by task 47, 2026-08-02, and it LANDED GREEN -- the only check here that did. Tasks 36 and the rule-7 widening both landed red on purpose, on the argument that a checker whose first run is green has been tested against nothing; C7 was tested against a synthetic tree instead (tests/test_docs_policy.py, TestSyntheticTree) and against HANDOFF.md with 60 lines appended, because its subject is a live document nobody should have to leave broken to prove a point. Task 47 part A did the split first, so there was nothing for a baseline row to record.",
+      "count": 0,
+      "findings": []
     }
   }
 }

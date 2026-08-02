@@ -110,6 +110,29 @@ Archived files follow `docs/archive/README.md`: a provenance header saying **wha
 when, and what superseded it**, and a **stub and link** left where the content was, so an
 inbound citation still lands somewhere.
 
+### The third half, added 2026-08-02 — a `rolling` document declares a size budget
+
+**The two halves above, taken together, mean a `rolling` document that also carries narrative
+can only grow.** *Mark, do not delete* makes appending the correct response to every
+correction; *retire on a trigger* fixes retirement for a document whose **subject** has landed
+and says nothing about one whose subject is live and whose **size** is the problem.
+
+The evidence is `HANDOFF.md` and it is unambiguous. Task 44 archived it from **2771 lines to
+2272** on 2026-08-01. **Thirty-six hours later it was 2669** — four fifths of the cut, back —
+with C1–C6 reporting zero the entire time, because every one of them measures *consistency* and
+none measures *volume*.
+
+So: **a `rolling` document declares `budget:` in its frontmatter, and check C7 enforces it.**
+An undeclared budget is not a violation — declaring one is the act that asks for the check.
+The fix when C7 fires is **not** to raise the budget: it is to move narrative into a
+`kind: record` file, which is **frozen on write and therefore cannot accrete**. That property,
+not the archival, is what keeps the entry point small — 44's cut was correct and had no way to
+hold, because nothing stopped the next session appending to what it had just cleared.
+
+Task 47 records the split, and found a lifecycle nobody had named: content that is neither the
+entry point nor a dated record, but **true until the code changes** — `contract`, living in
+`docs/tasks/refactor/STANDING-GUIDANCE.md`.
+
 ## Rule 5 — Promote durable content out of bound contexts
 
 **If it would still be true for a different cohort, persona, model or product, it does not
@@ -160,6 +183,13 @@ one indirection later.
 - exits non-zero
 - runs offline, with no network and no database, so it can never be a flake
 
+**Seven checks as of 2026-08-02.** C7 — the size budget rule 4 now asks for — was added by
+task 47 and is **the only one that landed green**, which is a departure worth naming: tasks 36
+and the rule-7 widening both landed red on the argument that a checker whose first run is green
+has been tested against nothing. C7 was tested against a synthetic tree and against
+`HANDOFF.md` with sixty lines appended instead, because its subject is the document every
+session opens first and leaving it broken to prove a point would cost every reader in between.
+
 **What is deliberately not checked**, and is therefore convention rather than rule: whether a
 `rationale` entry is *good*, whether a `record` is *interesting*, and whether prose is accurate.
 No script can check those, and pretending otherwise would put a green tick beside a document
@@ -171,7 +201,7 @@ nobody read.
 |---|---|---|
 | **at decision time** | append to `DECISIONS.md`. The reasoning cannot be reconstructed later — `relevance.json`'s rejected-alternative note is information that existed for about an hour | convention |
 | **at land time** | the commit that changes behaviour edits the `contract` document describing it, in the same commit | ~~`audit-docs.py`~~ **convention — unenforced, corrected 2026-08-01. See below** |
-| **at session end** | append to `CLAUDE_UPDATES.md`; **roll forward or retire** the `rolling` document | `audit-docs.py` staleness check |
+| **at session end** | append to `CLAUDE_UPDATES.md`; write the session's narrative into its **own `kind: record` file**; **roll forward or retire** the `rolling` document, editing only its live state — never appending narrative to it | `audit-docs.py` C3 (staleness) and **C7 (budget)** |
 | **at phase boundary** | run `audit-docs.py` and `audit-doc-links.py`; archive what they flag | both suites |
 
 **The "at land time" row claimed an enforcement that does not exist, and task 37 found it by

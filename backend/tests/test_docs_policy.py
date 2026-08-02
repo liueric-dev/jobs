@@ -518,6 +518,73 @@ class TestSyntheticTree(unittest.TestCase):
         self.assertEqual([".claude/CLAUDE.md", "README.md"],
                          sorted(f.path for f in found))
 
+    def _rolling(self, rel, lines, budget=None):
+        """A `kind: rolling` document of `lines` body lines, budget optional."""
+        head = ["---", "kind: rolling"]
+        if budget is not None:
+            head.append(f"budget: {budget}")
+        head += ["---", ""]
+        self.write(rel, "\n".join(head + [f"line {i}" for i in range(lines)]) + "\n")
+
+    def test_c7_fires_only_when_a_declared_budget_is_exceeded(self):
+        """The whole check, in one assertion pair.
+
+        `over.md` and `under.md` are the same document at two lengths, so the only
+        thing that can distinguish them is the count -- which is the property the
+        other six checks do not have and the reason this one exists.
+        """
+        self._rolling("docs/over.md", 40, budget=10)
+        self._rolling("docs/under.md", 4, budget=10)
+        found = self.run_check("C7")[0]
+        self.assertEqual(["docs/over.md"], [f.path for f in found])
+        self.assertIn("against a declared budget of 10", found[0].problem)
+
+    def test_c7_says_nothing_about_a_document_that_declares_no_budget(self):
+        """An undeclared budget is not a violation, and this is deliberate.
+
+        Rule 7 permits a rule to be unenforced; what it forbids is *claiming* a check
+        that does not exist. Declaring `budget:` is the act that asks for the check,
+        which is the same disposition C3 takes for a file git cannot see -- report
+        nothing rather than guess a threshold nobody chose.
+        """
+        self._rolling("docs/huge.md", 5000)
+        self.assertEqual([], self.run_check("C7")[0])
+
+    def test_c7_reads_only_rolling_documents(self):
+        """A register that grows is a register doing its job.
+
+        `DECISIONS.md` and `CLAUDE_UPDATES.md` are both larger than anything C7
+        guards and are append-only by design. Size is only a defect in a document
+        someone has to read FIRST, which is what `kind: rolling` means -- so a budget
+        on any other kind is ignored rather than honoured, and the frontmatter cannot
+        be used to opt a record into a ceiling it must not have.
+        """
+        self.write("docs/register.md",
+                   "---\nkind: record\nbudget: 2\n---\n" + "row\n" * 500)
+        self.assertEqual([], self.run_check("C7")[0])
+
+    def test_c7_reports_an_unparseable_budget_rather_than_ignoring_it(self):
+        """A typo must not read as "no budget declared".
+
+        Silently skipping `budget: soon` would turn a request for the check into no
+        check at all, which is the failure the whole policy is built around -- a
+        document that stops being watched looks exactly like one with nothing wrong.
+        """
+        self.write("docs/typo.md",
+                   "---\nkind: rolling\nbudget: soon\n---\n" + "row\n" * 500)
+        found = self.run_check("C7")[0]
+        self.assertEqual(["docs/typo.md"], [f.path for f in found])
+        self.assertIn("not a whole number", found[0].problem)
+
+    def test_c7s_key_is_line_independent_like_every_other_check(self):
+        """`Finding.key` doc: a baseline keyed on a line number goes stale at once.
+
+        C7's finding is anchored at line 1 and its identity is the token, so editing
+        the file -- which is the only way to clear it -- cannot change the key.
+        """
+        self._rolling("docs/over.md", 40, budget=10)
+        self.assertEqual("docs/over.md::budget", self.run_check("C7")[0][0].key)
+
     def test_c1_reads_the_external_roots_too(self):
         """Rule 1 says EVERY document declares its kind, and these are documents."""
         self.write("README.md", "# root, undeclared\n")

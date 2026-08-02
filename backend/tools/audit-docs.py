@@ -212,6 +212,7 @@ CLEARED_BY = {
     "C4": "task 38 -- one figure, one owner",
     "C5": "task 39 -- split the D namespace, D46-D65 become DEC-46-DEC-65",
     "C6": "no task; C6 finds nothing today",
+    "C7": "task 47 -- split the entry point; it landed green and the baseline is empty",
 }
 
 BASELINE_PATH = "backend/config/doc-policy-baseline.json"
@@ -803,7 +804,60 @@ def check_archive(root, files):
                 "when, and what superseded it", token="provenance")
 
 
-CHECKS = ("C1", "C2", "C3", "C4", "C5", "C6")
+def check_budget(root, files):
+    """C7 -- a rolling document declaring a `budget:` stays inside it (rule 4).
+
+    THE GAP THIS FILLS, AND IT IS A SCOPE GAP RATHER THAN A BUG IN ANY CHECK ABOVE.
+    C1 asks whether a kind is declared, C2 whether a file is reached, C3 whether a
+    rolling document is stale against its subject, C4 whether a figure is copied,
+    C5 whether an identifier is defined twice, C6 whether an archived file says what
+    superseded it. Every one measures CONSISTENCY. None measures VOLUME -- and the
+    entry point every session reads first went 2771 -> 2272 lines under task 44 and
+    back to 2669 within thirty-six hours, with all six reporting zero the whole time.
+
+    WHY IT IS RULE 4 AND NOT A NEW RULE. Rule 4 is "mark, do not delete -- and retire
+    on a trigger". Applied to a rolling document that also carries narrative, the
+    first half makes APPENDING the correct response to every correction, so the file
+    can only grow; the second half fixes retirement for a document whose SUBJECT has
+    landed and has nothing to say about one whose subject is live and whose size is
+    the problem. A declared budget is that missing trigger, and it fires on a
+    quantity rather than on someone noticing.
+
+    AN UNDECLARED BUDGET IS NOT A VIOLATION. A document with no `budget:` key yields
+    nothing, deliberately -- the same disposition C3 takes for a file git cannot see.
+    Rule 7 allows a rule to be unenforced; what it forbids is claiming a check that
+    does not exist. Declaring the budget is the act that asks for the check.
+
+    Only `kind: rolling` is read. `DECISIONS.md` and `CLAUDE_UPDATES.md` are larger
+    than anything here and are append-only BY DESIGN: a register that grows is a
+    register doing its job. Size is only a defect in a document someone has to read
+    first, which is what `rolling` means.
+    """
+    for rel in files:
+        lines = read(root, rel)
+        fm, _ = frontmatter(lines)
+        if fm.get("kind") != "rolling" or "budget" not in fm:
+            continue
+        try:
+            budget = int(fm["budget"])
+        except ValueError:
+            yield Finding(
+                "C7", rel, 1,
+                f"budget: {fm['budget']!r} is not a whole number of lines",
+                "declare budget: as a plain integer, e.g. budget: 150",
+                token="budget")
+            continue
+        if len(lines) > budget:
+            yield Finding(
+                "C7", rel, 1,
+                f"{len(lines)} lines against a declared budget of {budget}",
+                "move narrative to a kind: record file beside it -- a record is "
+                "frozen on write and cannot accrete, which is the property that "
+                "keeps this file small; raising the budget is not the fix",
+                token="budget")
+
+
+CHECKS = ("C1", "C2", "C3", "C4", "C5", "C6", "C7")
 
 
 def run_checks(root=REPO_ROOT, only=None):
@@ -829,6 +883,8 @@ def run_checks(root=REPO_ROOT, only=None):
         findings += list(check_registers(root, files))
     if "C6" in wanted:
         findings += list(check_archive(root, files))
+    if "C7" in wanted:
+        findings += list(check_budget(root, files))
     findings.sort(key=lambda f: (f.check, f.path, f.lineno or 0))
     return findings, allowed
 
@@ -899,7 +955,7 @@ EPILOG = """scanned: every .md under docs/, PLUS the declared roots outside it -
 README.md and .claude/CLAUDE.md. C2 exempts them because a root cannot be an orphan;
 C5 and C6 read their own fixed file sets. See scanned_files() for the rest.
 
-the checks, all six by name:
+the checks, all seven by name:
 
   C1  kind declared       every scanned .md declares kind: in frontmatter, one
                           of contract, rationale, record, rolling, task  (rule 1)
@@ -919,6 +975,12 @@ the checks, all six by name:
                           one register                                   (rule 6)
   C6  archive provenance  a file under docs/archive/ whose opening lines carry no
                           provenance header                              (rule 4)
+  C7  budget              a kind: rolling document longer than the budget: it
+                          declares in its own frontmatter. No budget: key, no
+                          finding -- declaring one is what asks for the check.
+                          The other six measure consistency; this one measures
+                          volume, which is how HANDOFF.md regrew four fifths of
+                          an archival with all six green                 (rule 4)
 
 not checked: rule 5 (promotion of durable content) needs a judgement about meaning.
 Nor is whether a rationale entry is good, a record interesting, or any sentence in
