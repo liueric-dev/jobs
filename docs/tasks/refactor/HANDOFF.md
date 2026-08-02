@@ -108,13 +108,124 @@ full argument; this table is an index and deliberately does not restate the reas
 | # | question | owns it | if you do nothing |
 |---|---|---|---|
 | 1 | **Who issues a contributor credential?** Grant `jobs_web` INSERT on `jobs_api`'s tables / a server-to-server mint / a request queue the owner services by hand | `DEC-84`, [`24`](tranche_four/24-revive-contributor-api.md) | 24's *"a Builder onboards without the author"* cannot be met, and the page stays unbuilt. **This is a product call about how long `backend/api/` is expected to live** |
-| 2 | **Is the impression dedup key `(profile, job_id)` or `(profile, job_id, request_id)`?** One line of code; it changes the documented meaning of *"a list re-render is not new information"* | [`27`](tranche_five/27-event-schema.md), [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), [`engagement-events.md`](../../ingest/engagement-events.md) | **skips stay a first-render-per-day signal**, and every skip-derived figure quietly means that instead of what it says |
+| 2 | ~~**Is the impression dedup key `(profile, job_id)` or `(profile, job_id, request_id)`?** One line of code; it changes the documented meaning of *"a list re-render is not new information"*~~ **THIS ROW ASKED THE WRONG QUESTION — see § *A session's read on the five decisions* below. The binding axis is `app_user_id`, not `request_id`, and a third option neither this row nor the source documents offer is almost certainly the answer** | [`27`](tranche_five/27-event-schema.md), [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), [`engagement-events.md`](../../ingest/engagement-events.md), and `webapp/jobs.py:934-937` which is the code | ~~skips stay a first-render-per-day signal~~ **understated by a wide margin: the key holds no `app_user_id`, thirty Builders share `pursuit`, so the FIRST Builder to load the list suppresses every other Builder's impression of those postings for the window. Skips are derived from impressions, so they inherit it** |
 | 3 | **More labellers on the SAME ten overlap rows**, and round 2 (~2026-08-09) | [`AUDIT.md`](AUDIT.md) § *What is open*, [`labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md) | tasks **30**, 13's weights and 12's next bump stay gated. More *postings* do nothing — 25 of 36 carry one labeller and add zero to the ceiling. **Task 30's data half is now unblocked and its label half is not**, so this row is the whole remaining blocker there |
-| 7 | **The live database is missing task 25's five search objects and `cohort_signal`'s GRANT.** `verify_schema()` fails on exactly those; `manage_app_users.py init-schema` with `JOBS_ADMIN_DATABASE_URL` is the fix | [`33`](tranche_six/33-deployment.md), `backend/webapp/schema_web.py` | **the search screen cannot be exercised end to end at all** — it is proven against fixtures and three suites and against no running server. Nothing else on the webapp is affected today |
+| ~~7~~ | ~~**The live database is missing task 25's five search objects and `cohort_signal`'s GRANT.**~~ **CLOSED 2026-08-02.** `init-schema` created the five search objects and `builder_profiles`; the seven GRANTs were issued by hand from README § *Database privileges*, as that command's own output says it does not issue them. `verify_schema()` returns clean and the service boots | [`33`](tranche_six/33-deployment.md), `backend/webapp/schema_web.py` | ~~the search screen cannot be exercised end to end~~ **— and the row understated it. Measured by starting the service: `verify_schema()` raised in `app.py`'s lifespan and the process EXITED, so nothing on the webapp ran at all, not the search screen alone.** Now serving: `/v1/health` answers and the page renders. **The lesson worth keeping is that this row read as a nicety for a day while the whole app was down**, because nobody had started it — the same silence-is-the-failure-mode shape the runbook opens with, one layer up |
 | 8 | **Name the tracks, or decide the grouping ships with the vocabulary it has** | `config/pursuit-persona.json`'s `_no_buckets_comment`, [`30`](tranche_six/30-within-track-ordering.md) | grouping works and its headings use `extract.ROLE_TRACK`'s nine slugs with hand-written plain-language copy. The persona config records that `score.TRACKS`' five names "do not describe this population" and makes naming task 30's — **building the mechanism was ungated; choosing the names is not** |
 | 4 | **The machine half of 33** — Cloudflare account and `cloudflared login`, the OAuth redirect URI, `systemctl --user enable`, an off-machine backup destination, and **the one verified restore** | [`33`](tranche_six/33-deployment.md) § the command list, [`RUNBOOK.md`](../../RUNBOOK.md) | nothing is reachable by a Builder, and **there is no proven backup** — the script and its verify timer are written and have never run |
 | 5 | **Apply the `revenue_commercial` archetype?** Proposed and deliberately unapplied | `DEC-64`/`DEC-65`, [`11`](tranche_two/11-archetype-superset-role-track.md) | `role_archetype = other` stays where it is. It is a `FACTS_VERSION` bump and `pursuit-v1` is mid-labelling, which is why it waits |
 | 6 | **`D31`** needs a decision, not a fix | [`DEFECTS.md`](../../ingest/DEFECTS.md) | stays open, correctly |
+
+## A session's read on the five decisions — RECOMMENDATIONS, NOT DECISIONS TAKEN
+
+*Written 2026-08-02 by an assistant session, at the owner's request, after reading the code
+behind each row rather than the prose describing it. **Nothing here is a decision.** No
+`DEC-` number is allocated and no code was changed on account of any of it; every row above
+stays open until the owner closes it. It is here because the rows state what is open and not
+what turns on it, and the owner said the implications were the missing part.*
+
+*Figures are cited, not restated — rule 2. Where a recommendation disagrees with a document,
+the document is named so the disagreement is checkable.*
+
+### (2) The dedup key — this is a defect wearing a decision's clothes
+
+**The row above, `27-event-schema.md`, `API-CONTRACT-v1.md` and `engagement-events.md` all
+frame this as `(profile, job_id)` vs `(profile, job_id, request_id)`. Read the predicate and
+that is not the live question.** `webapp/jobs.py:934-937` matches on `prior.profile` and
+`prior.job_id` and nothing else. `profile` is the **cohort**. So the first Builder to load
+the list writes impressions, and for `IMPRESSION_DEDUP_HOURS` (`jobs.py:95`) every other
+Builder who sees the same postings is deduped away — most sharply at the top of the list,
+where everyone sees the same rows.
+
+`derive_skips()` reads impressions back out (`jobs.py:836-851`) and its own docstring calls
+skips *"the strongest free negative signal available"*. No impression, no skip. **So the
+consequence is not "skips are a first-render-per-day signal". It is that the cohort records
+roughly one Builder's engagement per posting per day instead of thirty.**
+
+**`jobs.py:891-895` already says this** — *"one Builder's render suppresses another
+Builder's impression of the same job for the rest of the window"* — and it never reached
+this table. The row was written from the task file, and the task file predates
+`app_user_id` existing.
+
+Three keys, not two:
+
+| key | window survives? | cross-Builder | matches the documented sentence? |
+|---|---|---|---|
+| `(profile, job_id)` — today | yes | **broken** | **no — it suppresses more than the sentence claims** |
+| `(profile, job_id, request_id)` | no — a new id per render means no window at all | fixed incidentally | no |
+| **`(app_user_id, job_id)`** | yes, per person | fixed directly | **yes** |
+
+**The recommendation is the third, and the argument is that it is not a change of meaning at
+all.** The documented contract is *"a list re-render is not new information."* It does not
+say *another person's* render is not new information. Today's code is stronger than the
+sentence that licenses it, which makes this a defect against the contract rather than a
+choice between two readings of it. **Suggested disposition: file it as `D75`** — the
+register's next free number — **and fix it, rather than leave it owed as a decision.**
+
+Why it is worth doing before the other open rows: `job_events` is append-only, so every day
+it runs adds rows whose meaning has to be caveated permanently. This is the same shape as
+task 27's own argument for landing `rank` and `request_id` before the frontend existed.
+
+### (1) The contributor credential — the question is how long `backend/api/` lives
+
+`DEC-84` states this outright and it is the whole decision; the three options are its
+mechanics. The reading it offers — (2) if the service is genuinely being revived, (3) if it
+is a stopgap for one cohort — is sound, and the population argues for **(3)**: a cohort of
+~30 means the owner is the bottleneck for a couple of dozen credentials in total, against
+(2)'s permanent cost of a second inter-process dependency and a second secret to rotate, in
+a service the repo describes throughout as expected to be deprecated. **Take it with task
+24's *"a Builder onboards without the author's involvement"* recorded as deliberately unmet**,
+which is the same disposition `DEC-92` took for 33's stated goal.
+
+**Option (1) is the one to avoid**, and not on general principle: it widens a webapp
+session-hijack from reads-and-event-rows to minting a contributor credential, and makes two
+roles writers of one table, which is the property role separation exists to buy.
+
+### (8) Naming the tracks — ship the slugs, and the reason has changed
+
+`pursuit-persona.json`'s `_no_buckets_comment` blocks naming on task 29's labels, to avoid
+inventing a vocabulary before the evidence arrives. **The evidence has now partly arrived
+and it argues against spending effort here at all**: the humans answered `no_track_fits` on
+a large fraction of the labelled set ([`labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md)
+owns the figure). Renaming a nine-value vocabulary that the labellers reject on a substantial
+share of postings is polishing the wrong object — the open question the labels raise is
+whether nine values are the right **shape**, which is task 30's gated half.
+
+**Recommendation: ship `extract.ROLE_TRACK`'s nine slugs with the hand-written display copy
+already in `js/tracks.mjs`, and fold naming into task 30 when its label half unblocks.** This
+is the lowest-stakes row in the table and is being carried as though it were not.
+
+### (5) `revenue_commercial` — already decided correctly, but it is hiding a cheap fix
+
+`DEC-64`'s reasoning holds and nothing here disputes it: cost is not the objection, the
+objection is that `job_facts` is keyed on `job_id` alone so re-extraction overwrites the
+facts the labelled postings were labelled against.
+
+**What is worth acting on is the second half of that argument rather than the first.**
+`eval_labels` records `labeller_id`, `round_no` and `labelled_at` and **no `facts_version`**
+(`evals/labels.py:365-379`), so nothing marks which extraction a label was formed against.
+That absent column is what turns "wait for the labelling to finish" from an inconvenience
+into a one-way door — with it, pre-bump and post-bump labels would at least be separable.
+
+**Recommendation: add `facts_version` to `eval_labels` before round 2 (~2026-08-09), not
+after.** It is additive, it is free, and it is the difference between this constraint binding
+once and binding at every future bump. It does not change `DEC-64`'s answer for today.
+
+### (6) `D31` — this is a chore that was filed as a decision
+
+The register asks whether the retry split across the six ingest scripts is deliberate or an
+incomplete migration, and `docs/ingest/weworkremotely.md` already records that nobody could
+determine which. **Nothing turns on the answer.** Three scripts get `lib.http`'s retries and
+three call `urlopen` directly; `lib/http.py:3-5` cites exactly this failure as the reason the
+module exists, and the failures are **counted rather than silent**, which is what keeps it out
+of the class the runbook is built around.
+
+**Recommendation: stop calling it a decision.** Either migrate the three scripts to `lib.http`
+— session work, no owner input, and the answer to "deliberate or incomplete?" becomes moot —
+or mark it won't-fix with the completeness cost stated. It has stayed open because "needs a
+decision" reads as blocked when what it needs is an afternoon.
+
+---
 
 **Two of these have moved since they were written and the movement is easy to miss.** (3) is
 no longer *"get a second labeller"* — that happened, the report printed, and **the ceiling
