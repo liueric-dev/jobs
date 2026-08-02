@@ -6,7 +6,7 @@ generator: none
 
 # 28 — Anonymous cohort aggregation
 
-**Status:** todo. **Depends on:** 27, **which is DONE**. **Blocks:** 32.
+**Status:** DONE 2026-08-02. **Depends on:** 27, **which is DONE**. **Blocks:** 32.
 
 > **UNBLOCKED 2026-08-02, and this is the one blocker on this track that was REMOVED rather
 > than argued away.** `HANDOFF.md` carried this task as *"a real blocker"*: `job_events` was
@@ -134,3 +134,110 @@ within cohort until there is a reason not to.
 - The read endpoint joins the materialised table, never `job_events`.
 - A written note in the endpoint docstring explaining the suppression threshold, so
   someone tuning it later knows it is a privacy control and not a display preference.
+
+## What the work turned up
+
+Implemented 2026-08-02. `../../../../backend/cohort.py` (new), `cohort_signal` in
+`../../../../backend/schema.py:454-533`, the join and the field in
+`../../../../backend/webapp/jobs.py`, the step in `../../../../backend/run-daily.py`, and
+48 tests in `../../../../backend/webapp/tests/test_cohort_signal.py`. Webapp suite
+159 → **207, OK**.
+
+**1. Two of this file's instructions conflict, and the conflict is silent.** § *Rules*
+says "aggregate only `cohort_anon` events — enforce it in the query"; the 2026-08-02
+correction block says take the latest of `{save, unsave}`. An `unsave` is **not**
+`cohort_anon`: `visibility_for()` maps only `save` (`COHORT_VISIBLE_EVENTS`,
+`../../../../backend/webapp/jobs.py:80`), so every unsave row is stored `private`. A
+fold filtered on `visibility = 'cohort_anon'` therefore drops exactly the rows that make
+it a fold, and silently restores the retracted-save overcount the correction block exists
+to prevent — nothing raises, the counts just come out too high. Resolved by putting the
+visibility predicate on the **counted** row only: a save contributes only if it is
+`cohort_anon`, and an unsave is read regardless of its label because it is a retraction
+of the Builder's own save and can only ever *remove* somebody from a count. The privacy
+failure mode is a posting appearing that should not have; a retraction cannot cause one.
+`TestVocabularyDoesNotDrift.test_an_unsave_is_stored_private_and_that_is_why_the_fold_is_asymmetric`
+pins it, so if `unsave` ever becomes cohort-visible that test says the asymmetry can go.
+
+**2. `save_bucket` is `NOT NULL`, deviating from § *Implementation*'s DDL sketch.** That
+sketch lists `null` as a fourth value. A row with a NULL bucket means "somebody saved this
+and it is below three", and the webapp role holds SELECT on the table — so the row's mere
+**existence** publishes the fact the threshold exists to withhold. That is the suppression
+failing open, one indirection past the obvious way, and it defeats § *Rules*' "absence of
+a badge must not be readable as 'exactly one or two'". Sub-threshold postings therefore get
+**no row at all**; the endpoint LEFT JOINs and renders the miss as `null`, so the API shape
+this file describes is unchanged. There is a `CHECK` on the three labels besides.
+
+**3. `'10+'` means eleven or more.** The three labels are ambiguous at the seam and the
+code is not: the first matching bound wins, so 10 savers is `'6-10'`. Kept verbatim
+because `frontend/fixtures/contract/` already ships these exact strings; pinned by
+`TestBucketArithmetic.test_ten_is_in_the_six_to_ten_bucket_not_the_open_one`.
+
+**4. The `id DESC` tie-break is load-bearing, not tidiness.** `occurred_at` is TEXT to the
+second and `record_events` stamps one `now` across a whole batch, so a save and an unsave
+of the same posting can share a timestamp exactly. Without it the winner is arbitrary — and
+arbitrary in the direction that publishes a badge half the time, which is the suppression
+failing open nondeterministically.
+
+**5. The webapp needed `SELECT` on `cohort_signal`, and `test_grants.py` could not see
+that it did — `D69`.** Without the `schema_web.REQUIRED_TABLES` entry, `verify_schema()`
+never checks the table, the service starts cleanly, and the first `GET /v1/jobs` is a
+`permission denied` 500 — precisely the failure
+`../../../../backend/webapp/tests/test_grants.py`'s own docstring says it exists to
+convert into a refusal to start. **The scan missed it**, and the blind spot was
+pre-existing rather than new: `sql_strings_in()` kept only strings matching
+`SELECT|INSERT|UPDATE|DELETE`, so a hoisted `LEFT JOIN <table> <alias> ON …` fragment was
+dropped before `_FROM_JOIN` ever ran. `_BUILDER_STATE_JOIN` is invisible the same way and
+was declared only by luck — `write_builder_state`'s real INSERT names that table elsewhere
+in the file. Stated generally: **the check worked whenever a table was WRITTEN and skipped
+tables that are only ever JOINED**, which is to say it was blind to read-only tables
+specifically, and a read-only join is exactly what this task added.
+
+Closed the same day. `schema_web.py:53` now declares `"cohort_signal": ("SELECT",)` (the
+profiles stream), `test_grants.py`'s `pipeline_read_only` tuple carries it, and
+`sql_strings_in()` now keeps a string that is a statement **or** a join clause. The
+widening is deliberately `JOIN … ON` rather than the obvious `_FROM_JOIN`: measured on
+this package, the loose form admits `label.py`'s user-facing HTML and `onboarding.py`'s
+error messages and reports the "tables" `memory`, `the`, `this`, `what`, `you` and `a`,
+which could only be quieted by listing English words as aliases. The narrow form admits
+exactly two more strings package-wide and adds exactly one name, the real missing grant.
+**Residue:** a fragment with neither a statement keyword nor `JOIN … ON` — a bare
+`FROM <table>` tail, a WHERE clause, a CTE body — is still dropped.
+
+**6. `frontend/verify_fixtures.py` still exits 0, and that is the bad outcome.** It reads
+`LIST_COLUMNS` / `STATE_FIELDS` out of the source with `ast` and compares them to the
+fixtures. `cohort_signal` is a new response key that neither tuple contains, so the
+verifier compares a key set it has not learned about and passes while
+`fixtures/shipped/` no longer describes the code — the "confidently wrong" fixture its own
+docstring warns about. `jobs.COHORT_FIELDS` is exported as a module-level tuple of strings
+so the existing `ast` reader can pick it up; `frontend/` must add it to `list_row` and
+`detail_row` and add the key to the shipped fixtures, positioned **after the state fields
+and before `rank`** on list rows and last on detail rows. That order is pinned from the
+backend side by `TestTheEndpointReadsTheMaterialisedTable.test_the_response_key_order_puts_cohort_signal_before_rank`.
+
+**7. It writes zero rows today, and that is correct.** The cohort is two Builders
+([`../../../labelling-report-2026-08-02.md`](../../../labelling-report-2026-08-02.md)) and
+the floor is three. Because "silence is this system's failure mode", the step's summary
+line prints the builder count and the floor beside the posting count — `0 posting(s)
+[3-5=0, 6-10=0, 10+=0], 2 builder(s) saving, floor=3` distinguishes a quiet Tuesday from
+a broken fold, which `0` alone cannot. It deliberately never prints how many postings are
+*below* the threshold: that is a per-posting sub-threshold fact, which is the one thing
+this module refuses to emit anywhere, logs included.
+
+**8. `run-daily.py`'s docstring says "all nine steps" and there were twelve before this
+change.** Stale before this task touched it, and left alone rather than fixed in passing —
+it is a doc claim about the schedule as a whole, not about this step.
+
+**9. `webapp/README.md`'s GRANT table is enforced by nothing, and that is a rule 7 gap.**
+`../../../../backend/webapp/schema_web.py:19-23` names three consumers of
+`REQUIRED_TABLES` — the startup check, the README's `GRANT` statements, and
+`tests/test_grants.py`. The test checks the dict against the package's SQL and **never
+against the README**, so the second consumer is on the honour system. That is the same
+shape as the failure `tests/test_grants.py:11` records as the reason it exists: a grant
+"documented in its README and verified by nothing", which surfaced as a 500 on a
+contributor's first submit rather than as a refusal to start. The lesson was made
+automatic for one of the two artefacts and not the other. Recorded rather than fixed —
+a README-versus-constant check is its own piece of work, and it is exactly the
+figure-lives-with-its-instrument problem `DOCS-POLICY.md` rule 7 and tranche seven's 45/46
+are closing for `docs/`. `TABLES_TOUCHED = frozenset(REQUIRED_TABLES)`
+(`schema_web.py:119`) is derived, so `test_required_tables_matches_tables_touched` needs
+nothing.

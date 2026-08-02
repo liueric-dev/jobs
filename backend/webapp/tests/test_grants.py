@@ -27,7 +27,8 @@ import schema_web  # noqa: E402
 #: Modules whose SQL runs as the restricted service role. manage_app_users.py
 #: is excluded on purpose: init-schema runs as the admin role, and its CREATE
 #: statements would otherwise read as tables the service needs granted.
-SERVICE_MODULES = ("auth.py", "jobs.py", "db.py", "app.py", "label.py")
+SERVICE_MODULES = ("auth.py", "jobs.py", "db.py", "app.py", "label.py",
+                   "onboarding.py")
 
 #: Aliases bound inside the SQL itself -- subquery, lateral and correlation
 #: names. They follow FROM/JOIN syntactically but are not tables to grant.
@@ -44,6 +45,12 @@ _KEYWORDS = {"set"}
 _STATEMENT = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE)\b", re.I)
 _FROM_JOIN = re.compile(r"\b(?:FROM|JOIN|INTO|UPDATE)\s+([a-z_][a-z0-9_]*)", re.I)
 
+#: A join CLAUSE with no statement keyword in it -- `LEFT JOIN <table> <alias>
+#: ON ...`. The second way a string can be SQL, and the one that used to be
+#: invisible: see sql_strings_in()'s docstring for the defect and for why this
+#: is narrower than it could be.
+_JOIN_CLAUSE = re.compile(r"\bJOIN\s+[a-z_][a-z0-9_]*\b.*?\bON\b", re.I | re.S)
+
 
 def sql_strings_in(path):
     """Every string literal in the module that is actually SQL.
@@ -52,8 +59,60 @@ def sql_strings_in(path):
     docstrings excluded, because neither filter alone is enough here: a grep
     cannot tell a table name from prose, and the prose in this package is full
     of sentences like "reachable from JavaScript" and "revocation is one
-    UPDATE" that satisfy both patterns below. Docstrings are the only place
-    that happens, so dropping them is the whole fix.
+    UPDATE" that satisfy both patterns above. Docstrings are the only place
+    that happens.
+
+    A STRING IS SQL IF IT IS A STATEMENT **OR** A JOIN CLAUSE, and the second
+    half is D69. `_STATEMENT` alone silently dropped every string with no
+    statement keyword in it -- which is exactly what a hoisted join fragment
+    is. jobs.py's `_COHORT_SIGNAL_JOIN` is `LEFT JOIN cohort_signal cs ON ...`
+    and nothing else, so `cohort_signal` was never offered to `_FROM_JOIN`, was
+    never reported undeclared, and this suite stayed green over a missing GRANT
+    -- the precise failure this module's own docstring says it exists to turn
+    into a refusal to start. `_BUILDER_STATE_JOIN` is invisible the same way
+    and was declared only by luck, because write_builder_state's real INSERT
+    names that table elsewhere in the file. The check worked whenever a table
+    was WRITTEN and skipped tables that are only ever JOINED, which is to say
+    it was blind to read-only tables specifically.
+
+    WHY `_JOIN_CLAUSE` AND NOT SIMPLY `_FROM_JOIN`, which is the obvious
+    widening and is wrong. Ordinary English contains "from <word>" constantly.
+    Measured on this package rather than guessed: keeping every string that
+    `_FROM_JOIN` matches admits label.py's user-facing HTML and onboarding.py's
+    error messages, and yields the "tables" `memory`, `the`, `this`, `what`,
+    `you` and `a` -- from "Answer it again from the posting, not from memory"
+    and "a Builder inherits from a cohort profile". None of those is an alias
+    or a keyword, so the only way to quiet them is to list English words in
+    _ALIASES, which is how a real missing GRANT eventually hides behind a
+    plausible-looking word. Requiring the JOIN ... ON shape instead admits
+    exactly two more strings across the whole package -- jobs.py's two join
+    fragments -- and adds exactly one name, `cohort_signal`, which is a real
+    missing grant. No new alias or keyword was needed for this change, and
+    needing one would have been the signal to narrow the pattern further.
+
+    THIS CLOSES THE JOIN-FRAGMENT CASE, NOT THE GENERAL ONE. A SQL fragment
+    hoisted into a constant with neither a statement keyword nor a JOIN ... ON
+    -- a bare `FROM <table>` tail, a WHERE clause naming a table, a CTE body --
+    is still dropped. That residue is deliberate: every narrowing here is a
+    trade against the prose above, and the general form of "is this string SQL"
+    is not a regex. Anything hoisted that way needs a test naming it directly.
+
+    AND A TABLE REACHED THROUGH A VIEW IS INVISIBLE TO ANY VERSION OF THIS,
+    which is a different limit and a permanent one. Measured, not assumed:
+    `job_facts` appears in NO SQL string anywhere in this package -- only in
+    prose and in the declaration itself -- and is nonetheless correctly granted,
+    because `jobs_app` expands to jobs + job_facts + job_matches + job_scores
+    and a plain view runs with the CALLER's privileges. That is the same reason
+    REQUIRED_TABLES lists `jobs`, stated at the top of ../schema_web.py. No
+    scanner over this package's own strings can derive those entries; they come
+    from the view's definition, which lives in another process's file.
+    `profiles` is a third shape again -- named in real SQL, but in
+    ../schema_web.py:769, which is not in SERVICE_MODULES.
+
+    So a declared table can be justified three ways this test cannot check, and
+    two of them are load-bearing today. TestTheScannerSeesJoinOnlyFragments
+    pins what it CAN check; the rest is why REQUIRED_TABLES stays hand-written
+    rather than derived.
 
     An f-string is REASSEMBLED from its literal segments before being tested,
     not tested segment by segment. jobs.py interpolates its column list, so
@@ -88,7 +147,8 @@ def sql_strings_in(path):
                 and id(node) not in consumed):
             texts.append(node.value)
 
-    return [t for t in texts if _STATEMENT.search(t)]
+    return [t for t in texts
+            if _STATEMENT.search(t) or _JOIN_CLAUSE.search(t)]
 
 
 def tables_named_in(path):
@@ -99,6 +159,57 @@ def tables_named_in(path):
             if name not in _ALIASES and name not in _KEYWORDS:
                 found.add(name)
     return found
+
+
+class TestTheScannerSeesJoinOnlyFragments(unittest.TestCase):
+    """D69. The scanner kept only strings containing a statement keyword, so a
+    hoisted `LEFT JOIN <table> <alias> ON ...` constant was dropped before
+    _FROM_JOIN ever ran -- and a table this service only ever JOINs, never
+    writes, could go undeclared with the suite green. These tests are what
+    stops a narrowing back to _STATEMENT alone from silently reopening it."""
+
+    def test_a_join_fragment_with_no_statement_keyword_is_sql(self):
+        fragment = ("LEFT JOIN cohort_signal cs\n"
+                    "       ON cs.job_id = v.id AND cs.cohort_profile = v.profile")
+        self.assertIsNone(_STATEMENT.search(fragment),
+                          "the premise: this string has no statement keyword")
+        self.assertIsNotNone(_JOIN_CLAUSE.search(fragment))
+
+    def test_the_real_fragments_in_jobs_py_are_picked_up(self):
+        named = tables_named_in(os.path.join(WEBAPP_DIR, "jobs.py"))
+        # Both of jobs.py's hoisted joins. builder_job_state was declared only
+        # by luck -- write_builder_state's INSERT names it elsewhere -- and
+        # cohort_signal had no such luck, which is how the defect surfaced.
+        self.assertIn("cohort_signal", named)
+        self.assertIn("builder_job_state", named)
+
+    def test_prose_that_merely_says_from_is_not_sql(self):
+        # WHY THE PATTERN IS `JOIN ... ON` AND NOT SIMPLY `FROM|JOIN <name>`.
+        # These six are real strings from label.py's HTML and onboarding.py's
+        # error messages, and the loose widening reports them as the tables
+        # `the`, `memory`, `what`, `you`, `this` and `a`. Quieting those means
+        # listing English words as aliases, which is how a real missing GRANT
+        # ends up hiding behind a plausible-looking word.
+        for prose in (
+            "Answer it again from the posting, not from memory",
+            "Answer from what the posting says, not from what you think",
+            "I can't tell from this posting",
+            "a Builder inherits from a cohort profile and this one does not exist",
+            "reachable from JavaScript",
+            "Nothing else is needed from you",
+        ):
+            self.assertIsNone(_JOIN_CLAUSE.search(prose), prose)
+            self.assertIsNone(_STATEMENT.search(prose), prose)
+
+    def test_the_widening_needed_no_new_alias_or_keyword(self):
+        # The check on the check. Widening a scanner can only ADD findings, so
+        # the honest deliverable is the list of what it adds -- and every
+        # addition must be a real missing grant, a real alias, or a real
+        # keyword. This one added exactly `cohort_signal`, a real missing
+        # grant, so these two sets are untouched by it. If a future widening
+        # needs an English word in either, narrow the pattern instead.
+        self.assertNotIn("cs", _ALIASES, "the alias is never captured; only the table is")
+        self.assertEqual(_KEYWORDS, {"set"})
 
 
 class TestGrantsCoverTheSQL(unittest.TestCase):
@@ -122,9 +233,39 @@ class TestGrantsCoverTheSQL(unittest.TestCase):
         # The boundary this service is built around: it can read the corpus and
         # append engagement, and it can rewrite nothing. A session-hijacking bug
         # or an injection here must cost reads and event rows, not the corpus.
+        #
+        # cohort_signal (tranche_five/28) is here for a sharper version of the
+        # same reason. It is pipeline-owned like the rest -- ../schema.py
+        # declares it and ../cohort.py's nightly fold is its only writer -- but
+        # what a write grant would cost is not corpus damage: it is the
+        # suppression rule. The threshold below which a posting gets no badge is
+        # a privacy control, and it is enforced in exactly one place. A service
+        # that could INSERT a bucket could publish one it never computed, from a
+        # count nobody applied a floor to.
+        #
+        # IT IS ALSO THE ONE ENTRY test_every_queried_table_is_declared ABOVE
+        # CANNOT SEE. That scan keeps only string literals matching
+        # SELECT|INSERT|UPDATE|DELETE, and jobs.py names cohort_signal solely in
+        # _COHORT_SIGNAL_JOIN -- a bare `LEFT JOIN cohort_signal cs ON ...`
+        # fragment, which contains none of those words. _BUILDER_STATE_JOIN is
+        # invisible for the same reason and is declared only by luck, because
+        # write_builder_state's real INSERT names that table elsewhere in the
+        # file. So for cohort_signal this line is not a companion assertion, it
+        # is the only automated thing standing between a missing GRANT and a
+        # permission-denied 500 on a Builder's first list render.
         pipeline_read_only = ("jobs_app", "jobs", "job_matches", "job_scores",
-                              "job_facts", "profiles")
+                              "job_facts", "profiles", "cohort_signal")
         for table in pipeline_read_only:
+            # Membership first, so an undeclared table fails with an
+            # instruction rather than with a bare KeyError from the line below
+            # -- the reader of this failure is whoever has to add the entry.
+            self.assertIn(
+                table, schema_web.REQUIRED_TABLES,
+                f"{table} is pipeline-owned and queried by this service, but "
+                f"schema_web.REQUIRED_TABLES has no entry, so verify_schema() "
+                f"never checks it: the service starts cleanly and 500s with "
+                f"permission denied on the first request that touches it. Add "
+                f'"{table}": ("SELECT",) there and to README.md\'s grant table.')
             self.assertEqual(
                 schema_web.REQUIRED_TABLES[table], ("SELECT",),
                 f"{table} is pipeline-owned and must stay SELECT-only here")

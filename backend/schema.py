@@ -141,6 +141,58 @@ FACTS_TABLE = "job_facts"
 MATCHES_TABLE = "job_matches"
 PROFILES_TABLE = "profiles"
 EVENTS_TABLE = "job_events"
+COHORT_SIGNAL_TABLE = "cohort_signal"
+
+#: How many DISTINCT Builders must have a posting currently saved before the
+#: cohort badge says anything at all. THIS IS A PRIVACY CONTROL AND NOT A
+#: DISPLAY PREFERENCE, which is why it is a constant here rather than a literal
+#: in the query or a config knob.
+#:
+#: The argument is in tranche_five/28-cohort-aggregation.md § The small-N
+#: problem and it is arithmetic, not caution. Thirty Builders who see each other
+#: in a classroom: "1 Builder saved this", plus knowing who was on their laptop,
+#: plus a posting for a role someone mentioned out loud, is an identification.
+#: An aggregate is not automatically anonymous at this scale.
+#:
+#: LOWERING IT TO SEE OUTPUT IS THE ONE THING NOT TO DO. The live cohort is two
+#: labellers today (docs/labelling-report-2026-08-02.md), so at 3 this table is
+#: empty by construction -- and an empty badge is the CORRECT rendering of a
+#: two-person cohort, not a bug to tune away. webapp/tests/test_cohort_signal.py
+#: TestSuppression pins that 2 savers produce no row.
+COHORT_MIN_SAVERS = 3
+
+#: (inclusive upper bound or None for "no ceiling", label), in order. Bucketed
+#: rather than exact because an exact count that increments visibly lets an
+#: observer infer WHEN somebody saved something, and timing is the strongest
+#: deanonymiser available in a room where people can see each other.
+#:
+#: NOTE ON THE BOUNDARY, because the labels are ambiguous and the code is not:
+#: 10 savers is '6-10' -- the first matching bound wins -- so '10+' means ELEVEN
+#: or more despite reading as "ten or more". The labels are the task file's,
+#: verbatim, and the fixtures in frontend/fixtures/contract/ already show those
+#: exact strings, so they are not ours to tidy.
+COHORT_BUCKETS = ((5, "3-5"), (10, "6-10"), (None, "10+"))
+
+#: Just the labels, for the CHECK constraint and for anything asserting on the
+#: vocabulary. One tuple, so the constraint and the writer cannot disagree.
+COHORT_BUCKET_LABELS = tuple(label for _, label in COHORT_BUCKETS)
+
+
+def cohort_bucket(savers):
+    """Bucket a distinct-Builder count, or None if it must be suppressed.
+
+    Pure arithmetic, no I/O, so the suppression rule is unit-testable without a
+    database -- the same property score_job() is kept for. It is the ONLY place
+    the threshold and the boundaries are applied; cohort.py's SQL selects which
+    rows exist and this decides what they are allowed to say.
+    """
+    if savers < COHORT_MIN_SAVERS:
+        return None
+    for bound, label in COHORT_BUCKETS:
+        if bound is None or savers <= bound:
+            return label
+    raise AssertionError("COHORT_BUCKETS has no open-ended final bucket")
+
 
 #: Bump to invalidate every extracted row. job_facts.facts_version records
 #: which generation of the extraction schema produced a row, so "which rows
@@ -460,6 +512,60 @@ def ensure_schema(conn):
             match_score INTEGER,
             fit_score INTEGER,
             occurred_at TEXT NOT NULL
+        )
+    """)
+    # The cohort badge's materialised answer (tranche_five/28), beside the table
+    # it is folded from. One row per posting the cohort is ALLOWED to be told
+    # about, refreshed nightly by cohort.py, joined by webapp/jobs.py and read
+    # by nothing else.
+    #
+    # MATERIALISED RATHER THAN COMPUTED LIVE, which is the task file's
+    # instruction and has two reasons. Live computation invites a timing side
+    # channel -- a badge that flips mid-session tells an observer that somebody
+    # in the room just saved something, which is the recency leak the whole
+    # design exists to avoid -- and it puts a fold over an append-only log on
+    # every list render.
+    #
+    # THE PIPELINE OWNS IT, NOT webapp/. builder_job_state (webapp/schema_web.py)
+    # carries saved_at per Builder and is the obvious source; it is also on the
+    # far side of the ownership line this file's processes keep -- they share
+    # only this file and lib/, and none imports another -- and the compute runs
+    # on the nightly cycle. A pipeline table must not require the surfacing
+    # service's schema, the same argument app_user_id is annotated with below.
+    # So the fold reads job_events, which lives here. See cohort.py.
+    #
+    #   save_bucket -- '3-5' | '6-10' | '10+'. NOT NULL, AND THAT IS A
+    #     DELIBERATE DEVIATION from the task file's sketch, which lists null as
+    #     a fourth value. A row with a NULL bucket would mean "somebody saved
+    #     this and it is below three", and the webapp role holds SELECT on this
+    #     table -- so the row's mere EXISTENCE would publish the fact the
+    #     threshold exists to withhold. That is the suppression failing open,
+    #     one indirection later than the obvious way. Absence is the answer for
+    #     everything below the threshold: a posting with two savers and a
+    #     posting with none are the same query result and are indistinguishable,
+    #     which is what "absence of a badge must not be readable as exactly one
+    #     or two" asks for. The endpoint LEFT JOINs and renders the miss as
+    #     null, so the API shape the task file describes is unchanged.
+    #   computed_at -- when the nightly fold last ran. Provenance for an
+    #     operator, and DELIBERATELY NOT SERVED: it is a per-posting timestamp
+    #     that moves when the underlying set moves, so a client that could read
+    #     it would have the recency channel back. webapp/jobs.py selects
+    #     save_bucket and nothing else.
+    #
+    # No index beyond the primary key. Every read is a lookup by
+    # (job_id, cohort_profile) from a LEFT JOIN, which the PK already serves;
+    # nothing orders or ranges over this table, and nothing may -- ordering by
+    # a save count is the ranking feedback loop the task file rules out.
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {COHORT_SIGNAL_TABLE} (
+            job_id TEXT NOT NULL REFERENCES jobs(id)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+            cohort_profile TEXT NOT NULL,
+            save_bucket TEXT NOT NULL,
+            computed_at TEXT NOT NULL,
+            PRIMARY KEY (job_id, cohort_profile),
+            CONSTRAINT cohort_signal_bucket CHECK (save_bucket IN (
+                {', '.join("'" + b + "'" for b in COHORT_BUCKET_LABELS)}))
         )
     """)
     conn.commit()
@@ -854,6 +960,7 @@ _JOB_CHILD_FKS = (
     (FACTS_TABLE, "job_id"),
     (MATCHES_TABLE, "job_id"),
     (EVENTS_TABLE, "job_id"),
+    (COHORT_SIGNAL_TABLE, "job_id"),
 )
 
 

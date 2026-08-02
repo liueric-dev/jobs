@@ -83,7 +83,7 @@ else does.** Decisions are `DEC-<n>` and live in
 [`DECISIONS.md`](../tasks/refactor/DECISIONS.md); task numbers live in
 [`tasks/refactor/README.md`](../tasks/refactor/README.md).
 
-**Next free: `D69`.** Allocated `D01`–`D45` and `D66`–`D68`; **`D46`–`D65` are burnt and
+**Next free: `D71`.** Allocated `D01`–`D45` and `D66`–`D70`; **`D46`–`D65` are burnt and
 must never be issued.** They are not defects and never were — `DECISIONS.md` continued this register's
 count when it started allocating decision IDs mid-file, so those twenty numbers circulate
 in eighty-odd places meaning *decisions*. Task 39 re-prefixed the live sites to `DEC-46`–
@@ -233,6 +233,8 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D66](#d66) | silent data loss | **fixed** — 2026-08-01 — `job_events.app_user_id`, nullable and unbackfilled | `GET /v1/jobs` reports `seen` cohort-wide, not per Builder |
 | [D67](#d67) | silent data loss | **fixed** — 2026-08-01 — same column, same join; dedup key deliberately untouched | `applied` likewise, contradicting the `private` visibility on its own event row |
 | [D68](#d68) | silent data loss | **fixed** — 2026-08-01 — both halves; two conjuncts, one on each end of the derivation | `derive_skips` reads *and* is vetoed by another Builder's events if the client echoes their `request_id` |
+| [D69](#d69) | check with a blind spot | **PARTIALLY fixed** — 2026-08-02 — `_JOIN_CLAUSE` closes the join-fragment case; **three-part residue, recorded not closed** | `test_grants` kept only strings containing a statement keyword, so a table named solely in a hoisted `JOIN … ON` fragment was never checked for a GRANT |
+| [D70](#d70) | check with a blind spot | **open** — found 2026-08-02 | `frontend/verify_fixtures.py` hardcodes the tail of the expected key list, so a new response field is invisible: fixtures and verifier agree with each other and both disagree with the code |
 
 **D66 and D67 were absent from this index entirely** until they were closed — added
 2026-08-01, on the lesson D45's row records four paragraphs above: *"the index is the part
@@ -1363,3 +1365,132 @@ For readers arriving from a task file rather than this register:
 | "audit item 8" (`docs/ingestion_tests/04-score-validation.md:5`) | D15 |
 | the `buckets` `KeyError`, "a second defect" (ibid., `:122-177`) | D16 |
 | `weworkremotely.py`'s duplicated `parse_posted_at` call | D29 |
+
+---
+
+### D69 — partially fixed
+
+<a id="d69"></a>
+
+**`tests/test_grants.py` could not see a table that is only ever JOINED.** Its
+`sql_strings_in()` kept only string literals containing `SELECT|INSERT|UPDATE|DELETE`, so a
+hoisted `LEFT JOIN <table> <alias> ON …` constant — which contains none of those words — was
+dropped before `_FROM_JOIN` ever ran. The check therefore worked whenever a table was
+**written** and silently skipped tables that are only ever **joined**: it was blind to
+read-only tables specifically.
+
+**This is the failure that module's own docstring says it exists to prevent**, one level up:
+*"a service that starts cleanly and 500s on that one request — in production, on someone
+else's first click, with a permission error nobody was looking for."*
+
+**Found 2026-08-02** when task 28 added `cohort_signal`, named in `webapp/jobs.py` solely in
+a join fragment. The webapp suite was **green with no `REQUIRED_TABLES` entry and no
+GRANT**, so `verify_schema()` never checked it and the first `GET /v1/jobs` would have been
+`permission denied for table cohort_signal`.
+
+**What makes it structural rather than a one-off:** `_BUILDER_STATE_JOIN` is invisible the
+same way, and `builder_job_state` was declared **only by luck** — `write_builder_state`'s
+real `INSERT INTO` names that table elsewhere in the same file. `cohort_signal` had no such
+luck.
+
+Class: **static check with a blind spot in its input filter** — the same family as the
+`\y`/`\b` landmine: no error, no red, just a quietly empty answer.
+
+**Fixed for the join-fragment case, 2026-08-02**, by keeping a string that is a statement
+**or** a join clause (`_JOIN_CLAUSE`, requiring the `JOIN … ON` shape). The obvious wider
+fix — keep anything `_FROM_JOIN` matches — was **measured and rejected**: it admits
+`label.py`'s HTML and `onboarding.py`'s error strings and yields "tables" called `memory`,
+`the`, `this`, `what`, `you` and `a`, out of prose like *"from the posting, not from
+memory"*. Quieting those means listing English words in `_ALIASES`, which is how a real
+missing GRANT eventually hides behind a plausible-looking word. The widening admits **2
+strings across the package and adds exactly 1 table name** — `cohort_signal`, the genuinely
+missing grant. Zero additions in the other five modules.
+
+**DISPOSITION IS PARTIAL, DELIBERATELY. The residue is three-part and two parts are
+permanent:**
+
+1. **Non-join fragments with no statement keyword.** A hoisted bare `FROM <table>` tail, a
+   WHERE clause, a CTE body, a subquery string. Still dropped. (`UPDATE … FROM` *is* caught —
+   `UPDATE` is in `_STATEMENT`.)
+2. **A table reached through a view is invisible to any version of this check.** `job_facts`
+   appears in **no** SQL string anywhere in `webapp/` — only prose and the declaration — and
+   is correctly granted, because `jobs_app` expands to `jobs + job_facts + job_matches +
+   job_scores` and a plain view runs with the **caller's** privileges. Those entries come
+   from the view definition in `backend/schema.py`, another process's file. **No scanner over
+   this package's own strings can derive them.**
+3. **A module outside `SERVICE_MODULES` is unscanned.** `profiles` is in real SQL at
+   `webapp/schema_web.py:769` — `WHERE NOT EXISTS (SELECT 1 FROM profiles p …)`, running as
+   the service role at startup — and that file is not in the tuple, deliberately, because it
+   also holds admin-only DDL whose every `CREATE` would read as a table the service needs
+   granted. That file now documents this against itself: *"the one place in the package where
+   a service-role query's tables are declared by hand and checked by nothing."*
+
+   > **MEASURED 2026-08-02 rather than left as a question, and it surfaces NO missing grant
+   > today** — so this part of the residue is future-proofing, not a live defect. Scanning
+   > `schema_web.py` yields `app_users`, `oauth_logins` and `profiles`, all already declared;
+   > plus `information_schema` and `pg_constraint`, which are catalog names; plus `cascade`,
+   > captured because `_FROM_JOIN` matches `UPDATE\s+CASCADE` in `ON DELETE CASCADE ON UPDATE
+   > CASCADE`.
+   >
+   > **The whole job is three small changes:** add `schema_web.py` to `SERVICE_MODULES`, add
+   > `cascade` to `_KEYWORDS`, add a catalog predicate for the `pg_*` / `information_schema`
+   > namespace. Both additions are principled rather than quieting: `cascade` is SQL grammar
+   > following `UPDATE`, which is **exactly** the existing `_KEYWORDS = {"set"}` case (present
+   > because `DO UPDATE SET` captures `set`), and the catalog namespace is closed and
+   > well-defined — unlike the English words that ruled out the naive `_FROM_JOIN` widening.
+   >
+   > Deliberately **not** taken on 2026-08-02: it is scope beyond the defect, and landing a
+   > scanner change at the commit point would invalidate the report it was being committed
+   > against. The measurement is recorded here so the next person inherits an answer rather
+   > than a question.
+   >
+   > `manage_app_users.py` stays excluded regardless — it runs as the admin role and its
+   > `CREATE`s would read as tables the service needs granted, as `SERVICE_MODULES`' own
+   > comment says.
+
+**Together these are the argument for `REQUIRED_TABLES` staying hand-written rather than
+derived**, which is a better justification than the file previously carried. All three are
+recorded in `sql_strings_in()`'s docstring under their own heading. **Do not close this
+without addressing (1), or restating (2) and (3) as accepted limits.**
+
+---
+
+### D70 — open
+
+<a id="d70"></a>
+
+**`frontend/verify_fixtures.py` hardcodes the tail of the key list it checks, so a new
+response field is invisible to it.** `verify_fixtures.py:110-111` builds its expectation as
+
+```python
+list_row = tuple(jobs["LIST_COLUMNS"]) + tuple(jobs["STATE_FIELDS"]) + ("rank",)
+detail_row = tuple(jobs["DETAIL_COLUMNS"]) + tuple(jobs["STATE_FIELDS"])
+```
+
+It reads three constants out of the source with `ast` and then **hardcodes the rest**.
+`jobs.COHORT_FIELDS = ("cohort_signal",)` (`webapp/jobs.py:367`) is not read at all.
+
+**Found 2026-08-02**, when task 28 added `cohort_signal` to both endpoints. The fixtures omit
+the key, the verifier's expectation omits the key, **the two agree with each other and both
+disagree with the source**, and `verify_fixtures.py` exits 0. Confirmed directly: the first
+job object in `fixtures/shipped/GET_v1_jobs.json` ends `… dismiss_reason, rank`, while
+`jobs.py:499-500` assigns `cohort_signal` between them.
+
+Class: **static check with a blind spot** — the same family as [D69](#d69), found the same
+day in a different checker. **The general form is worth more than either instance: a
+verifier whose expectation is partly derived and partly hardcoded stops being a derivation
+exactly where the hardcoding starts, and that seam is where the next field lands.** Both
+defects are a checker that passed while the thing it checks had moved.
+
+It also produces the specific failure `verify_fixtures.py`'s own docstring warns about — a
+fixture that is confidently wrong, which is worse than no fixture, because a client author
+builds a parser against it.
+
+Disposition: **fix by deriving `COHORT_FIELDS`** rather than extending the hardcoded tail,
+and see the verifier go red against the current fixtures before correcting them — a checker
+nobody has watched fail is not a checker anyone has tested. If `rank` must stay literal
+because the endpoint appends it rather than declaring it, that is acceptable and must be
+stated in the docstring, since it is the seam this defect came through.
+
+**Not a task-28 defect.** The field was added correctly and its position is pinned by two
+tests on the endpoint side; the checker on the other side could not see it.

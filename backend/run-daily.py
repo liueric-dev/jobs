@@ -178,6 +178,29 @@ STEPS = [
     # `score.py --stale-report`. This line is the single place the nightly
     # spend is decided, which is why a test asserts it verbatim.
     ["score.py", "--active-within-days", "7"],
+    # The cohort badge (tranche_five/28). LAST, and it is the only step whose
+    # input is the USERS rather than the postings -- it folds yesterday's saves
+    # out of job_events into cohort_signal, from which webapp/ reads a bucket
+    # and never an exact count.
+    #
+    # ORDER IS NOT LOAD-BEARING HERE, unlike extract -> match -> score. It reads
+    # job_events, which only webapp/ writes, and jobs.id, which the ingest steps
+    # settle. It sits at the end because it is the cheapest step and because a
+    # failure in it should not delay the ranking; run-daily runs every step
+    # regardless of what failed earlier, so nothing depends on that.
+    #
+    # NIGHTLY RATHER THAN AT READ TIME IS THE PRIVACY DESIGN, not an
+    # optimisation to revisit. A badge recomputed live flips within a session
+    # and tells an observer that somebody in the room just saved something,
+    # which is the recency channel the suppression rule exists to close. See
+    # cohort.py.
+    #
+    # IT WILL WRITE ZERO ROWS ON A HEALTHY RUN for as long as the cohort is
+    # smaller than the floor of three -- two Builders today. Its summary line
+    # prints the builder count and the floor beside the posting count for
+    # exactly that reason: "0 postings" alone cannot tell a quiet Tuesday from
+    # a broken fold, which is the distinction this whole summary exists for.
+    "cohort.py",
 ]
 
 

@@ -328,6 +328,60 @@ _STATE_COLUMNS = """
 #: Their names, in the order _STATE_COLUMNS selects them.
 STATE_FIELDS = ("seen", "applied", "dismissed", "saved", "dismiss_reason")
 
+#: The cohort badge (tranche_five/28), read from the MATERIALISED table and
+#: never from job_events. That is the whole point of the table: the suppression
+#: rule lives in exactly one place -- ../cohort.py's nightly fold -- so no
+#: future endpoint can forget it by writing its own count. Nothing in this
+#: package may query job_events for a save count; if it does, the rule now has
+#: two implementations and only one of them was reviewed.
+#:
+#: IT NEEDS NO PARAMETER, and that is deliberate rather than lucky. Both other
+#: joins here take a %s and the file's comments are emphatic about what
+#: reordering them silently does. `cs.cohort_profile = v.profile` gets the same
+#: answer from a column the view already carries and the WHERE has already
+#: pinned to user.profile, so this fragment cannot be spliced in at the wrong
+#: position because it has no position to get wrong.
+#:
+#: A MISS IS THE COMMON CASE AND IS NOT AN ERROR. Postings below the threshold
+#: have no row at all -- see ../schema.py, which explains why absence rather
+#: than a NULL bucket is what suppression has to look like -- so the LEFT JOIN
+#: misses for almost every posting and renders as null.
+_COHORT_SIGNAL_JOIN = """
+        LEFT JOIN cohort_signal cs
+               ON cs.job_id = v.id AND cs.cohort_profile = v.profile
+"""
+
+#: save_bucket ALONE. cohort_signal.computed_at is not selected and must not be:
+#: it is a per-posting timestamp that moves when the underlying set moves, which
+#: hands a client the recency channel the bucketing exists to close.
+_COHORT_COLUMNS = """
+               cs.save_bucket
+"""
+
+#: The raw column's name in the zip, popped before the response is built.
+_COHORT_RAW_FIELD = "save_bucket"
+
+#: The response key. A tuple so that anything reading this module's constants
+#: -- ../../frontend/verify_fixtures.py parses them out with `ast` -- sees the
+#: field the same way it sees LIST_COLUMNS and STATE_FIELDS.
+COHORT_FIELDS = ("cohort_signal",)
+
+
+def cohort_signal(save_bucket):
+    """{"save_bucket": '3-5'|'6-10'|'10+'} for a posting with a badge, else None.
+
+    NESTED RATHER THAN FLAT because that is the shape
+    ../../frontend/fixtures/contract/GET_v1_jobs.json already declares, down to
+    the key name, and task 32 nests the rest of the payload around it. A flat
+    string here would have to be renamed later for no gain now.
+
+    null is the answer for BOTH "nobody saved this" and "one or two Builders
+    saved this", and the endpoint cannot tell them apart either -- the row does
+    not exist in the first place. That is the requirement, not a limitation:
+    absence of a badge must not be readable as "exactly one or two".
+    """
+    return None if save_bucket is None else {"save_bucket": save_bucket}
+
 
 # --------------------------------------------------------------------------
 # List
@@ -346,6 +400,27 @@ def list_jobs(
     include_dismissed: bool = Query(
         False, description="debugging only; dismissed postings are hidden by default"),
 ):
+    """The ranked list for this Builder's profile.
+
+    THE `cohort_signal` SUPPRESSION THRESHOLD IS A PRIVACY CONTROL, NOT A
+    DISPLAY PREFERENCE. A posting fewer than schema.COHORT_MIN_SAVERS Builders
+    have currently saved carries no badge at all -- not "1 Builder", not a
+    greyed-out zero -- and absence must stay unreadable as "exactly one or
+    two". The reason is arithmetic rather than caution: in a thirty-person
+    cohort who see each other in a classroom, "1 Builder saved this" plus
+    knowing who was on their laptop plus a posting for a role somebody
+    mentioned out loud is an identification. Aggregates are not automatically
+    anonymous at this scale.
+
+    So: whoever is looking at this later because the badge never appears --
+    the live cohort is two Builders, three is the floor, and an empty badge is
+    the CORRECT rendering of a two-person cohort. Lowering the threshold to
+    see output is the one change this docstring exists to stop. The buckets
+    ('3-5' / '6-10' / '10+') are part of the same control, not formatting: an
+    exact count that increments visibly lets an observer infer WHEN somebody
+    saved something. tranche_five/28-cohort-aggregation.md § The small-N
+    problem is the full argument; the rule itself is in ../schema.py.
+    """
     # THE JOINS' PARAMETERS LEAD. _EVENT_STATE_JOIN and _BUILDER_STATE_JOIN are
     # both spliced in ahead of the WHERE clause, in that order, so their two %s
     # bind before any of the WHERE's -- see the comment on _BUILDER_STATE_JOIN
@@ -398,10 +473,12 @@ def list_jobs(
     columns = ", ".join(f"v.{c}" for c in LIST_COLUMNS)
     sql = f"""
         SELECT {columns},
-        {_STATE_COLUMNS}
+        {_STATE_COLUMNS},
+        {_COHORT_COLUMNS}
         FROM jobs_app v
         {_EVENT_STATE_JOIN}
         {_BUILDER_STATE_JOIN}
+        {_COHORT_SIGNAL_JOIN}
         WHERE {' AND '.join(where)}
         ORDER BY {ORDER_BY}
         LIMIT %s
@@ -413,8 +490,14 @@ def list_jobs(
 
     has_more = len(rows) > limit
     rows = rows[:limit]
-    names = list(LIST_COLUMNS) + list(STATE_FIELDS)
+    names = list(LIST_COLUMNS) + list(STATE_FIELDS) + [_COHORT_RAW_FIELD]
     items = [dict(zip(names, r)) for r in rows]
+
+    # BEFORE `rank` is assigned, so cohort_signal lands ahead of it and the
+    # response key order stays LIST_COLUMNS, STATE_FIELDS, cohort_signal, rank
+    # -- the order ../../frontend/verify_fixtures.py checks exactly.
+    for item in items:
+        item[COHORT_FIELDS[0]] = cohort_signal(item.pop(_COHORT_RAW_FIELD))
 
     # 1-based and continuing across pages. This is the position the user saw,
     # and it is the only field in the response that cannot be recomputed later:
@@ -445,20 +528,30 @@ def get_job(job_id: str, user: User = Depends(require_user)):
     deliberate. Undo has to be reachable, and a client that has just written a
     `dismiss` still needs to render the row it acted on. Filtering here would
     make the undo in tranche_six/31 unimplementable from a detail page.
+
+    `cohort_signal` IS THE SAME MATERIALISED ROW THE LIST SERVES, joined the
+    same way and suppressed by the same rule -- the threshold is a privacy
+    control and not a display preference, and list_jobs' docstring carries the
+    argument. A detail page is where a per-posting count would be most
+    tempting to compute live and is exactly where it must not be: this endpoint
+    never touches job_events for it.
     """
     columns = ", ".join(f"v.{c}" for c in DETAIL_COLUMNS)
     with db() as conn:
         row = conn.execute(
             f"""
             SELECT {columns},
-            {_STATE_COLUMNS}
+            {_STATE_COLUMNS},
+            {_COHORT_COLUMNS}
             FROM jobs_app v
             {_EVENT_STATE_JOIN}
             {_BUILDER_STATE_JOIN}
+            {_COHORT_SIGNAL_JOIN}
             WHERE v.profile = %s AND v.id = %s
             """,
             # user.id leads TWICE: both joins bind before the WHERE, in the
-            # order they are spliced. See _BUILDER_STATE_JOIN.
+            # order they are spliced. _COHORT_SIGNAL_JOIN adds no third value
+            # -- it matches on v.profile, which is already pinned below.
             (user.id, user.id, user.profile, job_id),
         ).fetchone()
 
@@ -466,8 +559,10 @@ def get_job(job_id: str, user: User = Depends(require_user)):
         # 404, not 403: "exists but isn't yours" and "doesn't exist" should be
         # indistinguishable to anyone enumerating ids.
         raise HTTPException(status_code=404, detail="no such job for this profile")
-    names = list(DETAIL_COLUMNS) + list(STATE_FIELDS)
-    return dict(zip(names, row))
+    names = list(DETAIL_COLUMNS) + list(STATE_FIELDS) + [_COHORT_RAW_FIELD]
+    item = dict(zip(names, row))
+    item[COHORT_FIELDS[0]] = cohort_signal(item.pop(_COHORT_RAW_FIELD))
+    return item
 
 
 # --------------------------------------------------------------------------
