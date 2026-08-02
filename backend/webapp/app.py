@@ -42,6 +42,7 @@ import jobs
 import label
 import onboarding
 import schema_web
+import search
 from db import db
 
 logging.basicConfig(level=logging.INFO,
@@ -86,6 +87,12 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(jobs.router)
+# Searches (task 25). AFTER jobs.router and before the exception handler below,
+# because search.py raises jobs.ContractError -- the same type, so the same
+# handler produces the same error envelope for both routers. A second error
+# shape for the search screen would be a client-visible inconsistency in the
+# one thing API-CONTRACT-v1.md specifies exactly.
+app.include_router(search.router)
 # API-CONTRACT-v1.md specifies one error shape -- {"error": {code, message,
 # request_id}} -- and FastAPI's default handler produces {"detail": ...}.
 # Registered for jobs.ContractError alone rather than for HTTPException, so

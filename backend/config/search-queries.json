@@ -1,0 +1,96 @@
+{
+  "_comment": [
+    "Seeded searches: one per role_track, so a Builder who does not yet know",
+    "what role they want is shown a catalogue instead of a blank input.",
+    "tranche_four/25-search-queries.md: 'Search is the refinement tool, not the",
+    "entry point. A blank input is the wrong first experience for this",
+    "population.'",
+    "",
+    "THE VOCABULARY IS extract.ROLE_TRACK, NOT A LIST INVENTED HERE. All nine",
+    "values appear exactly once and tests/test_search_queries.py asserts the",
+    "set equality against extract.py:305-308 -- adding a tenth track without",
+    "seeding it fails the suite rather than producing a track nobody can find.",
+    "",
+    "WHY THE TEXT IS NOT THE TRACK NAME. A track is a machine value",
+    "('solutions_and_implementation'); a query is what someone types into",
+    "Google Jobs. Seeding the identifier verbatim would produce a provider call",
+    "for a string no employer has ever written. Each `text` below is the",
+    "ordinary-English role family the track names, in the phrasing a job board",
+    "actually uses.",
+    "",
+    "WHY NOT ONE SEED PER ARCHETYPE TOO. extract.ARCHETYPE has 26 values. 26",
+    "seeded queries re-run daily is ~9% of the ~280 renewable searches/day",
+    "against a browse surface nobody has asked for; role_track exists precisely",
+    "because it is the coarser, browsable axis (schema.py's role_track block).",
+    "Nine is the catalogue.",
+    "",
+    "REJECTED: adding 'entry level' or 'junior' to every seed. It is true of",
+    "the cohort and it is the wrong place to say so -- seniority is a scoring",
+    "and relevance concern (config/pursuit-criteria.json), applied to every",
+    "posting from every source. Putting it in the query text would narrow the",
+    "provider call to postings whose TITLE says junior, which is a small and",
+    "unrepresentative slice, and it would do it invisibly.",
+    "",
+    "REJECTED: a per-seed location. Every seed uses the cohort's city, which",
+    "is searchnorm.DEFAULT_LOCATION. A remote-only seed was considered and",
+    "dropped: remoteness is a filter on results (jobs.location_is_remote,",
+    "job_facts.remote_policy), not a different search."
+  ],
+
+  "_location_comment": [
+    "Applied to every seed below. Left as one value rather than repeated nine",
+    "times so that changing the cohort's city is one edit, and so no seed can",
+    "silently disagree with the others."
+  ],
+  "location": "New York, NY",
+
+  "_source_comment": [
+    "'track' rather than 'seeded'. searchnorm.SOURCES carries both because they",
+    "are different provenance: 'track' means 'this row exists because",
+    "role_track has this value', which is what makes the completeness test",
+    "above possible. 'seeded' is reserved for a hand-added query that is not a",
+    "track -- there are none today, and the value exists so that adding one",
+    "later does not require widening a CHECK constraint under load."
+  ],
+
+  "queries": [
+    {
+      "role_track": "software_engineering",
+      "text": "software engineer"
+    },
+    {
+      "role_track": "technical_support",
+      "text": "technical support specialist"
+    },
+    {
+      "role_track": "business_analysis",
+      "text": "business analyst"
+    },
+    {
+      "role_track": "product_and_marketing",
+      "text": "product marketing"
+    },
+    {
+      "role_track": "solutions_and_implementation",
+      "_comment": "'implementation' rather than 'solutions': 'solutions' alone is the single most diluted word on a job board and returns consulting, sales and IT services in roughly equal measure.",
+      "text": "implementation specialist"
+    },
+    {
+      "role_track": "data_and_analytics",
+      "text": "data analyst"
+    },
+    {
+      "role_track": "revenue_operations",
+      "text": "revenue operations"
+    },
+    {
+      "role_track": "business_systems",
+      "_comment": "business_systems appears in BOTH extract.ARCHETYPE and extract.ROLE_TRACK at different grains, which extract.py:300-304 says is intended. The seed is the TRACK reading -- the browsable family, not the Salesforce/Workday configuration role.",
+      "text": "business systems analyst"
+    },
+    {
+      "role_track": "business_operations",
+      "text": "business operations"
+    }
+  ]
+}

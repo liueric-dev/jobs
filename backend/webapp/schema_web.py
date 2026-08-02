@@ -96,6 +96,46 @@ REQUIRED_TABLES = {
     # NULL, exactly as it is on builder_job_state, and for the same reason --
     # the OTHER columns may be carrying live answers.
     "builder_profiles": ("SELECT", "INSERT", "UPDATE"),
+    # -- the search-query tables (tranche_four/25) --------------------------
+    #
+    # PIPELINE-OWNED, ALL FOUR. ../schema.py declares them, because the pipeline
+    # is what runs these queries, updates their run statistics, folds their
+    # watcher counts and decays them. Ownership follows who COMPUTES, not who is
+    # nearest the user. Listed here for the same reason `jobs` is: the startup
+    # check has to prove this role can reach them before a Builder's first click
+    # finds out.
+    #
+    # INSERT BUT NO UPDATE on search_queries. Registering a query is this
+    # service's job; run_count, last_run_at, result_count_last_run and
+    # retired_at are the pipeline's, and an UPDATE grant would let a
+    # session-hijacking bug rewrite the schedule. The find-or-create still
+    # works without it: searchnorm.REGISTER_QUERY_SQL's ON CONFLICT branch
+    # assigns a column to itself, so the "update" changes nothing and needs
+    # nothing.
+    "search_queries": ("SELECT", "INSERT"),
+    # Watch and unwatch. UPDATE rather than DELETE, matching builder_job_state
+    # above: unwatching sets removed_at. A DELETE grant on the one table that
+    # records who is looking for what is the grant this design least wants to
+    # issue.
+    "search_query_watchers": ("SELECT", "INSERT", "UPDATE"),
+    # SELECT ONLY, AND THIS ENTRY IS THE POINT OF THE WHOLE ARRANGEMENT. This
+    # table carries the exposed watcher bucket. The suppression rule lives in
+    # the pipeline's nightly fold (../searchqueries.py, fold_signal) and this
+    # service must not be able to write a bucket it did not compute -- which is
+    # why the count is a separate table rather than a column on search_queries,
+    # a table this service can INSERT into.
+    "search_query_signal": ("SELECT",),
+    # SELECT ONLY. Attaching a posting to a search is a pipeline act. A service
+    # that could write here could put a posting in front of a Builder without it
+    # ever having passed relevance.py -- the "no shortcut to display" rule in
+    # tranche_four/25, made a privilege rather than a convention.
+    #
+    # THE SAME SHAPE AS cohort_signal ABOVE, DELIBERATELY. That entry states the
+    # rule this one is built on -- the suppression rule lives in the pipeline's
+    # nightly fold and this service must not be able to write a bucket it did
+    # not compute -- and two different answers to "who may write an aggregate"
+    # is how a privacy promise gets broken by accident.
+    "search_query_results": ("SELECT",),
 }
 
 #: The golden-set tables, owned by ../evals/labels.py and merged in here.
@@ -122,6 +162,11 @@ REQUIRED_TABLES.update(_labels.WEB_PRIVILEGES)
 #: a contributor's first submit rather than as a refusal to start.
 REQUIRED_SEQUENCES = {
     "job_events_id_seq": ("USAGE", "SELECT"),
+    # search_queries.id is BIGSERIAL and this service INSERTs into it, so the
+    # same argument applies unchanged: without USAGE on the sequence, INSERT on
+    # the table is a permission error at nextval() -- a 500 on the first search
+    # anyone submits rather than a refusal to start.
+    "search_queries_id_seq": ("USAGE", "SELECT"),
 }
 
 #: Columns this service WRITES that were added after the table shipped, and

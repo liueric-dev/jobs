@@ -52,6 +52,15 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.app_sessions TO jobs_web;
 GRANT SELECT, INSERT, DELETE ON public.oauth_logins TO jobs_web;
 GRANT SELECT, INSERT, UPDATE ON public.builder_job_state TO jobs_web;
 GRANT SELECT, INSERT, UPDATE ON public.builder_profiles TO jobs_web;
+-- Searches (task 25). Note what is NOT here: no UPDATE on search_queries (the
+-- run statistics and the decay flag are the pipeline's), and nothing at all
+-- beyond SELECT on search_query_signal, which carries the exposed watcher
+-- bucket. The suppression rule lives in the nightly fold and this role must not
+-- be able to write a bucket it did not compute.
+GRANT SELECT, INSERT ON public.search_queries TO jobs_web;
+GRANT USAGE, SELECT ON SEQUENCE public.search_queries_id_seq TO jobs_web;
+GRANT SELECT, INSERT, UPDATE ON public.search_query_watchers TO jobs_web;
+GRANT SELECT ON public.search_query_signal, public.search_query_results TO jobs_web;
 GRANT SELECT ON public.eval_label_sets, public.eval_label_items TO jobs_web;
 GRANT SELECT, INSERT ON public.eval_labels TO jobs_web;
 GRANT USAGE, SELECT ON SEQUENCE public.eval_labels_id_seq TO jobs_web;

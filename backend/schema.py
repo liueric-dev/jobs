@@ -194,6 +194,91 @@ def cohort_bucket(savers):
     raise AssertionError("COHORT_BUCKETS has no open-ended final bucket")
 
 
+SEARCH_QUERIES_TABLE = "search_queries"
+SEARCH_WATCHERS_TABLE = "search_query_watchers"
+SEARCH_SIGNAL_TABLE = "search_query_signal"
+SEARCH_RESULTS_TABLE = "search_query_results"
+
+#: How many DISTINCT Builders must currently watch a search before its badge
+#: says anything at all. SAME KIND OF CONTROL AS COHORT_MIN_SAVERS ABOVE, SAME
+#: RULE ABOUT LOWERING IT, AND DELIBERATELY A DIFFERENT NUMBER.
+#:
+#: The copy-the-neighbour answer is 3, and it is wrong here for one reason:
+#: WHAT IS BEING COUNTED IS ATTACKER-CHOSEN. The set of postings a save count
+#: can be observed on is fixed by the pipeline -- an observer can watch a badge
+#: but cannot conjure the posting it sits on. A search query is created by
+#: submitting it, which is free and unlimited to anyone with an account. An
+#: observer who suspects a specific Builder is looking for "bilingual healthcare
+#: operations Brooklyn" can type exactly that, create the row, and then watch
+#: its bucket. That is a chosen-plaintext capability the save path does not
+#: have, and it makes 3 weaker here than the same 3 is there.
+#:
+#: It compounds with a second asymmetry: THE PLANTER IS ALWAYS A WATCHER.
+#: POST /v1/searches registers its caller, so at a floor of 3 the badge appears
+#: when 2 OTHER people arrive -- an anonymity set of two, in a thirty-person
+#: cohort who sit in a room together. 4 restores the set of three that
+#: COHORT_MIN_SAVERS was chosen to give.
+#:
+#: WHY NOT HIGHER. At N=30 a floor of 5 or 6 means most real searches never show
+#: a badge, and a signal nobody ever sees is not a privacy win -- it is the
+#: feature removed, on a guess rather than on a measurement. 4 is the smallest
+#: number that survives both asymmetries.
+#:
+#: WHAT IT DOES NOT DEFEND AGAINST, so it is not read as more than it is: a
+#: planter who gets no badge still learns "fewer than four". The mitigation is
+#: the same one COHORT_MIN_SAVERS relies on -- every count below the floor is
+#: rendered identically, because search_watcher_bucket() returns None for all of
+#: them and search_query_signal holds no row at all. tests/test_search_queries.py
+#: TestSuppression pins that two watchers and zero watchers are indistinguishable.
+#:
+#: LOWERING IT TO SEE OUTPUT IS THE ONE THING NOT TO DO -- the live cohort is
+#: two labellers today (docs/labelling-report-2026-08-02.md), so this table is
+#: empty by construction, and an empty badge is the CORRECT rendering of a
+#: two-person cohort rather than a bug to tune away.
+SEARCH_MIN_WATCHERS = 4
+
+#: (inclusive upper bound or None for "no ceiling", label), in order -- the same
+#: shape as COHORT_BUCKETS and applied by the same first-match-wins rule.
+#:
+#: THE LABELS DO NOT OVERLAP, WHICH IS THE ONE PLACE THIS DEVIATES FROM ITS
+#: NEIGHBOUR. COHORT_BUCKETS reads '3-5' | '6-10' | '10+', where 10 satisfies
+#: two of the three and '10+' actually means eleven or more; that comment says
+#: those labels are the task file's verbatim and already shipped in
+#: frontend/fixtures/contract/, so they are not that constant's to tidy. This
+#: vocabulary is new, tranche_four/25 specifies no labels at all, and nothing
+#: has shipped against it -- so the boundaries are written to say what they mean
+#: the first time. A label a value can satisfy twice is a boundary that leaks
+#: which side of it the value was on.
+SEARCH_WATCHER_BUCKETS = ((6, "4-6"), (10, "7-10"), (None, "11+"))
+
+#: Just the labels, for the CHECK constraint and for anything asserting on the
+#: vocabulary. One tuple, so the constraint and the writer cannot disagree.
+SEARCH_WATCHER_BUCKET_LABELS = tuple(label for _, label in SEARCH_WATCHER_BUCKETS)
+
+#: The closed set of search_queries.source. 'track' means the row exists because
+#: role_track has this value, which is what makes "one seeded query per track"
+#: checkable; 'seeded' is reserved for a hand-added query that is not a track --
+#: there are none today, and the value exists so that adding one later is not a
+#: CHECK-constraint migration under load.
+SEARCH_SOURCES = ("builder", "seeded", "track")
+
+
+def search_watcher_bucket(watchers):
+    """Bucket a distinct-Builder watcher count, or None if it must be suppressed.
+
+    Pure arithmetic, no I/O, deliberately identical in shape to cohort_bucket()
+    above: the ONLY place the threshold and the boundaries are applied.
+    searchqueries.py's SQL selects which rows exist and this decides what they
+    are allowed to say.
+    """
+    if watchers < SEARCH_MIN_WATCHERS:
+        return None
+    for bound, label in SEARCH_WATCHER_BUCKETS:
+        if bound is None or watchers <= bound:
+            return label
+    raise AssertionError("SEARCH_WATCHER_BUCKETS has no open-ended final bucket")
+
+
 #: Bump to invalidate every extracted row. job_facts.facts_version records
 #: which generation of the extraction schema produced a row, so "which rows
 #: predate the new field" is a query rather than a guess, and a re-extraction
@@ -857,7 +942,178 @@ def ensure_schema(conn):
     """)
     conn.commit()
 
+    ensure_search_query_schema(conn)
+
     ensure_app_view(conn)
+
+
+#: The CHECKs are GENERATED from the tuples above, never typed out beside them,
+#: so the vocabulary cannot be widened in Python while the database keeps
+#: refusing the new value -- a failure that surfaces as a 500 on one Builder's
+#: click and nowhere else. Same construction as cohort_signal's own CHECK below
+#: and as webapp/schema_web.py's _PRIOR_DOMAIN_CHECK.
+_SEARCH_SOURCE_CHECK = (
+    "source IN (" + ", ".join(f"'{v}'" for v in SEARCH_SOURCES) + ")")
+_SEARCH_BUCKET_CHECK = (
+    "watcher_bucket IN ("
+    + ", ".join(f"'{v}'" for v in SEARCH_WATCHER_BUCKET_LABELS) + ")")
+
+
+def ensure_search_query_schema(conn):
+    """The four tables behind tranche_four/25. Idempotent.
+
+    WHY THEY ARE DECLARED HERE AND NOT IN webapp/schema_web.py. The webapp is
+    the process a Builder talks to, so the naive home for a table a Builder
+    writes is that service's own schema module. It is the wrong home, for the
+    reason schema_web.py gives about tranche_five/28's cohort_signal: the
+    suppression rule lives in the pipeline's nightly fold and the service must
+    not be able to write a bucket it did not compute. The PIPELINE runs these
+    queries, updates their run statistics, decays them and folds their watcher
+    counts; the service registers a watcher and reads. Ownership follows who
+    computes, not who is nearest the user.
+
+    That split is enforced by GRANT, not by comment. The service role holds:
+      search_queries        SELECT, INSERT   -- register a query. NO UPDATE:
+                            run_count, last_run_at and retired_at are the
+                            pipeline's, and INSERT alone cannot forge them
+                            because searchnorm.REGISTER_QUERY_SQL's conflict
+                            branch assigns a column to itself.
+      search_query_watchers SELECT, INSERT, UPDATE  -- watch and unwatch.
+      search_query_signal   SELECT ONLY. This is the exposed watcher count and
+                            the service cannot write one at all.
+      search_query_results  SELECT ONLY. Attaching a posting to a search is a
+                            pipeline act; a service that could do it could put
+                            an ungated posting in front of a Builder.
+
+    THE EXPOSED COUNT IS A SEPARATE TABLE, NOT A COLUMN ON search_queries, and
+    that is forced rather than tidy. The task file sketches
+    `watcher_count INTEGER NOT NULL DEFAULT 0` on the query row. The service
+    needs INSERT on that row to register a new query, and an INSERT names
+    whatever columns it likes -- so a `watcher_count` column on a table the
+    service can INSERT into is a count the service can write. Splitting it out
+    is what makes "a value the webapp cannot write" true of the grant rather
+    than of the caller's good manners.
+
+    NO SUB-THRESHOLD ROW EXISTS. watcher_bucket is NOT NULL, so a query with
+    three watchers has no row here rather than a row saying NULL. A NULL-bucket
+    row would still be a row -- present for a query with 1, 2 or 3 watchers and
+    absent for one with none -- and that presence is the count leaking back out
+    through the side door the bucketing closed.
+    """
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {SEARCH_QUERIES_TABLE} (
+            id BIGSERIAL PRIMARY KEY,
+            normalized_text TEXT NOT NULL,
+            normalized_location TEXT NOT NULL,
+            display_text TEXT NOT NULL,
+            display_location TEXT NOT NULL,
+            chips TEXT,
+            source TEXT NOT NULL,
+            role_track TEXT,
+            first_requested_at TEXT NOT NULL,
+            last_run_at TEXT,
+            last_result_at TEXT,
+            run_count INTEGER NOT NULL DEFAULT 0,
+            provider_last_used TEXT,
+            result_count_last_run INTEGER,
+            retired_at TEXT,
+            CONSTRAINT search_queries_source CHECK ({_SEARCH_SOURCE_CHECK}),
+            UNIQUE (normalized_text, normalized_location)
+        )
+    """)
+    # -- what is NOT on that table, and why --------------------------------
+    #
+    # watcher_count -- see the docstring. It is search_query_signal.
+    #
+    # created_by / requested_by -- deliberately absent. `search_queries`
+    #   carries NO per-Builder identity at all, which is what lets the read
+    #   endpoint select from it without a privacy argument. Identity lives in
+    #   search_query_watchers and reaches nothing that is rendered.
+    #
+    # chips is TEXT holding JSON, not JSONB. Every other JSON in this database
+    #   is TEXT (jobs.raw_json, job_matches.match_reasons, job_facts.tech_stack)
+    #   and nothing queries inside it. One JSONB column would be the same kind
+    #   of special case ../webapp/schema_web.py refuses for TIMESTAMPTZ.
+    #
+    # display_text is FIRST-WRITER-WINS and is never re-attributed. The second
+    #   Builder to type "ai ops" sees the first one's spelling. That is a
+    #   deliberate trade: re-attributing on every request would make the
+    #   displayed spelling change the moment someone new arrived, which is a
+    #   recency channel of exactly the kind tranche_five/28 forbids.
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {SEARCH_WATCHERS_TABLE} (
+            query_id BIGINT NOT NULL REFERENCES {SEARCH_QUERIES_TABLE}(id)
+                ON DELETE CASCADE,
+            app_user_id TEXT NOT NULL,
+            profile TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            removed_at TEXT,
+            PRIMARY KEY (query_id, app_user_id)
+        )
+    """)
+    # app_user_id is BARE TEXT WITH NO FOREIGN KEY to app_users(id), and the
+    # reason is the ownership rule pointing the other way for once:
+    # webapp/schema_web.py owns app_users, so a real FK here would make the
+    # PIPELINE's DDL depend on a table it must not own. That module makes the
+    # identical call for builder_job_state.job_id against jobs(id)
+    # (schema_web.py:303-309) and the exposure is the same and equally small: a
+    # stranded watcher row is invisible, because every read of this table is
+    # either scoped to one app_user_id or folded into a count.
+    #
+    # KEYED (query_id, app_user_id) AND NOT (query_id, profile). Thirty
+    # Builders share one profile, so a profile-keyed watcher table can hold at
+    # most one row per query per COHORT -- see searchnorm.REGISTER_WATCHER_SQL.
+    #
+    # cohort_signal (above) is keyed (job_id, cohort_profile) and has no such
+    # problem, because job_events carries app_user_id and cohort.py counts
+    # DISTINCT on it. This table has no log to fold, so the identity has to be
+    # the key.
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {SEARCH_SIGNAL_TABLE} (
+            query_id BIGINT NOT NULL REFERENCES {SEARCH_QUERIES_TABLE}(id)
+                ON DELETE CASCADE,
+            cohort_profile TEXT NOT NULL,
+            watcher_bucket TEXT NOT NULL,
+            computed_at TEXT NOT NULL,
+            CONSTRAINT search_query_signal_bucket CHECK ({_SEARCH_BUCKET_CHECK}),
+            PRIMARY KEY (query_id, cohort_profile)
+        )
+    """)
+    # The link between a search and what it surfaced. It exists so the read
+    # endpoint can JOIN jobs_app rather than re-run a text search, which is
+    # what makes "results route through the full gate" a structural property:
+    # jobs_app requires a job_matches row, match.py writes one only for
+    # postings that pass relevance.union_sql, so a relister posting a provider
+    # returned has no match row and cannot be selected however it got here.
+    #
+    # ON DELETE CASCADE on BOTH sides. A closed posting is deleted from nothing
+    # (closing is a status change) but a re-keyed one is real -- see
+    # _ensure_fk_update_cascade -- so ON UPDATE CASCADE is on the jobs side for
+    # the reason every other child table has it.
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {SEARCH_RESULTS_TABLE} (
+            query_id BIGINT NOT NULL REFERENCES {SEARCH_QUERIES_TABLE}(id)
+                ON DELETE CASCADE,
+            job_id TEXT NOT NULL REFERENCES jobs(id)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+            first_seen_at TEXT NOT NULL,
+            provider TEXT,
+            PRIMARY KEY (query_id, job_id)
+        )
+    """)
+    conn.commit()
+    # The scheduler's only question: "which queries are due". Partial on
+    # retired_at, because every row it exists to find has retired_at NULL and
+    # the retired ones are precisely the rows the scan must never reach.
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_search_queries_due "
+                 f"ON {SEARCH_QUERIES_TABLE}(last_run_at NULLS FIRST) "
+                 f"WHERE retired_at IS NULL")
+    # "What does this Builder watch", asked on every render of the search
+    # screen, and "who watches this query", asked once per query by the fold.
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_search_watchers_user "
+                 f"ON {SEARCH_WATCHERS_TABLE}(app_user_id) "
+                 f"WHERE removed_at IS NULL")
+    conn.commit()
 
 
 #: The one supported read surface for a consumer (an app, a digest, a report).

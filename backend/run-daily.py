@@ -172,6 +172,24 @@ STEPS = [
     "ingest/hn-hiring.py",
     "ingest/google-serpapi.py",
     "ingest/google-apify.py",
+    # Searches (tranche_four/25): seed the role_track catalogue, fold watcher
+    # counts into the suppressed bucket, retire abandoned queries, dispatch the
+    # due ones.
+    #
+    # HERE, AND NOT AFTER match.py, because it is an INGEST-SHAPED step: what it
+    # dispatches produces `jobs` rows, so it has to run before extract turns new
+    # postings into facts. Placed at the END of ingest rather than the start so
+    # a Builder's query and the ATS sweep land in the same nightly window and
+    # the same extract pass -- a search whose results waited a day for facts
+    # would take two nights to reach a Builder, not one.
+    #
+    # IT DOES NOT FETCH ANYTHING TODAY, and says so on stderr every run. There
+    # is no provider to dispatch to: tranche_four/23 (`backend/serp/`) is
+    # descoped and ingest/google-serpapi.py reads its queries from
+    # config/google-queries.json rather than from the table. The step still
+    # earns its place tonight -- seeding, folding and decay all run, and the
+    # fold is the only writer of the exposed watcher bucket.
+    "searchqueries.py",
     "extract.py",
     "match.py",
     # The warm pass: prepare narratives for profiles that have been active in

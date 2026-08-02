@@ -28,7 +28,7 @@ import schema_web  # noqa: E402
 #: is excluded on purpose: init-schema runs as the admin role, and its CREATE
 #: statements would otherwise read as tables the service needs granted.
 SERVICE_MODULES = ("auth.py", "jobs.py", "db.py", "app.py", "label.py",
-                   "onboarding.py")
+                   "onboarding.py", "search.py")
 
 #: Aliases bound inside the SQL itself -- subquery, lateral and correlation
 #: names. They follow FROM/JOIN syntactically but are not tables to grant.
@@ -254,7 +254,18 @@ class TestGrantsCoverTheSQL(unittest.TestCase):
         # is the only automated thing standing between a missing GRANT and a
         # permission-denied 500 on a Builder's first list render.
         pipeline_read_only = ("jobs_app", "jobs", "job_matches", "job_scores",
-                              "job_facts", "profiles", "cohort_signal")
+                              "job_facts", "profiles", "cohort_signal",
+                              # task 25, and the same argument as cohort_signal
+                              # one line up: search_query_signal is the exposed,
+                              # suppressed, bucketed watcher count and
+                              # search_query_results is what a search surfaced.
+                              # The pipeline computes both; this service must not
+                              # be able to write either. search_query_signal is
+                              # also named ONLY in search._SIGNAL_JOIN, a bare
+                              # join clause -- so it is visible to the scan above
+                              # only because D69 widened it, exactly as
+                              # cohort_signal is.
+                              "search_query_signal", "search_query_results")
         for table in pipeline_read_only:
             # Membership first, so an undeclared table fails with an
             # instruction rather than with a bare KeyError from the line below
@@ -272,6 +283,16 @@ class TestGrantsCoverTheSQL(unittest.TestCase):
         self.assertEqual(schema_web.REQUIRED_TABLES["job_events"],
                          ("SELECT", "INSERT"),
                          "job_events is append-only: a dismiss is a row, not a delete")
+        # INSERT to register a query, and NOT update: the run statistics and the
+        # decay flag are the pipeline's. searchnorm.REGISTER_QUERY_SQL's
+        # conflict branch is what makes find-or-create work without one.
+        self.assertEqual(schema_web.REQUIRED_TABLES["search_queries"],
+                         ("SELECT", "INSERT"),
+                         "search_queries: registering is ours, scheduling is not")
+        self.assertNotIn("DELETE",
+                         schema_web.REQUIRED_TABLES["search_query_watchers"],
+                         "unwatching sets removed_at; who watched what is never "
+                         "deleted, and never deletable from here")
 
     def test_the_label_tables_are_declared_and_append_only(self):
         # label.py's own SQL names eval_label_items; the rest of the golden-set
