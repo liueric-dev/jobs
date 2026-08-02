@@ -1432,6 +1432,16 @@ permanent:**
    > captured because `_FROM_JOIN` matches `UPDATE\s+CASCADE` in `ON DELETE CASCADE ON UPDATE
    > CASCADE`.
    >
+   > **`cascade` is task 26's, not pre-existing debt — corrected 2026-08-02 after this note
+   > was first written.** `grep "UPDATE CASCADE" backend/webapp/*.py` returns exactly two
+   > lines, `schema_web.py:560` (the `builder_profiles_parent` composite FK) and `:606` (a
+   > comment about it), and the file carried none before that FK landed the same day. So of
+   > the three changes, **two are the pre-existing catalog gap and one is a direct consequence
+   > of a table added hours earlier.** Recorded because it decides nothing and clarifies
+   > everything: a follow-up that reads as inherited debt gets deprioritised differently from
+   > one a fresh change created. The follow-up stays whole rather than split across two tasks
+   > — at three small changes, splitting costs more than it clarifies.
+   >
    > **The whole job is three small changes:** add `schema_web.py` to `SERVICE_MODULES`, add
    > `cascade` to `_KEYWORDS`, add a catalog predicate for the `pg_*` / `information_schema`
    > namespace. Both additions are principled rather than quieting: `cascade` is SQL grammar
