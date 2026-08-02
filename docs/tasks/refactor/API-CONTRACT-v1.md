@@ -20,9 +20,20 @@ parallel. Build the client against a mock of this; fill in the backend behind it
 ## THE DIFF THIS FILE ASKS FOR — done 2026-07-31, task 34
 
 *"Diff this against what they return today before implementing"* was the right
-instruction and nobody had followed it. Here is the diff. **Nothing was built against
+instruction and nobody had followed it. Here is the diff. ~~**Nothing was built against
 this contract** — `frontend/` contains one `.gitkeep`, and the mock fixtures § *Mocking*
-describes were never created.
+describes were never created.~~
+
+> **THE MOCK FIXTURES NOW EXIST, `fe3df28`, 2026-08-02.** They are split in two —
+> `frontend/fixtures/contract/` derived from **this document**, and
+> `frontend/fixtures/shipped/` derived from the code — because the two genuinely differ and
+> that difference is the frontend's whole problem. Build a client's types against the
+> first and its **parser** against the second.
+> [`frontend/README.md`](../../../frontend/README.md) enumerates every divergence;
+> `frontend/verify_fixtures.py` re-derives every shape claim in `shipped/` from
+> `backend/webapp/{jobs,auth,schema_web}.py` and currently exits 0. **Nothing checks
+> `contract/`, because there is no code to check it against** — that is what makes it a
+> specification rather than a description. Still true: there is no application code.
 
 **Three of six endpoints exist, by path only.** `GET /v1/searches`, `POST /v1/searches`
 and `POST /v1/onboarding` have no route and no backing table (`search_queries`,

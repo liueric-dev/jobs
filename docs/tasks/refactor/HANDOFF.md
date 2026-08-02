@@ -94,7 +94,7 @@ worth keeping: it is the only work in the plan that **cannot be backfilled**, be
 | track | tasks | what it needs |
 |---|---|---|
 | **the labelling night** | 30, then 13's weights and 12's next bump | ~~a second labeller for about twenty minutes; no session can do this~~ **DONE 2026-08-02 — and it did not unblock them.** The report prints ([`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md)) and **the ceiling came back BELOW the floor on all five fields**, on 6–10 items each. What these tasks need is a *usable* ceiling: more labellers on the **same ten** overlap rows (more postings do nothing), round 2 ~2026-08-09, and an n=120 selfcheck covering `role_track`. Only the last is a session's to run |
-| **the product / API surface** | ~~24, 25, 26, 27,~~ ~~24, 25, 26, 28, 31, 32, 33~~ **24, 25, 26, 28, 32, 33** | **27 and 31 are done.** The rest is unblocked apart from ordering, **except 28 — see the D66/D67 note below, which is new and is a real blocker.** **Audit the premises first:** they were checked on 2026-07-31 and several were stale, and **two dependency arrows have now been found wrong, both pointing at 26** — 27 declared *"Depends on: 26"* while 26's own DoD needs 27's `visibility` column, and 31's *"Depends on: 27, 26"* needed nothing 26 builds. Corrections are in the task files and in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), **which is a specification and not a description of the shipped API** |
+| **the product / API surface** | ~~24, 25, 26, 27,~~ ~~24, 25, 26, 28, 31, 32, 33~~ **24, 25, 26, 28, 32, 33** | **27 and 31 are done.** The rest is unblocked apart from ordering, ~~**except 28 — see the D66/D67 note below, which is new and is a real blocker.**~~ **and 28 is now the LEAST blocked of them, not the most — its column landed in `3f4f88e`.** **Audit the premises first:** they were checked on 2026-07-31 and several were stale, and **~~two~~ FIVE dependency arrows have now been found wrong, and two of them are cycles** — 27 declared *"Depends on: 26"* while 26's own DoD needs 27's `visibility` column; 31's *"Depends on: 27, 26"* needed nothing 26 builds; **24 ↔ 33** each declared the other; **26 ↔ 32** each declared the other; and **25 → 24** is contradicted by 24's own file at `:92-94`. All five corrected in the task files 2026-08-02. Corrections are also in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), **which is a specification and not a description of the shipped API** |
 
 **Three things a session picking up this track next must not re-derive.**
 
@@ -110,19 +110,34 @@ worth keeping: it is the only work in the plan that **cannot be backfilled**, be
    the documented meaning of *"a list re-render is not new information"*. Recorded in
    `27-event-schema.md` § *What the work turned up*, the contract, and
    `docs/ingest/engagement-events.md`.
-3. **`job_events` has no `app_user_id` column, and that now blocks task 28.** Added by task
-   31, 2026-08-01. The table is keyed `(profile, job_id)` and thirty Builders share
-   `pursuit`, so **no query over it can count Builders** — only rows. *"4 Builders saved
-   this"* is 28's entire deliverable and is unanswerable from this table. Two shipped
-   defects come from the same cause: the list resolved `seen`, `dismissed`, `applied` and
-   `saved` from `job_events` by profile, so one Builder's save read as everyone's.
-   **Task 31 fixed `dismissed` and `saved`** by moving them to `builder_job_state`;
-   **`seen` and `applied` are [D66 and D67](../../ingest/DEFECTS.md)**, both
-   `BLOCKED-BY: job_events has no app_user_id`. D67 is the sharp one — an application is
-   `private` in the event row and cohort-wide in the response body.
-   **It is invisible at one Builder and wrong at two**, with no error and no code change on
-   the day it turns. 28 can either read `saved_at` from `builder_job_state` or add the
-   column, and adding it closes all three at once.
+3. ~~**`job_events` has no `app_user_id` column, and that now blocks task 28.**~~ **CLOSED
+   2026-08-02 by `3f4f88e`, and this is the one blocker on the track that was REMOVED
+   rather than argued away.** Found by task 31, 2026-08-01. The table was keyed
+   `(profile, job_id)` and thirty Builders share `pursuit`, so **no query over it could
+   count Builders** — only rows. *"4 Builders saved this"* is 28's entire deliverable and
+   was unanswerable from that table. Two shipped defects came from the same cause: the list
+   resolved `seen`, `dismissed`, `applied` and `saved` from `job_events` by profile, so one
+   Builder's save read as everyone's. **Task 31 fixed `dismissed` and `saved`** by moving
+   them to `builder_job_state`; **`seen` and `applied` were
+   [D66 and D67](../../ingest/DEFECTS.md)**. D67 was the sharp one — an application is
+   `private` in the event row and was cohort-wide in the response body, so the control was
+   enforced in the column and defeated in the join. **It was invisible at one Builder and
+   wrong at two**, with no error and no code change on the day it turned.
+
+   **`app_user_id TEXT` landed on `job_events`** (`../../../backend/schema.py:678`,
+   nullable and unbackfilled, index at `:703`), and **D66, D67 and D68 are all closed**.
+   Three things the column does *not* settle are now recorded in
+   [`tranche_five/28-cohort-aggregation.md`](tranche_five/28-cohort-aggregation.md) rather
+   than here: `builder_job_state` is the webapp's and a nightly compute cannot read it;
+   `save`/`unsave` are both events so a distinct count over `save` is wrong; and NULL rows
+   must be excluded rather than counted as one phantom Builder.
+
+   **The hole that survives is the write path, not the read path.** The impression dedup
+   key is still `(profile, job_id)`, so one Builder's render can suppress another's
+   impression of the same job for 24 hours — `seen` is per-Builder when read and
+   cohort-wide when written. **That remains the owner's open decision**, and it is now
+   *actionable* rather than hypothetical because the column exists. It was examined on
+   2026-08-02 and deliberately not taken.
 
 ~~**Where a fresh session on this track should look first, and it is a suggestion rather
 than a finding.** Task 31 …~~

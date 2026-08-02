@@ -16,8 +16,29 @@ which is DONE.** **Blocks:** 28, 29, 32.
 > and 27 has landed: `visibility`, `request_id`, `rank` and the `skip` derivation all
 > exist, so the seed-judgement step has somewhere correct to write.
 >
-> **What this task still needs and does not have is a screen**, which is task 32, and
-> `frontend/` holds one `.gitkeep`. That is the real blocker on 26 and it always was.
+> ~~**What this task still needs and does not have is a screen**, which is task 32, and
+> `frontend/` holds one `.gitkeep`. That is the real blocker on 26 and it always was.~~
+>
+> > **OVERSTATED, AND IT IS THE OTHER HALF OF A CYCLE. Corrected 2026-08-02.**
+> > [`../tranche_six/32-frontend.md`](../tranche_six/32-frontend.md)`:9` declares
+> > *"Depends on: **26**, 27, 28, 30, 31"* while this block declared 32. **26 → 32 → 26.**
+> >
+> > Exactly two Definition-of-done bullets need a screen — *"a Builder signs in and reaches
+> > a ranked list"* and *"onboarding is ≤3 screens"*. **The rest is schema and does not:**
+> > the `builder_profiles` DDL, resolving overrides against the cohort profile,
+> > `POST /v1/onboarding` (no route today), narrowing `migrate_profiles.py`, and making the
+> > `app_users` → `profiles` mapping explicit — today `app_users.profile` is bare TEXT with
+> > its no-FK rationale at `../../../../backend/webapp/schema_web.py:231, 241-247`.
+> >
+> > **So the backend half is unblocked and is on 32's critical path**, which is the
+> > opposite of what this block said. The arrow to invert is this one, because a screen
+> > cannot be built against an endpoint that does not exist and an endpoint can be built
+> > against no screen.
+> >
+> > **And `frontend/` no longer holds one `.gitkeep`** — it carries `README.md`,
+> > `verify_fixtures.py` and 39 frozen fixtures as of `fe3df28`. That sentence is stale in
+> > three files; see [`../API-CONTRACT-v1.md`](../API-CONTRACT-v1.md) and
+> > [`../tranche_six/32-frontend.md`](../tranche_six/32-frontend.md).
 
 Close the last gap between "a Builder can sign in" and "a Builder has a ranked list."
 

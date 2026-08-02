@@ -6,7 +6,29 @@ generator: none
 
 # 33 — Deployment
 
-**Status:** todo. **Depends on:** 24, 32. **Blocks:** nothing.
+**Status:** todo. **Depends on:** ~~24, 32~~ **nothing hard — see below**. **Blocks:** nothing.
+
+> **BOTH ARROWS ARE SOFT, AND ONE OF THEM IS HALF OF A CYCLE. Corrected 2026-08-02.**
+>
+> **`24` is a cycle.** [`../tranche_four/24-revive-contributor-api.md`](../tranche_four/24-revive-contributor-api.md)`:9`
+> declares *"Depends on: 23, **33** (tunnel)"* while this file declared 24. One of the two
+> has to be soft and it is this one: the tunnel, the secrets, the backups, the alerting and
+> the runbook do not read a line of the contributor API. Only the *"contributor API
+> reachable over TLS"* clause of the first Definition-of-done bullet does, and that is one
+> clause of one bullet. **24 genuinely needs the tunnel; the tunnel does not need 24.**
+>
+> **`32` is not real at all.** No bullet in the Definition of done reads frontend code.
+> `backend/webapp/` runs standalone and the tunnel fronts a FastAPI app whether or not a
+> client exists.
+>
+> **So the deployable half is deployable now**, and the half with no prerequisite at all is
+> the one that would have caught the most: `pg_dump` off-machine with one verified restore,
+> and volume-based alerting. `.claude/CLAUDE.md` § *Landmines* — *"Silence is this system's
+> failure mode … alert on volume, not errors"* — is an argument for doing that half first
+> rather than last.
+>
+> This is the **third** wrong arrow found in this tranche and the second cycle. The first
+> two both pointed at 26.
 
 Get this running on a home server for thirty people, without opening a port or paying
 for anything.

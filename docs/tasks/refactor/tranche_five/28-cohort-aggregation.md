@@ -6,7 +6,47 @@ generator: none
 
 # 28 — Anonymous cohort aggregation
 
-**Status:** todo. **Depends on:** 27. **Blocks:** 32.
+**Status:** todo. **Depends on:** 27, **which is DONE**. **Blocks:** 32.
+
+> **UNBLOCKED 2026-08-02, and this is the one blocker on this track that was REMOVED rather
+> than argued away.** `HANDOFF.md` carried this task as *"a real blocker"*: `job_events` was
+> keyed `(profile, job_id)`, thirty Builders share `pursuit`, so *"4 **Builders** saved
+> this"* — the entire deliverable — was not a question the table could answer. **`app_user_id
+> TEXT` landed on `job_events` in `3f4f88e`** (`../../../../backend/schema.py:678`, index at
+> `:703`), written from `user.id` by `POST /v1/events`
+> (`../../../../backend/webapp/jobs.py:837`). `COUNT(DISTINCT app_user_id)` is now answerable.
+>
+> **Three things that column does not settle, and each changes the implementation below.**
+>
+> 1. **`builder_job_state` is NOT usable as the source, despite being the obvious one.** It
+>    carries `saved_at` per Builder already — but it is declared in
+>    `../../../../backend/webapp/schema_web.py:281-288`, on the **webapp's** side of the
+>    ownership line, and § *Implementation* below puts this compute on the **nightly
+>    cycle**. `.claude/CLAUDE.md` § *Layout*: the three processes have their own roles and
+>    **none imports another**. A pipeline table must not require the surfacing service's
+>    schema. So aggregate from `job_events`, which is what this file already says — the
+>    reason is stronger than it looks.
+> 2. **`save` and `unsave` are both events, so a distinct count over `event='save'` is
+>    wrong.** `_STATE_WRITES` (`../../../../backend/webapp/jobs.py:573-574`) maps both, and
+>    `job_events` is append-only. Someone who saved and then unsaved still has a `save` row
+>    forever. Take the **latest** of `{save, unsave}` per `(app_user_id, job_id)`; the
+>    current answer is a fold over the log, not a filter on it.
+> 3. **`app_user_id IS NULL` rows must be excluded, not counted.** Pre-column rows are NULL
+>    by design and unbackfilled (`../../../../backend/schema.py:662-671`). Counting them
+>    collapses every pre-2026-08-01 saver into one phantom Builder — which would push
+>    postings **over** the suppression threshold on the strength of a row that names nobody.
+>    That is the privacy control failing open.
+>
+> **What the column does NOT unblock is the small-N problem below.** *"4 Builders saved
+> this"* becoming an identifier in a thirty-person classroom is not something a column
+> answers, and the suppression rule is load-bearing arithmetic today rather than a
+> precaution. [`../../../labelling-report-2026-08-02.md`](../../../labelling-report-2026-08-02.md)
+> records **two** labellers on `pursuit`; at that headcount a threshold of 3 suppresses
+> everything by construction. **Do not tune it down to see output** — an empty badge is the
+> correct rendering of a two-person cohort, and the first thing a test here should pin is
+> that `2` produces no badge rather than a small one. (Instrument for the live count is
+> `manage_app_users.py list`, which needs the database; the report is committed data and
+> does not.)
 
 Surface "4 Builders saved this" without ever revealing which four — and without the
 count itself becoming an identifier.

@@ -6,7 +6,25 @@ generator: none
 
 # 25 — Search queries
 
-**Status:** todo. **Depends on:** 23, 24, 11. **Blocks:** 28, 32.
+**Status:** todo. **Depends on:** ~~23, 24,~~ **11**; 23 for two bullets only. **Blocks:** 28, 32.
+
+> **THE ARROW TO 24 IS FALSE, AND TASK 24'S OWN FILE SAYS SO. Corrected 2026-08-02.**
+> [`24-revive-contributor-api.md`](24-revive-contributor-api.md)`:92-94` reads *"Task 25
+> fills that queue … Until then, seed manually from task 05's vocabulary."* — 24 expects to
+> be seeded **by** 25, not to precede it. Nothing here reads the contributor API: the
+> `search_queries` and `search_query_watchers` tables, the normaliser, the watcher counts,
+> the per-`role_track` seeding and the decay all stand alone. Only *"a query submitted twice
+> costs one provider call"* needs **a** provider, and any of the two shipped adapters is one.
+>
+> **23 is real for two bullets and no more** — *"one provider call"* and *"results route
+> through the full gate"*. It is `todo` and `backend/serp/` does not exist, so those two
+> wait; the rest does not.
+>
+> **11 is real and is satisfied** (`da4942c`). `role_track` is a column
+> (`../../../../backend/schema.py:542`) with a nine-value vocabulary
+> (`../../../../backend/extract.py:305-308`), so *"seed one query per `role_track`"* has
+> something to seed from today. **It is NULL on every pre-task-11 row**, which the seeding
+> has to expect rather than treat as an empty vocabulary.
 
 Make the query a first-class object. It is what turns a quota problem and a community
 feature into the same thing.

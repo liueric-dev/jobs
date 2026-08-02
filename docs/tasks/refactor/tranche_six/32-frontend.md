@@ -8,7 +8,16 @@ generator: none
 
 **Status:** todo. **Depends on:** 26, 27, 28, 30, 31. **Blocks:** nothing.
 
-Build `frontend/`. It is currently a single `.gitkeep`.
+Build `frontend/`. ~~It is currently a single `.gitkeep`.~~
+
+> **STALE as of `fe3df28`, 2026-08-02.** `frontend/` carries
+> [`README.md`](../../../../frontend/README.md), `verify_fixtures.py` and 39 frozen
+> fixtures under `fixtures/shipped/` and `fixtures/contract/`. There is still **no
+> application code** — that part of the sentence stands — but the contract mocking this
+> task's own § *Mocking* asked for exists, and `README.md` there is the list of everything
+> a client author gets wrong if nobody says it. **Read it before writing a line of client
+> code.** The same stale sentence was in `26-profile-creation.md` and
+> `API-CONTRACT-v1.md`; all three are corrected.
 
 ## The backend is further along than the empty directory suggests
 
