@@ -191,10 +191,18 @@ task 33's tunnel and on a running service, and is untouched.
   still uncapped** — see below.
 - **Registered in task 23's router as a deferred provider.** Not possible.
   `backend/serp/` does not exist; task 23 is descoped.
-- **Contribution counts tracked; empty-submission workers detectable.**
+- ~~**Contribution counts tracked; empty-submission workers detectable.**
   Detectable, not surfaced. `submission_log` now records an empty submit as an
   empty submit with `action` on every row, so the query exists. No report reads
-  it.
+  it.~~ **Done 2026-08-02.** `backend/api/contribution_report.py` reads it —
+  per contributor and, with `--by-dataset`, per query slug. Both halves of "an
+  empty-submission worker" are answerable from the output: a worker whose
+  submits come back empty (`action = 'submit' AND fetched_count = 0`), and a
+  worker that claims and never submits at all, which writes no submit row of
+  any kind and so cannot appear in an empty rate. The second view is the
+  control — every contributor submitting empty on one slug is a dead query, not
+  a room full of broken workers, and reporting the latter for the former was the
+  failure worth designing against. See *Where the report lives* below.
 - **The ~~two~~ one deprecation notice corrected.** Deferred to deploy day on
   purpose — see the Documentation section above.
 - **`docs/ingest/contributor-api.md` regenerated.** Done, where "regenerated"
@@ -354,7 +362,64 @@ carried. Disposition: **fix before opening to more than a handful of
 contributors** — not before deploy, since a tailnet-only phase 1 has no
 adversary.
 
-### Proposed defect — the claim protocol has no test
+### Where the report lives, and why that was not a style choice
+
+*(2026-08-02, the session that closed the bullet above.)*
+
+`backend/api/contribution_report.py`, run on this package's venv beside
+`manage_users.py`, which is the CLI precedent here:
+
+```bash
+cd backend/api
+.venv/bin/python contribution_report.py                  # per contributor
+.venv/bin/python contribution_report.py --by-dataset     # per query slug
+.venv/bin/python contribution_report.py --empty-workers  # only the findings
+```
+
+**Not `backend/tools/`, and the reason is a GRANT.** `submission_log` is granted
+to `jobs_api` and to nothing else (`query_claims.REQUIRED_TABLES`, and README's
+privilege table). Everything under `backend/tools/` runs as `jobs_pipeline`,
+which holds nothing on it, so putting the report there would have meant issuing
+a new grant to produce a report — widening a role's reach for a read, which is
+the opposite of what the three-role split buys. Here it needs no new privilege
+at all, which `backend/api/tests/test_grants.py` now checks: the module was
+added to `SERVICE_MODULES`, so its SQL is scanned against `REQUIRED_TABLES` like
+the request path's.
+
+**`action` has four values, not three, and the fourth is NULL.**
+`SUBMISSION_ACTIONS` is `('claim', 'submit', 'release')`; the column is nullable
+with no default and `query_claims.py` says what a NULL means — *"written before
+this column existed"*. The report gives it its own column headed `null`, prints
+a word rather than a blank there (a blank in a column of integers reads as
+zero), excludes it from every rate, and — the assertion that matters — never
+lets it earn a contributor a finding. *"This worker submits nothing"* about a
+worker whose rows merely predate the column is a false accusation that reads
+exactly like a true one. Same rule the pipeline applies to an unversioned
+`job_scores` row and to `job_events.rank`.
+
+There is a **fifth** bucket, `other`, for an action that is neither NULL nor in
+the vocabulary. `action` is free TEXT — `DEC-83` rejected a `CHECK` because it
+would need DDL rights this service deliberately does not hold — so a value
+outside the set is a state the database can represent and the code cannot
+prevent. The five buckets partition the rows exactly and `summarize()` asserts
+they add up to `COUNT(*)`, which is the *"reconcile collected counts against the
+total"* rule applied to a log instead of a paginated API: a row in no bucket
+would be a row the report silently drops from somebody's totals.
+
+**An empty submit is keyed on `fetched_count = 0`, not on `reason`.** That is
+the server-computed `len(payload.jobs)` from the D08 short-circuit. `reason` is
+free text the caller partially controls on the release path, and a diagnosis
+that parses caller-supplied text is one an input can influence — the same
+argument `DEC-83` used to reject a `reason` prefix in favour of a column.
+
+**The two thresholds are a reading lens, not a policy.** `--min-submits` and
+`--empty-rate` decide what gets a label printed beside it; nothing acts on them
+and no row is written. That is why they are flags rather than constants: there
+is no distribution of real worker behaviour to derive a ceiling from yet, and
+picking an enforced number before one is observable is the mistake `D71`'s
+concurrency cap was left open to avoid.
+
+### ~~Proposed defect~~ **`D72`, fixed** — the claim protocol has no test
 
 `try_claim_query`'s conditional update and `holds_claim`'s three conditions are
 this service's subtlest reasoning — particularly the `claim_granted_at` takeover
@@ -375,6 +440,44 @@ length. That is a real piece of work, not a line.
 Class: **cosmetic** (a testing gap, not a defect in the code). Disposition: fix
 with the scratch-schema fixture, before the service is exposed beyond the
 tailnet.
+
+**Numbered `D72` and fixed 2026-08-02**, with exactly that fixture:
+`backend/api/tests/test_claim_protocol.py`. The takeover is performed by
+`lib.state.try_claim` — the function `ingest/google-serpapi.py` actually calls —
+rather than by a hand-written `UPDATE`, because this entry's own premise is that
+the guard was *"found by testing against the pipeline's real SQL, not
+theorized"*, and a test that restates the pipeline's SQL from memory stops being
+that the first time the pipeline changes.
+[`DEFECTS.md` § D72](../../../ingest/DEFECTS.md#d72) has the full list of what it
+pins.
+
+### `D73` — the 400 on a malformed body echoed the body
+
+*(Allocated and closed 2026-08-02, in this task's stream because it owns
+`app.py`.)*
+
+`submit`'s parse handler returned `detail=f"malformed body: {e}"`, and a pydantic
+`ValidationError` embeds `input_value=` in its string form. For `json_invalid` —
+every syntactically broken body — that is the **whole request body**, which for
+this endpoint is a SerpApi response fetched with a contributor's own key.
+
+Found by task 33, which recorded it and declined to fix it because another stream
+owned this file. **That entry's cite was wrong by 58 lines**: it said
+`app.py:292` and the site was `:350`, with `:292` landing on the daily-cap
+`HTTPException` in `claim()` — a citation that resolves to plausible-looking
+other code, which is worse than one that resolves to nothing. Corrected in
+`tranche_six/33-deployment.md` and in `docs/RUNBOOK.md`, struck rather than
+overwritten in both.
+
+The fix is `app._validation_detail()`, which builds the detail from the error's
+`loc` and `type` alone and passes both through a whitelist. **It is placed at the
+bottom of `app.py` on purpose**: about forty-five `backend/api/app.py:NNN`
+citations live in `docs/ingest/contributor-api.md`, `docs/RUNBOOK.md` and three
+task files, and anything inserted above `submit()` invalidates all of them at
+once — which is precisely what this task's Definition of done records happening
+after the D01 fix shifted the file by eight lines. The diff is one changed line
+at `:350` and an append after `:527`, so no existing citation moved.
+[`DEFECTS.md` § D73](../../../ingest/DEFECTS.md#d73) carries the rest.
 
 ### A credential-issuing page needs an ownership decision — proposed decision, NOT built
 

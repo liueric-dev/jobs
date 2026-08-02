@@ -41,7 +41,15 @@ import query_claims as qc  # noqa: E402
 #: qc.ensure_schema() rather than in its own body, so what remains here --
 #: create, list, revoke -- runs on the same restricted DATABASE_URL the service
 #: uses and touches only contributors and api_keys. Its own docstring says so.
-SERVICE_MODULES = ("app.py", "query_claims.py", "manage_users.py")
+#:
+#: contribution_report.py is included on the same reasoning: it connects on
+#: qc.DATABASE_URL, reads submission_log and contributors, and needs no grant
+#: beyond the SELECTs this role already holds -- which is precisely the claim
+#: this scan checks rather than assumes, and the reason the report lives in this
+#: package instead of backend/tools/ (which runs as jobs_pipeline and holds
+#: nothing on submission_log).
+SERVICE_MODULES = ("app.py", "query_claims.py", "manage_users.py",
+                   "contribution_report.py")
 
 #: Aliases bound inside the SQL itself. They follow FROM/JOIN syntactically and
 #: are not tables to grant.

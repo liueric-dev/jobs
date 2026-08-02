@@ -314,12 +314,21 @@ week.
   § *Restoring for real* works around this by starting `jobs-api.service`, which
   refuses to start when a grant is missing — but that is a manual step in a procedure,
   not a check.
-- **`backend/api/app.py:292`** returns `detail=f"malformed body: {e}"`, and a pydantic
+- ~~**`backend/api/app.py:292`** returns `detail=f"malformed body: {e}"`, and a pydantic
   `ValidationError` string can carry the offending input. It is a response body to the
   sender and nothing persists it, so it leaks nothing today; it becomes an exposure the
   moment anything in front of the service logs response bodies. Recorded in
   `docs/RUNBOOK.md` § *The audit behind the "no payload is logged" claim*. Not changed
-  here — another stream owns that file.
+  here — another stream owns that file.~~
+  **Numbered `D73` and fixed 2026-08-02 by task 24**, the stream that owns `app.py`.
+  **The cite above was wrong by 58 lines**: the site was `app.py:350`, inside `submit()`,
+  and `:292` lands on the daily-cap `HTTPException` in `claim()` — a different handler
+  raising a different status, so the citation resolved to plausible-looking code rather
+  than to nothing. Struck rather than corrected in place, because a stale line number is
+  worth keeping visible next to the entry that shows what it costs. The severity was also
+  understated here: for the `json_invalid` case, which is every syntactically broken body,
+  pydantic's `input_value` is the **whole request body**, not one field of it. See
+  [`DEFECTS.md` § D73](../../../ingest/DEFECTS.md#d73).
 - **`config/volume-floors.json` has no floor for `workday`'s real shape.** Two runs of
   history, both after the step landed. It is the least-evidenced number in the file and
   the first to re-derive.

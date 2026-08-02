@@ -366,18 +366,36 @@ cd backend/api && grep -rn "print(\|logger\|logging\|log\." --include=*.py . \
   | grep -v "submission_log\|contributor-worker"
 ```
 
-**Result: every hit is in `manage_users.py`, an interactive admin CLI that never sees a
-submission.** `app.py` and `query_claims.py` — the entire request path — emit nothing at
-all. `submission_log` stores counts and a reason, never a body
-(`backend/api/app.py:308-315`). `backend/tests/test_secrets_rotation.py` pins both facts
-so a future `print()` on the request path fails the suite.
+**Result: every hit is in an admin CLI that never sees a submission** — `manage_users.py`,
+and since 2026-08-02 `contribution_report.py`, which prints counts read back out of
+`submission_log` and never touches a payload. `app.py` and `query_claims.py` — the entire
+request path — emit nothing at all. `submission_log` stores counts and a reason, never a
+body (`backend/api/app.py:308-315`). `backend/tests/test_secrets_rotation.py` pins both
+facts so a future `print()` on the request path fails the suite; it scans exactly the two
+request-path modules, which is why an admin CLI printing to a terminal is not a finding
+here and adding one does not need the test relaxed.
 
-**One residual, recorded rather than smoothed over.** `backend/api/app.py:292` returns
+~~**One residual, recorded rather than smoothed over.** `backend/api/app.py:292` returns
 `detail=f"malformed body: {e}"` on a parse failure, and a pydantic `ValidationError`
 string can include the offending input. That is a **response body to the sender**, not a
 log — it goes back to the machine that just sent it, and nothing persists it — so it
 leaks nothing today. It would become a real exposure the moment anything in front of
-this service starts logging response bodies. cloudflared does not.
+this service starts logging response bodies. cloudflared does not.~~
+
+**Closed 2026-08-02 as defect `D73`** ([`DEFECTS.md` § D73](ingest/DEFECTS.md#d73)). Two
+things about the struck paragraph were wrong and are worth keeping visible. The line number
+was off by 58 — the site was `app.py:350`, and `:292` resolved to a *different*
+`HTTPException` in a different handler, which is worse than resolving to nothing. And the
+severity was understated: for pydantic's `json_invalid`, which is every syntactically broken
+body, `input_value` is the **whole request body**, not the one field that failed.
+
+`app._validation_detail()` now builds the 400 from the error's `loc` and `type` alone, both
+passed through a whitelist, so the response is independent of the input by construction.
+**"cloudflared does not log response bodies" is no longer load-bearing** — it was a rule
+about a component someone will eventually reconfigure, and this is a property of the
+service. `backend/api/tests/test_malformed_body.py` asserts it on the serialized response
+bytes rather than on the exception's `detail`, which is the thing a proxy would actually
+write down.
 
 ---
 

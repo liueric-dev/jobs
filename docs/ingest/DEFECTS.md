@@ -83,7 +83,7 @@ else does.** Decisions are `DEC-<n>` and live in
 [`DECISIONS.md`](../tasks/refactor/DECISIONS.md); task numbers live in
 [`tasks/refactor/README.md`](../tasks/refactor/README.md).
 
-**Next free: `D73`.** Allocated `D01`–`D45` and `D66`–`D72`; **`D46`–`D65` are burnt and
+**Next free: `D74`.** Allocated `D01`–`D45` and `D66`–`D73`; **`D46`–`D65` are burnt and
 must never be issued.** They are not defects and never were — `DECISIONS.md` continued this register's
 count when it started allocating decision IDs mid-file, so those twenty numbers circulate
 in eighty-odd places meaning *decisions*. Task 39 re-prefixed the live sites to `DEC-46`–
@@ -237,6 +237,14 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D70](#d70) | check with a blind spot | **fixed** — 2026-08-02, task 32 — `COHORT_FIELDS` derived, fixtures re-frozen, and `_KNOWN_JOBS_TUPLES` fails on a group it does not know; **two-part residue, measured and recorded not closed** — renaming `rank` still exits 0 | `frontend/verify_fixtures.py` hardcodes the tail of the expected key list, so a new response field is invisible: fixtures and verifier agree with each other and both disagree with the code |
 | [D71](#d71) | cosmetic (while undeployed) | **open** — fix before opening to more than a handful of contributors; the ceiling is a policy number nobody has picked | Contributor API: concurrent claims per contributor are uncapped — one worker can hold the entire 32-slug bank while inside its daily allowance |
 | [D72](#d72) | cosmetic (a testing gap) | **open** — fix with the scratch-schema fixture, before the service is exposed beyond the tailnet | Contributor API: the claim protocol has no test — `fakedb.py` dispatches on SQL text and cannot falsify a `WHERE` clause |
+
+| [D72](#d72) | cosmetic — a testing gap, not a defect in the code | **fixed** — 2026-08-02, task 24 — `backend/api/tests/test_claim_protocol.py`, on a scratch schema, skipping where no database is available | the claim protocol had no test: `backend/api/tests/fakedb.py` dispatches on SQL text and cannot falsify the `WHERE` clauses `try_claim_query` and `holds_claim` consist of |
+| [D73](#d73) | information disclosure | **fixed** — 2026-08-02, task 24 — `app._validation_detail()` builds the detail from `loc` and `type` alone, both whitelisted | `submit`'s `detail=f"malformed body: {e}"` echoed the offending input back to the caller through a pydantic `ValidationError`; for a syntactically broken body that input is the **whole request body** |
+
+**`D71` has no row in this index.** Filed 2026-08-02 and still open, and the body below is
+the only place it exists. Left as-is here rather than fixed in passing because another
+stream owns it this session — recorded so that the gap is a finding rather than an
+oversight, which is the entire lesson of the paragraph below.
 
 **D66 and D67 were absent from this index entirely** until they were closed — added
 2026-08-01, on the lesson D45's row records four paragraphs above: *"the index is the part
@@ -2035,7 +2043,7 @@ deploy, since the tailnet-only configuration has no adversary. Note that
 names this as one of the three couplings between the pipeline and the contributor API: a held
 claim blocks the nightly pipeline from that query.
 
-### D72 — open
+### D72 — fixed
 
 <a id="d72"></a>
 
@@ -2063,3 +2071,112 @@ length. **That is a real piece of work, not a line.**
 
 Class: **cosmetic** — a testing gap, not a defect in the code. Disposition: fix with the
 scratch-schema fixture, before the service is exposed beyond the tailnet.
+
+**Fixed 2026-08-02, task 24.** `backend/api/tests/test_claim_protocol.py`, built on exactly
+the pattern this entry named: a scratch schema from `evals/scratchdb`, created on the
+pipeline credential read out of `backend/.env` and published only as
+`JOBS_SCRATCH_DATABASE_URL`, skipping rather than failing where no database is reachable.
+`api_scratch_schema()` calls `qc.ensure_schema()` inside `scratchdb.scratch_schema()`'s body,
+which is what brings the three contributor tables and the two extra claim columns into the
+scratch schema alongside the pipeline's own.
+
+What it pins, in the order the entry raised it:
+
+- **The conditional update.** A second claimant loses *and writes nothing* — asserted as
+  "the row is byte-identical afterwards", not merely as a `False` return. Both sides of the
+  TTL boundary are pinned, in `try_claim_query` (`claimed_at < cutoff`, strict) and in
+  `holds_claim` (`claimed_at >= cutoff`), because the two live in different functions and a
+  disagreement between them is a query frozen for no reason.
+- **The takeover guard, against the pipeline's real SQL.** The takeover is performed by
+  `lib.state.try_claim` — the function `ingest/google-serpapi.py` actually calls — rather
+  than by a hand-written `UPDATE` that agrees with this file's idea of it. Three tests, and
+  the split is the point: one pins the *premise* (the pipeline rewrites `claimed_at` and
+  leaves `claimed_by` stale), one shows that **both conditions a naive check would look at
+  are satisfied** after the takeover, and one shows `holds_claim` says no anyway. Deleting
+  the `claim_granted_at` comparison turns exactly the third one red — verified, not assumed.
+  A fourth pins that the guard is not a one-way latch: a contributor who legitimately
+  re-claims an expired query holds it again.
+- **`pick_stale_queries_by_bucket`.** Never-run first, a lost claim not consuming the
+  bucket's budget, the `MIN_HOURS_BETWEEN_RUNS` break, and — the one with teeth — that the
+  `last_run` returned beside each query is *that* query's watermark. `app.claim` passes it
+  straight to `choose_date_chip`, so a mispairing hands the contributor a chip covering the
+  wrong window and the postings in the real gap are fetched by nobody.
+- **Across two sessions**, via `scratchdb.second_connection`. What is *not* claimed is
+  written into the file: a genuinely simultaneous race would block on a row lock rather than
+  interleave, and the property it would establish is Postgres's rather than this service's.
+
+`fakedb.py`'s docstring already pointed here — the parenthetical naming the claim protocol as
+"on the scratch-schema side of that line and NOT covered here" — and now names the file that
+covers it.
+
+### D73 — fixed
+
+<a id="d73"></a>
+
+**`POST /v1/queries/{dataset}/submit` echoed the request body back in its 400.**
+`backend/api/app.py`'s malformed-body handler returned `detail=f"malformed body: {e}"`,
+where `e` is a pydantic `ValidationError`. That exception's string form embeds
+`input_value=`, so the offending input travelled back to the caller inside the response
+body.
+
+**The severe case is not the field-level one.** For a type error the echo is one field. For
+`json_invalid` — which is *every syntactically broken body* — pydantic sets `input_value` to
+the **entire request body**, verified directly against the pinned `pydantic 2.13.4`:
+
+```
+Invalid JSON: EOF while parsing an object at line 1 column 15
+  [type=json_invalid, input_value=b'{"jobs": [1,2] ', input_type=bytes]
+```
+
+A submit body is a SerpApi response a contributor fetched with their own key, up to
+`MAX_BODY_BYTES` (2 MB). So a worker with a trailing-comma bug had its whole payload
+reflected on every attempt.
+
+**Found by task 33** (`docs/tasks/refactor/tranche_six/33-deployment.md`, § *Open gaps*),
+which recorded it and deliberately did not fix it because another stream owned `app.py`.
+That entry cites **`backend/api/app.py:292`** and **the site is at `:350`** — 58 lines off,
+and `:292` now lands on the daily-cap `HTTPException` in `claim()`, a different handler
+raising a different status. The drift is this register's own documented failure mode
+appearing in a task file: a line-number citation is a fact with a half-life, and the D01 fix
+shifting `app.py` by eight lines had already invalidated roughly thirty citations in
+`docs/ingest/contributor-api.md` once. Both cites are corrected where they live.
+
+**Why it is filed rather than shrugged at.** The only recipient is the sender, who already
+has the bytes, and nothing here persists the string — so it leaks nothing today. It becomes
+an exposure the moment anything in front of the service logs response bodies: a reverse
+proxy, an error tracker, the Cloudflare Tunnel's own access log. Every one of those is a
+deployment decision made later by somebody who will not have read this. `docs/RUNBOOK.md`
+§ *The audit behind the "no payload is logged" claim* answered it with a rule; a rule decays
+and a property does not, which is rule 7's whole argument in
+[`DOCS-POLICY.md`](../DOCS-POLICY.md).
+
+**Fixed 2026-08-02, task 24.** `app._validation_detail()` builds the detail from two fields
+of `exc.errors()` — `loc` and `type` — and passes both through a whitelist pattern before
+printing them. `jobs: list_type`, `jobs.2: dict_type`, `body: json_invalid`: which field
+failed and how, without the value.
+
+**Why a whitelist and not a redaction.** Stripping `input` out of the error dicts would work
+today and would rest on knowing which keys of a third-party library's error objects can
+carry caller bytes — `input`, `ctx`, `msg` and `url` all vary by error type and across
+pydantic releases. Building the detail from an allowed set instead makes *"no byte of the
+request body reaches the response"* hold by construction rather than by having read
+pydantic's formatter, which is the same reason this service recomputes every stored field
+server-side rather than validating what a contributor sends.
+
+**What is deliberately kept.** The failing field and the error kind, including list indices
+— `jobs.2` is a position the server counted, not something the caller supplied, and it is
+what makes "the third posting in your batch" answerable. A redaction that said nothing would
+be a different defect: a contributor whose worker is broken has no other channel.
+
+Closed by `backend/api/tests/test_malformed_body.py`, which asserts at the FastAPI layer:
+each hostile body is put through the real `submit` coroutine and the resulting exception is
+rendered by the handler registered on `app.app`, so the assertion is on the **serialized
+response bytes** a proxy would log rather than on `exc.detail`. `fakedb.py` could not have
+closed this — the 400 is raised before `db()` is entered, so there is no SQL on the path for
+a fake connection to observe, which one of those tests asserts as a property in its own
+right. Restoring the f-string turns five assertions across three of those tests red;
+verified by monkeypatching the old behaviour back in rather than by reasoning about it.
+
+Class: **information disclosure**. Disposition: **fixed before deploy**, which is where it
+belonged: the fix is one function, and the alternative was carrying a "do not log response
+bodies" instruction into every future proxy configuration.

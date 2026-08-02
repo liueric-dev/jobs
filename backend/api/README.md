@@ -93,6 +93,44 @@ python3 manage_users.py revoke --key-hash <prefix>
 The raw key prints **once** and is never stored — only `sha256(key)`. If a key
 is lost, revoke it and mint a new one; there is no recovery command by design.
 
+### Who is contributing, and whose worker is broken
+
+```bash
+.venv/bin/python contribution_report.py                  # per contributor
+.venv/bin/python contribution_report.py --by-dataset     # per query slug
+.venv/bin/python contribution_report.py --empty-workers  # only the findings
+.venv/bin/python contribution_report.py --since 2026-08-01 --json
+```
+
+Counts over `submission_log`, bucketed by `action`. Two findings, and they are
+different failures: `empty-submits` is a worker whose submissions come back with
+nothing in them, and `no-submits` is a worker that claims queries and never
+submits at all — the second writes no submit row of any kind, so no empty rate
+can see it, and every one of its claims held a query out of the pool for
+`CLAIM_TTL_MINUTES`.
+
+`--by-dataset` is the control, not a convenience. If every contributor's submits
+on one slug come back empty, the **query** is dead and the workers are fine;
+telling a Builder their worker is broken when the query is stale is the mistake
+that view exists to prevent.
+
+**A NULL `action` is a fourth value, not a zero.** It means *"written before the
+column existed"* (see `query_claims.py`), it gets its own `null` column, and it
+is excluded from every rate and from both findings — a contributor whose rows
+cannot be classified is reported as unmeasurable rather than as broken. A sixth
+column, `other`, catches an `action` outside the vocabulary; the column is free
+TEXT by design, so that state is representable and is worth naming when it
+appears.
+
+`--min-submits` and `--empty-rate` are a reading lens: they decide what gets a
+label printed beside it and nothing else. Nothing in the service reads them, no
+request is refused because of them, and no row is written.
+
+This runs on the same restricted `DATABASE_URL` the service uses — it needs
+`SELECT` on `submission_log` and `contributors` and nothing more. That is also
+why it lives here rather than in `backend/tools/`, which runs as
+`jobs_pipeline` and holds nothing on `submission_log`.
+
 ## Tests
 
 ```bash
@@ -110,10 +148,27 @@ that importing them would buy nothing there; it parametrises over
 `schema.google_spec()`. So until 2026-08-02 nothing anywhere imported this
 service. These are its first tests.
 
-No database and no network: `tests/fakedb.py` is a fake connection that dispatches
-on SQL text, the same line `backend/webapp/tests/` draws between its unit files
-and `test_event_replay.py`. What that cannot falsify — the claim-protocol SQL in
-`try_claim_query` and `holds_claim` — is not covered and is called out as such.
+Most of it needs no database and no network: `tests/fakedb.py` is a fake
+connection that dispatches on SQL text, the same line `backend/webapp/tests/`
+draws between its unit files and `test_event_replay.py`.
+
+~~What that cannot falsify — the claim-protocol SQL in `try_claim_query` and
+`holds_claim` — is not covered and is called out as such.~~ **Covered since
+2026-08-02 (defect `D72`)** by `tests/test_claim_protocol.py`, which runs against
+a scratch schema and **skips** where no database is reachable rather than passing
+vacuously. `tests/test_contribution_report.py` splits the same way: the bucket
+arithmetic is pure and always runs, and the five `COUNT(*) FILTER` expressions
+run against Postgres.
+
+The scratch schema is created on the **pipeline's** credential, read out of
+`backend/.env` and published only as `JOBS_SCRATCH_DATABASE_URL`. It has to be:
+`scratchdb.create()` issues `CREATE SCHEMA`, and `jobs_api` holds no DDL at all
+by design — which is the property `verify_schema()` exists to preserve, so
+borrowing a stronger credential for the fixture is better than weakening the
+role. Set that variable yourself to point the fixture somewhere else.
+
+**Read the `Ran N tests` line, not a number written down anywhere.** A skip is
+not a failure, and this suite has modules that skip.
 
 ## API
 
@@ -313,7 +368,11 @@ Two of these are still open, and both are real once strangers can call it:
 - **No provenance.** Rows submitted through this API are indistinguishable
   from locally-ingested ones, and `submission_log` records counts, not job
   ids. There is no way to trace or purge one contributor's rows if they turn
-  out to be submitting junk.
+  out to be submitting junk. **`contribution_report.py` does not close this**
+  and should not be read as closing it: it can tell you a contributor's
+  submissions are empty or that their accepted count is implausible, which is
+  the *detection* half. Acting on the finding still means having no way to say
+  which stored rows were theirs.
 
 ## Configuration
 

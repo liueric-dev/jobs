@@ -440,7 +440,7 @@ Required objects (`backend/api/query_claims.py:97-137`):
 | Input | Behavior |
 |---|---|
 | Body over 2 MiB | 413 before parsing (`:345-346`) |
-| Body that is not valid `SubmitRequest` JSON | 400 (`:347-350`) |
+| Body that is not valid `SubmitRequest` JSON | 400 (`:347-350`), detail naming the failing `loc` and error `type` only — ~~*was:* `f"malformed body: {e}"`, which echoed the offending input and, for a syntactically broken body, the whole request body; defect D73~~ |
 | A job element that is not a dict | `rejected++`, `continue` (`:420-422`) |
 | A job raising `AttributeError`/`TypeError`/`ValueError` in `normalize_job` | `rejected++`, `continue` (`:423-426`) |
 | `jobs: []` | accepted, watermark **not** advanced, claim released, logged, `watermark_advanced: false` (`:403-412`) — ~~*was:* still advanced the watermark, defect D08~~ |
@@ -593,8 +593,24 @@ code. It is now at least scanned by `tests/test_grants.py`, which parses its SQL
 and asserts every table it names is declared — which is a statement about its
 grants, not about its logic. Nothing tests `create`, `list` or `revoke`.
 
-**The claim protocol has no test.** `try_claim_query`'s conditional update and
+~~**The claim protocol has no test.** `try_claim_query`'s conditional update and
 `holds_claim`'s three conditions — including the `claim_granted_at` takeover
 guard, which is this service's subtlest piece of reasoning — are SQL semantics,
 and `tests/fakedb.py` cannot falsify a WHERE clause. `backend/webapp/tests/test_event_replay.py` is the pattern for closing this against a scratch schema;
-it is not built. Written up in task 24.
+it is not built. Written up in task 24.~~
+
+**Numbered `D72` and closed 2026-08-02** by `backend/api/tests/test_claim_protocol.py`,
+against a scratch schema, skipping where no database is reachable. The takeover
+guard is exercised by calling the pipeline's own `lib.state.try_claim` rather
+than a hand-written `UPDATE`, so the premise the guard defends against — the
+pipeline rewrites `claimed_at` and leaves `claimed_by` stale — is pinned as its
+own assertion beside the guard itself. See
+[`DEFECTS.md` § D72](DEFECTS.md#d72).
+
+**`submission_log` is now read by something.** `backend/api/contribution_report.py`
+buckets it by `action` per contributor and, with `--by-dataset`, per query slug —
+the deliverable for task 24's *"contribution counts tracked; empty-submission
+workers detectable"*. It runs on this service's own restricted role, which is why
+it lives in `backend/api/` and not in `backend/tools/`: `submission_log` is
+granted to `jobs_api` alone. A NULL `action` is carried as an unknown throughout
+and never counted as a claim, a submit or a zero.

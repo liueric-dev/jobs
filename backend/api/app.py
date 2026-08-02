@@ -347,7 +347,7 @@ async def submit(
     try:
         payload = SubmitRequest.model_validate_json(raw)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"malformed body: {e}")
+        raise HTTPException(status_code=400, detail=_validation_detail(e))
 
     with db() as conn:
         contributor_id = authenticate(conn, authorization)
@@ -525,3 +525,109 @@ def _last_success(conn, dataset):
     if not row or not row[0]:
         return None
     return row[0]
+
+
+# --------------------------------------------------------------------------
+# The 400 on a malformed body -- defect D73
+# --------------------------------------------------------------------------
+#
+# WHY THIS IS AT THE BOTTOM AND NOT WITH THE OTHER MODULE CONSTANTS ABOVE. Both
+# names below belong beside MAX_BODY_BYTES on every other consideration, and
+# they are here for one: ~45 citations of the form `backend/api/app.py:NNN`
+# live in docs/ingest/contributor-api.md, docs/RUNBOOK.md and three task files,
+# and inserting anything above `submit()` invalidates all of them at once. That
+# is not hypothetical -- task 24's own Definition of done records re-citing
+# roughly thirty of them after the D01 fix shifted this file by eight lines.
+# Neither name is read at import time (both are resolved when
+# _validation_detail runs), so the placement costs nothing at runtime and saves
+# a file of stale line numbers.
+
+#: How many validation errors are named before the summary is truncated. A
+#: malformed batch of fifty can produce fifty, and a response body that grows
+#: with the request is its own small amplification.
+MAX_REPORTED_ERRORS = 5
+
+#: The longest error-location or error-type token that will be printed. Bounded
+#: for the same reason as above, and because an unbounded "safe" string is only
+#: safe until someone finds a long one.
+MAX_TOKEN_LENGTH = 40
+
+
+def _safe_token(value):
+    """Whether `value` may appear verbatim in a response body.
+
+    str.isidentifier() rather than a regex, and not only to avoid an import:
+    the field names of this module's models and pydantic's own error types
+    ('list_type', 'json_invalid') are exactly Python identifiers, so the
+    built-in predicate IS the whitelist rather than an approximation of it.
+    ASCII and a length bound on top, because isidentifier() accepts unicode and
+    accepts any length.
+    """
+    text_value = str(value)
+    return (len(text_value) <= MAX_TOKEN_LENGTH
+            and text_value.isascii()
+            and text_value.isidentifier())
+
+
+def _validation_detail(exc):
+    """A 400 detail that describes the failure without quoting the request.
+
+    DEFECT D73. This used to be `detail=f"malformed body: {e}"` in submit(). A
+    pydantic ValidationError's string form embeds `input_value=`, so the
+    offending input was echoed back to the sender -- and for the `json_invalid`
+    case, which is every syntactically broken body, `input_value` is the WHOLE
+    REQUEST BODY, not one field of it. A submit body is a SerpApi response a
+    contributor fetched with their own key, so whatever a worker sent came back
+    out, up to MAX_BODY_BYTES of it.
+
+    It leaks nothing to the sender, who already has the bytes. It becomes an
+    exposure the moment anything in front of this service logs response bodies
+    -- a reverse proxy, an error tracker, a tunnel's access log -- and that is a
+    deployment decision made later by someone who will not be reading this file.
+    So the fix is to make the response independent of the input rather than to
+    write down that nobody may log it. docs/RUNBOOK.md had done exactly that,
+    which is a rule, not a property.
+
+    WHY A WHITELIST AND NOT A REDACTION. Stripping `input` out of the dicts
+    exc.errors() returns would work today and would rest on knowing which keys
+    of a third-party library's error objects can carry caller bytes -- `input`,
+    `ctx`, `msg` and `url` all vary by error type and across pydantic releases.
+    This builds the detail from two fields instead and passes even those through
+    _safe_token, so "no byte of the request body reaches the response" holds by
+    construction rather than by having read pydantic's formatter. It is the same
+    argument that makes this service recompute every stored field server-side
+    instead of validating what a contributor sends.
+
+    WHAT IS DELIBERATELY KEPT: which field failed and how, list indices
+    included. An index is a position the server counted, not something the
+    caller supplied, and it is what makes "the third posting in your batch"
+    answerable. A redaction that said nothing would be its own defect -- a
+    contributor whose worker is broken has no other channel.
+
+    Anything unrecognised degrades to the bare string rather than raising. The
+    `except Exception` this serves is deliberately broad, because
+    model_validate_json can fail before pydantic builds a ValidationError at
+    all, and a formatter that raised inside an exception handler would turn a
+    400 into a 500.
+    """
+    errors = getattr(exc, "errors", None)
+    if not callable(errors):
+        return "malformed body"
+    try:
+        found = list(exc.errors())
+    except Exception:
+        return "malformed body"
+    if not found:
+        return "malformed body"
+
+    parts = []
+    for err in found[:MAX_REPORTED_ERRORS]:
+        loc = ".".join(
+            str(part) if isinstance(part, int)
+            else (str(part) if _safe_token(part) else "?")
+            for part in err.get("loc") or ()) or "body"
+        kind = err.get("type")
+        parts.append(f"{loc}: {kind if _safe_token(kind) else 'invalid'}")
+    if len(found) > MAX_REPORTED_ERRORS:
+        parts.append(f"and {len(found) - MAX_REPORTED_ERRORS} more")
+    return "malformed body (" + "; ".join(parts) + ")"
