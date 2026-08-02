@@ -41,7 +41,10 @@ on it — the instrument is named in each case.*
 > **D18–D21** (per-unit isolation in four ingest scripts and the match stage), **the register
 > reconciled** against the code with D69's third residue closed, **task 24's `submission_log`
 > report plus D72 and D73**, and **the search screen** — which makes 32 five of six surfaces.
-> One new defect, `D74`, open and cosmetic.
+> One new defect, `D74`, ~~open and~~ cosmetic — **fixed 2026-08-02**, and its count had
+> gone stale by then: 19 broken anchors when filed, 22 when fixed, because `e79448c` gave
+> three more headings a ` — fixed` suffix the same day. `tests/test_defect_register.py`
+> now watches it.
 >
 > **WHAT IS LEFT ON THIS TRACK IS NOTHING A SESSION CAN DO.** 24's deploy half, 33's machine
 > half, 32's phone test and its live Google login all need a person, an account or a device.

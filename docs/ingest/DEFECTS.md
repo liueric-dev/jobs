@@ -238,7 +238,7 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D71](#d71) | cosmetic (while undeployed) | **open** — fix before opening to more than a handful of contributors; the ceiling is a policy number nobody has picked | Contributor API: concurrent claims per contributor are uncapped — one worker can hold the entire 32-slug bank while inside its daily allowance |
 | [D72](#d72) | cosmetic — a testing gap, not a defect in the code | **fixed** — 2026-08-02, task 24 — `backend/api/tests/test_claim_protocol.py`, on a scratch schema, skipping where no database is available | the claim protocol had no test: `backend/api/tests/fakedb.py` dispatches on SQL text and cannot falsify the `WHERE` clauses `try_claim_query` and `holds_claim` consist of |
 | [D73](#d73) | information disclosure | **fixed** — 2026-08-02, task 24 — `app._validation_detail()` builds the detail from `loc` and `type` alone, both whitelisted | `submit`'s `detail=f"malformed body: {e}"` echoed the offending input back to the caller through a pydantic `ValidationError`; for a syntactically broken body that input is the **whole request body** |
-| [D74](#d74) | cosmetic (this file only) | **open** — 19 rows, one `<a id>` each; no code change | **19 of this index's own links resolve to nothing.** A row links `[D01](#d01)` while the heading is `### D01 — fixed`, which slugs to `#d01-fixed`. `audit-doc-links.py` strips fragments by design, so nothing can see it |
+| [D74](#d74) | cosmetic (this file only) | **fixed** — 2026-08-02 — ~~19~~ **22** rows, one `<a id>` each; no code change, and a test | **~~19~~ 22 of this index's own links resolved to nothing.** A row links `[D01](#d01)` while the heading is `### D01 — fixed`, which slugs to `#d01-fixed`. `audit-doc-links.py` strips fragments by design, so nothing could see it — now `tests/test_defect_register.py` does. The count moved from 19 to 22 inside the session that filed it, via `e79448c` |
 
 ~~**`D71` has no row in this index.**~~ **It has one, at the row above, added the same
 afternoon by the stream that owned it.** The struck sentence was true in the tree it was
@@ -270,6 +270,8 @@ only class the operator cannot detect by watching the nightly run.
 
 ### D01 — fixed
 
+<a id="d01"></a>
+
 **Per-record upsert errors discarded, at every one of 8 call sites.**
 `lib/upsert.py:157-166`'s `UpsertResult.__iter__` yields `(new, updated,
 unchanged)` and never `.errors`, so `x, y, z = upsert(...)` reads naturally
@@ -298,6 +300,8 @@ dropped everything" no longer print identically.
 `backend/tests/test_upsert_checked.py` covers all 8 paths.
 
 ### D02 — fixed
+
+<a id="d02"></a>
 
 **`builtin-nyc.py` pairs titles and companies by list index, not by
 containment**, and nothing verifies the pairing (`backend/ingest/builtin-nyc.py:316-333`).
@@ -332,6 +336,8 @@ one anchor and the counts match again while every pairing stays wrong. Counting 
 a proxy for containment.
 
 ### D03 — fixed
+
+<a id="d03"></a>
 
 **`SALARY_PATTERN` is not scoped to a salary element** — it matches
 `[0-9]{1,3}K-[0-9]{1,3}K` anywhere in a builtin card window
@@ -374,6 +380,8 @@ documented as a known limitation, not actionable without a fuzzy-match layer
 the docstring explicitly declines to build.
 
 ### D05 — fixed
+
+<a id="d05"></a>
 
 **`weworkremotely.py` drops items via three separate `continue` statements
 with zero counters at any verbosity**: no colon in `<title>`
@@ -437,6 +445,8 @@ parameters are ever dropped or a non-US locale is added.
 
 ### D08 — fixed
 
+<a id="d08"></a>
+
 **A contributor submitting `jobs: []` still advances the query's
 watermark.** `submit` performs no non-empty check; `qc.upsert(conn, [])`
 writes nothing, then `mark_success` runs unconditionally
@@ -467,6 +477,8 @@ query all look like from here. A `fetch_ok` flag in the payload would only
 move the assertion to the side that has the bug.
 
 ### D09 — fixed
+
+<a id="d09"></a>
 
 **`_mode_for_slug` silently returns `"unknown"`** when the query bank is
 unreadable at submit time (`backend/api/app.py:399-411` — this entry said
@@ -523,6 +535,8 @@ completed one.
 `:237-240` is now `:393-402`. Read the code, not the cite.
 
 ### D11 — fixed
+
+<a id="d11"></a>
 
 **Demoted and orphaned `job_matches` rows are deleted with no recoverable
 log of which jobs.** Only counts reach stdout
@@ -585,6 +599,8 @@ carries. The scratch database appears in neither the fix nor the tests.
 
 ### D13 — fixed
 
+<a id="d13"></a>
+
 **`match.py`'s `SENIORITY_ORDER` must stay a superset of `extract.py`'s
 `SENIORITY` vocabulary, and nothing asserts it**
 (`backend/match.py:65-66`, `:116`; `backend/extract.py:82-83`). A level
@@ -641,6 +657,8 @@ makes `--profile` a routine, rather than exceptional, invocation.
 
 ### D15 — fixed
 
+<a id="d15"></a>
+
 **`score.py` writes `fit_score` and `primary_track` straight from model
 output with no coercion, unlike `extract.py`'s `_enum()`/`_int_or_none()`**
 (`backend/score.py:372-373`; full write-up and SQL to run first in
@@ -670,6 +688,8 @@ rows, 0.24%), which is why the fix is a guard rather than a migration: the
 stored form stays Title Case and no existing row is rewritten.
 
 ### D43 — fixed
+
+<a id="d43"></a>
 
 **A tombstone left the previous score in place, and `llm.has_fields` let an
 answer that was null in every column through as a row.** Two halves of one
@@ -702,6 +722,8 @@ them correctly.
 ## Loud failure — fix opportunistically; the harness catches regressions
 
 ### D16 — fixed
+
+<a id="d16"></a>
 
 **`score.py`'s `build_prompt` hard-indexes `persona["buckets"]`, but
 `profiles.validate()` does not require the `buckets` key**
@@ -789,6 +811,8 @@ token at the top of this file exists to make greppable.
 
 ### D18 — fixed
 
+<a id="d18"></a>
+
 **Uncaught `KeyError` on malformed config, before the guarded load
 completes.** Two sites: `company["platform"]`/`company["token"]` in
 `backend/ingest/ats.py:320-321` (subscripted before the `try` at `:325`,
@@ -854,6 +878,8 @@ controls that pass in both directions on purpose — the shipped
 bucket must still load.
 
 ### D19 — fixed
+
+<a id="d19"></a>
 
 **Normalization/parsing happens outside the per-unit `try` block in four of
 six ingest scripts**, so one malformed record's exception kills the entire
@@ -1009,6 +1035,8 @@ the behavioural claim was measured separately, above, and is what
 
 ### D21 — fixed
 
+<a id="d21"></a>
+
 **`hn-hiring.py` has a hard, unguarded import-time dependency on
 `config/relevance.json`.** `relevance.load()` runs at module import
 (`backend/ingest/hn-hiring.py:90`, `:152`, into module-level `ROLE_PATTERN` at
@@ -1073,6 +1101,8 @@ legacy `events` table shape.
 
 ### D23 — fixed
 
+<a id="d23"></a>
+
 **A crash between the `hn-hiring.py` ledger commit and the `jobs` upsert
 commit permanently strands comments.** The ledger commits once, after the
 whole comment loop (`backend/ingest/hn-hiring.py:422`); the `jobs` upsert
@@ -1124,6 +1154,8 @@ harder to see, but nothing today depends on the answer.
 
 ### D25 — fixed
 
+<a id="d25"></a>
+
 **The live extraction/scoring model silently differed from the documented
 default.** All `job_facts`/`job_scores` rows were written by
 `deepseek-v4-flash@api.deepseek.com`, while `backend/llm.py`'s
@@ -1161,6 +1193,8 @@ the same columns.
 
 ### D44 — fixed
 
+<a id="d44"></a>
+
 **`python3 -m evals run` raised `UnboundLocalError` for every task, on every
 invocation.** `cmd_run` re-imported `corpus as corpus_mod` inside its
 `--golden` branch (`backend/evals/__main__.py:143`, before this task) even
@@ -1182,6 +1216,8 @@ import; both `--task extract` and `--task score` now run.
 ---
 
 ### D45 — fixed
+
+<a id="d45"></a>
 
 **`company_ats.status = 'never_found'` holds 35 rows against a true population
 of 139, and the 35 are an alphabetical block.** `ats_seed` records a probe
@@ -1425,6 +1461,8 @@ fix as D39.
 
 ### D41 — fixed
 
+<a id="d41"></a>
+
 **Contributor API's `claim` endpoint has no rate limit beyond the daily
 per-contributor cap.** `backend/api/README.md:214-224` names this as a known
 gap before opening up: an unmetered claim-loop could lock the whole query
@@ -1506,6 +1544,8 @@ shows both commits and only the first is the fix.
 
 ### D66 — fixed
 
+<a id="d66"></a>
+
 **`GET /v1/jobs` and `GET /v1/jobs/{id}` report `seen` cohort-wide, not per Builder.**
 `_EVENT_STATE_JOIN` resolves it from `job_events` with `WHERE e.profile = v.profile`
 (`backend/webapp/jobs.py`), and `job_events` has no `app_user_id` column at all — it is
@@ -1563,6 +1603,8 @@ the detail endpoint, and the NULL-attribution direction.
 
 ### D67 — fixed
 
+<a id="d67"></a>
+
 **The same for `applied`, and this one contradicts a written privacy promise.**
 `bool_or(e.event = 'applied')` in the same lateral, same cause as D66.
 
@@ -1618,6 +1660,8 @@ closed in passing.
 ---
 
 ### D68 — fixed
+
+<a id="d68"></a>
 
 **`derive_skips` was open at BOTH ends to another Builder's events if the client echoes
 their `request_id`** — it read their impressions, and their actions vetoed the skips it
@@ -2184,11 +2228,11 @@ bodies" instruction into every future proxy configuration.
 
 ---
 
-### D74 — open
+### D74 — fixed
 
 <a id="d74"></a>
 
-**Nineteen of this index's own links resolve to nothing, and no checker can see it.**
+**~~Nineteen~~ Twenty-two of this index's own links resolve to nothing, and no checker can see it.**
 A row reads `[D01](#d01)`; the heading it points at is `### D01 — fixed`, which slugs to
 `#d01-fixed`. The anchor `#d01` exists nowhere, so the link lands at the top of a
 1,900-line file instead of at the entry. Eight defects carry an explicit `<a id="dNN">`
@@ -2208,17 +2252,33 @@ print(sorted({l for l in re.findall(r'\]\(#(d\d+)\)', t)} - ok, key=lambda s:int
 PY
 ```
 
-**The nineteen:** D01, D02, D03, D05, D08, D09, D11, D13, D15, D16, D23, D25, D41, D43,
-D44, D45, D66, D67, D68. Every one is a defect whose heading gained a ` — fixed` or
-` — open` suffix after the link was written; the suffix is what breaks it.
+**~~The nineteen:~~ The twenty-two:** D01, D02, D03, D05, D08, D09, D11, D13, D15, D16,
+**D18, D19, D21,** D23, D25, D41, D43, D44, D45, D66, D67, D68. Every one is a defect
+whose heading gained a ` — fixed` or ` — open` suffix after the link was written; the
+suffix is what breaks it.
+
+> **The count went stale inside the session that filed it, which is the finding worth
+> keeping.** D18, D19 and D21 were bare headings when this entry was written and gained
+> their ` — fixed` suffix hours later in `e79448c` — the per-unit-isolation commit, from
+> a stream that had no reason to know this entry existed. Nineteen was correct when
+> typed and wrong by the end of the day. **The mechanism this entry describes was right
+> in every particular; only its number moved**, and it moved in the ordinary course of
+> another stream doing its own work correctly. That is the argument for the test below
+> rather than for a more careful count.
 
 **WHY NOTHING CATCHES THIS, and it is a deliberate choice rather than a gap in the
 tool.** `audit-doc-links.py` strips `#fragment` before resolving, on the stated reasoning
 that *a wrong anchor lands the reader on the right document*. That is correct for links
 **between** documents and wrong for an index **inside** one, where the whole value of the
 link is the jump. Widening the checker to resolve intra-document fragments would be a
-real fix and is not in scope here; the cheap fix is nineteen `<a id>` tags matching the
-convention D69–D73 already use.
+real fix and is not in scope here; the cheap fix is ~~nineteen~~ twenty-two `<a id>` tags
+matching the convention D69–D73 already use.
+
+**That reasoning still stands, and it is why the closure did NOT widen
+`audit-doc-links.py`.** What it grew instead is `backend/tests/test_defect_register.py` —
+one file, one rule, no change to how any link in any other document is resolved. It reuses
+the slug function above verbatim, so this entry and the test that enforces it cannot
+disagree.
 
 **It matters here more than it would elsewhere**, by this file's own rule four
 paragraphs above D66's note: *"the index is the part anyone scans."* An index whose links
@@ -2227,8 +2287,8 @@ body — the reader is sent to the wrong place, with nothing marking it.
 
 Found 2026-08-02 by the parallel session, while checking a stream's claim of ~24 broken
 rows. **That claim was an overcount**: it included defects with bare headings, which
-resolve fine. The number is 19, and it was arrived at by computing GitHub's slug for every
-heading rather than by reading the list.
+resolve fine. The number was ~~19~~ 22 at the time of the fix, and both readings were
+arrived at by computing GitHub's slug for every heading rather than by reading the list.
 
 **A SECOND FINDING FROM THE SAME MERGE, recorded here rather than as its own number
 because the fix is the same afternoon's discipline and not code.** Two concurrent streams
@@ -2243,6 +2303,9 @@ parallelise this file" — three streams touched it and two seams held — it is
 register's *index* is a single shared surface even when its bodies are not, and one stream
 should own the whole table.
 
-Class: **cosmetic (this file only)**. Disposition: **open** — nineteen `<a id>` tags, no
+Class: **cosmetic (this file only)**. Disposition: ~~**open** — nineteen `<a id>` tags, no
 code change, no test. Worth doing next time this file is opened for another reason;
-not worth a commit of its own.
+not worth a commit of its own.~~ **fixed 2026-08-02** — twenty-two `<a id>` tags, no code
+change, **and a test after all**. The entry's own "no test" call was made before the count
+went stale; once it had, the argument changed. `backend/tests/test_defect_register.py`
+fails against this file as it stood, and was watched doing so before the anchors landed.
