@@ -2825,3 +2825,36 @@ remaining fields' cells are values like 38/47/83% that no field-anchored pattern
 without matching the record's own per-platform tables. `config/doc-figures.json`'s own
 standard — measure the pattern before writing the row, and a check that cries wolf is worse
 than no check — is what decided it.
+
+## 2026-08-02 — 41c taken: the repo is one branch, and one of its three facts was never true
+
+**The owner took all three deferred branch decisions.** `main` fast-forwarded to `8be15d7`
+and pushed — **35 commits**, `4374ede..8be15d7`, plain fast-forward. Every other branch,
+local and remote, was verified `ahead 0` of `main` and deleted. `git ls-remote --heads origin`
+now returns one line.
+
+**The interesting part is that `origin/HEAD` had been lying, and the lie was structural.**
+41c's middle fact read *"`origin/HEAD` points at `origin/jobs-app-readiness`, which is behind
+100 — a fresh clone gets a hundred-commit-old default branch."* Checked against the host:
+
+| instrument | answer |
+|---|---|
+| `git symbolic-ref refs/remotes/origin/HEAD` | `refs/remotes/origin/jobs-app-readiness` |
+| `gh repo view --json defaultBranchRef` | **`main`** |
+| `git ls-remote --heads origin` | `main`, `webapp-service` — **`jobs-app-readiness` does not exist** |
+
+**Three of the five branches that task reasoned about were local ghosts.**
+`jobs-app-readiness`, `match-quality-learned-ranker-probe` and
+`worktree-jobs-pipelib-migration` had been deleted on GitHub and never pruned, and
+`git branch -r` lists them with exactly the confidence it lists a real one. The default
+branch had been correct the whole time; the recommended fix — *"moving the REAL default
+branch is a host-side setting"* — was solving a problem that did not exist.
+
+**The lesson is promoted to `MEASUREMENT-TRAPS.md` because it is not about git.** A command
+that answers instantly and never errors may not be asking anything: `symbolic-ref` reads a
+cache written at clone time, and it returns a *real answer to a slightly different question*,
+which is the one disguise that beats a smoke test. The test to apply is not *did it error*,
+it is *did it do I/O*.
+
+**Nothing was risked.** Every deletion was gated on `git log --oneline main..<branch> | wc -l`
+returning 0, for all six branches, and every commit remains reachable from `main`.

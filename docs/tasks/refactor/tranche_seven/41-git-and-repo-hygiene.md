@@ -173,6 +173,37 @@ git branch -d webapp-service           # ahead 0, safe
 these three were not among the decisions taken. They stay open and visible here rather than
 being decided by silence.
 
+### 41c — TAKEN 2026-08-02 by the owner, and one of the three facts was an instrument error
+
+**All three are now closed**, and the repo has exactly one branch, `main`, local and remote
+in sync at `8be15d7`.
+
+| the decision | what was done |
+|---|---|
+| push `main` | **35 commits pushed**, plain fast-forward, `4374ede..8be15d7` |
+| the default branch | **nothing to do — GitHub's default was already `main`.** See below |
+| delete `webapp-service` | deleted local **and** `origin/webapp-service`; also deleted three remote-tracking refs whose branches no longer existed on the server |
+
+**`git symbolic-ref refs/remotes/origin/HEAD` does not read the server.** It reads a
+*locally cached* guess, written once at clone time and updated only by an explicit
+`git remote set-head`. The line in the table above — *"a fresh clone gets a hundred-commit-old
+default branch"* — was **false when it was written**: `gh repo view --json defaultBranchRef`
+answered `main`, and `git ls-remote --heads origin` showed that `jobs-app-readiness` **did not
+exist on the server at all**, along with `match-quality-learned-ranker-probe` and
+`worktree-jobs-pipelib-migration`. Three of the five branches this file reasoned about were
+local ghosts of branches deleted on GitHub and never pruned.
+
+**The transferable form, and it is this repo's recurring one:** a command that answers
+instantly and never errors is worth checking for whether it is *asking* anything. `symbolic-ref`
+reports a cache with the confidence of a lookup — the same shape as
+`.claude/CLAUDE.md`'s *"Silence is this system's failure mode."* The instruments that do ask
+the server are `git ls-remote` and `gh repo view`; the one that does not is the one this task
+quoted. Promoted to [`../../../MEASUREMENT-TRAPS.md`](../../../MEASUREMENT-TRAPS.md) under
+policy rule 5, because it is true of any repo and any host.
+
+**What was not lost:** every branch deleted, local or remote, was verified `ahead 0` of `main`
+first — `git log --oneline main..<branch> | wc -l` returned 0 for all six.
+
 **41d — DONE.** The cassette staleness policy is in
 [`DOCS-POLICY.md`](../../../DOCS-POLICY.md) § *Cassette staleness*. No cassette was
 re-recorded.

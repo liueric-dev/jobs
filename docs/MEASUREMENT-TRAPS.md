@@ -65,6 +65,23 @@ model or product. The dated narrative they were extracted from is at
   the shape in which one measurement gets quoted as corroborating another. If you meet a bare
   rate, establish its population first.
 
+**Promoted 2026-08-02 from `docs/tasks/refactor/tranche_seven/41-git-and-repo-hygiene.md`
+§ 41c**, under rule 5 — it is true of any repository and any host.
+
+- **A command that answers instantly and never errors may not be asking anything.** Task 41c
+  read the remote's default branch with `git symbolic-ref refs/remotes/origin/HEAD` and
+  reasoned for a day about a *"hundred-commit-old default branch a fresh clone gets"*. That
+  ref is a **local cache**, written once at clone time and updated only by an explicit
+  `git remote set-head`. The server's answer was `main` — already correct — and the branch
+  the cache named **did not exist on the server at all**, along with two others: three of the
+  five branches the task reasoned about were local ghosts of branches deleted on the host and
+  never pruned. **Local state that mirrors a remote will answer a question about the remote
+  without ever contacting it.** The distinction to check is not *did it error*, it is *did it
+  do I/O*: `git ls-remote` and `gh repo view` ask the server, `symbolic-ref` and `git branch -r`
+  do not. This is `.claude/CLAUDE.md`'s *"Silence is this system's failure mode"* wearing the
+  one disguise that beats a smoke test — the cached answer is not merely plausible, it is a
+  real answer to a slightly different question.
+
 ---
 
 ## 4. Measurement traps — all seven of these bit on this codebase
