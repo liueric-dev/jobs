@@ -54,11 +54,11 @@ instrument, and every other document cites this one rather than restating them.
 | | value | instrument |
 |---|---|---|
 | tasks done or dropped | ~~20 of 35~~ **read the status column** — the count moved five times on 2026-08-01 alone, and two tasks were added | `grep -cE '\| \*{0,2}done\*{0,2} \|' docs/tasks/refactor/README.md`, against the same for `todo` |
-| test suite, main | **green.** The count is whatever `Ran N tests` prints — see the note under this table | `cd backend && python3 -m unittest discover -s tests` |
+| test suite, main | ~~**green.**~~ **RED, one failure, and it is deliberate** — see the row below and § *What is open*. The count is whatever `Ran N tests` prints — see the note under this table | `cd backend && python3 -m unittest discover -s tests` |
 | test suite, webapp | **green.** Same: run it, read the line | `cd backend/webapp && .venv/bin/python -m unittest discover -s tests` |
 | broken doc links | **0** | `python3 backend/tools/audit-doc-links.py` |
-| documentation policy | **all six checks 0**, and the baseline is empty — that emptiness is phase 9's exit gate | `python3 backend/tools/audit-docs.py`; wired into `backend/tests/test_docs_policy.py` |
-| defect register | 45 entries, `D01`–`D45` | [`../../ingest/DEFECTS.md`](../../ingest/DEFECTS.md) |
+| documentation policy | ~~**all six checks 0**~~ **C1 2, C4 2 — 4 findings, red on purpose** since the scanned set widened to the two declared roots 2026-08-02. **The baseline is still empty** and that emptiness is phase 9's exit gate; the findings are tasks [45](tranche_seven/45-declare-kind-on-the-roots.md) and [46](tranche_seven/46-sentence-scope-the-c4-lookahead.md), not baseline rows | `python3 backend/tools/audit-docs.py`; wired into `backend/tests/test_docs_policy.py` |
+| defect register | ~~45 entries, `D01`–`D45`~~ **48 entries — `D01`–`D45` and `D66`–`D68`**; `D46`–`D65` are burnt, re-prefixed to `DEC-` by task 39. Next free `D69` | [`../../ingest/DEFECTS.md`](../../ingest/DEFECTS.md) |
 | human labels | ~~186 rows / 31 postings / **one** labeller~~ **271 rows / 36 postings / two labellers**, round 1 (2026-08-02) | `python3 backend/tools/label-findings.py` |
 | model vs human | **measured 2026-08-02, and the ceiling is below the floor on all five fields** — owned by [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md), which carries the table and the reasons not to tune on it | the command in that document; every input is committed |
 | labelling rate | 93 s median (n=29) | `python3 backend/tools/label-findings.py --timing` |
@@ -144,10 +144,21 @@ to do:
    arrange.
 2. **Round 2**, the same labeller re-answering the overlap block after the form's 7-day delay
    (~2026-08-09), for the intra-annotator ceiling. The owner's to arrange.
-3. **An `evals selfcheck` at n=120 that covers `role_track`.** The committed
+3. ~~**An `evals selfcheck` at n=120 that covers `role_track`.** The committed
    `docs/ingestion_tests/selfcheck-n120-2026-07-28.json` predates task 11 adding the field, so
    the report cannot be run against it at all and a per-corpus selfcheck was substituted
-   (`DEC-75`). This one is a session's to run and costs LLM calls, not people.
+   (`DEC-75`). This one is a session's to run and costs LLM calls, not people.~~
+   **DONE 2026-08-02 — [`../../ingestion_tests/selfcheck-n120-2026-08-02.md`](../../ingestion_tests/selfcheck-n120-2026-08-02.md),
+   which owns `role_track`'s figures.** `agree2` **88.7%** [81.6–93.3] at n=115 — the artifact
+   is named `n120` because that was the ask; 5 of 120 were skipped before any call.
+   **It did not unblock task 30, and the decomposition is why.** 13 of 115 (**11.3%**,
+   [6.7–18.4]) changed whether the posting belongs to *any* track between runs, against only
+   6.1% moving between two named tracks: nearly two thirds of the instability sits on the
+   classifiable/not boundary, which is the boundary a "group by `role_track`" display turns
+   on. **It is NOT the same quantity as the humans' 15-of-36 `no_track_fits`** — 42% is a
+   prevalence, 11.3% an instability, and neither bounds the other. A model answering `null`
+   always would score 100% and 0%. So items 1 and 2 above are still what a usable ceiling
+   needs, and both are the owner's.
 
 ~~**Not blocked, not started:** the product/API surface — tasks 24–28, 31, 32.~~
 **STARTED 2026-08-01. Task 27 is done** (`2687bc0`); 24, 25, 26, 28, 31, 32 remain. Its

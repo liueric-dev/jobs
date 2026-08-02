@@ -25,7 +25,57 @@ on it — the instrument is named in each case.*
 
 ### ~~THE CURRENT SESSION IS PHASE 9~~ — **PHASE 9 IS CLOSED. Rolled forward 2026-08-01.**
 ### ~~**THE PRODUCT / API TRACK IS OPEN AND TASK 27 HAS LANDED.**~~ **27 AND 31 HAVE BOTH LANDED. Rolled forward 2026-08-01.**
-### **THE LABELLING NIGHT HAPPENED AND THE REPORT PRINTED — and the answer is "not yet". Rolled forward 2026-08-02.**
+### ~~**THE LABELLING NIGHT HAPPENED AND THE REPORT PRINTED** — and the answer is "not yet".~~ Rolled forward 2026-08-02.
+### **THE `role_track` GROUPING AXIS HAS THREE INDEPENDENT PROBLEMS, AND THE TREE IS UNCOMMITTED. 2026-08-02, four parallel streams.**
+
+> **NOTHING BELOW IS COMMITTED.** 15 modified files and 6 new ones sit in the working tree.
+> The natural split is four commits along stream lines. **Take a `git status` before
+> anything else** — a session that starts by editing will merge two sessions' work into one
+> unreviewable diff.
+>
+> **Suites, measured after all four landed: `backend` has exactly one failure; `webapp` is
+> green.** No count is typed here — [`AUDIT.md`](AUDIT.md) owns that figure under rule 2, and
+> per rule 3 the reproducible answer is the `Ran N tests` line of
+> `cd backend && python3 -m unittest discover -s tests`. Both suites grew; run them and
+> compare, do not trust a number. *(This paragraph typed both counts on its first draft and
+> check C4 caught it within the minute — which is the second time that check has caught a
+> restatement in the hour after it landed.)*
+> **The one failure is deliberate and owner-approved** —
+> `test_docs_policy.TestPolicyBaseline.test_findings_are_a_subset_of_the_declared_baseline`,
+> red because `audit-docs.py` was widened to scan `.claude/CLAUDE.md` and the root
+> `README.md`. Tasks [45](tranche_seven/45-declare-kind-on-the-roots.md) and
+> [46](tranche_seven/46-sentence-scope-the-c4-lookahead.md) clear it. **Do not silence it by
+> declaring the four findings** — the baseline is *pruned, never grown*.
+>
+> **What landed:** `job_events.app_user_id`, closing **D66, D67 and D68**; the frozen
+> contract fixtures in `frontend/`; the doc-policy widening; and an n=115 `role_track`
+> selfcheck.
+
+**THE ONE FINDING TO CARRY FORWARD: task 30's "group by `role_track`" display now has three
+independent problems, none of which was known on 2026-08-01, and they were found by three
+different streams that were not looking for each other's answers.**
+
+1. **The axis is unstable at exactly the boundary that matters.** `role_track` `agree2`
+   **88.7%** [81.6–93.3] at n=115 — but **13 of 115 (11.3%, [6.7–18.4]) changed whether the
+   posting belongs to any track at all** between runs, against only 6.1% moving between two
+   *named* tracks. Nearly two thirds of the instability is the classifiable/not boundary.
+   [`../../ingestion_tests/selfcheck-n120-2026-08-02.md`](../../ingestion_tests/selfcheck-n120-2026-08-02.md)
+   owns those figures.
+2. **The humans reject the vocabulary on about half the set** — `no_track_fits` on 15 of 36.
+   [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md).
+   **It is NOT the same quantity as (1)** and neither bounds the other: 42% is a
+   *prevalence*, 11.3% an *instability*. A model answering `null` always would score 100%
+   and 0%.
+3. **The track vocabulary does not exist in code.** `API-CONTRACT-v1.md`'s only example,
+   `ai_operations`, is a `role_archetype` value in `config/pursuit-criteria.json` — not a
+   track. The only track vocabulary anywhere is `score.TRACKS`, Title Case. `frontend/`'s
+   fixtures slugify it and flag the choice as task 32's, unresolved.
+
+**A THING THAT WILL BITE THE FRONTEND AND IS NOT IN THE CONTRACT:** `match_reasons`,
+`tech_stack`, `risk_factors` and `key_technologies` come back as **JSON strings, not arrays**
+— TEXT columns holding `json.dumps(...)` (`match.py:526`, `extract.py:755`,
+`score.py:851-853`), and the endpoint parses nothing. `why.risk_factors` is a real array in
+the contract, so this is invisible there. `frontend/README.md` records it.
 
 **The first `evals label report` is [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md),
 and the one thing to carry out of it is that a measurement can arrive and change nothing.**
@@ -95,15 +145,33 @@ check the premises on hardest**, for the reason in point 3 above.
 including a count you just ran.** The instrument [`AUDIT.md`](AUDIT.md) names for it was
 itself wrong until 2026-08-01: `grep -c '| done |'` misses the two rows that spell it
 `| **done** |`, so it reported 29 where the file holds 31. Corrected there.
-Task 23 reads `todo` and its own row says descoped; that row is worth correcting before
-anyone plans against it.
+~~Task 23 reads `todo` and its own row says descoped; that row is worth correcting before
+anyone plans against it.~~ **Corrected 2026-08-02, and the two words were never in
+conflict:** `descoped` is a decision about scope (`DECISIONS.md`), `todo` is the state of
+the work, and `backend/serp/` does not exist. The row now says which is which.
 
-**One rule 7 gap is open and is not a task.** `audit-docs.py` walks `docs/` only, so
+~~**One rule 7 gap is open and is not a task.** `audit-docs.py` walks `docs/` only, so
 `.claude/CLAUDE.md` and the root `README.md` are declared reachability roots for C2 and are
 scanned by **no other check, C4 included** — and both carry figures. Widening `docs_files()`
 to include the declared roots is the obvious next check and is unwritten. Until it is, **a
 figure in `.claude/CLAUDE.md` is on the honour system**, and it is the first thing every
-session reads. [`AUDIT.md`](AUDIT.md) § *What is open* has the argument.
+session reads.~~ [`AUDIT.md`](AUDIT.md) § *What is open* has the argument.
+
+> **CLOSED 2026-08-02, and it landed red on purpose — 4 findings.** The widening is done and
+> the two roots are scanned by C1, C3 and C4. It became two tasks rather than none:
+> [`tranche_seven/45`](tranche_seven/45-declare-kind-on-the-roots.md) for the two real
+> findings, [`tranche_seven/46`](tranche_seven/46-sentence-scope-the-c4-lookahead.md) for the
+> two where **C4 is wrong and the file is right** — its compliance lookahead is scoped to the
+> physical line and `.claude/CLAUDE.md` is hard-wrapped, so a figure and the metric naming it
+> land on different lines.
+>
+> **The `backend` suite is RED until both land**, on
+> `test_findings_are_a_subset_of_the_declared_baseline`. That is the intended state and the
+> baseline is still empty — it is *pruned, never grown*. Do not silence it by declaring these
+> four; task 45 says so in its own text.
+>
+> One sentence above was already stale when written: the root `README.md` stopped typing an
+> entry-point count in task 37. `AUDIT.md` § *What is open* records that.
 
 > **Superseded, kept per rule 4 — what this block said while phase 9 ran:**
 

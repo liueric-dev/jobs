@@ -2858,3 +2858,82 @@ it is *did it do I/O*.
 
 **Nothing was risked.** Every deletion was gated on `git log --oneline main..<branch> | wc -l`
 returning 0, for all six branches, and every commit remains reachable from `main`.
+
+## 2026-08-02 — four parallel streams, committed in five; and the tree was the finding
+
+**The session's own working tree was the first thing to audit.** Fifteen modified files and
+six untracked ones, four streams merged into one diff, and `HANDOFF.md:31-34` predicting in
+writing what happens next: *"a session that starts by editing will merge two sessions' work
+into one unreviewable diff."* So the whole of this entry is work that already existed and
+was committed along stream lines — plus what re-reading it turned up, which is the part
+worth keeping.
+
+**The floor, measured before anything changed:** `backend` **Ran 1239 tests, FAILED
+(failures=1)**; `webapp` **Ran 159 tests, OK**; `audit-docs.py` **4 findings**;
+`verify_fixtures.py` **exit 0**. The one failure is
+`test_docs_policy.TestPolicyBaseline.test_findings_are_a_subset_of_the_declared_baseline`
+and it is red on purpose.
+
+| commit | stream |
+|---|---|
+| `3f4f88e` | `job_events.app_user_id`; D66, D67 and D68 closed |
+| `fe3df28` | the frozen contract fixtures in `frontend/` |
+| `9a36b88` | `audit-docs.py` widened to the two declared roots — red on purpose |
+| `7e6f6b8` | the n=120 `role_track` selfcheck, at n=115 |
+| `0d8c7ee` | tasks 20 and 21 rest on task 19's parser, and 19 is dropped |
+
+### Four things the documents did not say, found by re-reading the tree
+
+**1. Task 46's premise is wrong on one of its two findings, and it is the useful kind of
+wrong.** The task says both C4 hits on `.claude/CLAUDE.md` are the same defect — a
+compliance lookahead scoped to the physical line, on a file hard-wrapped at ~88 columns.
+That is true of `:121`, where `94.8%` sits one line above the `` `agree2` `` that licenses
+it. It is **not** true of `:190`: of the nine rows in `backend/config/doc-figures.json`,
+eight carry a `^(?![^\n]*…)` lookahead and **`main suite test count` carries none**, so
+joining that paragraph still matches `1182`. The actual licence there is that the figure is
+*struck through* — and `DOCS-POLICY.md` rule 4 mandates struck-and-kept, with 434
+strikethroughs across 46 documents. **A check that flags a number whose own sentence
+disowns it is measuring the wrong thing twice**, and re-scoping cannot clear it. Two
+findings, two causes, one stated cause.
+
+**2. Three dependency cycles, on a track whose arrows had already been found wrong twice.**
+`24 ↔ 33`, `26 ↔ 32`, and `25 → 24` which task 24's own file contradicts at `:92-94`
+(*"seed manually from task 05's vocabulary"* until 25 exists). This run has now found
+**five** false arrows and every one pointed at work that had not started. The habit worth
+keeping is the one task 31 wrote down: check the arrow, and do not assume the rest are
+wrong either.
+
+**3. `API-CONTRACT-v1.md` still asserted `job_events` has no `app_user_id`.** The stream
+that added the column, re-keyed the join and closed D66/D67 updated `DEFECTS.md`,
+`engagement-events.md`, `dismiss-reasons.py` and the schema — and not the contract, which
+is the document a client author reads first. **The defect register and the contract
+disagreed about the same column for a day**, and nothing was red, because no check compares
+two documents' claims about one fact.
+
+**4. `frontend/verify_fixtures.py` is wired into no suite.** It works — exit 0, and it
+re-derives every shape claim from the source with `ast` rather than by importing modules
+that need a venv. Nothing runs it. It shipped in the same session, in a neighbouring
+stream, as the widening of `audit-docs.py` whose entire justification is rule 7: *"a script
+nobody runs automatically decays the moment the person who remembers it stops running
+it."* **The two streams did not read each other.** That is the argument for the isolation
+rule this session then adopted — disjoint file sets, and every run-level document written
+serially by one owner at the end.
+
+### Line citations, corrected rather than swept
+
+Seven in the `app_user_id` stream's own documents, all invalidated by the diff that
+introduced them (`jobs.py` `:746→837`, `:652→729`, `:700→734`, `:708→742`, `:290→291`,
+`:838→857`), and three routes in `frontend/README.md` (`:310→336`, `:413→440`,
+`:641→753`). **These were wrong the moment they were typed**, which is the case
+`HANDOFF.md` § *Verify before you trust* distinguishes from a wholesale sweep — it forbids
+the sweep, not the correction of numbers a known diff moved. The symbol names remain the
+durable pointers.
+
+### Three half-finished edits in `AUDIT.md`
+
+Its `:57` still said the main suite was green, `:59` still said all six checks were 0, and
+open item 3 — the n=120 `role_track` selfcheck — was never struck even though the artifact
+retiring it was sitting untracked in the same tree. **A stream that produces a measurement
+and stops before retiring the item that asked for it leaves the ask looking open**, which
+is the failure `HANDOFF.md` records as *"marked still owed in two files for three days
+after it landed."* Corrected here, struck rather than deleted.
