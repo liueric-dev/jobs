@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from auth import User, require_user
 from db import db
+from schema_web import DISMISS_REASONS
 from lib.timeparse import utc_now_str
 
 log = logging.getLogger("webapp.jobs")
@@ -43,7 +44,13 @@ MAX_LIMIT = 100
 #: year from now, when the learned ranker in docs/SCORING.md wants to read it. A
 #: typo'd event name is worse than a rejected one: it is silently unusable
 #: training data.
-CLIENT_EVENT_NAMES = ("impression", "open", "save", "unsave", "dismiss", "applied")
+#:
+#: `undismiss` is the undo (tranche_six/31). It is a row rather than a deletion
+#: of the dismiss it reverses, for the reason that task gives: "the fact that
+#: someone reversed a dismissal is itself signal, and deletion loses it". It is
+#: shaped on `unsave`, which had already answered the same question.
+CLIENT_EVENT_NAMES = ("impression", "open", "save", "unsave", "dismiss",
+                      "undismiss", "applied")
 
 #: Written by the server, never accepted from a client. A `skip` is DERIVED --
 #: see derive_skips() -- and a client that sends one is asserting something it
@@ -56,13 +63,11 @@ SERVER_EVENT_NAMES = ("skip",)
 #: Everything that may appear in job_events.event, from either writer.
 EVENT_NAMES = CLIENT_EVENT_NAMES + SERVER_EVENT_NAMES
 
-#: The dismiss vocabulary (tranche_five/27). A closed enum rather than free
-#: text, and the values map onto existing features deliberately: a `wrong_level`
-#: dismiss is evidence about the seniority weight, not about one posting, which
-#: is what task 31 consumes. Free text would be unreadable at cohort scale and
-#: un-joinable to any feature.
-DISMISS_REASONS = ("wrong_level", "wrong_role", "wrong_location",
-                   "bad_company", "stale_posting", "other")
+#: The dismiss vocabulary (tranche_five/27), consumed by task 31's aggregation,
+#: is IMPORTED from schema_web above and is not defined here any more -- so that
+#: the CHECK on builder_job_state.dismiss_reason and this request validator read
+#: one tuple. `jobs.DISMISS_REASONS` still resolves, which is what every
+#: existing citation names (tests/test_events.py, docs/ingest/engagement-events.md).
 
 #: Who may see an event, set server-side by event type and NEVER by the client.
 #: Only a save is cohort-visible. An application is private on purpose: in a
@@ -236,26 +241,66 @@ def _like(term):
     return "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
-#: This profile's interaction state for each row. The lookup is by
-#: (profile, job_id), which is what idx_job_events_profile_job in ../schema.py
-#: exists for -- the older (profile, occurred_at DESC) index answers "recent
-#: activity" and cannot answer this, so without it every page render is a
-#: sequential scan over a table that only grows.
+#: This PROFILE's interaction state for each row -- which is thirty Builders'
+#: interaction state, not one Builder's, and that is the point of the second
+#: join below. The lookup is by (profile, job_id), which is what
+#: idx_job_events_profile_job in ../schema.py exists for -- the older
+#: (profile, occurred_at DESC) index answers "recent activity" and cannot answer
+#: this, so without it every page render is a sequential scan over a table that
+#: only grows.
 #:
-#: save/unsave are resolved by recency rather than by a flag, because the table
-#: is append-only: an unsave is a row, not a deletion. occurred_at is TEXT in a
-#: fixed-width ISO form, so string comparison IS chronological comparison.
+#: `seen` AND `applied` ARE STILL COHORT-WIDE AND THAT IS A KNOWN DEFECT --
+#: D66 and D67 in docs/ingest/DEFECTS.md. job_events has no app_user_id column
+#: at all (../schema.py), so "did THIS Builder see it" is not a question this
+#: table can answer, and inventing an answer here would be worse than the
+#: honest one. Both are BLOCKED-BY that column. `applied` is the worse of the
+#: two: API-CONTRACT-v1.md calls an application `private`, and a cohort-wide
+#: applied=true contradicts that in the response body.
+#:
+#: dismissed and saved USED to be resolved here too, by event recency. They are
+#: not any more -- see _BUILDER_STATE_JOIN.
 _EVENT_STATE_JOIN = """
         LEFT JOIN LATERAL (
             SELECT bool_or(e.event IN ('impression', 'open')) AS seen,
-                   bool_or(e.event = 'dismiss') AS dismissed,
-                   bool_or(e.event = 'applied') AS applied,
-                   max(e.occurred_at) FILTER (WHERE e.event = 'save') AS last_save,
-                   max(e.occurred_at) FILTER (WHERE e.event = 'unsave') AS last_unsave
+                   bool_or(e.event = 'applied') AS applied
             FROM job_events e
             WHERE e.profile = v.profile AND e.job_id = v.id
         ) ev ON TRUE
 """
+
+#: THIS Builder's state for each row, and the whole of task 31 in four lines.
+#:
+#: job_matches is keyed (job_id, profile) and thirty Builders share the cohort
+#: profile, so anything per-person has to live beside it rather than in it.
+#: Ranking stays cohort-level and cheap -- one match row per posting, not
+#: thirty -- and the personal part is a read-time join. That is the same
+#: fixed-effect/random-effect split as task 26's config inheritance and the
+#: ranker's eventual shape, kept deliberately consistent.
+#:
+#: IT TAKES A PARAMETER, AND THE PARAMETER COMES FIRST. This fragment is
+#: spliced in ahead of the WHERE clause, so app_user_id must be the FIRST
+#: element of the params list, before anything the WHERE contributes. Getting
+#: that backwards does not raise -- it compares a user id against a profile
+#: name, finds nothing, and silently reports every Builder as having no state.
+#: tests/test_event_replay.py TestListState is what fails if it is ever
+#: reordered.
+_BUILDER_STATE_JOIN = """
+        LEFT JOIN builder_job_state bs
+               ON bs.app_user_id = %s AND bs.job_id = v.id
+"""
+
+#: The four state fields in the response, in one place so the list and the
+#: detail endpoint cannot answer the same question differently.
+_STATE_COLUMNS = """
+               coalesce(ev.seen, FALSE) AS seen,
+               coalesce(ev.applied, FALSE) AS applied,
+               (bs.dismissed_at IS NOT NULL) AS dismissed,
+               (bs.saved_at IS NOT NULL) AS saved,
+               bs.dismiss_reason
+"""
+
+#: Their names, in the order _STATE_COLUMNS selects them.
+STATE_FIELDS = ("seen", "applied", "dismissed", "saved", "dismiss_reason")
 
 
 # --------------------------------------------------------------------------
@@ -272,10 +317,25 @@ def list_jobs(
     nyc: bool | None = None,
     min_score: int | None = None,
     since: str | None = Query(None, description="ISO date; posted_at_ts >= this"),
-    exclude_dismissed: bool = False,
+    include_dismissed: bool = Query(
+        False, description="debugging only; dismissed postings are hidden by default"),
 ):
+    # THE JOIN'S PARAMETER LEADS. _BUILDER_STATE_JOIN is spliced in ahead of the
+    # WHERE clause, so its %s binds before any of the WHERE's -- see the comment
+    # on that constant for what a reordering silently does.
+    params = [user.id]
+
     where = ["v.profile = %s"]
-    params = [user.profile]
+    params.append(user.profile)
+
+    # A dismissal is permanent for that Builder and is the DEFAULT, not a flag
+    # the client has to remember to set. This replaces the old
+    # `exclude_dismissed` parameter, which defaulted to showing dismissed rows
+    # and so made the dismissal mean nothing unless a client opted in.
+    # `include_dismissed` exists for reading the state back by hand; it is not
+    # part of the client contract.
+    if not include_dismissed:
+        where.append("bs.dismissed_at IS NULL")
 
     # A call without a cursor STARTS a render; a call with one continues the
     # render the cursor names. That is the whole rule, and it is what makes
@@ -307,19 +367,14 @@ def list_jobs(
     if since:
         where.append("v.posted_at_ts >= %s::timestamptz")
         params.append(since)
-    if exclude_dismissed:
-        where.append("NOT coalesce(ev.dismissed, FALSE)")
 
     columns = ", ".join(f"v.{c}" for c in LIST_COLUMNS)
     sql = f"""
         SELECT {columns},
-               coalesce(ev.seen, FALSE) AS seen,
-               coalesce(ev.dismissed, FALSE) AS dismissed,
-               coalesce(ev.applied, FALSE) AS applied,
-               (ev.last_save IS NOT NULL
-                AND (ev.last_unsave IS NULL OR ev.last_save > ev.last_unsave)) AS saved
+        {_STATE_COLUMNS}
         FROM jobs_app v
         {_EVENT_STATE_JOIN}
+        {_BUILDER_STATE_JOIN}
         WHERE {' AND '.join(where)}
         ORDER BY {ORDER_BY}
         LIMIT %s
@@ -331,7 +386,7 @@ def list_jobs(
 
     has_more = len(rows) > limit
     rows = rows[:limit]
-    names = list(LIST_COLUMNS) + ["seen", "dismissed", "applied", "saved"]
+    names = list(LIST_COLUMNS) + list(STATE_FIELDS)
     items = [dict(zip(names, r)) for r in rows]
 
     # 1-based and continuing across pages. This is the position the user saw,
@@ -357,28 +412,34 @@ def list_jobs(
 
 @router.get("/v1/jobs/{job_id}")
 def get_job(job_id: str, user: User = Depends(require_user)):
+    """One posting in full, INCLUDING one this Builder has dismissed.
+
+    The list hides a dismissal; this does not, and the difference is
+    deliberate. Undo has to be reachable, and a client that has just written a
+    `dismiss` still needs to render the row it acted on. Filtering here would
+    make the undo in tranche_six/31 unimplementable from a detail page.
+    """
     columns = ", ".join(f"v.{c}" for c in DETAIL_COLUMNS)
     with db() as conn:
         row = conn.execute(
             f"""
             SELECT {columns},
-                   coalesce(ev.seen, FALSE) AS seen,
-                   coalesce(ev.dismissed, FALSE) AS dismissed,
-                   coalesce(ev.applied, FALSE) AS applied,
-                   (ev.last_save IS NOT NULL
-                    AND (ev.last_unsave IS NULL OR ev.last_save > ev.last_unsave)) AS saved
+            {_STATE_COLUMNS}
             FROM jobs_app v
             {_EVENT_STATE_JOIN}
+            {_BUILDER_STATE_JOIN}
             WHERE v.profile = %s AND v.id = %s
             """,
-            (user.profile, job_id),
+            # user.id leads: the join binds before the WHERE. See
+            # _BUILDER_STATE_JOIN.
+            (user.id, user.profile, job_id),
         ).fetchone()
 
     if row is None:
         # 404, not 403: "exists but isn't yours" and "doesn't exist" should be
         # indistinguishable to anyone enumerating ids.
         raise HTTPException(status_code=404, detail="no such job for this profile")
-    names = list(DETAIL_COLUMNS) + ["seen", "dismissed", "applied", "saved"]
+    names = list(DETAIL_COLUMNS) + list(STATE_FIELDS)
     return dict(zip(names, row))
 
 
@@ -469,6 +530,65 @@ def validate_batch(batch):
                 batch.request_id)
 
 
+#: How each event moves builder_job_state, as (SET clause, params-from-`now`).
+#: Everything not named here -- impression, open, applied -- leaves the row
+#: alone and writes nothing, which is why a Builder who has only ever scrolled
+#: has no state row at all rather than an empty one.
+#:
+#: unsave and undismiss set their column back to NULL rather than deleting the
+#: row: the OTHER column may be carrying a live state, and a delete would take
+#: it with it. An undismiss also clears dismiss_reason, because a reason
+#: outstanding on an undismissed row is a fact about a decision that was
+#: reversed, and builder_job_state_reason_needs_dismissal refuses it.
+_STATE_WRITES = {
+    "dismiss":   ("dismissed_at = %s, dismiss_reason = %s", ("now", "reason")),
+    "undismiss": ("dismissed_at = NULL, dismiss_reason = NULL", ()),
+    "save":      ("saved_at = %s", ("now",)),
+    "unsave":    ("saved_at = NULL", ()),
+}
+
+
+def write_builder_state(conn, app_user_id, job_id, event, reason, now):
+    """Move THIS Builder's state for one posting. Returns True if it wrote.
+
+    Called only after the job_events insert returned a row, which is what keeps
+    the current state and the evidence behind it from ever disagreeing: an
+    event for a job outside this profile's match set records neither, and a
+    deduplicated impression is not an event this function has an opinion about.
+
+    The state row is derived from job_events and is not a second source of
+    truth -- job_events keeps every dismiss and every undo, and this table
+    keeps the current answer. Both are written inside record_events' single
+    transaction.
+    """
+    write = _STATE_WRITES.get(event)
+    if write is None:
+        return False
+    set_clause, wanted = write
+    values = {"now": now, "reason": reason}
+    set_params = [values[name] for name in wanted]
+
+    # The INSERT names every column the SET could touch, because ON CONFLICT
+    # runs only when the row already exists -- a first dismiss has to land its
+    # reason on the way in.
+    conn.execute(
+        f"""
+        INSERT INTO builder_job_state (app_user_id, job_id, dismissed_at,
+                                       dismiss_reason, saved_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (app_user_id, job_id) DO UPDATE
+           SET {set_clause}, updated_at = %s
+        """,
+        (app_user_id, job_id,
+         now if event == "dismiss" else None,
+         reason if event == "dismiss" else None,
+         now if event == "save" else None,
+         now,
+         *set_params, now),
+    )
+    return True
+
+
 def derive_skips(conn, profile, request_id, rank, now):
     """An open at rank k means every un-actioned item above it was passed over.
 
@@ -530,6 +650,12 @@ def record_events(batch: EventBatch, user: User = Depends(require_user)):
     unverifiable training data, which is worse than none. It is the same rule
     api/ applies to postings, arrived at independently.
 
+    A save, unsave, dismiss or undismiss ALSO moves builder_job_state, in this
+    same transaction -- the append-only log keeps what happened, that table
+    keeps the current answer, and they are written together so no reader can
+    catch them disagreeing. It is keyed on user.id and not on the profile: see
+    write_builder_state.
+
     criteria_version and visibility join them on the same principle, for two
     different reasons. criteria_version is read from job_matches beside
     match_score because it names the weight generation that produced the order
@@ -584,6 +710,13 @@ def record_events(batch: EventBatch, user: User = Depends(require_user)):
             ).fetchone()
             if row:
                 recorded += 1
+                # The current per-Builder answer, beside the evidence for it
+                # and in the same transaction. Keyed on user.id, NOT on the
+                # profile: thirty Builders share one profile, so a dismissal
+                # written per-profile would suppress the posting for all of
+                # them. tranche_six/31.
+                write_builder_state(conn, user.id, e.job_id, e.event,
+                                    e.reason, now)
                 # AFTER the open's own row, never before: the derivation
                 # excludes any job with a non-impression event in this render,
                 # and the job just opened must be one of them.

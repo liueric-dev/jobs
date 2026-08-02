@@ -24,20 +24,20 @@ on it — the instrument is named in each case.*
 | suites | ~~a number was typed here~~ **read [`AUDIT.md`](AUDIT.md), which owns the figure** — per `DOCS-POLICY.md` rule 2, and per rule 3 the reproducible answer is the `Ran N tests` line of `cd backend && python3 -m unittest discover -s tests` |
 
 ### ~~THE CURRENT SESSION IS PHASE 9~~ — **PHASE 9 IS CLOSED. Rolled forward 2026-08-01.**
-### **THE PRODUCT / API TRACK IS OPEN AND TASK 27 HAS LANDED. Rolled forward 2026-08-01.**
+### ~~**THE PRODUCT / API TRACK IS OPEN AND TASK 27 HAS LANDED.**~~ **27 AND 31 HAVE BOTH LANDED. Rolled forward 2026-08-01.**
 
 **Tranche seven is complete: tasks 36–44, ending `b8c2943`.** ~~Nothing in `docs/` is the
-next session's work.~~ **The owner chose the product/API track, and task 27 — the position
-instrumentation — is done.** It was the right first move for a reason worth keeping: it is
-the only work in the plan that **cannot be backfilled**, because `rank` and `request_id`
-describe a render that is over the moment it happens.
+next session's work.~~ **The owner chose the product/API track. Task 27 — the position
+instrumentation — is done, and so is task 31.** 27 was the right first move for a reason
+worth keeping: it is the only work in the plan that **cannot be backfilled**, because
+`rank` and `request_id` describe a render that is over the moment it happens.
 
 | track | tasks | what it needs |
 |---|---|---|
 | **the labelling night** | 30, then 13's weights and 12's next bump | **a second labeller for about twenty minutes.** `evals label report` exits 2 by design at one labeller — there is no inter-annotator ceiling to denominate a model score against. All ten `overlap` rows are already answered on the owner's side, so a second person's ten are the **last** input needed, not the first. No session can do this |
-| **the product / API surface** | ~~24, 25, 26, 27,~~ 24, 25, 26, 28, 31, 32, 33 | **27 is done.** The rest is unblocked apart from ordering. **Audit the premises first:** they were checked on 2026-07-31 and several were stale, and **27's own dependency line was backwards** — it declared *"Depends on: 26"* while 26's Definition of done needs 27's `visibility` column. Corrections are in the task files and in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), **which is a specification and not a description of the shipped API** |
+| **the product / API surface** | ~~24, 25, 26, 27,~~ ~~24, 25, 26, 28, 31, 32, 33~~ **24, 25, 26, 28, 32, 33** | **27 and 31 are done.** The rest is unblocked apart from ordering, **except 28 — see the D66/D67 note below, which is new and is a real blocker.** **Audit the premises first:** they were checked on 2026-07-31 and several were stale, and **two dependency arrows have now been found wrong, both pointing at 26** — 27 declared *"Depends on: 26"* while 26's own DoD needs 27's `visibility` column, and 31's *"Depends on: 27, 26"* needed nothing 26 builds. Corrections are in the task files and in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), **which is a specification and not a description of the shipped API** |
 
-**Two things a session picking up this track next must not re-derive.**
+**Three things a session picking up this track next must not re-derive.**
 
 1. **`bucket` gates the rest of the list payload, and `bucket` is task 30, which is gated on
    the labelling night.** `API-CONTRACT-v1.md`'s *"No 0–100 score appears anywhere"* cannot
@@ -51,16 +51,36 @@ describe a render that is over the moment it happens.
    the documented meaning of *"a list re-render is not new information"*. Recorded in
    `27-event-schema.md` § *What the work turned up*, the contract, and
    `docs/ingest/engagement-events.md`.
+3. **`job_events` has no `app_user_id` column, and that now blocks task 28.** Added by task
+   31, 2026-08-01. The table is keyed `(profile, job_id)` and thirty Builders share
+   `pursuit`, so **no query over it can count Builders** — only rows. *"4 Builders saved
+   this"* is 28's entire deliverable and is unanswerable from this table. Two shipped
+   defects come from the same cause: the list resolved `seen`, `dismissed`, `applied` and
+   `saved` from `job_events` by profile, so one Builder's save read as everyone's.
+   **Task 31 fixed `dismissed` and `saved`** by moving them to `builder_job_state`;
+   **`seen` and `applied` are [D66 and D67](../../ingest/DEFECTS.md)**, both
+   `BLOCKED-BY: job_events has no app_user_id`. D67 is the sharp one — an application is
+   `private` in the event row and cohort-wide in the response body.
+   **It is invisible at one Builder and wrong at two**, with no error and no code change on
+   the day it turns. 28 can either read `saved_at` from `builder_job_state` or add the
+   column, and adding it closes all three at once.
 
-**Where a fresh session on this track should look first, and it is a suggestion rather than
-a finding.** Task **31** (dismiss demotion) declares `Depends on: 27, 26`; **27 is now
-done**, and it was the half that mattered — 31 consumes the `reason` enum 27 added. Whether
-it truly needs 26 is **unverified**: `builder_job_state` is keyed `app_user_id`, and
-`app_users.id` already exists without anything 26 builds, so the 26 half may be as spurious
-as 27's was. **Check it before planning on it** — one dependency arrow in this tranche has
-already been found backwards, which is a reason to check the others and not a reason to
-assume they are all wrong. Tasks 24, 25, 28 and 32 are the rest; 32 is the one everything
-user-facing is actually waiting on, and `frontend/` still holds one `.gitkeep`.
+~~**Where a fresh session on this track should look first, and it is a suggestion rather
+than a finding.** Task 31 …~~
+
+> **Struck 2026-08-01: task 31 is done, and the suggestion's open question is answered.**
+> It asked whether 31's declared dependency on 26 was real. **It was not** —
+> `builder_job_state` is keyed `app_user_id`, `app_users.id` and `User.id` both already
+> exist, and nothing 31 builds reads `builder_profiles`, `parent_profile`, config
+> inheritance or onboarding. That is **two arrows now found wrong in this tranche and both
+> pointed at 26**, which is worth carrying forward as a habit rather than a conclusion:
+> check the arrow, and do not assume the rest are wrong either.
+
+**Where a fresh session on this track should look first.** Tasks **24, 25, 26, 28, 32** and
+**33** are what is left. **32 is the one everything user-facing is actually waiting on**,
+and `frontend/` still holds one `.gitkeep` — it is also what task **26** is really blocked
+on, per that file's own correction: 26 needs a screen, not a schema. **28 is the one to
+check the premises on hardest**, for the reason in point 3 above.
 
 **Read [`README.md`](README.md)'s status column for what is done — do not trust a count,
 including a count you just ran.** The instrument [`AUDIT.md`](AUDIT.md) names for it was

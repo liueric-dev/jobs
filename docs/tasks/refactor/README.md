@@ -95,7 +95,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | | Task | Lands | |
 |---|---|---|---|
 | 30 | [Within-track ordering](tranche_six/30-within-track-ordering.md) | buckets not scores; `gap_bridging_angle` promoted | todo |
-| 31 | [Dismiss demotion](tranche_six/31-dismiss-demotion.md) | persistent, and specific to the reason given | todo |
+| 31 | [Dismiss demotion](tranche_six/31-dismiss-demotion.md) | `builder_job_state`, per-Builder and joined at read time; `undismiss` as the undo; `tools/dismiss-reasons.py` as a report and deliberately not a loop. **Its declared dependency on 26 was spurious** — the second arrow in this tranche pointing at 26 that turned out to be wrong. **And the leak it predicts was already shipped one layer down**: the list resolved `seen`/`dismissed`/`applied`/`saved` from `job_events` by profile, so one Builder's save read as everyone's. Two fixed, two registered as defects D66/D67 (`BLOCKED-BY: job_events has no app_user_id`) | **done** |
 
 ## Phase 8 — Delivery
 

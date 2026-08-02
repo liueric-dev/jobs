@@ -31,7 +31,15 @@ SERVICE_MODULES = ("auth.py", "jobs.py", "db.py", "app.py", "label.py")
 
 #: Aliases bound inside the SQL itself -- subquery, lateral and correlation
 #: names. They follow FROM/JOIN syntactically but are not tables to grant.
-_ALIASES = {"m", "s", "e", "v", "u", "ev", "prior", "public", "lateral"}
+_ALIASES = {"m", "s", "e", "v", "u", "ev", "bs", "prior", "public", "lateral"}
+
+#: Keywords that follow one of the words below syntactically and are not names
+#: of anything. `set` is here because an upsert reads `ON CONFLICT ... DO UPDATE
+#: SET`, and the pattern below cannot tell that UPDATE from the statement kind.
+#: Kept separate from _ALIASES on purpose: an alias is something the SQL bound
+#: and a keyword is something it did not, and collapsing the two would let a
+#: real missing GRANT hide behind a plausible-looking word.
+_KEYWORDS = {"set"}
 
 _STATEMENT = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE)\b", re.I)
 _FROM_JOIN = re.compile(r"\b(?:FROM|JOIN|INTO|UPDATE)\s+([a-z_][a-z0-9_]*)", re.I)
@@ -88,7 +96,7 @@ def tables_named_in(path):
     for sql in sql_strings_in(path):
         for match in _FROM_JOIN.finditer(sql):
             name = match.group(1).lower()
-            if name not in _ALIASES:
+            if name not in _ALIASES and name not in _KEYWORDS:
                 found.add(name)
     return found
 

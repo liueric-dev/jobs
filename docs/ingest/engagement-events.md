@@ -49,6 +49,44 @@ generator: none
 > information"*) for a different task's benefit, so it is recorded rather than changed in
 > passing. **It is an open decision, not a settled one.**
 
+> **AMENDED 2026-08-01 BY TASK 31 — dismissal became per-Builder, and the endpoint
+> acquired a second table. Read this with the task 27 block above it.**
+>
+> **`POST /v1/events` is no longer the only path that writes state; it is still the only
+> path that writes `job_events`.** A `save`, `unsave`, `dismiss` or `undismiss` now also
+> upserts `builder_job_state`, **in the same transaction as the event row**. The two are
+> not redundant and the split is the point: `job_events` is the append-only evidence and
+> keeps every dismissal and every reversal; `builder_job_state` is the current answer.
+> Writing them together is what stops a reader ever catching them disagreeing.
+>
+> | | |
+> |---|---|
+> | new table | `builder_job_state (app_user_id, job_id, dismissed_at, dismiss_reason, saved_at, updated_at)`, PK `(app_user_id, job_id)`. Declared in `backend/webapp/schema_web.py`, which owns `app_users` |
+> | new client event | **`undismiss`** — the undo. No `rank`, no `reason`; clears the state columns and leaves the `dismiss` row in the log |
+> | moved | `DISMISS_REASONS` now lives in `schema_web.py`, so the CHECK on `dismiss_reason` and the request validator read one tuple. `jobs.DISMISS_REASONS` still resolves |
+> | list behaviour | dismissed postings are **hidden by default**. `exclude_dismissed` is gone; `include_dismissed` replaces it and is a debugging flag |
+> | detail behaviour | **not** filtered — undo has to be reachable from a detail page |
+> | operator report | `backend/tools/dismiss-reasons.py`, read-only. It reads `builder_job_state`, never `job_events` |
+>
+> **WHY THE STATE COULD NOT LIVE IN `job_events`, which is the durable lesson here.**
+> `job_events` is keyed `(profile, job_id)` and has **no `app_user_id` column**. Thirty
+> Builders share the `pursuit` profile, so every per-person question is unanswerable from
+> this table — not hard, unanswerable. That had already produced a shipped bug: the list's
+> `seen`, `dismissed`, `applied` and `saved` flags were all resolved from `job_events` by
+> profile, so one Builder's save read as everyone's. Two of the four are fixed;
+> **`seen` and `applied` are defects [D66 and D67](DEFECTS.md)**, both
+> `BLOCKED-BY: job_events has no app_user_id`.
+>
+> **It is invisible at one Builder and wrong at two**, with no error and no code change on
+> the day it turns. `manage_app_users.py list` shows one active `pursuit` account.
+>
+> **This also constrains task 28.** *"4 Builders saved this"* needs distinct users, and no
+> query over `(profile, job_id)` yields one. 28 reads `saved_at` from the new table, or
+> adds the column D66/D67 want first.
+>
+> **Line citations below remain from `dd49a27` and are still not swept**, for the reason
+> the task 27 block gives. `grep -n` on the symbol names is the instrument.
+
 ## Purpose
 
 `POST /v1/events` is the only path in the system that writes `job_events`
@@ -302,11 +340,24 @@ rewritten, and they say `applied`.
 | Reader | Uses |
 |---|---|
 | `score.py:_recently_active` (`backend/score.py:552-570`) | any event within N days gates the nightly warm pass; **zero events counts as active** |
-| `GET /v1/jobs` `_EVENT_STATE_JOIN` (`:122-132`) | `bool_or(event IN ('impression','open')) AS seen`, `bool_or(event='dismiss')`, `bool_or(event='applied')`, and the latest `save`/`unsave` timestamps |
+| `GET /v1/jobs` `_EVENT_STATE_JOIN` (`:122-132`) | ~~`bool_or(event IN ('impression','open')) AS seen`, `bool_or(event='dismiss')`, `bool_or(event='applied')`, and the latest `save`/`unsave` timestamps~~ **`seen` and `applied` only, since 2026-08-01** |
+| `GET /v1/jobs` `_BUILDER_STATE_JOIN` | `dismissed`, `saved` and `dismiss_reason`, from `builder_job_state` keyed on `app_user_id` — **not** from this table |
+| `backend/tools/dismiss-reasons.py` | the `undismiss` count, and nothing else. Everything it reports about dismissals comes from `builder_job_state`, which is the only place a *Builder* can be counted |
 
-The save/unsave pair is resolved by comparing `max(occurred_at)` of each
+~~The save/unsave pair is resolved by comparing `max(occurred_at)` of each
 (`:126-127`) rather than by storing a mutable flag — the event log is
-append-only and the current state is derived.
+append-only and the current state is derived.~~
+
+> **Superseded 2026-08-01 by task 31, kept per `DOCS-POLICY.md` rule 4 because the
+> principle in it is still right and the mechanism moved.** The event log is still
+> append-only and the current state is still derived from it — the derivation just happens
+> at *write* time into `builder_job_state` instead of at read time out of `max(occurred_at)`.
+> It had to move: the recency comparison keys on `profile`, and a cohort shares one, so it
+> was answering "did **anyone** save this" while reading as "did **you**".
+>
+> The undo pairs are unchanged in spirit — an `unsave` and an `undismiss` are both rows,
+> never deletions, and both set a column back to NULL rather than removing the state row,
+> because the *other* column may be carrying a live state.
 
 ---
 

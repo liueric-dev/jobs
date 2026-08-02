@@ -28,7 +28,17 @@ class TestEventNames(unittest.TestCase):
         # meaning in a table meant to be read years from now.
         self.assertEqual(
             set(jobs.CLIENT_EVENT_NAMES),
-            {"impression", "open", "save", "unsave", "dismiss", "applied"})
+            {"impression", "open", "save", "unsave", "dismiss", "undismiss",
+             "applied"})
+
+    def test_every_undo_has_something_to_undo(self):
+        # `unsave` and `undismiss` are undos, and an undo whose forward event
+        # does not exist is a client contract nobody can satisfy. Cheap to
+        # state, and it is the property that would break if a future event were
+        # added as an "un" name first.
+        for undo in ("unsave", "undismiss"):
+            self.assertIn(undo, jobs.CLIENT_EVENT_NAMES)
+            self.assertIn(undo.removeprefix("un"), jobs.CLIENT_EVENT_NAMES)
 
     def test_skip_is_server_only_and_storable(self):
         # The two tuples answer two different questions and the bug this guards
@@ -133,6 +143,23 @@ class TestBatchValidation(unittest.TestCase):
                                         "reason": "wrong_level"}]))
         self.assertEqual(caught.exception.code, "reason_not_allowed")
 
+    def test_a_reason_on_an_undismiss_is_rejected(self):
+        # The near miss the rule above exists for: `undismiss` is the one other
+        # event a reason reads as plausible on, and it is exactly where one
+        # would be wrong. The reason belongs to the dismissal being reversed
+        # and is already on that row; a second one here would be a fact about a
+        # decision nobody made.
+        with self.assertRaises(jobs.ContractError) as caught:
+            jobs.validate_batch(batch([{"job_id": "a", "event": "undismiss",
+                                        "reason": "wrong_level"}]))
+        self.assertEqual(caught.exception.code, "reason_not_allowed")
+
+    def test_an_undismiss_needs_no_rank(self):
+        # It is raised from wherever the Builder happens to be -- a detail
+        # page, a saved list -- and has no position in any render. Requiring a
+        # rank would force a client to invent one.
+        jobs.validate_batch(batch([{"job_id": "a", "event": "undismiss"}]))
+
     def test_dwell_is_open_only(self):
         with self.assertRaises(jobs.ContractError) as caught:
             jobs.validate_batch(batch([{"job_id": "a", "event": "impression",
@@ -168,9 +195,20 @@ class TestVisibility(unittest.TestCase):
         self.assertEqual(jobs.visibility_for("applied"), jobs.VISIBILITY_PRIVATE)
 
     def test_everything_else_is_private(self):
-        for name in ("impression", "open", "unsave", "dismiss", "skip"):
+        for name in ("impression", "open", "unsave", "dismiss", "undismiss",
+                     "skip"):
             self.assertEqual(jobs.visibility_for(name), jobs.VISIBILITY_PRIVATE,
                              f"{name} must not be cohort-visible")
+
+    def test_a_dismissal_is_never_aggregated_for_display(self):
+        # tranche_six/31 is explicit: "18 Builders dismissed this" is
+        # discouraging, deanonymising at small N, and reflects a cohort-wide
+        # config problem more often than a bad posting. Task 28 aggregates
+        # saves and only saves, and the mechanism enforcing that is this tuple
+        # -- dismissals never carry the visibility the aggregation reads.
+        self.assertEqual(set(jobs.COHORT_VISIBLE_EVENTS), {"save"})
+        for name in ("dismiss", "undismiss"):
+            self.assertNotIn(name, jobs.COHORT_VISIBLE_EVENTS)
 
     def test_the_client_cannot_name_a_visibility(self):
         # Not in the model at all, so there is no field to ignore. A field the

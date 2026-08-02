@@ -1,11 +1,11 @@
 """
-The three tables this service owns, and the startup gate that proves it can
+The four tables this service owns, and the startup gate that proves it can
 use them.
 
 SCHEMA OWNERSHIP. ../schema.py owns `jobs`, `job_facts`, `job_matches`,
 `job_scores`, `profiles`, `job_events` and the `jobs_app` view. This module
-declares ONLY app_users, app_sessions and oauth_logins, and never drops,
-alters or restates anything on the other side of that line. api/query_claims.py
+declares ONLY app_users, app_sessions, oauth_logins and builder_job_state, and
+never drops, alters or restates anything on the other side of that line. api/query_claims.py
 makes the same split and its docstring records what happens when it is not
 made: nine functions and three tables' DDL were duplicated there and had
 drifted six ways by the time anyone measured, two of the drifts changing row
@@ -30,7 +30,7 @@ from lib import dbconn
 from lib.timeparse import utc_now_str
 
 #: Tables this service touches, and the privileges each use needs. Read tables
-#: belong to the pipeline; the last three are ours.
+#: belong to the pipeline; the last four are ours.
 #:
 #: `jobs` is listed with SELECT even though every query goes through the
 #: `jobs_app` view. A plain view runs with the CALLER's privileges -- it is not
@@ -49,6 +49,12 @@ REQUIRED_TABLES = {
     "app_users": ("SELECT", "INSERT", "UPDATE"),
     "app_sessions": ("SELECT", "INSERT", "UPDATE", "DELETE"),
     "oauth_logins": ("SELECT", "INSERT", "DELETE"),
+    # Current per-Builder state, upserted -- so INSERT and UPDATE, and no
+    # DELETE. An undo is a column going back to NULL plus an `undismiss` row in
+    # job_events, never a deletion: tranche_six/31 asks for the reversal itself
+    # to be kept, because "the fact that someone reversed a dismissal is itself
+    # signal, and deletion loses it".
+    "builder_job_state": ("SELECT", "INSERT", "UPDATE"),
 }
 
 #: The golden-set tables, owned by ../evals/labels.py and merged in here.
@@ -146,6 +152,26 @@ PRIOR_DOMAINS = (
 _PRIOR_DOMAIN_CHECK = (
     "prior_domain IS NULL OR prior_domain IN ("
     + ", ".join(f"'{v}'" for v in PRIOR_DOMAINS) + ")"
+)
+
+#: Why a Builder dismissed a posting (tranche_five/27, consumed by
+#: tranche_six/31). A closed enum rather than free text, and the values map onto
+#: existing features deliberately: a `wrong_level` dismiss is evidence about the
+#: seniority weight, not about one posting. Free text would be unreadable at
+#: cohort scale and un-joinable to any feature.
+#:
+#: IT LIVES HERE RATHER THAN IN jobs.py, WHERE IT WAS, for the reason
+#: PRIOR_DOMAINS lives here: the CHECK below is generated from this tuple, so
+#: the vocabulary cannot be widened in Python while the database keeps refusing
+#: the new value -- a failure that would surface as a 500 on one Builder's
+#: dismiss and nowhere else. jobs.py imports it back and the request validator
+#: still reads `jobs.DISMISS_REASONS`; nothing here imports jobs.
+DISMISS_REASONS = ("wrong_level", "wrong_role", "wrong_location",
+                   "bad_company", "stale_posting", "other")
+
+_DISMISS_REASON_CHECK = (
+    "dismiss_reason IS NULL OR dismiss_reason IN ("
+    + ", ".join(f"'{v}'" for v in DISMISS_REASONS) + ")"
 )
 
 
@@ -251,8 +277,52 @@ def ensure_schema(conn):
     # out of the primary key instead of out of code someone has to keep
     # correct, and there is no signing secret to generate, store or rotate.
 
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS builder_job_state (
+            app_user_id TEXT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+            job_id TEXT NOT NULL,
+            dismissed_at TEXT,
+            dismiss_reason TEXT,
+            saved_at TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (app_user_id, job_id),
+            CONSTRAINT builder_job_state_reason CHECK ({_DISMISS_REASON_CHECK}),
+            -- A reason without a dismissal is a row that survived a bad undo.
+            -- Cheap to forbid, and it makes the aggregation in
+            -- tools/dismiss-reasons.py able to trust its own WHERE clause.
+            CONSTRAINT builder_job_state_reason_needs_dismissal
+                CHECK (dismiss_reason IS NULL OR dismissed_at IS NOT NULL)
+        )
+    """)
+    # WHY THIS TABLE EXISTS: job_matches is keyed (job_id, profile) and thirty
+    # Builders share one cohort profile, so a demotion written into match_score
+    # would suppress a posting for all thirty. Per-Builder state goes here and
+    # applies as a read-time join instead; ranking stays cohort-level and cheap,
+    # which is the flat-cost property in ../.claude/CLAUDE.md. tranche_six/31.
+    #
+    # job_id IS BARE TEXT WITH NO FOREIGN KEY to jobs(id), for the same reason
+    # app_users.profile carries none: a real FK would make this service's DDL
+    # depend on a table it must not own. The exposure that creates is a jobs.id
+    # rewrite (../schema.py's _ensure_fk_update_cascade exists because ids do
+    # get rewritten) stranding a state row -- and the consequence is nil,
+    # because a state row is only ever read joined to jobs_app. A stranded row
+    # is invisible, not harmful.
+    #
+    # NOT AN EVENT LOG. job_events is the append-only evidence and keeps every
+    # dismiss and every undo; this is the current answer, and it is derived from
+    # those rows rather than a second source of truth. The two are written in
+    # one transaction (jobs.record_events) so they cannot disagree.
+
     conn.execute("CREATE INDEX IF NOT EXISTS idx_app_sessions_user "
                  "ON app_sessions(user_id)")
+    # The list's hot path: "which of this Builder's states apply to the page I
+    # am rendering". The primary key already leads with app_user_id, so this
+    # index is the covering half of it -- one partial index over the rows that
+    # actually filter anything, since the overwhelming majority of state rows
+    # are saves with dismissed_at NULL.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_builder_job_state_dismissed "
+                 "ON builder_job_state(app_user_id, job_id) "
+                 "WHERE dismissed_at IS NOT NULL")
     conn.commit()
 
     # The golden-set tables, created by their own module's DDL. One definition

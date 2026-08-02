@@ -64,7 +64,9 @@ and the `Accept: application/vnd.jobs.v1+json` header. `comp{}`, `why{}`, `state
 column anywhere.
 
 **Implemented and undocumented here:** eight query parameters (`limit`, `cursor`, `q`,
-`remote`, `nyc`, `min_score`, `since`, `exclude_dismissed`), the `seen` state, `unsave`,
+`remote`, `nyc`, `min_score`, `since`, ~~`exclude_dismissed`~~ **`include_dismissed`** —
+renamed and inverted 2026-08-01 by task 31, because the old one defaulted to *showing*
+dismissed rows), the `seen` state, `unsave`, **`undismiss`**,
 24-hour impression dedup, the `{recorded, deduped, skipped}` response, the `profile`
 echo, `GET /v1/me`, `POST /v1/auth/logout` and the whole `/v1/label*` surface.
 
@@ -150,6 +152,30 @@ enforced server-side.
 **`state` is per-Builder**, resolved from `builder_job_state` (task 31), not from the
 cohort profile.
 
+> **HALF SHIPPED 2026-08-01, TASK 31, and the half that has not is a numbered defect.**
+>
+> | field | resolved from | per-Builder? |
+> |---|---|---|
+> | `dismissed` | `builder_job_state.dismissed_at` | **yes** |
+> | `saved` | `builder_job_state.saved_at` | **yes** |
+> | `seen` | `job_events`, by `profile` | **no** — defect D66 |
+> | `applied` | `job_events`, by `profile` | **no** — defect D67 |
+>
+> `job_events` has no `app_user_id` column, so the last two cannot be answered per Builder
+> without a change to task 27's landed schema. Both are `BLOCKED-BY: job_events has no
+> app_user_id` in [`../../ingest/DEFECTS.md`](../../ingest/DEFECTS.md), which owns the
+> argument. **D67 is a contradiction inside this document**: an application is `private`
+> two paragraphs above and cohort-wide in the response body.
+>
+> **This is invisible at one Builder and wrong at two.** There is one active `pursuit`
+> account today, so every `e.profile` belongs to one person and the join is accidentally
+> correct. Nothing will change in the code on the day it stops being.
+>
+> Two fields this response also gained: `dismiss_reason` (null unless dismissed), and the
+> list now **hides** dismissed postings by default. `GET /v1/jobs/{id}` does not hide them,
+> deliberately — undo has to be reachable. The `exclude_dismissed` query parameter is gone;
+> `include_dismissed` replaces it and is for debugging.
+
 **`comp.is_estimated`** must be honoured in the UI. Adzuna predicts salary; showing a
 prediction as though the employer stated it is a trust problem, not a formatting one.
 
@@ -190,10 +216,17 @@ Requesting a detail page is **not** an impression. Emit `open` with `dwell_ms` o
     { "event": "save",       "job_id": "gh_acme_4821", "rank": 1 },
     { "event": "dismiss",    "job_id": "gh_beta_991",  "rank": 4,
       "reason": "wrong_level" },
+    { "event": "undismiss",  "job_id": "gh_beta_991" },
     { "event": "applied",    "job_id": "gh_acme_4821", "rank": 1 }
   ]
 }
 ```
+
+> **`undismiss` added 2026-08-01 by task 31** — the undo, shaped on `unsave`. It takes no
+> `rank` (it is raised from wherever the Builder happens to be) and **no `reason`**: the
+> reason belongs to the dismissal being reversed and is already on that row, so one here is
+> a 400 with code `reason_not_allowed`. It clears the state and leaves the `dismiss` row in
+> `job_events`, because a reversal is itself signal and a deletion would lose it.
 
 **Client rules:**
 

@@ -83,8 +83,8 @@ else does.** Decisions are `DEC-<n>` and live in
 [`DECISIONS.md`](../tasks/refactor/DECISIONS.md); task numbers live in
 [`tasks/refactor/README.md`](../tasks/refactor/README.md).
 
-**Next free: `D66`.** Allocated `D01`–`D45`; **`D46`–`D65` are burnt and must never be
-issued.** They are not defects and never were — `DECISIONS.md` continued this register's
+**Next free: `D68`.** Allocated `D01`–`D45` and `D66`–`D67`; **`D46`–`D65` are burnt and
+must never be issued.** They are not defects and never were — `DECISIONS.md` continued this register's
 count when it started allocating decision IDs mid-file, so those twenty numbers circulate
 in eighty-odd places meaning *decisions*. Task 39 re-prefixed the live sites to `DEC-46`–
 `DEC-65`, but `CLAUDE_UPDATES.md` and `docs/archive/` are `kind: record` and are
@@ -1104,6 +1104,57 @@ should behave differently from the deliberate "transient failure, don't
 mark seen" convention already used for fetch errors at the same site.
 Disposition: fix with harness — task 09 lists this as naturally expressible
 as a cassette test (`fixtures/cassettes/hn-item-null.json`).
+
+---
+
+### D66 — open
+
+**`GET /v1/jobs` and `GET /v1/jobs/{id}` report `seen` cohort-wide, not per Builder.**
+`_EVENT_STATE_JOIN` resolves it from `job_events` with `WHERE e.profile = v.profile`
+(`backend/webapp/jobs.py`), and `job_events` has no `app_user_id` column at all — it is
+keyed `(profile, job_id)` (`backend/schema.py`, `EVENTS_TABLE`). Thirty Builders share the
+`pursuit` profile, so once a second Builder exists, one Builder's impression marks the row
+`seen` for all of them.
+
+Found by task 31 while making `dismissed` and `saved` per-Builder. Those two moved to
+`builder_job_state`, which carries `app_user_id`; `seen` cannot follow, because it derives
+from impressions and impressions live only in `job_events`.
+
+**Invisible today and that is the whole risk.** `manage_app_users.py list` shows one active
+`pursuit` labeller, so every value of `e.profile` belongs to one person and the join is
+accidentally correct. It becomes wrong on the day a second Builder signs in, silently, with
+no error and no changed code. Class: **silent data loss** (a wrong answer reported as a
+right one). Disposition: **fix with schema change** —
+`BLOCKED-BY: job_events has no app_user_id`.
+
+---
+
+### D67 — open
+
+**The same for `applied`, and this one contradicts a written privacy promise.**
+`bool_or(e.event = 'applied')` in the same lateral, same cause as D66.
+
+Worse than D66 because `API-CONTRACT-v1.md` and `webapp/jobs.py`'s own
+`COHORT_VISIBLE_EVENTS` comment both make applications `private` — *"in a cohort competing
+for the same entry-level roles, seeing who else applied is discouraging at best"* — and
+`visibility_for("applied")` correctly returns `private` on the event row. The response body
+then leaks the same fact anyway: Builder B's list renders `applied: true` on a posting only
+Builder A applied to. The control is enforced in the column and defeated in the join.
+
+Not a leak of *identity* — the flag says someone in the cohort applied, not who — but at
+N=30 in a shared classroom that is the distinction task 28 spends its whole *small-N
+problem* section refusing to rely on.
+
+Found by task 31, same pass as D66. Class: **silent data loss**. Disposition: **fix with
+schema change** — `BLOCKED-BY: job_events has no app_user_id`.
+
+> **The shared fix, noted once for both.** An `app_user_id` column on `job_events` closes
+> D66 and D67 together and is also what task 28 needs — *"4 Builders saved this"* requires
+> distinct users, and no query over `(profile, job_id)` can produce one. It is a change to
+> task 27's landed schema and is deliberately not taken here: task 31's Definition of done
+> names dismissal, `builder_job_state` covers `saved` on the way past, and widening a
+> landed event schema in passing is how a column acquires two meanings. Whoever takes 28
+> should expect to take this first.
 
 ---
 

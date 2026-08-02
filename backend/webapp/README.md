@@ -49,6 +49,7 @@ GRANT USAGE, SELECT ON SEQUENCE public.job_events_id_seq TO jobs_web;
 GRANT SELECT, INSERT, UPDATE ON public.app_users TO jobs_web;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.app_sessions TO jobs_web;
 GRANT SELECT, INSERT, DELETE ON public.oauth_logins TO jobs_web;
+GRANT SELECT, INSERT, UPDATE ON public.builder_job_state TO jobs_web;
 GRANT SELECT ON public.eval_label_sets, public.eval_label_items TO jobs_web;
 GRANT SELECT, INSERT ON public.eval_labels TO jobs_web;
 GRANT USAGE, SELECT ON SEQUENCE public.eval_labels_id_seq TO jobs_web;
@@ -261,6 +262,7 @@ engagement, and rewrite nothing.
 | `app_users` | SELECT, INSERT, UPDATE |
 | `app_sessions` | SELECT, INSERT, UPDATE, DELETE |
 | `oauth_logins` | SELECT, INSERT, DELETE |
+| `builder_job_state` | SELECT, INSERT, UPDATE |
 | `eval_label_sets`, `eval_label_items` | SELECT |
 | `eval_labels` | SELECT, INSERT |
 | `eval_labels_id_seq` | USAGE, SELECT |
