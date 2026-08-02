@@ -147,8 +147,33 @@ def _python_role_pattern():
     the same thing in Python's dialect. Translating is safe in this direction
     and only in this direction: every other construct in that file (`back.?end`,
     `full.?stack`) is already common to both dialects.
+
+    D21 -- WHY THE LOAD IS GUARDED AND NOT JUST THE COMPILE
+        This function runs at IMPORT (see ROLE_PATTERN below), which is before
+        main() exists to report anything and before the `FAILED:` convention
+        every other failure in this file goes through applies. relevance.load()
+        already returns the DISABLED defaults for a MISSING file
+        (relevance.py:95-96), so that case was never the problem; a file that
+        is present and unreadable, or present and not parseable JSON, or
+        parseable but not an object, raised straight out of the module body and
+        took the import down. It also broke evals/ingest_modules.py's stated
+        precondition that a module body neither connects nor fetches nor reads.
+
+        The fallback is the same one the re.error branch relies on, so the
+        reasoning is unchanged -- but it is announced. A silent fallback here
+        means the HN parser quietly stops using the persona's role vocabulary
+        and scores every segment positionally, which looks like a bad night
+        rather than a broken config.
     """
-    patterns = relevance.load().get("title_include") or []
+    try:
+        cfg = relevance.load()
+        patterns = cfg.get("title_include") or []
+    except Exception as e:
+        print(f"hn-hiring: WARNING -- could not load the role vocabulary from "
+              f"{relevance.CONFIG_FILE} ({type(e).__name__}: {e}); falling back "
+              f"to positional title selection. Fix the config: this parser is "
+              f"picking titles with no vocabulary behind it.", file=sys.stderr)
+        return None
     if not patterns:
         return None
     try:

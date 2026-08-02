@@ -238,7 +238,23 @@ def main():
                 print(f"[debug] Apify run failed for {q['slug']}: {e}", file=sys.stderr)
             continue
 
-        records = [normalize_job(j, q["mode"]) for j in jobs]
+        # D19, and the same shape as ingest/google-serpapi.py's -- both call
+        # the same normalize_job(). Its own guard, not the fetch tuple above:
+        # that tuple names transport failures, and an actor result this parser
+        # cannot read is not one. One malformed dataset item used to kill every
+        # remaining query in the run. The claim is released so another machine
+        # can retry; the actor run is billed either way.
+        try:
+            records = [normalize_job(j, q["mode"]) for j in jobs]
+        except Exception as e:
+            query_errors.append(f"{q['slug']} (normalize): {type(e).__name__}: {e}")
+            state.release_claim(conn, dataset, table=schema.WATERMARK_TABLE)
+            print(f"google-jobs-apify: WARNING -- {q['slug']} returned "
+                  f"{len(jobs)} dataset item(s) that did not normalize "
+                  f"({type(e).__name__}: {e}); continuing with the other "
+                  f"queries.", file=sys.stderr)
+            continue
+
         try:
             result = upsert_checked(conn, job_spec, records, schema.make_job_id,
                                     debug=DEBUG_PRINT_KEYS)

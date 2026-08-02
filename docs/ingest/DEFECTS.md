@@ -688,7 +688,7 @@ live API. Blast radius: one source (`google-apify`). Disposition: **fix with
 harness** — `docs/ingestion_tests/05-fetcher-harness.md` names the exact
 fixture needed: `apify-immediate-success.json`.
 
-### D18
+### D18 — fixed
 
 **Uncaught `KeyError` on malformed config, before the guarded load
 completes.** Two sites: `company["platform"]`/`company["token"]` in
@@ -705,7 +705,56 @@ subscripting sits *inside* the function its own `try` wraps
 two Google scripts. Disposition: fix opportunistically — move the
 subscripting inside the guarded load, matching the apify script's pattern.
 
-### D19
+**Re-verified at HEAD, 2026-08-02. The two sites did not age the same way.**
+
+**Site 1 (`ats.py`) is closed by construction, and the entry above describes a
+config file this script no longer has.** "One config entry missing either key"
+was a claim about `config/companies.json`; `597662b` retargeted the script onto
+the `company_ats` table, and the roster is now built by
+`ats_sources.load_companies`, which constructs each dict literally with all four
+keys (`backend/ingest/ats_sources.py:123-124`). `company["platform"]` and
+`company["token"]` (now `backend/ingest/ats.py:1094-1095`, still outside the
+`try` at `:1097`) cannot raise from that path, and they are deliberately left
+where they are: they name the company in the error handler's own message, and a
+roster that really lacked them should die at the first row rather than process
+fifty companies under a `None` token.
+
+**What survives at that site is one level down.** `FETCHERS[platform]` /
+`NORMALIZERS[platform]` (`backend/ingest/ats.py:1000`) is a `KeyError` for any
+roster row whose `ats` value this script has no fetcher for. That is filtered by
+`ats_sources.HANDLED_PLATFORMS` (`ats_sources.py:76-77`) — but
+`HANDLED_PLATFORMS`, `FETCHERS` (`ats.py:536-543`) and `NORMALIZERS`
+(`ats.py:920-927`) are three independent literals in two files, so "cannot
+happen" holds exactly as long as they agree and nothing checked that they did.
+Both halves are now covered: the `except Exception` at `ats.py:1106` makes it one
+company's failure instead of the run's, and
+`tests/test_ingest_isolation.py::test_the_platform_tables_agree_across_the_two_files`
+pins the three sets equal. The same handler closes D19 at this site; see there.
+
+**Site 2 (`google-serpapi.py`) was open exactly as described, at
+`:221-222`, guarded by the load at `:307-312`** — eight and seven lines off the
+recorded cites, both found by reading rather than by the numbers.
+`load_query_buckets` (now `backend/ingest/google-serpapi.py:206-243`, keys and check) now touches
+every key the script subscripts anywhere, inside the caller's guard, and names
+the bucket and the missing key rather than raising a bare `KeyError: 'queries'`.
+
+**The `q[...]` subscripts were the worse half and the register did not have
+them.** `q["slug"]` (`:262`, `:281`), `q["query"]`/`q["location"]` (`:368`) and
+`q["mode"]` (`:378`) are the same defect one level deeper, and `mode` in
+particular is not touched **until after that query's SerpApi credit has already
+been spent** — a config typo therefore burned metered budget and then raised.
+They are in `REQUIRED_QUERY_KEYS` and checked before any query is claimed.
+`TypeError` joined main's guard tuple (`:348`) because the load now checks shape
+as well as presence.
+
+Fixed 2026-08-02. Nine tests in
+`backend/tests/test_ingest_isolation.py::TestQueryBucketsAreCheckedInsideTheGuard`
+and `::TestAtsPerCompanyIsolation`, all watched failing first. Two of them are
+controls that pass in both directions on purpose — the shipped
+`config/google-queries.json` must still satisfy its own check, and a well-formed
+bucket must still load.
+
+### D19 — fixed
 
 **Normalization/parsing happens outside the per-unit `try` block in four of
 six ingest scripts**, so one malformed record's exception kills the entire
@@ -724,6 +773,59 @@ run rather than one unit. This is "audit item 7."
 `:196-198` (`docs/ingest/weworkremotely.md:295-296`). Blast radius: one
 source each, four sources total. Disposition: fix opportunistically — move
 each normalize/parse call inside its script's existing `try`.
+
+**Re-verified at HEAD, 2026-08-02. Every cite above had moved, and at one site
+the finding itself had changed.** Corrected addresses, read off the code:
+
+| site | recorded | at HEAD, before the fix below | guard |
+|---|---|---|---|
+| `ats.py` | `:334`, try `:325-332` | **`:1019`**, inside `fetch_company()` | try at `:1097` |
+| `builtin-nyc.py` | `:390`, try `:382-388` | **`:438`** | try `:430-436` |
+| `google-serpapi.py` | `:324`, try `:314-322` | **`:335`** | try `:325-333` |
+| `google-apify.py` | `:231`, try `:221-229` | **`:241`** | try `:231-239` |
+
+**`ats.py` had already been half-fixed and neither the register nor the commit
+that did it knew.** `597662b` ("Retarget ats.py onto company_ats") split
+`fetch_company()` out of `main()`, and that function wraps the normalize call
+(`backend/ingest/ats.py:1019`) — which `main()` calls from **inside** its
+per-company `try`. Structurally, this entry's prescribed fix — *"move each
+normalize/parse call inside its script's existing `try`"* — had already
+happened, as a side effect of a refactor about something else.
+
+**It changed nothing.** The `except` tuple named `URLError`, `HTTPError`,
+`TimeoutError`, `JSONDecodeError` and `OSError` — transport failures — and a
+normalizer tripping over a posting's shape raises none of those. It went
+straight past the handler and ended the run for every remaining company,
+exactly as before. **A structural fix to an exception-handling defect is not a
+fix**, and this is the shape a mechanical re-anchoring pass would have closed:
+the cite moves, the code looks right, the behaviour is untouched.
+
+**All four fixed 2026-08-02, and deliberately not the way this entry
+prescribes.** Each normalize/parse call got **its own** guard rather than being
+folded under the fetch tuple:
+
+- `ats.py:1106` — a second `except Exception` on the same `try`, since
+  `fetch_company()` is now genuinely both halves.
+- `builtin-nyc.py:444-451`, `google-serpapi.py:377-393`,
+  `google-apify.py:241-256` — a separate `try` immediately after the fetch
+  guard, which leaves the fetch guard's behaviour bit-for-bit unchanged.
+
+Widening the fetch tuple would have made a genuine `URLError` and a broken
+normalizer read identically in the summary, and on the two Google scripts that
+block is contested by another stream this session. Every handler is loud — the
+failure lands in `company_errors`/`page_errors`/`query_errors`, so it is in the
+stdout summary's failure count at every verbosity, a `WARNING` goes to stderr,
+and a run where every unit fails still exits non-zero. On both Google scripts
+the claim is released, so another machine can retry the query; the SerpApi
+credit and the Apify run are billed either way, which is why the claim is
+released rather than the query being retried in-process.
+
+Nine tests in `backend/tests/test_ingest_isolation.py`
+(`TestBuiltInPerPageIsolation`, `TestSerpApiQueryIsolation`,
+`TestApifyQueryIsolation`, `TestAtsPerCompanyIsolation`), each watched failing
+against the unfixed code first. One asserts the other direction: every page
+failing is still a failed run, so the isolation cannot turn a total break into a
+quiet success.
 
 ### D20
 
@@ -747,7 +849,66 @@ opportunistically — no task currently owns this specifically; the fetcher
 harness (task 09) is the natural place to add regression coverage once a
 scratch database exists.
 
-### D21
+**Re-verified at HEAD, 2026-08-02: open exactly as described, three cites all
+wrong.** Addresses in this paragraph are as found, **before** the fix below moved
+them. `score_job` was called unguarded at **`backend/match.py:523`** (recorded
+`:290`); `total += delta` was at **`:152`** (recorded `:92`); the `executemany`
+was at **`:537-549`** (recorded `:304-316`). `main()`'s per-profile loop at
+`:596-603` had no guard either, so the "kills the run for all profiles" claim was
+literally true.
+
+**Both halves fixed 2026-08-02.** This entry is the one the register left without
+an owner and it is the only one of D18–D21 that is larger than a handler.
+
+**The `executemany` half was reproduced against a real server before it was
+touched**, because a fake connection cannot show it — the reason
+`backend/evals/scratchdb.py`'s docstring gives, which names this defect by
+class. The trigger is not contrived: `job_matches.job_id REFERENCES jobs(id)`
+(`schema.py:574-575`), so a posting deleted between `load_facts()` and the write
+is a plain foreign key violation. Measured on a scratch schema, two rows, one of
+them orphaned: `ForeignKeyViolation` propagates out of `match_profile` and
+**`job_matches` holds 0 rows** — the good row is lost with the bad one.
+
+`write_matches()` (`backend/match.py:529-575`) is **batch-then-retry, not a
+SAVEPOINT per row.** `lib/upsert.py:191-197` is right to pay a savepoint per
+record — every record there costs a SELECT anyway — but here the batch is the
+whole of `job_facts` for a profile and the common case is that all of it is
+fine. So the `executemany` runs first inside its own SAVEPOINT; only when it
+fails does the row-by-row pass run, and then each row gets the isolation
+`lib/upsert.py` describes. Both paths bind the same `MATCH_UPSERT_SQL`
+(`:515-526`), hoisted precisely so a fallback cannot quietly stop matching the
+statement it falls back from.
+
+**`written` is now what the table holds, not what was attempted** (`:645`).
+Returning `len(to_write)` after a rejection would have converted the loud half of
+this defect into the silent half, which is the worse class.
+
+**A job that fails to score is never demoted.** The tempting fix — treat a
+scoring exception as below-floor — would put the job in `to_delete` and let one
+non-numeric weight silently clear a profile's entire match list. The row stays,
+stale-but-correct, until scoring works again. Pinned by a test that reads the
+guard's body.
+
+**Isolation at the profile level too** (`:681-712`): the loop used to abandon
+every remaining profile the moment one raised, so a criteria file broken for one
+Builder cost the whole cohort its nightly ranking. A profile that fails entirely,
+or that scores **nothing** because every job raised, is collected in
+`failed_profiles` and exits non-zero (`:722-726`) rather than reporting `0
+matched` like an ordinary quiet night. Per-job failures print at most three
+lines: 20,000 facts against a broken criteria file must not print 20,000
+warnings, because a flood is the same silence.
+
+`match_profile` grew an optional `stats` Counter rather than a fourth return
+value — `backend/tools/mock-acceptance.py:428` unpacks it into exactly three
+names, and the counter costs nothing to a caller that does not pass one.
+
+Nine tests, `backend/tests/test_match.py::TestScoringFailuresAreIsolated` and
+`::TestRejectedRowsDoNotLoseTheBatch`, all watched failing first. Two of the nine
+fail against the unfixed code only because `write_matches` does not exist there;
+the behavioural claim was measured separately, above, and is what
+`test_one_row_with_no_posting_does_not_lose_the_batch` pins.
+
+### D21 — fixed
 
 **`hn-hiring.py` has a hard, unguarded import-time dependency on
 `config/relevance.json`.** `relevance.load()` runs at module import
@@ -757,6 +918,47 @@ translation (`:158-161`), not the file read itself. A config file that
 cannot be read or parsed crashes at import, before `main()` runs and before
 the standard `FAILED:` reporting convention applies. Blast radius: one
 source (`hn_whoishiring`). Disposition: fix opportunistically.
+
+**Re-verified at HEAD, 2026-08-02: open, cites off by one to three lines, and
+one clause of the finding was wrong when it was written.** As found, **before**
+the fix below moved them: the import at `:89`, the load at `:151`, `ROLE_PATTERN`
+at `:163`, the `re.error` guard at `:157-160`.
+
+**"A config file that cannot be read" was already false for the commonest
+case.** `relevance.load()` catches `FileNotFoundError` and returns the DISABLED
+defaults (`backend/relevance.py:95-96`), so a **missing** file never crashed
+anything and never did. What crashed was a file that is *present* and malformed:
+unparseable JSON, a permission error, or valid JSON that is not an object (the
+`cfg.items()` at `relevance.py:97` is an `AttributeError` on a list). The
+distinction matters because "config missing" is the scenario anyone would test
+first, and it would have shown the defect absent.
+
+**It was also a live violation of a stated precondition.**
+`backend/evals/ingest_modules.py`'s docstring says importing an ingest script
+runs its body "and nothing else… none of them connects, fetches or writes.
+Verified for all six." This one **read a file** — and an unreadable one made the
+import itself the failure, which is what breaks the eight modules that harness
+loads.
+
+Fixed 2026-08-02 at `backend/ingest/hn-hiring.py:168-176`: the load is guarded,
+the positional fallback in `pick_title_segment()` is the same one the `re.error`
+branch already relies on, **and it is announced on stderr**. A silent fallback
+here means the parser quietly stops using the persona's role vocabulary and
+scores every segment positionally, which reads as a bad night rather than a
+broken config — this register's own house failure mode.
+
+Five tests, `backend/tests/test_ingest_isolation.py::TestRoleVocabularyLoadIsGuarded`,
+including one that imports the script fresh with a malformed config pointed at it
+(the defect proper, in the module body) and one that pins the corrected finding
+so it does not drift back — a missing file was never the problem. Two are
+controls that pass in both directions: the real config must still compile to a
+pattern, or a guard that always falls back is the same bug wearing a hat.
+
+**Adjacent and deliberately not changed:** the pre-existing `except re.error`
+branch (`:182-185`) still returns `None` **silently**. That is the same
+"vocabulary quietly disabled" outcome arriving by a different route, and it is
+outside what this entry describes. Not given a `D` number here — the allocator
+is not this stream's to spend.
 
 ### D22
 

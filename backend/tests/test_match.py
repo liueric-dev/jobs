@@ -19,8 +19,10 @@ WHY THESE TESTS AND NOT OTHERS
         calibrate-match.py both assume that range.
 """
 
+import collections
 import contextlib
 import importlib
+import inspect
 import io
 import json
 import os
@@ -908,6 +910,183 @@ class TestPruneOrphansAgainstPostgres(unittest.TestCase):
                 f"SELECT count(*) FROM {schema.MATCHES_TABLE}").fetchone()[0]
         self.assertEqual((n, remaining), (1, 2))
         self.assertEqual(stream.getvalue(), "")
+
+
+# ---------------------------------------------------------------------------
+# D20 -- per-record isolation, the invariant this stage did not have
+# ---------------------------------------------------------------------------
+
+class _MatchProfile:
+    """The three attributes match_profile() reads off a profile."""
+
+    profile = "tech"
+    criteria_version = 1
+
+    def __init__(self, criteria=None):
+        self.criteria = CRITERIA if criteria is None else criteria
+
+
+class TestScoringFailuresAreIsolated(unittest.TestCase):
+    """D20, the half that needs no database.
+
+    `score_job` was called unguarded at `match.py:523` (the register said
+    `:290`), so the uncaught `TypeError` from `total += delta` at `:152` (the
+    register said `:92`) propagated out of `match_profile` and out of `main`'s
+    per-profile loop, ending the run for every profile -- including ones
+    already computed and not yet committed.
+
+    Everything here is dry-run, so `score_job`'s purity is the only thing
+    under test and no connection is touched.
+    """
+
+    def _facts(self, n):
+        return [dict(facts(), job_id=f"job-{i}", facts_version=3)
+                for i in range(n)]
+
+    def test_one_unscorable_job_does_not_cost_the_others(self):
+        """A facts row no rule anticipated. `tech_stack` is iterated, so a
+        non-iterable there is a shape the extractor could really produce."""
+        rows = self._facts(3)
+        rows[1]["tech_stack"] = 7          # not iterable -- TypeError inside
+        stats = collections.Counter()
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            written, deleted, skipped = match.match_profile(
+                None, _MatchProfile(), rows, rebuild=True, dry_run=True,
+                stats=stats)
+        self.assertEqual(written, 2, "two jobs scored cleanly and must count")
+        self.assertEqual(stats["score_failed"], 1)
+        self.assertIn("job-1", err.getvalue(),
+                      "the job that could not be scored must be named")
+
+    def test_a_non_numeric_weight_fails_every_job_loudly(self):
+        """The register's own example: a criteria weight that is not a number.
+
+        It is not one bad row -- it is every row -- and the point of the
+        isolation is that this is now REPORTED rather than raised. main()
+        turns it into a non-zero exit; see the source assertion below.
+        """
+        broken = dict(CRITERIA, base="thirty-five")
+        stats = collections.Counter()
+        with contextlib.redirect_stderr(io.StringIO()):
+            written, _deleted, _skipped = match.match_profile(
+                None, _MatchProfile(broken), self._facts(4), rebuild=True,
+                dry_run=True, stats=stats)
+        self.assertEqual(written, 0)
+        self.assertEqual(stats["score_failed"], 4)
+
+    def test_only_the_first_few_failures_are_printed(self):
+        """20,000 facts against a broken criteria file must not print 20,000
+        lines. Loud is a signal; a flood is the same silence."""
+        broken = dict(CRITERIA, base="thirty-five")
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            match.match_profile(None, _MatchProfile(broken), self._facts(50),
+                                rebuild=True, dry_run=True)
+        self.assertEqual(err.getvalue().count("could not score"), 3)
+
+    def test_an_unscorable_job_is_never_demoted(self):
+        """The dangerous fix, ruled out.
+
+        Treating a scoring exception as "below the floor" would DELETE the
+        existing match row -- so one bad weight would silently clear a
+        profile's whole list. That is worse than the crash it replaces.
+        """
+        src = inspect.getsource(match.match_profile)
+        guard = src[src.index("try:\n            score, reasons"):]
+        self.assertNotIn("to_delete.append", guard.split("continue")[0])
+
+    def test_main_exits_non_zero_when_a_profile_scores_nothing(self):
+        src = inspect.getsource(match.main)
+        self.assertIn("failed_profiles", src)
+        self.assertIn("sys.exit(1)", src)
+
+
+@unittest.skipUnless(
+    scratchdb.available(),
+    "no scratch database: set DATABASE_URL (or JOBS_SCRATCH_DATABASE_URL)")
+class TestRejectedRowsDoNotLoseTheBatch(unittest.TestCase):
+    """D20's other half: the `executemany` at `match.py:537-549` (the register
+    said `:304-316`) is one statement with no per-row isolation.
+
+    This needs a real server for the reason `evals/scratchdb.py`'s docstring
+    gives: a failed statement aborts the whole Postgres transaction, and a
+    fake connection cannot reproduce that. The trigger is not contrived --
+    `job_matches.job_id REFERENCES jobs(id)` (`schema.py:574-575`), so a
+    posting deleted between `load_facts()` and this write is a plain foreign
+    key violation, and before the fix it took every other row with it.
+    """
+
+    def _jobs(self, conn, job_ids):
+        for job_id in job_ids:
+            conn.execute(
+                f"INSERT INTO {schema.TABLE} "
+                f"(id, platform, company_token, company_name, source_id, "
+                f" title, first_seen, last_seen) "
+                f"VALUES (%s, 'greenhouse', 'acme', 'Acme', %s, 'Engineer', "
+                f"'2026-08-01T00:00:00', '2026-08-01T00:00:00')",
+                (job_id, job_id))
+        conn.commit()
+
+    def _row(self, job_id):
+        return (job_id, "tech", 50, "[]", 3, 1, "2026-08-01T00:00:00")
+
+    def test_one_row_with_no_posting_does_not_lose_the_batch(self):
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._jobs(conn, ["a", "c"])
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                failed = match.write_matches(
+                    conn, [self._row("a"), self._row("b"), self._row("c")])
+            conn.commit()
+            landed = sorted(r[0] for r in conn.execute(
+                f"SELECT job_id FROM {schema.MATCHES_TABLE}").fetchall())
+        self.assertEqual(failed, 1)
+        self.assertEqual(landed, ["a", "c"],
+                         "'b' has no posting and cannot be written; 'a' and "
+                         "'c' have one and must be")
+        self.assertIn("job_id=b", err.getvalue())
+
+    def test_a_clean_batch_stays_one_statement(self):
+        """The fallback must be a fallback. If every batch degraded to
+        row-by-row the nightly run would pay a round trip per posting."""
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._jobs(conn, ["a", "b"])
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                failed = match.write_matches(
+                    conn, [self._row("a"), self._row("b")])
+            conn.commit()
+            landed = conn.execute(
+                f"SELECT count(*) FROM {schema.MATCHES_TABLE}").fetchone()[0]
+        self.assertEqual((failed, landed), (0, 2))
+        self.assertEqual(err.getvalue(), "",
+                         "a batch that succeeded has nothing to report")
+
+    def test_the_row_by_row_pass_writes_what_the_batch_would_have(self):
+        """One SQL string, used by both paths -- so the fallback cannot
+        quietly stop matching the statement it falls back from."""
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._jobs(conn, ["a"])
+            with contextlib.redirect_stderr(io.StringIO()):
+                match.write_matches(conn, [self._row("a"), self._row("gone")])
+            conn.commit()
+            row = conn.execute(
+                f"SELECT match_score, match_reasons, facts_version, "
+                f"criteria_version, matched_at FROM {schema.MATCHES_TABLE} "
+                f"WHERE job_id = 'a'").fetchone()
+        self.assertEqual(row, (50, "[]", 3, 1, "2026-08-01T00:00:00"))
+
+    def test_match_profile_reports_rejected_rows_as_unwritten(self):
+        """`written` must be what the table holds, not what was attempted."""
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._jobs(conn, ["a"])
+            rows = [dict(facts(), job_id="a", facts_version=3),
+                    dict(facts(), job_id="gone", facts_version=3)]
+            stats = collections.Counter()
+            with contextlib.redirect_stderr(io.StringIO()):
+                written, _deleted, _skipped = match.match_profile(
+                    conn, _MatchProfile(), rows, rebuild=True, stats=stats)
+            landed = conn.execute(
+                f"SELECT count(*) FROM {schema.MATCHES_TABLE}").fetchone()[0]
+        self.assertEqual(stats["write_failed"], 1)
+        self.assertEqual((written, landed), (1, 1))
 
 
 if __name__ == "__main__":

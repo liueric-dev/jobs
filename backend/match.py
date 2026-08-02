@@ -46,6 +46,7 @@ import argparse
 import json
 import os
 import sys
+from collections import Counter
 
 import extract
 import llm
@@ -508,9 +509,83 @@ def check_criteria_sections(profile):
     return unknown
 
 
-def match_profile(conn, profile, facts, *, rebuild=False, dry_run=False):
-    """Recompute one profile's matches. Returns (written, deleted, skipped)."""
+#: The one INSERT this stage writes, hoisted so the batch path and the
+#: per-row fallback below cannot drift apart. D20: two copies of an upsert is
+#: how a fallback quietly stops matching the thing it falls back from.
+MATCH_UPSERT_SQL = f"""
+    INSERT INTO {schema.MATCHES_TABLE}
+        (job_id, profile, match_score, match_reasons,
+         facts_version, criteria_version, matched_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (job_id, profile) DO UPDATE SET
+        match_score=EXCLUDED.match_score,
+        match_reasons=EXCLUDED.match_reasons,
+        facts_version=EXCLUDED.facts_version,
+        criteria_version=EXCLUDED.criteria_version,
+        matched_at=EXCLUDED.matched_at
+"""
+
+
+def write_matches(conn, rows):
+    """INSERT every row, isolating any that the server rejects. Returns the
+    number that failed.
+
+    D20 -- WHY BATCH-THEN-RETRY AND NOT A SAVEPOINT PER ROW
+
+        `executemany` is one statement. On Postgres a failed statement aborts
+        the whole transaction, so a single rejected tuple loses every other
+        row in the batch -- and `job_matches.job_id` carries a foreign key to
+        `jobs(id)`, so "rejected" is not hypothetical: a posting deleted
+        between load_facts() and this write takes the profile's entire match
+        set with it.
+
+        `lib/upsert.py:191-197` solves the same problem with a SAVEPOINT per
+        record, and that is the right shape THERE, where every record costs a
+        SELECT anyway. Here the batch is the whole of `job_facts` for a
+        profile and the common case is that all of it is fine, so paying a
+        SAVEPOINT round trip per row every night to insure against a rare
+        FK race is the wrong trade. The batch runs first, inside its own
+        SAVEPOINT; only if it fails does the row-by-row pass run, and then
+        each row gets the isolation lib/upsert.py describes.
+
+        Not silent either way: the batch failure and every rejected row are
+        printed, and the count is returned so main() can put it in the
+        summary.
+    """
+    if not rows:
+        return 0
+    try:
+        with conn.transaction():
+            conn.cursor().executemany(MATCH_UPSERT_SQL, rows)
+        return 0
+    except Exception as e:
+        print(f"job-match: WARNING -- the {len(rows)}-row batch INSERT was "
+              f"rejected ({type(e).__name__}: {e}); retrying row by row so "
+              f"the good rows still land.", file=sys.stderr)
+
+    failed = 0
+    for row in rows:
+        try:
+            with conn.transaction():
+                conn.execute(MATCH_UPSERT_SQL, row)
+        except Exception as e:
+            failed += 1
+            print(f"job-match: WARNING -- job_id={row[0]} profile={row[1]} "
+                  f"rejected ({type(e).__name__}: {e})", file=sys.stderr)
+    return failed
+
+
+def match_profile(conn, profile, facts, *, rebuild=False, dry_run=False,
+                  stats=None):
+    """Recompute one profile's matches. Returns (written, deleted, skipped).
+
+    `stats` is an optional Counter the caller can read the D20 failure counts
+    out of (`score_failed`, `write_failed`). It is an out-parameter rather
+    than a fourth return value because `tools/mock-acceptance.py:428` unpacks
+    this into exactly three names, and a counter nobody passes costs nothing.
+    """
     check_criteria_sections(profile)
+    stats = Counter() if stats is None else stats
     seen = {} if rebuild else existing_versions(conn, profile.profile)
     now = utc_now_str()
 
@@ -520,7 +595,26 @@ def match_profile(conn, profile, facts, *, rebuild=False, dry_run=False):
         if seen.get(f["job_id"]) == current:
             skipped += 1
             continue
-        score, reasons = score_job(f, profile.criteria)
+        # D20. score_job() is pure, so the only way it raises is bad input --
+        # a non-numeric weight in criteria.json reaching `total += delta`
+        # (:152), or a facts row shaped in a way no rule anticipated. Either
+        # used to end the run for EVERY profile, including ones already
+        # computed and not yet committed.
+        #
+        # A job that fails to score is deliberately NOT added to to_delete
+        # even when it has an existing row. Demoting on an exception would
+        # let one bad weight silently clear a profile's whole match list,
+        # which is worse than the crash it replaces -- the row stays,
+        # stale-but-correct, until scoring works again.
+        try:
+            score, reasons = score_job(f, profile.criteria)
+        except Exception as e:
+            stats["score_failed"] += 1
+            if stats["score_failed"] <= 3:
+                print(f"job-match: WARNING -- {profile.profile} could not "
+                      f"score job_id={f.get('job_id')} "
+                      f"({type(e).__name__}: {e})", file=sys.stderr)
+            continue
         if score >= schema.MATCH_FLOOR:
             to_write.append((f["job_id"], profile.profile, score,
                              json.dumps(reasons), f["facts_version"],
@@ -533,20 +627,8 @@ def match_profile(conn, profile, facts, *, rebuild=False, dry_run=False):
     if dry_run:
         return len(to_write), len(to_delete), skipped
 
-    if to_write:
-        conn.cursor().executemany(
-            f"""
-            INSERT INTO {schema.MATCHES_TABLE}
-                (job_id, profile, match_score, match_reasons,
-                 facts_version, criteria_version, matched_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (job_id, profile) DO UPDATE SET
-                match_score=EXCLUDED.match_score,
-                match_reasons=EXCLUDED.match_reasons,
-                facts_version=EXCLUDED.facts_version,
-                criteria_version=EXCLUDED.criteria_version,
-                matched_at=EXCLUDED.matched_at
-            """, to_write)
+    write_failed = write_matches(conn, to_write)
+    stats["write_failed"] += write_failed
     if to_delete:
         conn.execute(
             f"DELETE FROM {schema.MATCHES_TABLE} "
@@ -557,7 +639,10 @@ def match_profile(conn, profile, facts, *, rebuild=False, dry_run=False):
         # the DELETE itself.
         log_deleted_ids(profile.profile, "demoted", to_delete)
     conn.commit()
-    return len(to_write), len(to_delete), skipped
+    # D20: rows the server rejected are not written rows. Returning
+    # len(to_write) here would report a number the table does not hold, which
+    # is the silent half of the defect rather than the loud half.
+    return len(to_write) - write_failed, len(to_delete), skipped
 
 
 def main():
@@ -593,18 +678,52 @@ def main():
         return
 
     parts = []
+    failed_profiles = []
     for prof in active:
-        written, deleted, skipped = match_profile(
-            conn, prof, facts, rebuild=args.rebuild, dry_run=args.dry_run)
-        orphaned = prune_orphans(conn, prof, facts, dry_run=args.dry_run)
+        # D20. Isolation at the profile level too, and for the same reason it
+        # exists at the record level below: this loop used to abandon every
+        # remaining profile the moment one of them raised, so a criteria file
+        # broken for ONE Builder cost the whole cohort its nightly ranking.
+        stats = Counter()
+        try:
+            written, deleted, skipped = match_profile(
+                conn, prof, facts, rebuild=args.rebuild, dry_run=args.dry_run,
+                stats=stats)
+            orphaned = prune_orphans(conn, prof, facts, dry_run=args.dry_run)
+        except Exception as e:
+            conn.rollback()
+            failed_profiles.append(f"{prof.profile}: {type(e).__name__}: {e}")
+            print(f"job-match: WARNING -- {prof.profile} failed entirely "
+                  f"({type(e).__name__}: {e}); continuing with the other "
+                  f"profiles.", file=sys.stderr)
+            parts.append(f"{prof.profile}: FAILED")
+            continue
+
+        # A profile that scored nothing because EVERY job raised is not a
+        # quiet night -- it is a broken criteria file, and it exits non-zero
+        # below rather than reporting "0 matched" like an ordinary one.
+        if stats["score_failed"] and not written:
+            failed_profiles.append(
+                f"{prof.profile}: every job failed to score "
+                f"({stats['score_failed']})")
+
         parts.append(f"{prof.profile}: {written} matched"
                      + (f", {deleted} demoted" if deleted else "")
                      + (f", {orphaned} orphaned" if orphaned else "")
-                     + (f", {skipped} current" if skipped else ""))
+                     + (f", {skipped} current" if skipped else "")
+                     + (f", {stats['score_failed']} unscorable"
+                        if stats["score_failed"] else "")
+                     + (f", {stats['write_failed']} rejected"
+                        if stats["write_failed"] else ""))
     print(f"job-match{' [dry run]' if args.dry_run else ''}: "
           f"{len(facts)} facts x {len(active)} profile(s) -- "
           + "; ".join(parts) + f", floor={schema.MATCH_FLOOR}")
     conn.close()
+
+    if failed_profiles:
+        print(f"job-match FAILED: {len(failed_profiles)} of {len(active)} "
+              f"profile(s) did not complete: {failed_profiles[:3]}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

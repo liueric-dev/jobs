@@ -199,9 +199,48 @@ def log_query_stats(conn, slug, new_count, total_fetched, days_since_last_run):
     conn.commit()
 
 
+#: Every key this script subscripts on a bucket, and on a query inside one.
+#: D18: stated as data so the check below cannot drift from the code that
+#: reads them -- `mode` in particular is not touched until AFTER the SerpApi
+#: credit for that query has already been spent.
+REQUIRED_BUCKET_KEYS = ("queries", "daily_budget")
+REQUIRED_QUERY_KEYS = ("slug", "query", "location", "mode")
+
+
 def load_query_buckets():
+    """The `buckets` object from the queries config, structurally checked.
+
+    D18 -- WHY THE CHECK IS HERE AND NOT AT THE SUBSCRIPT
+        main() wraps this call in a try that reports `FAILED: could not load
+        <file>` and exits (see below). It used to guard only the top-level
+        `buckets` key: `bucket["queries"]`, `bucket["daily_budget"]` and every
+        `q[...]` were subscripted later, in pick_stale_queries_by_bucket() and
+        in the run loop, long after the guard had returned. A config entry
+        missing one of them therefore raised an uncaught KeyError naming a bare
+        key and nothing else -- mid-run for the `q[...]` cases, with claims
+        held and credits spent.
+
+        Touching every key here means one shape of failure ("this file is
+        wrong, here is the bucket and the key") reported through one path,
+        before any query is claimed. It does NOT relax anything: a missing key
+        is still fatal, and deliberately so -- a query with no `mode` cannot be
+        normalized and a bucket with no `daily_budget` has no schedule.
+    """
     with open(GOOGLE_JOBS_QUERIES_FILE) as f:
-        return json.load(f)["buckets"]
+        buckets = json.load(f)["buckets"]
+    if not isinstance(buckets, dict):
+        raise TypeError(f"`buckets` must be an object, not "
+                        f"{type(buckets).__name__}")
+    for name, bucket in buckets.items():
+        missing = [k for k in REQUIRED_BUCKET_KEYS if k not in bucket]
+        if missing:
+            raise KeyError(f"bucket {name!r} is missing {missing}")
+        for i, q in enumerate(bucket["queries"]):
+            missing = [k for k in REQUIRED_QUERY_KEYS if k not in q]
+            if missing:
+                raise KeyError(f"query {i} in bucket {name!r} "
+                               f"({q.get('slug', 'no slug')}) is missing {missing}")
+    return buckets
 
 
 def pick_stale_queries_by_bucket(conn, buckets):
@@ -306,7 +345,10 @@ def main():
 
     try:
         buckets = load_query_buckets()
-    except (OSError, json.JSONDecodeError, KeyError) as e:
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
+        # D18: TypeError joins the tuple because load_query_buckets() now
+        # checks shape as well as presence, and a `buckets` that is not an
+        # object is the same operator error as one missing a key.
         print(f"google-jobs-serpapi ingest FAILED: could not load {GOOGLE_JOBS_QUERIES_FILE}: {e}")
         conn.close()
         sys.exit(1)
@@ -332,7 +374,24 @@ def main():
                 print(f"[debug] SerpApi fetch failed for {q['slug']}: {e}", file=sys.stderr)
             continue
 
-        records = [normalize_job(j, q["mode"]) for j in jobs]
+        # D19. Its own guard rather than the fetch tuple above, which names
+        # network exceptions only: normalize_job() fails on a result SHAPE, not
+        # on a transport error, and widening the fetch tuple to cover it would
+        # make a genuine URLError and a broken normalizer read the same in the
+        # summary. One malformed result used to kill every remaining query.
+        # The claim is released, so another machine can retry the query; the
+        # SerpApi credit for this one is already spent either way.
+        try:
+            records = [normalize_job(j, q["mode"]) for j in jobs]
+        except Exception as e:
+            query_errors.append(f"{q['slug']} (normalize): {type(e).__name__}: {e}")
+            state.release_claim(conn, dataset, table=schema.WATERMARK_TABLE)
+            print(f"google-jobs-serpapi: WARNING -- {q['slug']} returned "
+                  f"{len(jobs)} result(s) that did not normalize "
+                  f"({type(e).__name__}: {e}); continuing with the other "
+                  f"queries.", file=sys.stderr)
+            continue
+
         try:
             result = upsert_checked(conn, job_spec, records, schema.make_job_id,
                                     debug=DEBUG_PRINT_KEYS)

@@ -1103,6 +1103,32 @@ def main(argv=None):
             if DEBUG_PRINT_KEYS:
                 print(f"[debug] fetch failed for {token}: {e}", file=sys.stderr)
             continue
+        except Exception as e:
+            # D19, and D18's residue at this site. fetch_company() wraps the
+            # normalizer (:1019), so this call is no longer fetch-only -- but
+            # the tuple above still names transport failures only, and a
+            # normalizer that trips over one posting's shape raised straight
+            # past it and ended the run for all fifty-odd companies.
+            #
+            # It also catches the KeyError from FETCHERS[platform] /
+            # NORMALIZERS[platform] (:1000), which is what a roster row whose
+            # `ats` value this script has no fetcher for produces. That cannot
+            # happen through ats_sources.load_companies(), which filters on
+            # HANDLED_PLATFORMS -- but HANDLED_PLATFORMS and FETCHERS are two
+            # independent literals in two files, so "cannot" here means "as
+            # long as they agree", and tests/test_ingest_isolation.py pins that
+            # they do.
+            #
+            # Never silent: it lands in company_errors like a fetch failure, so
+            # it is in the summary line's failure count, and if every company
+            # fails the run still exits non-zero.
+            company_errors.append(f"{company['name']} ({platform}:{token}): "
+                                  f"normalize: {type(e).__name__}: {e}")
+            print(f"jobs-ingest: WARNING -- {company['name']} "
+                  f"({platform}:{token}) fetched but did not normalize "
+                  f"({type(e).__name__}: {e}); continuing with the other "
+                  f"companies.", file=sys.stderr)
+            continue
 
         try:
             result = upsert_checked(conn, ats_spec, records, schema.make_job_id,

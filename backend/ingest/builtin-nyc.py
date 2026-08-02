@@ -435,7 +435,21 @@ def main():
                 print(f"[debug] fetch failed for page {page_num}: {e}", file=sys.stderr)
             continue
 
-        records = parse_page(page_html, stats)
+        # D19. The fetch guard above is deliberately narrow -- it names the
+        # network exceptions and nothing else -- so parse_page() gets its own,
+        # rather than being moved under a tuple that would not have caught it.
+        # One page of unexpected markup is one page: without this, a card whose
+        # shape none of the regexes anticipated raised out of main() and lost
+        # every page, including the ones already parsed.
+        try:
+            records = parse_page(page_html, stats)
+        except Exception as e:
+            page_errors.append(f"page {page_num} (parse): {type(e).__name__}: {e}")
+            print(f"builtin-nyc: WARNING -- page {page_num} did not parse "
+                  f"({type(e).__name__}: {e}); continuing with the other pages.",
+                  file=sys.stderr)
+            continue
+
         all_records.extend(records)
         if DEBUG_PRINT_KEYS:
             print(f"[debug] page {page_num}: parsed {len(records)} job cards", file=sys.stderr)
