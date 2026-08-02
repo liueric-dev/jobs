@@ -233,13 +233,24 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D66](#d66) | silent data loss | **fixed** — 2026-08-01 — `job_events.app_user_id`, nullable and unbackfilled | `GET /v1/jobs` reports `seen` cohort-wide, not per Builder |
 | [D67](#d67) | silent data loss | **fixed** — 2026-08-01 — same column, same join; dedup key deliberately untouched | `applied` likewise, contradicting the `private` visibility on its own event row |
 | [D68](#d68) | silent data loss | **fixed** — 2026-08-01 — both halves; two conjuncts, one on each end of the derivation | `derive_skips` reads *and* is vetoed by another Builder's events if the client echoes their `request_id` |
-| [D69](#d69) | check with a blind spot | **PARTIALLY fixed** — 2026-08-02 — `_JOIN_CLAUSE` closes the join-fragment case; **three-part residue, recorded not closed** | `test_grants` kept only strings containing a statement keyword, so a table named solely in a hoisted `JOIN … ON` fragment was never checked for a GRANT |
+| [D69](#d69) | check with a blind spot | **PARTIALLY fixed** — 2026-08-02 — `_JOIN_CLAUSE` closes the join-fragment case; part 3 landed the same day (`schema_web.py` scanned, catalog predicate, `cascade`; re-measured, 6 names, 0 undeclared). **Two-part residue: (1) non-join fragments still open, (2) view expansion permanent. Not closed — the entry's condition names (1)** | `test_grants` kept only strings containing a statement keyword, so a table named solely in a hoisted `JOIN … ON` fragment was never checked for a GRANT |
 | [D70](#d70) | check with a blind spot | **fixed** — 2026-08-02, task 32 — `COHORT_FIELDS` derived, fixtures re-frozen, and `_KNOWN_JOBS_TUPLES` fails on a group it does not know; **two-part residue, measured and recorded not closed** — renaming `rank` still exits 0 | `frontend/verify_fixtures.py` hardcodes the tail of the expected key list, so a new response field is invisible: fixtures and verifier agree with each other and both disagree with the code |
+| [D71](#d71) | cosmetic (while undeployed) | **open** — fix before opening to more than a handful of contributors; the ceiling is a policy number nobody has picked | Contributor API: concurrent claims per contributor are uncapped — one worker can hold the entire 32-slug bank while inside its daily allowance |
+| [D72](#d72) | cosmetic (a testing gap) | **open** — fix with the scratch-schema fixture, before the service is exposed beyond the tailnet | Contributor API: the claim protocol has no test — `fakedb.py` dispatches on SQL text and cannot falsify a `WHERE` clause |
 
 **D66 and D67 were absent from this index entirely** until they were closed — added
 2026-08-01, on the lesson D45's row records four paragraphs above: *"the index is the part
 anyone scans."* A body with no index row is the same failure as an index row that
 disagrees with its body, one step earlier.
+
+**D71 and D72 were the same failure again, and it is now three times.** Both were written up
+in full on 2026-08-02 by task 24 and neither was given an index row, so the table stopped at
+D70 while the file held two more entries. Added 2026-08-02. Note the shape it takes when the
+entries are **open** rather than closed: D66 and D67 were at least discoverable as finished
+work, whereas an open defect missing from the index is *owed* work that nothing scans — the
+same invisible-in-both-directions state the nine stale `BLOCKED-BY:` entries were in. The
+lesson does not need a fourth restatement; **the row belongs in the same edit that writes
+the body**, which is what this file's own rule already says.
 
 ---
 
@@ -466,15 +477,41 @@ bank that read fine is a different fact and gets a **409**: `claim` only ever
 issues slugs from this bank, so the only route there is a dataset withdrawn
 between claim and submit. `backend/api/tests/test_query_bank.py`.
 
-### D10
+### D10 — fixed
 
-**`match.py` silently coerces a `tech_stack` JSON parse failure to
+<a id="d10"></a>
+
+**`match.py` silently coerced a `tech_stack` JSON parse failure to
 `[]`** (`backend/match.py:237-240`), losing that job's tech-match signal for
 every profile with no counter anywhere. Blast radius: all profiles (match
-stage). Disposition: **fix with harness** — task 09 (match.py fixes need the
+stage). ~~Disposition: **fix with harness** — task 09 (match.py fixes need the
 scratch database it builds, per its own "do not fix blind against
 production" principle); log a counter, no semantic change needed since `[]`
-is a reasonable fallback.
+is a reasonable fallback.~~
+
+**Fixed, task 34, 2026-07-31 (`46a5be4`).** `load_facts` now collects the id of
+every row whose `tech_stack` fails to parse and prints one stderr line naming
+the first five (`backend/match.py:390-408`). The semantics are deliberately
+unchanged — it is still `[]`, because one unreadable row must not kill a run —
+and the fix is that it is no longer *silent*. The reason that matters is in the
+comment at `:397-400`: `[]` is priced as `tech:missing` downstream, exactly like
+an honest absence, so corrupt JSON and an unextracted field scored identically
+and neither surfaced anywhere.
+
+**This never needed task 09.** Appending to a list and printing it is
+caller-side; the scratch database appears nowhere in the fix. Same shape as D17
+and as the three D05/D11/D13 cases task 42 found, which is why `BLOCKED-BY:`
+above is a token to verify rather than a fact to inherit.
+
+**No test covers the warning, and that is worth stating rather than implying.**
+`load_facts` is not exercised by the suite — verified 2026-08-02, `load_facts`
+appears in no file under `backend/tests/`. The code change is confirmed by
+direct read; the reporting path is not pinned against regression. Closing the
+entry on the code is correct, and a test here is unclaimed work, not a
+completed one.
+
+**Line cites in the original entry had drifted**, as in D03, D11 and D23:
+`:237-240` is now `:393-402`. Read the code, not the cite.
 
 ### D11 — fixed
 
@@ -501,15 +538,41 @@ The claim itself was accurate.
 **This never needed task 09** — wiring an env var and printing a list is caller-side.
 The scratch database appears in the test, not in the fix. See the note under D13.
 
-### D12
+### D12 — fixed
 
-**`criteria_json` structure is not validated at scoring time.** Every
+<a id="d12"></a>
+
+**`criteria_json` structure was not validated at scoring time.** Every
 section lookup defaults via `.get()` (`backend/match.py:97`, `:122`, `:133`,
 `:139`, `:149`, `:163`, `:173`), so a typo'd section name in a profile's
-criteria silently disables that entire section's penalty rather than
-erroring. `profiles.validate()` runs before every write but nothing re-checks
-at read time. Blast radius: all profiles (match stage). Disposition: **fix
-with harness** — task 09.
+criteria silently disabled that entire section's penalty rather than
+erroring. `profiles.validate()` runs before every write but nothing re-checked
+at read time. Blast radius: all profiles (match stage). ~~Disposition: **fix
+with harness** — task 09.~~
+
+**Fixed, task 34, 2026-07-31 (`46a5be4`).** `CRITERIA_SECTIONS`
+(`backend/match.py:485-488`) names every top-level section `score_job()` reads,
+and `check_criteria_sections()` (`:491-508`) warns on any key outside it that
+does not start with `_`. It runs once per profile per run **in the caller**
+(`:513`), never inside the scorer — `score_job()` is pure and stays pure, which
+is why this is a name list rather than a schema.
+
+**Deliberately a warning, not a raise**, and the entry should not be read as
+having asked for one. An unrecognised section may be a forward-compatible key
+from a newer version, and refusing to score a whole profile over one stray name
+is a worse failure than scoring it with one section quiet (`:494-498`). Note
+this is the *opposite* disposition to the seniority-vocabulary check D13 landed,
+which raises at import — the difference is recorded at `:89-90`: a stray section
+is one profile's own data and costs that profile, while a vocabulary drift is
+shared and costs everyone.
+
+**Four tests** at `backend/tests/test_match.py:669-724`, one of which
+(`test_every_section_score_job_reads_is_declared`, `:709`) pins the frozenset
+against `score_job()`'s own source so the hand-maintained list cannot go stale,
+and another (`:684`) asserts both shipped criteria files are clean.
+
+**This never needed task 09** either — the check reads a dict a profile already
+carries. The scratch database appears in neither the fix nor the tests.
 
 ### D13 — fixed
 
@@ -673,20 +736,47 @@ converted a scoring-time crash into a save-time one rather than removing it.
 The reasoning is left as a comment at `backend/profiles.py:139-149` so the
 absence does not read as the oversight it originally was.
 
-### D17
+### D17 — fixed
 
-**`google-apify.py`'s `run` variable is referenced before assignment when an
-actor's start response already reports `SUCCEEDED`.** `run` is bound only
+<a id="d17"></a>
+
+**`google-apify.py`'s `run` variable was referenced before assignment when an
+actor's start response already reported `SUCCEEDED`.** `run` was bound only
 inside the polling `while` body (`backend/ingest/google-apify.py:179-190`);
 a status of `SUCCEEDED` (or anything outside `("READY", "RUNNING")`) at the
 *first* check skips the loop entirely, so `run["data"]["defaultDatasetId"]`
-at line 190 raises `UnboundLocalError` — not in the caught list at
-`:223-224` — and propagates, killing the step rather than counting as an
+at line 190 raised `UnboundLocalError` — not in the caught list at
+`:223-224` — and propagated, killing the step rather than counting as an
 ordinary query error. This is "audit item 1." Whether Apify can return
 `SUCCEEDED` synchronously from run-creation was not confirmed against the
-live API. Blast radius: one source (`google-apify`). Disposition: **fix with
+live API. Blast radius: one source (`google-apify`). ~~Disposition: **fix with
 harness** — `docs/ingestion_tests/05-fetcher-harness.md` names the exact
-fixture needed: `apify-immediate-success.json`.
+fixture needed: `apify-immediate-success.json`.~~
+
+**Fixed, task 34, 2026-07-31 (`46a5be4`).** `run = start` before the loop
+(`backend/ingest/google-apify.py:186`) is the whole fix, two lines with the
+comment. It is correct rather than a placeholder for the reason recorded at
+`:180-185`: Apify's start endpoint and its run endpoint return the same
+`{"data": {...}}` run resource, `defaultDatasetId` included, so the start
+response **is** the answer when the run is already done. `:198` reads it
+unchanged.
+
+**The cheapest confirmed bug in the repo**, and the cost of leaving it was not
+an exception: it was a **paid Apify run whose results are never collected**,
+reported as one failed query among many.
+
+**The reproduction was already committed before the fix existed.**
+`backend/tests/test_ingest_cassettes.py:790` asserted the `UnboundLocalError` on
+purpose, with a note saying whoever fixes the defect flips the assertion. It is
+flipped and now asserts the rows. The fixture `05-fetcher-harness.md:68` named
+is **derived in code, not committed as a second file** (`:745-760`):
+`_immediate_success()` rewrites the recorded run object's status and serves it
+as the start response, so the same recorded bytes drive both cases and a copy
+cannot silently stop matching its recording.
+
+**The harness this was blocked on had landed three tranches earlier** (task 09,
+`68f026f`) and nothing rescheduled it. That is the failure the `BLOCKED-BY:`
+token at the top of this file exists to make greppable.
 
 ### D18 — fixed
 
@@ -1366,18 +1456,42 @@ still most of a 32-slug bank. `job_ingest_state.claimed_by` makes a
 concurrency cap a one-query check; it is not built and is written up in task
 24's "What the work turned up".
 
-### D42
+### D42 — fixed
 
-**`hn-hiring.py` re-fetches HN items answering `null` forever.** `if not
-comment: continue` (`backend/ingest/hn-hiring.py:409-410`) returns *before*
-the ledger insert at `:412`, so an id HN answers with `null` is never marked
-seen and is refetched on every subsequent run. This is "audit item 5." Not
+<a id="d42"></a>
+
+**`hn-hiring.py` re-fetched HN items answering `null` forever.** `if not
+comment: continue` (`backend/ingest/hn-hiring.py:409-410`) returned *before*
+the ledger insert at `:412`, so an id HN answers with `null` was never marked
+seen and was refetched on every subsequent run. This is "audit item 5." Not
 data loss — the comment never produced a row either way — but a permanent,
 low-volume waste of requests with no comment explaining why null bodies
 should behave differently from the deliberate "transient failure, don't
 mark seen" convention already used for fetch errors at the same site.
-Disposition: fix with harness — task 09 lists this as naturally expressible
-as a cassette test (`fixtures/cassettes/hn-item-null.json`).
+~~Disposition: fix with harness — task 09 lists this as naturally expressible
+as a cassette test (`fixtures/cassettes/hn-item-null.json`).~~
+
+**Fixed, task 34, 2026-07-31 (`46a5be4`).** The null branch now inserts into
+`hn_seen_comments` before continuing (`backend/ingest/hn-hiring.py:382-399`),
+and the comment there states the distinction the original code lacked: a null
+item is HN answering *"this comment is gone"*, which is **permanent**, unlike
+the fetch failure immediately above it at `:376-381`, which is transient and
+still correctly declines to mark seen. The defect was a permanent condition
+sitting on the transient path.
+
+**Marked seen but deliberately NOT counted as declined** (`:390-392`).
+`declined` means "fetched and judged irrelevant", and a comment that no longer
+exists was never judged. It gets its own counter, `null_items`, returned from
+`read_comments` (`:398`, `:411`) and reported in the summary.
+
+**A test**, `test_a_null_item_replays_as_None`
+(`backend/tests/test_ingest_cassettes.py:262`), driven by the recorded bytes:
+HN answers a nonexistent id with the four bytes `null`, and the cassette holds
+that. No hand-written fixture was needed.
+
+**Later refactored, not re-fixed.** `2a94f3d` (task 42) moved the counter into
+`read_comments` as part of that function's extraction; `git log -S null_items`
+shows both commits and only the first is the fix.
 
 ---
 
@@ -1682,11 +1796,12 @@ permanent:**
    job_scores` and a plain view runs with the **caller's** privileges. Those entries come
    from the view definition in `backend/schema.py`, another process's file. **No scanner over
    this package's own strings can derive them.**
-3. **A module outside `SERVICE_MODULES` is unscanned.** `profiles` is in real SQL at
+3. ~~**A module outside `SERVICE_MODULES` is unscanned.**~~ **CLOSED 2026-08-02 — see
+   *Residue part 3 is landed* below.** `profiles` was in real SQL at
    `webapp/schema_web.py:769` — `WHERE NOT EXISTS (SELECT 1 FROM profiles p …)`, running as
-   the service role at startup — and that file is not in the tuple, deliberately, because it
+   the service role at startup — and that file was not in the tuple, deliberately, because it
    also holds admin-only DDL whose every `CREATE` would read as a table the service needs
-   granted. That file now documents this against itself: *"the one place in the package where
+   granted. That file documented this against itself: *"the one place in the package where
    a service-role query's tables are declared by hand and checked by nothing."*
 
    > **MEASURED 2026-08-02 rather than left as a question, and it surfaces NO missing grant
@@ -1722,10 +1837,83 @@ permanent:**
    > `CREATE`s would read as tables the service needs granted, as `SERVICE_MODULES`' own
    > comment says.
 
+#### Residue part 3 is landed, 2026-08-02
+
+**The recorded measurement was re-run rather than inherited, and it reproduced exactly.**
+That was not a formality: the note above was measured the same day task 26's
+`builder_profiles` FK landed, so anything committed since could have added a sixth name.
+Nothing did. Scanning `schema_web.py` at HEAD yields six names and the same six:
+
+| name | where it comes from | verdict |
+|---|---|---|
+| `profiles` | `schema_web.py:831`, `WHERE NOT EXISTS (SELECT 1 FROM profiles p …)` | **real, and the reason part 3 mattered** — service-role SQL, already declared |
+| `app_users` | `:831`, `FROM app_users u` in the same query | real, already declared |
+| `oauth_logins` | `DELETE FROM oauth_logins WHERE expires_at < %s` | real, already declared |
+| `pg_constraint` | `:400` and `:425`, `SELECT 1 FROM pg_constraint WHERE conname = …` | catalog, excluded |
+| `information_schema` | `:773`, `FROM information_schema.columns` | catalog, excluded |
+| `cascade` | `:605`, `ON DELETE CASCADE ON UPDATE CASCADE` | grammar, excluded |
+
+**Zero undeclared tables** — so this part of the residue was future-proofing, exactly as the
+note predicted, and closing it adds no GRANT. The deliverable of a widening is the list of
+what it newly catches, not a green: widening a scanner can only ever *add* findings, and a
+suite that stays green proves nothing about them. Each of the six is now pinned by its own
+assertion in `TestSchemaWebIsScanned` (`backend/webapp/tests/test_grants.py`) rather than by
+a count, so a seventh name cannot arrive unnoticed.
+
+**All three changes landed as specified**, and the two exclusions cleared the bar the note
+set for them — SQL grammar and a closed namespace, not English words admitted to quiet a
+finding. `test_the_widening_needed_no_new_alias_or_keyword` moved with `_KEYWORDS` and now
+also asserts every entry in it is something `_FROM_JOIN` actually captures, so a dead
+keyword cannot accumulate. Falsified rather than assumed: disabling `_is_catalog` and
+reverting `_KEYWORDS` turns the file red — four failures, in both new classes and the
+existing one. A widening whose exclusions are never falsified is a widening nobody checked.
+
+**One premise of the note was wrong, and it is the one that argued for the exclusion.** The
+DDL was never a hazard: `_FROM_JOIN` keys on `FROM`/`JOIN`/`INTO`/`UPDATE`, and
+`CREATE TABLE IF NOT EXISTS <name>` matches none of them, so a `CREATE` contributes no table
+name at all. The `cascade` capture comes from a foreign-key clause, not from the table being
+created. So the reason `schema_web.py` was left out did not hold even when it was written —
+what the exclusion actually cost was the `profiles` query, and what it actually saved was
+three lines of exclusion. Pinned by `test_no_ddl_table_name_leaks_in_from_the_admin_half`,
+so if that ever stops being true the exclusion argument comes back on evidence.
+
+**Every line cite in the note above had drifted**, which is this register's most repeated
+finding (D03, D11, D13, D23, D10): `schema_web.py:769` → `:831`, and the FK pair `:560`/`:606`
+→ `:605`/`:651`. The claims were all accurate. **Read the code, not the cite.**
+
+**`manage_app_users.py` stays excluded**, and one thing is worth recording against a future
+argument to include it: it is excluded on the *role* it runs as, not on what it would yield.
+Measured 2026-08-02, it names `app_users` and `app_sessions` and nothing undeclared — so
+including it would be harmless today and would still be wrong tomorrow, because the reason
+is that admin-role SQL is not a claim about service-role grants.
+
+#### Still open, and here is the condition being applied rather than waived
+
 **Together these are the argument for `REQUIRED_TABLES` staying hand-written rather than
 derived**, which is a better justification than the file previously carried. All three are
 recorded in `sql_strings_in()`'s docstring under their own heading. **Do not close this
 without addressing (1), or restating (2) and (3) as accepted limits.**
+
+**NOT CLOSED, 2026-08-02, and the entry's own condition is why.** Closure requires (1)
+addressed **or** (2) and (3) restated as accepted limits. What happened is neither:
+
+- **(1) is untouched.** A hoisted bare `FROM <table>` tail, a WHERE clause, a CTE body or a
+  subquery string with no statement keyword and no `JOIN … ON` is still dropped. That is the
+  general form of *"is this string SQL"*, it is not a regex, and nothing in this change
+  approached it.
+- **(2) remains permanent and is restated as an accepted limit.** A table reached through a
+  view cannot be derived from this package's own strings, because the expansion lives in
+  `backend/schema.py`, another process's file. No version of this scanner closes it.
+- **(3) is no longer a limit at all** — it was *fixed*, not accepted. That is the important
+  distinction: closing D69 now would record an accepted limit where a fix exists, and
+  restating (2) alone does not satisfy a condition that names (2) **and** (3).
+
+So the disposition moves from **three-part residue** to **two-part residue, one fixed and
+one permanent** — and it stays **PARTIALLY fixed**, which is a status rather than an
+oversight. The register's failure mode is confident stale text in both directions:
+D45's body said fixed while its index said open, and D10/D12/D17/D42 said open while the
+code said fixed. Closing an entry whose stated condition is unmet would be the third shape
+of the same thing.
 
 ---
 

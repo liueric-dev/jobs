@@ -65,15 +65,17 @@ REQUIRED_TABLES = {
     # is the actual reason this line exists.
     #
     # AND IT IS STILL THE ONLY ENTRY IN THIS DICT THAT DEPENDS ON THAT FIX.
-    # Measured across all six SERVICE_MODULES, not assumed: every other table
-    # named in this package's SQL appears in a string that also carries a
+    # Measured across every module in SERVICE_MODULES, not assumed: every other
+    # table named in this package's SQL appears in a string that also carries a
     # statement keyword, so `_STATEMENT` alone would find it. This one appears
     # ONLY in the join fragment. Narrow the scanner back and it re-hides
     # immediately -- which is why the paragraph above is worth its length.
+    # (No count is typed here on purpose: SERVICE_MODULES has grown twice since
+    # this line was written, and a number here would have been wrong both times.)
     #
-    # THAT IS NOT THE SAME AS "everything else is checked". Four entries below
-    # are justified in ways NO version of this scanner can derive, two of them
-    # load-bearing today. test_grants.sql_strings_in()'s docstring owns that
+    # THAT IS NOT THE SAME AS "everything else is checked". Entries below are
+    # justified in ways NO version of this scanner can derive -- the view
+    # expansion above all. test_grants.sql_strings_in()'s docstring owns that
     # list; it is not restated here, because a second copy of it is exactly the
     # drift the ownership rule at the top of this file exists to prevent.
     # tranche_five/28, D69.
@@ -808,17 +810,22 @@ def profile_mapping_problems(conn):
     already reported by the caller, and a second complaint derived from the
     first would bury it.
 
-    THE SQL BELOW RUNS AS THE SERVICE ROLE AND IS NOT WATCHED BY
-    tests/test_grants.py. That test scans SERVICE_MODULES, which is auth.py,
-    jobs.py, db.py, app.py, label.py and onboarding.py -- this file is not in it,
-    deliberately, because it also holds the admin-only DDL above and every CREATE
-    would read as a table the service needs granted. So this function is the one
-    place in the package where a service-role query's tables are declared by hand
-    and checked by nothing. Both of them, `app_users` and `profiles`, are already
-    in REQUIRED_TABLES with SELECT for other reasons, so nothing is missing
-    today; a query added here naming a THIRD table would need its own entry and
-    would go red nowhere. It is the third shape of D69's residue -- the other two
-    are in test_grants.sql_strings_in()'s docstring, which owns that list.
+    THE SQL BELOW RUNS AS THE SERVICE ROLE AND IS NOW WATCHED BY
+    tests/test_grants.py -- D69 residue part 3, closed 2026-08-02. It used to be
+    the one place in the package where a service-role query's tables were
+    declared by hand and checked by nothing: this file was excluded from
+    SERVICE_MODULES deliberately, because it also holds the admin-only DDL above
+    and every CREATE was assumed to read as a table the service needs granted.
+
+    THAT ASSUMPTION WAS WRONG, which is why the exclusion could go. The scanner
+    keys on FROM/JOIN/INTO/UPDATE, and `CREATE TABLE IF NOT EXISTS <name>`
+    matches none of them, so the DDL contributes no table name at all. What the
+    exclusion actually cost was this query. Both its tables, `app_users` and
+    `profiles`, were already in REQUIRED_TABLES with SELECT for other reasons, so
+    nothing was missing when it was found -- but a query added here naming a
+    THIRD table would have needed its own entry and would have gone red nowhere.
+    Now it goes red here. Kept in the past tense rather than deleted, because
+    "checked by nothing" is the reason this paragraph exists.
     """
     for table in ("app_users", "profiles"):
         if conn.execute("SELECT to_regclass(%s)", (f"public.{table}",)

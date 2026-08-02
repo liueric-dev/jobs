@@ -27,8 +27,19 @@ import schema_web  # noqa: E402
 #: Modules whose SQL runs as the restricted service role. manage_app_users.py
 #: is excluded on purpose: init-schema runs as the admin role, and its CREATE
 #: statements would otherwise read as tables the service needs granted.
+#:
+#: schema_web.py IS SCANNED, and that is D69 residue part 3. It holds admin-only
+#: DDL, which is why it was left out originally -- but the exclusion also hid a
+#: real service-role query: `WHERE NOT EXISTS (SELECT 1 FROM profiles p ...)`,
+#: which runs as the service role at startup. The DDL turns out not to be the
+#: hazard it was assumed to be: `_FROM_JOIN` keys on FROM/JOIN/INTO/UPDATE, and
+#: `CREATE TABLE IF NOT EXISTS <name>` matches none of them, so a CREATE
+#: contributes no table name at all. Measured rather than argued -- scanning
+#: this file adds exactly `profiles` (already declared), `information_schema`
+#: and `pg_constraint` (catalog, excluded below) and `cascade` (SQL grammar,
+#: in _KEYWORDS below). No CREATE'd table name among them.
 SERVICE_MODULES = ("auth.py", "jobs.py", "db.py", "app.py", "label.py",
-                   "onboarding.py", "search.py")
+                   "onboarding.py", "search.py", "schema_web.py")
 
 #: Aliases bound inside the SQL itself -- subquery, lateral and correlation
 #: names. They follow FROM/JOIN syntactically but are not tables to grant.
@@ -37,10 +48,26 @@ _ALIASES = {"m", "s", "e", "v", "u", "ev", "bs", "prior", "public", "lateral"}
 #: Keywords that follow one of the words below syntactically and are not names
 #: of anything. `set` is here because an upsert reads `ON CONFLICT ... DO UPDATE
 #: SET`, and the pattern below cannot tell that UPDATE from the statement kind.
+#: `cascade` is EXACTLY the same case one clause over -- a foreign key reads
+#: `ON DELETE CASCADE ON UPDATE CASCADE`, so `_FROM_JOIN` reads the second
+#: CASCADE as a table name following UPDATE. Both are SQL grammar that happens
+#: to follow UPDATE, not English words admitted to quiet a finding; that
+#: distinction is the one that keeps this set honest, and a future addition
+#: that is not SQL grammar is the signal to narrow the pattern instead.
 #: Kept separate from _ALIASES on purpose: an alias is something the SQL bound
 #: and a keyword is something it did not, and collapsing the two would let a
 #: real missing GRANT hide behind a plausible-looking word.
-_KEYWORDS = {"set"}
+_KEYWORDS = {"set", "cascade"}
+
+#: The system catalogs. Readable by every role by default, granted to nobody
+#: explicitly, and therefore never entries in REQUIRED_TABLES. Unlike the
+#: English words that ruled out the naive `_FROM_JOIN` widening, this namespace
+#: is CLOSED and well-defined -- `pg_*` plus `information_schema` is the whole
+#: of it -- which is what makes excluding it a rule rather than a quieting.
+#: Reached by schema_web.py's introspection: `FROM pg_constraint WHERE conname
+#: = ...` and `FROM information_schema.columns WHERE table_schema = ...`.
+def _is_catalog(name):
+    return name == "information_schema" or name.startswith("pg_")
 
 _STATEMENT = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE)\b", re.I)
 _FROM_JOIN = re.compile(r"\b(?:FROM|JOIN|INTO|UPDATE)\s+([a-z_][a-z0-9_]*)", re.I)
@@ -106,12 +133,19 @@ def sql_strings_in(path):
     REQUIRED_TABLES lists `jobs`, stated at the top of ../schema_web.py. No
     scanner over this package's own strings can derive those entries; they come
     from the view's definition, which lives in another process's file.
-    `profiles` is a third shape again -- named in real SQL, but in
-    ../schema_web.py:769, which is not in SERVICE_MODULES.
 
-    So a declared table can be justified three ways this test cannot check, and
-    two of them are load-bearing today. TestTheScannerSeesJoinOnlyFragments
-    pins what it CAN check; the rest is why REQUIRED_TABLES stays hand-written
+    `profiles` USED TO BE A THIRD SHAPE -- named in real SQL, but in
+    ../schema_web.py, which was not in SERVICE_MODULES. That is D69 residue part
+    3 and it is CLOSED: that file is scanned as of 2026-08-02, the query is seen,
+    and TestSchemaWebIsScanned pins all six names it yields one assertion each.
+    Re-measured at that commit rather than inherited from the note that proposed
+    it, because widening a scanner can only ADD findings and the deliverable is
+    the list of what it adds. Zero undeclared.
+
+    So a declared table can be justified two ways this test cannot check -- the
+    view expansion above, and a fragment that is neither a statement nor a
+    JOIN ... ON. TestTheScannerSeesJoinOnlyFragments and TestSchemaWebIsScanned
+    pin what it CAN check; the rest is why REQUIRED_TABLES stays hand-written
     rather than derived.
 
     An f-string is REASSEMBLED from its literal segments before being tested,
@@ -156,7 +190,7 @@ def tables_named_in(path):
     for sql in sql_strings_in(path):
         for match in _FROM_JOIN.finditer(sql):
             name = match.group(1).lower()
-            if name not in _ALIASES and name not in _KEYWORDS:
+            if name not in _ALIASES and name not in _KEYWORDS and not _is_catalog(name):
                 found.add(name)
     return found
 
@@ -205,11 +239,89 @@ class TestTheScannerSeesJoinOnlyFragments(unittest.TestCase):
         # The check on the check. Widening a scanner can only ADD findings, so
         # the honest deliverable is the list of what it adds -- and every
         # addition must be a real missing grant, a real alias, or a real
-        # keyword. This one added exactly `cohort_signal`, a real missing
-        # grant, so these two sets are untouched by it. If a future widening
-        # needs an English word in either, narrow the pattern instead.
+        # keyword. The _JOIN_CLAUSE widening added exactly `cohort_signal`, a
+        # real missing grant, and needed neither set touched.
+        #
+        # _KEYWORDS GREW BY ONE WITH THE schema_web.py WIDENING, and the bar it
+        # had to clear is stated in the comment on that set: an addition must be
+        # SQL GRAMMAR following UPDATE, not an English word admitted to quiet a
+        # finding. `cascade` is `ON DELETE CASCADE ON UPDATE CASCADE`, which is
+        # `set`'s case exactly. If a future widening needs a word that is not
+        # SQL grammar in either set, narrow the pattern instead.
         self.assertNotIn("cs", _ALIASES, "the alias is never captured; only the table is")
-        self.assertEqual(_KEYWORDS, {"set"})
+        self.assertEqual(_KEYWORDS, {"set", "cascade"})
+        for keyword in _KEYWORDS:
+            self.assertIsNotNone(
+                _FROM_JOIN.search(f"ON CONFLICT DO UPDATE {keyword}"),
+                f"{keyword} is in _KEYWORDS but _FROM_JOIN never captures it, so "
+                f"the entry is dead and hides nothing")
+
+
+class TestSchemaWebIsScanned(unittest.TestCase):
+    """D69 residue part 3. schema_web.py was outside SERVICE_MODULES, so the one
+    service-role query in it -- `SELECT 1 FROM profiles p` inside a NOT EXISTS,
+    running at startup -- was declared by hand and checked by nothing.
+
+    THE DELIVERABLE OF A WIDENING IS THE LIST OF WHAT IT ADDS, each confirmed
+    individually, because widening a scanner can only ever ADD findings and a
+    green run proves nothing about them. Re-measured at HEAD rather than
+    inherited from the 2026-08-02 note: the file yields six names, and these
+    tests are one assertion per name so that a future addition cannot slip in
+    under a count."""
+
+    def _named(self):
+        return tables_named_in(os.path.join(WEBAPP_DIR, "schema_web.py"))
+
+    def test_the_service_role_query_in_schema_web_is_now_seen(self):
+        # The reason the exclusion mattered. This is real SQL, run as the
+        # service role, and `profiles` was declared only because someone
+        # remembered to.
+        self.assertIn("profiles", self._named())
+        self.assertIn("profiles", schema_web.REQUIRED_TABLES)
+
+    def test_the_other_two_real_names_are_already_declared(self):
+        named = self._named()
+        for table in ("app_users", "oauth_logins"):
+            self.assertIn(table, named)
+            self.assertIn(table, schema_web.REQUIRED_TABLES)
+
+    def test_the_catalog_names_are_excluded_not_declared(self):
+        # `FROM pg_constraint` and `FROM information_schema.columns` are
+        # introspection, readable by every role and granted to nobody. They must
+        # not reach REQUIRED_TABLES and must not be reported undeclared either.
+        for name in ("pg_constraint", "information_schema"):
+            self.assertTrue(_is_catalog(name))
+            self.assertNotIn(name, self._named())
+            self.assertNotIn(name, schema_web.REQUIRED_TABLES)
+
+    def test_cascade_is_excluded_as_grammar_not_as_a_table(self):
+        # Task 26's builder_profiles FK is what put `ON UPDATE CASCADE` in this
+        # file; it carried none before. Confirmed as grammar, not a name: the
+        # capture comes from the FK clause and nothing declares a table by it.
+        self.assertIn("cascade", _KEYWORDS)
+        self.assertNotIn("cascade", self._named())
+        self.assertIsNotNone(
+            _FROM_JOIN.search("ON DELETE CASCADE ON UPDATE CASCADE"),
+            "the premise: this is why cascade needs an entry at all")
+
+    def test_the_catalog_predicate_does_not_swallow_a_real_table(self):
+        # The risk of any namespace exclusion: a real table whose name starts
+        # the same way. `pg_` is a reserved prefix in Postgres, so this cannot
+        # collide with an application table -- but the assertion is cheap and
+        # the failure would be silent.
+        for table in schema_web.REQUIRED_TABLES:
+            self.assertFalse(_is_catalog(table),
+                             f"{table} is declared AND reads as a catalog name")
+
+    def test_no_ddl_table_name_leaks_in_from_the_admin_half(self):
+        # The original reason for the exclusion, tested rather than assumed.
+        # _FROM_JOIN keys on FROM/JOIN/INTO/UPDATE, and `CREATE TABLE IF NOT
+        # EXISTS <name>` matches none of them, so the DDL contributes no names.
+        # If that ever changes, this file's CREATEs would start reading as
+        # tables the service needs granted and the exclusion should come back.
+        self.assertIsNone(
+            _FROM_JOIN.search("CREATE TABLE IF NOT EXISTS builder_profiles ("))
+        self.assertNotIn("builder_profiles_parent", self._named())
 
 
 class TestGrantsCoverTheSQL(unittest.TestCase):
