@@ -6,11 +6,23 @@ generator: none
 
 # 21 — Nonprofit and civic boards
 
-**Status:** todo. **Depends on:** 19. **Blocks:** nothing.
-**Estimated yield:** 10–25 relevant postings/day.
+**Status:** todo. **Depends on:** ~~19~~ **nothing — 19 is DROPPED**. **Blocks:** nothing.
+**Estimated yield:** ~~10–25 relevant postings/day~~ **10–25, unverified**.
 
-The smallest yield in Phase 3 and arguably the best-fitting. Cheap because task 19's
-parser does most of the work.
+> **PREMISE BROKEN, flagged in `README.md` since task 34 and in this file 2026-08-02.**
+> [`../README.md`](../README.md)'s Phase 3 row has carried the flag; the file it points at
+> did not, so anyone who followed the link read the original premise as current. Task 20 had
+> the same defect and was flagged the same day.
+>
+> Task **19 is dropped** — 2 of 55 employers publish `JobPosting`, 1 of 35 in the target
+> population ([`../../../jsonld-coverage.md`](../../../jsonld-coverage.md) owns that figure).
+> So "cheap because task 19's parser does most of the work" is false, and the cost of this
+> task is unestimated rather than small. **Re-scope or measure first.** What survives
+> untouched is everything that is not parsing: board selection, the employer-discovery side
+> effect, and the mission-alignment argument below.
+
+~~The smallest yield in Phase 3 and arguably the best-fitting. Cheap because task 19's
+parser does most of the work.~~
 
 ## Why these belong in the plan
 
@@ -61,8 +73,11 @@ yield does not justify heroics.
 Idealist's per-listing expiration date is the good case: set `closed_at` directly,
 same as NYC Open Data's `post_until` and JSON-LD's `validThrough`.
 
-For boards without one, fall back to task 19's decaying re-crawl. Do not build a
-third closure mechanism.
+For boards without one, ~~fall back to task 19's decaying re-crawl~~ **there is no
+fallback to inherit — 19 is dropped and its decaying re-crawl was never built.** Reuse
+`ingest/nyc-open-data.py`'s `post_until` closure or state that closure is unsolved for
+these boards; do not build a third closure mechanism, and do not cite a second one that
+does not exist.
 
 ## Employer discovery, as a side effect
 

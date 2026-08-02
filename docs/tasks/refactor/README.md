@@ -64,7 +64,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | 17 | [Retarget `ats.py`](tranche_three/17-retarget-ats-ingest.md) | roster from `company_ats`; **six vendors** (3 new); closure conditional on reconciliation — done, [`docs/ingest/ats.md`](../../ingest/ats.md) | 50–150 |
 | 18 | [Workday CXS ingest](tranche_three/18-ingest-workday-cxs.md) | `/wday/cxs/` + **upstream relevance gating** — done; 1,366 reachable/night from 4 tenants at 11% detail cost. **Yield deliberately not reported until task 13**, [`docs/ingest/workday.md`](../../ingest/workday.md) | re-measure |
 | 19 | [JSON-LD parser](tranche_three/19-jsonld-parser.md) | measured before building — **2 of 55 employers publish `JobPosting`, 1 of 35 in the target population. DROPPED**, [`docs/jsonld-coverage.md`](../../jsonld-coverage.md) | ~~30–60~~ **≤1.1–2.3 (ceiling)** |
-| 20 | [iCIMS via Firecrawl](tranche_three/20-ingest-icims-firecrawl.md) | reserved 1,000 credits/month | 20–40 |
+| 20 | [iCIMS via Firecrawl](tranche_three/20-ingest-icims-firecrawl.md) | reserved 1,000 credits/month — **premise broken, the same defect as 21 and flagged 2026-08-02: it declares `Depends on: 16, 19` and its "what makes it tractable" rests on iCIMS detail pages carrying `schema.org/JobPosting` JSON-LD, which is precisely the coverage task 19 measured and failed ([`docs/jsonld-coverage.md`](../../jsonld-coverage.md)). 19 is dropped, so the extraction half of this task has no parser and its Definition of done cites one. The *fetching* half — Firecrawl budget, `curl_cffi` first, the quota ledger — is untouched by this. Re-scope or measure first** | 20–40, unverified |
 | 21 | [Nonprofit boards](tranche_three/21-ingest-nonprofit-boards.md) | Idealist and peers — **premise broken: it was "cheap because task 19's parser does most of the work", and 19 is dropped. Re-scope or measure first** | 10–25, unverified |
 
 ## Phase 4 — Google Jobs
@@ -72,7 +72,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 | | Task | Lands | |
 |---|---|---|---|
 | 22 | [JobSpy spike](tranche_four/22-jobspy-spike.md) | does self-hosted work from the home IP — **no: dropped**, [`docs/jobspy-spike.md`](../../jobspy-spike.md) | done |
-| 23 | [SERP abstraction](tranche_four/23-serp-abstraction.md) | `serp/` package, provider adapters, quota ledger, router, cache — **descoped**: 2 adapters not 8, no JobSpy, no router step 2 | todo |
+| 23 | [SERP abstraction](tranche_four/23-serp-abstraction.md) | `serp/` package, provider adapters, quota ledger, router, cache — **descoped**: 2 adapters not 8, no JobSpy (task 22 dropped it), no router step 2. **The descope is a decision taken, not work done** — `backend/serp/` does not exist, which is why this row still reads `todo`; the two words were read as contradicting each other and do not (corrected 2026-08-02). [`DECISIONS.md`](DECISIONS.md) also argues it should not block 24 and 25 | todo |
 | 24 | [Revive the contributor API](tranche_four/24-revive-contributor-api.md) | `backend/api/` deployed; Builder key onboarding | todo |
 | 25 | [Search queries](tranche_four/25-search-queries.md) | query as a first-class object, caching, cohort signal | todo |
 
