@@ -2,6 +2,7 @@
 kind: contract
 script: backend/ingest/builtin-nyc.py
 written: 2026-07-27
+revised: 2026-08-02
 code_at: dd49a27
 generator: none
 ---
@@ -80,8 +81,10 @@ deliberate sleeps, not by the network:
   last row (`:311`, `:310`) = up to ~118s at the default budget of 60.
 
 So ~2 minutes of sleep per full run, plus up to 63 requests at a 30-second
-timeout each (`http.DEFAULT_TIMEOUT`, `backend/lib/http.py:28`, passed at
-`:182` and `:241`).
+timeout each (`http.DEFAULT_TIMEOUT`, `backend/lib/http.py:28` — the default
+inside `http.get_text` for the listing pass, passed explicitly at the detail
+fetch). **Since 2026-08-02 the listing pass can also spend backoff on a
+retry**; the detail pass cannot, by design. See *Retry policy and backoff*.
 
 ### Concurrent runs
 
@@ -276,13 +279,38 @@ earlier attach-to-records approach.
 
 ### Retry policy and backoff
 
-**There is none, in either phase.** Both `fetch_page` (`:182`) and
-`fetch_description` (`:241`) call `urllib.request.urlopen` directly. The
-module imports `lib.http` (`:126`) but uses only `http.DEFAULT_TIMEOUT`.
+~~**There is none, in either phase.** Both `fetch_page` and
+`fetch_description` call `urllib.request.urlopen` directly. The module imports
+`lib.http` but uses only `http.DEFAULT_TIMEOUT`. So: 1 attempt, no backoff, no
+`Retry-After`, 30-second timeout.~~
 
-So: 1 attempt, no backoff, no `Retry-After`, 30-second timeout. Same gap as
-`ingest/weworkremotely.py`; contrast `ingest/ats.py`, which retries 429/5xx
-five times (`backend/lib/http.py:62-93`).
+**Revised 2026-08-02 by D31's disposition (`DEC-96`). The two phases now
+differ, and that is the decision, not an oversight:**
+
+| | `fetch_page` (listing) | `fetch_description` (detail) |
+|---|---|---|
+| transport | `http.get_text` | `urllib.request.urlopen`, still |
+| attempts | 5 (`backend/lib/http.py:29`) | **1** |
+| backoff, `Retry-After` | yes | no |
+| a 429 | retried, then surfaces as a page error | `RateLimited` **immediately**, abandoning the pass |
+
+This script is the only one where the split lives inside one file, so the
+reason is worth stating rather than inferring. The listing pass is at most
+`MAX_PAGES` paced requests and a lost page costs a whole screen of cards, so
+retrying is straightforwardly right. The detail pass is a budgeted crawl of up
+to `DETAIL_FETCH_LIMIT` pages against a host that has to be left alone the
+moment it objects — and `lib.http` answers a 429 by making four more requests
+on a schedule, which is precisely what `RateLimited`'s docstring forbids.
+
+`max_retries=1` was considered and rejected: `lib/http.py` prints its
+`[retry] … waiting 8.3s` line before it decides whether another attempt
+exists, so a one-attempt call announces a wait it never takes. A false log
+line is worse than no retry logic in a pipeline whose stated failure mode is
+silence.
+
+`backend/tests/test_ingest_retry.py` pins both halves — including that
+`fetch_description` issues exactly one request per posting, which is a test
+designed to fail for whoever next decides to make this uniform.
 
 ### Rate limits
 
@@ -295,9 +323,12 @@ spent hammering a host that already said no". The caller catches it and
 `break`s out of the pass entirely (`:293-301`), printing a line that names the
 two variables to adjust.
 
-The listing pass has **no** such handling — a 429 on `fetch_page` is caught by
-the generic `HTTPError` clause at `:384` and recorded as an ordinary page
-error.
+The listing pass has no such handling of its own. ~~A 429 on `fetch_page` is
+caught by the generic `HTTPError` clause and recorded as an ordinary page
+error.~~ **Since 2026-08-02** it is retried inside `lib.http` with
+`Retry-After` honored first, and only reaches that generic clause if all five
+attempts fail. See *Retry policy and backoff* above for why the two passes
+answer a 429 differently on purpose.
 
 Pacing is two fixed sleeps: 2.5s between listing pages (`:134`, `:396`) and
 2.0s between detail fetches (`:142`, `:311`), both skipped after the final

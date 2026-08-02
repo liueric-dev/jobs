@@ -142,9 +142,8 @@ results for that query, not an exhaustive "all open postings" list.
 import os
 import sys
 import json
-import urllib.request
 import urllib.parse
-import urllib.error
+import urllib.error   # D31: the fetch moved to lib.http; the except tuple stayed
 from datetime import datetime, timedelta, timezone
 
 
@@ -323,9 +322,22 @@ def serpapi_search(query, location, date_chip=None):
     if date_chip:
         params["chips"] = f"date_posted:{date_chip}"
     url = "https://serpapi.com/search.json?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"User-Agent": "hermes-jobs-ingest/1.0"})
-    with urllib.request.urlopen(req, timeout=http.DEFAULT_TIMEOUT) as resp:
-        data = json.loads(resp.read().decode())
+    # D31. Through lib.http since 2026-08-02. Two things this buys that the
+    # bare urlopen did not:
+    #
+    #   - a 429 backs off and honours Retry-After instead of losing the query
+    #     for the run. The credit is not lost either way (the claim is
+    #     released and last_success_at does not advance), but a lost query is
+    #     a day of coverage for that slug on a bank that only runs ~8/day.
+    #   - the key cannot reach the logs. It travels in the query string, and
+    #     lib/http.py's retry line tags requests with `url.split("?")[0]`.
+    #     tests/test_ingest_retry.py asserts that over a real retry.
+    #
+    # Errors that arrive as HTTP 200 with an `error` key are still this
+    # function's business, below: most of them are permanent (bad key, no
+    # searches left) and retrying them would burn wall-clock on a metered
+    # account, so they are NOT handed to `body_is_transient`.
+    data = http.get_json(url, headers={"User-Agent": "hermes-jobs-ingest/1.0"})
     if "error" in data:
         raise RuntimeError(data["error"])
     return data.get("jobs_results", [])

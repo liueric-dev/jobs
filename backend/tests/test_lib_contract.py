@@ -108,6 +108,49 @@ class TestHttpRetryPolicy(unittest.TestCase):
         self.assertEqual(calls, 1)
 
 
+class TestGetBytesIsThePrimitive(unittest.TestCase):
+    """D31, 2026-08-02. The retry loop moved into `get_bytes` and `get_text`
+    became that decoded, so that `ingest/weworkremotely.py` could retry
+    without giving up the raw bytes its XML parser needs.
+
+    What must stay true is that `get_text` is not merely similar to what it
+    was -- it is the same function with a decode bolted on. Anything else and
+    a source that has gone through it for months starts behaving differently
+    to settle another caller's problem.
+    """
+
+    def _fetch(self, fn, side_effect, **kw):
+        with mock.patch("urllib.request.urlopen", side_effect=side_effect), \
+             mock.patch("time.sleep"), \
+             mock.patch("sys.stderr", io.StringIO()):
+            return fn("http://x", **kw)
+
+    def test_get_bytes_returns_undecoded_bytes(self):
+        result = self._fetch(http.get_bytes, [_Resp(b"\xff\xfe raw")])
+        self.assertIsInstance(result, bytes)
+        self.assertEqual(result, b"\xff\xfe raw")
+
+    def test_get_text_is_get_bytes_decoded_with_replacement(self):
+        """`errors="replace"`, not strict: one stray byte in one description
+        must not cost the whole source for the day."""
+        result = self._fetch(http.get_text, [_Resp(b"caf\xe9")])
+        self.assertEqual(result, "caf�")
+
+    def test_get_bytes_retries_transient_failures_too(self):
+        result = self._fetch(http.get_bytes, [_http_error(503), _Resp(b"ok")])
+        self.assertEqual(result, b"ok")
+
+    def test_body_is_transient_still_sees_text_from_get_bytes(self):
+        """The predicate is about a rejection *page*. It is handed the decoded
+        body even on the bytes path, or every caller of it would have to
+        learn to pattern-match bytes to keep working."""
+        result = self._fetch(
+            http.get_bytes,
+            [_Resp(b"Request Rejected"), _Resp(b"real data")],
+            body_is_transient=lambda b: "Request Rejected" in b)
+        self.assertEqual(result, b"real data")
+
+
 class TestHttpBackoff(unittest.TestCase):
     def test_grows_and_is_capped(self):
         self.assertLess(http._backoff(0), http._backoff(6))

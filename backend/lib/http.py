@@ -44,14 +44,27 @@ def _backoff(attempt, retry_after=None):
     return wait
 
 
-def get_text(url, *, headers=None, timeout=DEFAULT_TIMEOUT,
-             max_retries=DEFAULT_MAX_RETRIES, opener=None,
-             body_is_transient=None, data=None, method=None, label=None):
-    """Fetch a URL as text, retrying transient failures.
+def get_bytes(url, *, headers=None, timeout=DEFAULT_TIMEOUT,
+              max_retries=DEFAULT_MAX_RETRIES, opener=None,
+              body_is_transient=None, data=None, method=None, label=None):
+    """Fetch a URL as raw bytes, retrying transient failures.
 
     `opener` accepts a urllib opener so a caller can carry cookies (QPL needs
     a session established against /calendar before /search/call returns data).
-    `body_is_transient` is a predicate over the response body.
+    `body_is_transient` is a predicate over the response body, and is handed
+    the decoded text -- it is a predicate about a rejection *page*, and no
+    caller has ever wanted to pattern-match bytes.
+
+    WHY BYTES ARE THE PRIMITIVE AND get_text() IS THE DERIVED ONE
+        An XML document that declares its own encoding cannot be parsed from
+        a str: `ET.fromstring` raises "Unicode strings with encoding
+        declaration are not supported", and every WWR feed opens with
+        `<?xml version="1.0" encoding="UTF-8"?>`. Handing such a caller
+        get_text() and asking it to `.encode()` the result back would round-
+        trip through `errors="replace"` below, so the bytes it parses would
+        no longer be the bytes the server sent -- which is the failure
+        `evals/cassettes.py:_body_fields` documents as worse than no fixture
+        at all. So the loop returns what it read, and decoding is a layer.
     """
     hdrs = {"User-Agent": DEFAULT_USER_AGENT}
     if headers:
@@ -65,8 +78,9 @@ def get_text(url, *, headers=None, timeout=DEFAULT_TIMEOUT,
                                          method=method)
             open_fn = opener.open if opener else urllib.request.urlopen
             with open_fn(req, timeout=timeout) as resp:
-                body = resp.read().decode("utf-8", errors="replace")
-            if body_is_transient and body_is_transient(body):
+                body = resp.read()
+            if body_is_transient and body_is_transient(
+                    body.decode("utf-8", errors="replace")):
                 # No tag here -- callers prefix it, and the retry log below
                 # already does, so including it prints "qpl: qpl: ...".
                 raise TransientBody("upstream rejected the request")
@@ -91,6 +105,16 @@ def get_text(url, *, headers=None, timeout=DEFAULT_TIMEOUT,
             time.sleep(wait)
 
     raise last_exc
+
+
+def get_text(url, **kwargs):
+    """get_bytes() decoded. The shape almost every caller wants.
+
+    `errors="replace"` rather than strict: an ingest run that dies on one
+    stray byte in one description has lost the whole source for the day, and
+    a replacement character in prose the scorer reads costs nothing.
+    """
+    return get_bytes(url, **kwargs).decode("utf-8", errors="replace")
 
 
 def get_json(url, **kwargs):

@@ -191,10 +191,17 @@ SENIORITY_MAP = {
 
 
 def fetch_page(page_num):
+    """One listing page's HTML.
+
+    D31. Through `lib.http` since 2026-08-02 -- five attempts, exponential
+    backoff, `Retry-After` honoured. Note that this is the OPPOSITE
+    disposition to fetch_description() below, deliberately: MAX_PAGES is a
+    handful of paced requests whose failure costs a whole page of cards, while
+    the detail crawl is a budgeted 60-request pass over a host that has to be
+    left alone the moment it says so. See the comment there.
+    """
     url = f"{BASE_URL}?page={page_num}"
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=http.DEFAULT_TIMEOUT) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+    return http.get_text(url, headers={"User-Agent": USER_AGENT})
 
 
 def extract_field(text, pattern):
@@ -249,6 +256,25 @@ def fetch_description(job_url):
     which is the same deferral logic scoring uses for transient errors.
 
     429 is the exception -- see RateLimited.
+
+    D31, AND THIS ONE STAYS ON urlopen ON PURPOSE
+        The other three raw-urlopen sites in `ingest/` moved to `lib.http` on
+        2026-08-02. This one did not, and the reason is RateLimited above:
+        `lib.http` retries a 429 up to DEFAULT_MAX_RETRIES times with backoff,
+        which is precisely the behaviour that docstring forbids -- the whole
+        remaining budget spent hammering a host that already said no.
+
+        `max_retries=1` is not the workaround it looks like. `lib/http.py`
+        formats and prints its "[retry] ... waiting 8.3s (attempt 1/1)" line
+        before it decides whether there is another attempt to make, so a
+        one-attempt call announces a wait it never takes. In a pipeline whose
+        stated failure mode is silence, a log line that is false is worse than
+        no retry logic at all.
+
+        So the split across these six scripts is not uniform and is not meant
+        to become so. `tests/test_ingest_retry.py` pins this call at exactly
+        one request per posting; that test failing means somebody "finished"
+        a migration that was already finished.
     """
     req = urllib.request.Request(job_url, headers={"User-Agent": USER_AGENT})
     try:

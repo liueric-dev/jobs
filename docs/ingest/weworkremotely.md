@@ -2,6 +2,7 @@
 kind: contract
 script: backend/ingest/weworkremotely.py
 written: 2026-07-27
+revised: 2026-08-02
 code_at: dd49a27
 generator: none
 ---
@@ -63,9 +64,15 @@ category list, delay and staleness window are module constants
 
 Not separately measured (see Open Questions). Lower bound from the code: 4
 requests at a 30-second timeout each (`http.DEFAULT_TIMEOUT`,
-`backend/lib/http.py:28`, passed at `backend/ingest/weworkremotely.py:124`),
-plus three `time.sleep(2.0)` pauses — the delay is skipped after the last
-category (`:216-217`). So ≥6 seconds of deliberate sleep per run.
+`backend/lib/http.py:28`, now the default inside `http.get_bytes` rather than
+passed explicitly), plus three `time.sleep(2.0)` pauses — the delay is skipped
+after the last category. So ≥6 seconds of deliberate sleep per run.
+
+**That lower bound is no longer the whole story, as of D31 (2026-08-02).** A
+retried request adds its own backoff, capped at `MAX_BACKOFF`
+(`backend/lib/http.py:30`) per attempt across up to `DEFAULT_MAX_RETRIES`
+(`:29`). A run that hits no transient failure is unchanged; one that does is
+slower and complete rather than fast and short a category.
 
 ### Concurrent runs
 
@@ -235,33 +242,44 @@ and read by nothing in this script.
 
 ### Retry policy and backoff
 
-**There is none.** `fetch_feed` calls `urllib.request.urlopen` directly
-(`backend/ingest/weworkremotely.py:124`), not `lib.http.get_text`. The module
-imports `http` (`:93`) but uses it only for the constant
-`http.DEFAULT_TIMEOUT` (`:124`).
+~~**There is none.** `fetch_feed` calls `urllib.request.urlopen` directly,
+not `lib.http.get_text`. The module imports `http` but uses it only for the
+constant `http.DEFAULT_TIMEOUT`.~~
 
-Consequences, contrasted with `ingest/ats.py`, which does go through
-`lib.http`:
+~~Consequences, contrasted with `ingest/ats.py`, which does go through
+`lib.http`: 1 attempt, no backoff, no `Retry-After` — a single transient 503
+from one feed loses that category for the run.~~
 
-| | `ingest/ats.py` | this script |
+**Superseded 2026-08-02 by D31's disposition (`DEC-96`).** `fetch_feed` goes
+through `lib.http.get_bytes`, so this script now has exactly what `ats.py`
+has:
+
+| | this script, before | this script, now |
 |---|---|---|
-| attempts | 5 (`backend/lib/http.py:29`) | **1** |
-| backoff | exponential + jitter (`backend/lib/http.py:37-44`) | none |
-| `Retry-After` honored | yes (`backend/lib/http.py:78`) | no |
-| 429/5xx retried | yes (`backend/lib/http.py:76`) | no |
-| User-Agent | `hermes-ingest/1.0` (`backend/lib/http.py:27`) | `Mozilla/5.0 (compatible; hermes-jobs-ingest/1.0; personal job-search automation)` (`:108`) |
+| attempts | 1 | 5 (`backend/lib/http.py:29`) |
+| backoff | none | exponential + jitter (`backend/lib/http.py:37-44`) |
+| `Retry-After` honored | no | yes |
+| 429/5xx retried | no | yes |
+| 4xx retried | n/a | **no** — permanent failures still surface on the first attempt (`backend/lib/http.py:76-77`) |
+| User-Agent | `Mozilla/5.0 (compatible; hermes-jobs-ingest/1.0; personal job-search automation)` | unchanged — passed through `headers=` |
 
-A single transient 503 from one feed therefore loses that category for the
-run. The `lib/http.py` docstring cites exactly this scenario as the reason
-that module exists — "a single transient 503 from one ATS board failed that
-company for the day" (`backend/lib/http.py:3-5`) — and this script does not
-use it.
+The User-Agent row is the one worth reading twice. The reason recorded for the
+bypass, here and in `backend/evals/cassettes.py`, was that `lib.http` had no
+User-Agent parameter. It always had one: `headers=` merges over the default
+(`backend/lib/http.py:56-58`). The stated reason for the split was not the
+real one, which is most of why D31 stayed open as long as it did.
+
+`get_bytes` rather than `get_text` because the feed opens with an XML
+declaration and `ET.fromstring` refuses a `str` that carries one. That is
+pinned by `backend/tests/test_ingest_retry.py`.
 
 ### Rate limits
 
-Not detected as such. There is no 429 branch, no `Retry-After` read and no
-quota tracking. A 429 arrives as `urllib.error.HTTPError`, is caught by the
-per-category handler (`:199-200`) and recorded as a plain error.
+~~Not detected as such. There is no 429 branch, no `Retry-After` read and no
+quota tracking.~~ **Since 2026-08-02**, a 429 is retried with `Retry-After`
+honored inside `lib.http` and only reaches the per-category handler if every
+attempt fails. There is still no quota tracking; an exhausted budget would
+present as five failures rather than one.
 
 The only pacing is `time.sleep(REQUEST_DELAY_SECONDS)` — 2.0 seconds between
 categories, skipped after the last (`:106`, `:216-217`).
@@ -374,8 +392,11 @@ uses stdlib `xml.etree.ElementTree` (`:81`) and the date parse uses
 `upsert.upsert` (`:92-95`).
 
 Five imports are unused: `hashlib` (`:77`), `html as html_module` (`:76`),
-`datetime` and `timedelta` (`:83`), and `ids` (`:93`). `http` is imported for
-a single constant (`:124`), not for its retry logic.
+`datetime` and `timedelta` (`:83`), and `ids` (`:93`). ~~`http` is imported for
+a single constant, not for its retry logic.~~ **Since 2026-08-02 `http` is
+imported for `get_bytes`**, and `urllib.request` — which the direct `urlopen`
+call was the only user of — is gone from the import block; `urllib.error`
+stays, for the `except` tuple in `main`.
 
 ---
 
@@ -387,13 +408,23 @@ output and re-emits it after completion (`backend/run-daily.py:126-133`,
 `time.sleep` is a floor derived from the code, not a measurement. Timing this
 would require running it, which writes to the database.
 
-**Why this script bypasses `lib.http` is not recorded anywhere.** It imports
-the module and uses only `DEFAULT_TIMEOUT` (`:124`). `ingest/ats.py`,
-`ingest/hn-hiring.py` and `ingest/google-apify.py` all call `lib.http`;
-`ingest/builtin-nyc.py` and `ingest/google-serpapi.py` also use raw `urllib`.
-No comment in any of the six explains the split, and `lib/http.py:3-5`
-describes retry as the reason the module was written. I could not determine
-whether this is deliberate or an incomplete migration.
+~~**Why this script bypasses `lib.http` is not recorded anywhere.** … No
+comment in any of the six explains the split, and `lib/http.py:3-5` describes
+retry as the reason the module was written. I could not determine whether this
+is deliberate or an incomplete migration.~~
+
+**Answered 2026-08-02. It was an incomplete migration — here, and at
+`google-serpapi.py`, and at `builtin-nyc.py`'s listing fetch. It was
+deliberate at exactly one of the four sites**, `builtin-nyc.fetch_description`,
+where `lib.http` would retry the 429 that `RateLimited` exists to stop on.
+Three moved, one stayed, and all four now carry the comment whose absence this
+question was really about. `DEC-96`; register entry `D31` in
+[`DEFECTS.md`](DEFECTS.md).
+
+Worth keeping, because the question was open for weeks and the answer took an
+afternoon: what made it hard was not the code but that the *recorded* reason
+for the bypass (a User-Agent `lib.http` supposedly could not send) was false
+and nobody had checked it against `lib/http.py:56-58`.
 
 **The full set of elements WWR emits is unknown.** `raw_json` is `None` for
 every row (`:181`), so unlike the ATS sources there is no stored payload to

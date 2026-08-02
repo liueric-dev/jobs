@@ -2,12 +2,13 @@
 
 WHAT THIS PINS, AND WHY EACH ONE
 
-  * The seam is `urllib.request.urlopen`, not `lib.http.get_text`. Four of
-    the six ingest scripts build their own Request and call urllib directly
-    (weworkremotely.py:124, google-serpapi.py:280, builtin-nyc.py:182 and
-    :241) so that they can send a browser-ish User-Agent lib/http.py has no
-    parameter for. A harness hooked into lib/http.py would replay two
-    sources and silently make live calls for the other four.
+  * The seam is `urllib.request.urlopen`, not `lib.http.get_text`. It has to
+    be below lib/http.py rather than at it, and D31 is why that was the
+    right call: four sites used to build their own Request and call urllib
+    directly, three of them moved to lib.http on 2026-08-02, and one
+    (`builtin-nyc.py:281`, the detail fetch) deliberately did not. A harness
+    hooked into lib/http.py would have replayed a different subset before and
+    after that decision, and made live calls for the rest.
 
   * A miss is fatal. Falling through to the network on an unrecorded
     request is how a replayed test quietly becomes a live test again.
@@ -58,8 +59,10 @@ class TestTheSeam(unittest.TestCase):
                              {"jobs": [1, 2]})
 
     def test_a_bare_urlopen_is_replayed_too(self):
-        """The shape weworkremotely.py:123-125 and builtin-nyc.py:181-183 use:
-        a hand-built Request with their own User-Agent, opened directly."""
+        """The shape `builtin-nyc.py:280-282` still uses, and every ingest
+        script used to: a hand-built Request with its own User-Agent, opened
+        directly. D31 left exactly one of these; this must keep working for
+        as long as that one does."""
         with cassettes.replay(cassette=_cassette(
                 _ok("https://example.test/feed.rss", "<rss/>"))):
             req = urllib.request.Request("https://example.test/feed.rss",

@@ -60,24 +60,25 @@ on effort. **Do not open that track expecting to write code.**
 `labels.inter_annotator()` needs is more labellers on the **same ten `overlap` rows**, and
 round 2 matures ~2026-08-09. `OQ-3`.
 
-**Two things a session can take today, neither blocked and neither started.** ~~Three~~ —
+~~**Two things a session can take today**~~ ~~Three~~ — **both are now done or the
+owner's, as of 2026-08-02. A session opening this run today should expect to find nothing
+it can start alone.**
+
+1. ~~**`D31` — the ingest scripts that call `urlopen` directly.**~~ **Decided 2026-08-02**
+   (`DEC-96`, [record](sessions/2026-08-02-d31-the-http-split.md)). Three of four sites went
+   through `lib.http`; `builtin-nyc.fetch_description` deliberately did not, and a test pins
+   it at one request per posting. The warning above was right about the shape — it was a
+   mixed disposition, not a migration — and wrong about the count: four sites, not three.
+2. **`OQ-2`/`D75` — the impression dedup key**, if the owner takes it. It is one predicate
+   (`webapp/jobs.py:934-937`), and `job_events` is append-only, so every day it runs adds
+   rows whose meaning has to be caveated permanently. **This is the only row left here.**
+
 **`facts_version` on `eval_labels` landed 2026-08-02** (`DEC-95`,
 [record](sessions/2026-08-02-label-provenance.md)), before round 2 rather than
 after, which was the whole point of its deadline. The migration ran against the live
 database; every row labelled before it reads as unrecorded and stays that way, because a
 backfill was available and refused for `job_events.rank`'s reason. `evals label status`
 prints the breakdown.
-
-1. **`D31` — the three ingest scripts that call `urlopen` directly** rather than going
-   through `lib.http`'s retries. Session work, no owner input. **Read
-   `ingest/builtin-nyc.py:233-241` before starting**: `fetch_description` refuses to retry a
-   429 on purpose (*"collapsing this into 'no description, try the next one' is what turns a
-   polite scraper into a rude one"*), so part of the split is **deliberate** and the answer
-   is a mixed disposition, not a migration. `lib.http.get_text` returns `str`, and
-   `weworkremotely.py` hands bytes to `ET.fromstring`.
-2. **`OQ-2`/`D75` — the impression dedup key**, if the owner takes it. It is one predicate
-   (`webapp/jobs.py:934-937`), and `job_events` is append-only, so every day it runs adds
-   rows whose meaning has to be caveated permanently.
 
 ## Three standing prohibitions, and each is guarded by something other than this page
 

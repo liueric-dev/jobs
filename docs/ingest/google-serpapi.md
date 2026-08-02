@@ -2,6 +2,7 @@
 kind: contract
 script: backend/ingest/google-serpapi.py
 written: 2026-07-27
+revised: 2026-08-02
 code_at: dd49a27
 generator: none
 ---
@@ -80,9 +81,10 @@ Not separately measured. Bounded by the number of queries claimed, which is at
 most the sum of the four bucket budgets — **8** — and is frequently **0** when
 every query ran within the last 20 hours (`:227-233`).
 
-One HTTP request per claimed query (`:279`), 30-second timeout
+One HTTP request per claimed query, 30-second timeout
 (`http.DEFAULT_TIMEOUT`, `backend/lib/http.py:28`), **no delay between
-queries**. Journal entries show runs claiming 1 and 4 queries
+queries**. **Since 2026-08-02 a query that hits a 429 or a 5xx costs more than
+one request and more than one timeout** — see *Retry policy and backoff*. Journal entries show runs claiming 1 and 4 queries
 (`journalctl --user -u jobs-ingest.service`: `3/4 queries succeeded`,
 `1/1 queries succeeded`).
 
@@ -301,14 +303,30 @@ claim would block the query forever (`:96-103`).
 
 ### Retry policy and backoff
 
-**There is none.** `serpapi_search` calls `urllib.request.urlopen` directly
-(`:279`), not `lib.http.get_text`. The module imports `http` (`:159`) and uses
-only `http.DEFAULT_TIMEOUT`.
+~~**There is none.** `serpapi_search` calls `urllib.request.urlopen` directly,
+not `lib.http.get_text`. The module imports `http` and uses only
+`http.DEFAULT_TIMEOUT`. So: 1 attempt, no backoff, no `Retry-After`. A
+transient 5xx from SerpApi loses that query for the run — though not the
+credit, since `last_success_at` does not advance and the claim is released
+immediately.~~
 
-So: 1 attempt, no backoff, no `Retry-After`, 30-second timeout. A transient
-5xx from SerpApi loses that query for the run — though not the credit, since
-`last_success_at` does not advance and the claim is released immediately
-(`:319`).
+**Superseded 2026-08-02 by D31's disposition (`DEC-96`).** `serpapi_search`
+goes through `http.get_json`: 5 attempts, exponential backoff, `Retry-After`
+honored, and permanent 4xx still surfacing on the first attempt
+(`backend/lib/http.py:76-77`).
+
+The credit was never what was at stake — the claim release and the unadvanced
+watermark already protected it. What was at stake is **coverage**: the bank
+runs at most 8 searches a day across 4 buckets, so a query lost to a transient
+5xx is a day of coverage for that slug, and the next run picks a different
+least-recently-run query rather than retrying this one.
+
+**What is deliberately not retried: a 200 carrying an `error` key.** SerpApi
+signals most failures that way (see *Rate limits* below), and most of them are
+permanent — a bad key, or an exhausted monthly allowance. Routing them through
+`lib.http`'s `body_is_transient` hook would spend five calls of a metered
+account's budget discovering that the account has no budget. `RuntimeError` on
+the first one, as before.
 
 ### Rate limits
 
@@ -337,9 +355,10 @@ refresh, no rotation, no expiry handling. The key is read once at import
 
 Note the key is embedded in the request URL. `lib.http`'s retry logger strips
 query strings from its `tag` for exactly this reason
-(`backend/lib/http.py:59`) — but this script does not use `lib.http`, and its
-own error path prints `{e}` (`:318`), whose text for a `urllib` error does not
-include the URL. See Open Questions.
+(`backend/lib/http.py:59`) — ~~but this script does not use `lib.http`~~
+**and since 2026-08-02 this script does**, which is what makes the retry
+lines safe to print. Its own error path still prints `{e}`, whose text for a
+`urllib` error does not include the URL. See Open Questions.
 
 ### Malformed or empty payloads
 
@@ -488,14 +507,22 @@ ownership check there passed for a contributor whose claim had already been
 taken over. It records the fix as API-side only. I did not verify the current
 API code.
 
-**Whether the SerpApi key can leak into logs is not fully determined.** The
-key is a query parameter (`:277`). The error path prints `str(e)` for the
-caught exception (`:318`); for `urllib.error.HTTPError` that string is
-typically `HTTP Error 429: Too Many Requests` without the URL, but I did not
-enumerate every exception type in the `except` clause at `:316-317` to confirm
-none stringifies to include the URL. `lib.http`'s deliberate query-string
-stripping (`backend/lib/http.py:59`) suggests the concern is real; this script
-does not use `lib.http`.
+~~**Whether the SerpApi key can leak into logs is not fully determined.** The
+key is a query parameter. The error path prints `str(e)` for the caught
+exception … `lib.http`'s deliberate query-string stripping suggests the
+concern is real; this script does not use `lib.http`.~~
+
+**Partly closed 2026-08-02.** The script does use `lib.http` now, and the
+retry logger — the one new place in this pipeline that prints something about
+a request that carries the key — tags each line with `url.split("?")[0]`
+(`backend/lib/http.py:59`), so the query string cannot reach stderr.
+`backend/tests/test_ingest_retry.py` asserts that over an actual retry rather
+than by reading the code.
+
+What is **not** closed is the original question, which was about the `except`
+clause's own `str(e)`: that path is unchanged, and no one has enumerated every
+exception type it can catch. The migration removed the larger new risk it
+would otherwise have introduced; it did not answer what was already asked.
 
 **A malformed bucket crashes uncaught.** `load_query_buckets` catches
 `KeyError` for a missing top-level `buckets` key (`:300`), but

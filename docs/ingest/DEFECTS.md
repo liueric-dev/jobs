@@ -139,15 +139,18 @@ Counted with an AST walk over binding-vs-`Name`-use rather than by grep, because
 cannot tell an import from the word appearing in a comment — which is exactly how D32's
 `ids` was miscounted in the first place.
 
-**Three are left open on purpose, with the reason recorded:**
+~~**Three are left open on purpose, with the reason recorded:**~~ **Two, as of
+2026-08-02** — D31 was decided, and the first bullet below records what the decision was
+rather than being deleted. D33 and D34 still hold.
 
-- **D31** (three of six ingests bypass `lib.http` retry/backoff) — *"I could not
+- ~~**D31** (three of six ingests bypass `lib.http` retry/backoff) — *"I could not
   determine whether this is deliberate or an incomplete migration"* is still the honest
-  state, and `weworkremotely.md` says so. Each of the three imports `http` **solely for
-  `DEFAULT_TIMEOUT`** and then calls `urllib.request.urlopen` directly, which is either a
-  deliberate opt-out of backoff for a cheap endpoint or a migration nobody finished.
-  **This is a decision, not a fix**, and making it silently uniform would change retry
-  behaviour on three live sources to settle a documentation question.
+  state … **This is a decision, not a fix**, and making it silently uniform would change
+  retry behaviour on three live sources to settle a documentation question.~~
+  **Decided 2026-08-02 — see the D31 body below.** The disposition kept the warning: it is
+  *not* uniform. Three of the four sites moved to `lib.http`, one stayed on `urlopen`
+  deliberately, and the deliberate one is now pinned by a test. The instinct that this was
+  a decision rather than a fix was correct and is why it was not swept a month ago.
 - **D33** (`google_jobs_query_stats` accumulates, read by nothing) — the adaptive-cadence
   consumer that was meant to read it is **task 25**. Deleting the table now destroys the
   input; wiring it now is task 25's job. Left with the pointer.
@@ -215,7 +218,7 @@ moved) and D23 (`:422`→`:438`). **Read the code, not the cite.**
 | [D28](#d28) | cosmetic | **fixed** — task 34, 2026-07-31 — **5** unused, not the 4 recorded | `builtin-nyc.py`: 4 unused imports, `http` imported for one constant |
 | [D29](#d29) | cosmetic | **fixed** — task 34, 2026-07-31 | `weworkremotely.py`: `parse_posted_at` called twice on the same value |
 | [D30](#d30) | cosmetic | **fixed** — task 34, 2026-07-31 — `timezone` IS used and was kept | `weworkremotely.py`: 5 unused imports |
-| [D31](#d31) | cosmetic | **open — needs a decision, not a fix** | Inconsistent `lib.http` usage — 3 of 6 ingest scripts bypass retry/backoff |
+| [D31](#d31) | cosmetic | **decided** — 2026-08-02, `DEC-96` — ~~3~~ **4** sites: three moved to `lib.http`, `builtin-nyc.fetch_description` deliberately did not, and a test pins it at one request. The stated reason for the bypass (a User-Agent `lib.http` "does not take a parameter for") was never true | Inconsistent `lib.http` usage — ~~3 of 6 ingest scripts~~ 4 call sites bypass retry/backoff |
 | [D32](#d32) | cosmetic | **fixed** — task 34, 2026-07-31 | `hn-hiring.py`: 3 unused imports |
 | [D33](#d33) | cosmetic | **open — belongs to task 25** | `google_jobs_query_stats` accumulates, read by nothing |
 | [D34](#d34) | cosmetic | **open — a data cleanup, needs the live DB** | 22 orphaned `job_ingest_state` watermark rows |
@@ -1388,6 +1391,53 @@ incomplete migration." Failures here are counted (as category/query errors),
 not silent, so this is a robustness gap rather than a correctness bug — but
 it does mean transient upstream errors cost more completeness on three of
 six sources than on the other three for no stated reason.
+
+**Decided 2026-08-02 — `DEC-96`. It was both, and the entry above understated
+the problem by one site: there were four `urlopen` calls, not three.**
+
+| site | disposition |
+|---|---|
+| `weworkremotely.py` `fetch_feed` | → `http.get_bytes` |
+| `builtin-nyc.py` `fetch_page` | → `http.get_text` |
+| `google-serpapi.py` `serpapi_search` | → `http.get_json` |
+| `builtin-nyc.py` `fetch_description` | **stays on `urlopen`, deliberately** |
+
+The fourth stays because `lib.http` retries a 429 up to five times with
+backoff, and `RateLimited` exists to abandon the detail pass on the first one
+— *"the whole remaining budget gets spent hammering a host that already said
+no."* `max_retries=1` is not a workaround: `lib/http.py` prints its `[retry] …
+waiting 8.3s` line before deciding whether another attempt exists, so a
+one-attempt call announces a wait it never takes.
+
+**The recorded reason for the bypass was false, and that is the part worth
+carrying forward.** `backend/evals/cassettes.py` stated the four sites called
+urllib directly "to send a browser-ish User-Agent that lib/http.py does not
+take a parameter for". `lib/http.py`'s `headers=` has always merged over the
+default (`:56-58`), so all four User-Agents survived the migration untouched.
+An entry can be open for weeks because the *explanation* attached to it was
+never checked, not because the code was hard. That is D03's lesson — read the
+code, not the cite — one level up: read the code, not the rationale either.
+
+Three things this did **not** do, each on purpose:
+
+- **`lib/` gained a function, not a behaviour change.** `get_bytes` holds the
+  retry loop and `get_text` is that decoded, byte-identically to before.
+  `fetch_feed` needs bytes: the WWR feeds open with an XML declaration and
+  `ET.fromstring` refuses a `str` carrying one, so `get_text(...).encode()`
+  would have round-tripped through `errors="replace"` and stopped being the
+  server's bytes.
+- **A 200 with an `error` key from SerpApi is still not retried.** Most are
+  permanent (bad key, exhausted allowance) and `body_is_transient` would spend
+  five calls of a metered budget finding that out.
+- **`backend/api/contributor-worker/google-serpapi-worker.py:71,94` is a fifth
+  and sixth copy of the pattern and was left alone.** It is in the `api/`
+  process, which this register does not scope itself to and which is expected
+  to be deprecated. Named here so the next reader does not read the sweep as
+  incomplete.
+
+Pinned by `backend/tests/test_ingest_retry.py`, whose most important assertion
+is the one that passes against the pre-decision tree: `fetch_description`
+issues exactly one request per posting.
 
 ### D32
 

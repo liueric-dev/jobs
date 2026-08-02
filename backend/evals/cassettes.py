@@ -19,20 +19,27 @@ WHY THIS EXISTS
 WHERE THE SEAM IS, AND WHY IT IS NOT lib/http.py
     `docs/ingestion_tests/05-fetcher-harness.md:63` describes this module as
     "record/replay for lib/http.py". That would cover two of the six sources.
-    The other four build their own request and call urllib directly:
+    When this was written, four sites built their own request and called
+    urllib directly, and this paragraph said they did it "to send a
+    browser-ish User-Agent that lib/http.py does not take a parameter for".
+    That reason was never true -- `get_text(headers=...)` merges over the
+    default -- and D31's disposition (2026-08-02) moved three of the four to
+    lib.http, User-Agent and all. One raw urlopen is left, and it is
+    deliberate:
 
-        ingest/weworkremotely.py:124   urllib.request.urlopen(req, ...)
-        ingest/google-serpapi.py:280   urllib.request.urlopen(req, ...)
-        ingest/builtin-nyc.py:182      urllib.request.urlopen(req, ...)
-        ingest/builtin-nyc.py:241      urllib.request.urlopen(req, ...)
+        ingest/builtin-nyc.py:281      urllib.request.urlopen(req, ...)
 
-    They do it to send a browser-ish User-Agent that lib/http.py does not
-    take a parameter for -- see the USER_AGENT constants in each. So the
-    seam is `urllib.request.urlopen`, which lib/http.py itself resolves at
-    call time (`open_fn = opener.open if opener else urllib.request.urlopen`,
-    lib/http.py:66) and therefore goes through this too. One seam, six
-    sources, and no change to lib/ -- which is vendored byte-identical to
-    another repo and must not grow a test hook.
+    It stays because lib.http would retry the 429 that `RateLimited` exists
+    to stop on. Read that docstring before touching it; the split is now
+    recorded rather than accidental.
+
+    None of that changes where the seam is, which is the point of this
+    section. `urllib.request.urlopen` is BELOW lib/http.py, which resolves it
+    at call time (`open_fn = opener.open if opener else
+    urllib.request.urlopen`, lib/http.py:79), so hooking it catches both
+    shapes and would have caught them however D31 had been decided. One seam,
+    six sources, and no test hook in lib/ -- which is this repo's own code
+    now (`lib/__init__.py`) and used to be described here as vendored.
 
 ADAPTERS, NEVER COPIES
     Nothing here parses anything. A cassette test imports the real ingest

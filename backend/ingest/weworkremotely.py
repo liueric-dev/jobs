@@ -74,8 +74,7 @@ import os
 import sys
 import re
 import time
-import urllib.request
-import urllib.error
+import urllib.error   # D31: the fetch moved to lib.http; the except tuple stayed
 import xml.etree.ElementTree as ET
 from collections import Counter
 from email.utils import parsedate_to_datetime
@@ -118,10 +117,22 @@ NON_TECH_EXCLUDE_PATTERN = re.compile(
 
 
 def fetch_feed(category):
+    """One category's RSS feed, as bytes.
+
+    D31. This went through `lib.http` on 2026-08-02; before that it built its
+    own Request and called `urllib.request.urlopen`, so a single transient 503
+    from one feed lost that category for the run -- which is the exact
+    scenario `lib/http.py:3-5` names as the reason that module was written.
+
+    Bytes, not text, and `http.get_bytes` exists for this: the feed opens with
+    `<?xml version="1.0" encoding="UTF-8"?>`, and `ET.fromstring` refuses a
+    str that carries an encoding declaration.
+    """
     url = FEED_URL_TEMPLATE.format(category=category)
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=http.DEFAULT_TIMEOUT) as resp:
-        return resp.read()
+    # The browser-ish USER_AGENT above, not lib/http.py's default -- WWR is a
+    # scraped RSS feed, and this is the header the recorded cassettes were
+    # taken with.
+    return http.get_bytes(url, headers={"User-Agent": USER_AGENT})
 
 
 def parse_posted_at(pub_date_text):

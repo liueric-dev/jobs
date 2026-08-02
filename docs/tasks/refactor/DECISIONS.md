@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-96`.** Allocated `DEC-46`–`DEC-95`. The count starts at 46 rather than at
+**Next free: `DEC-97`.** Allocated `DEC-46`–`DEC-96`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -3284,3 +3284,67 @@ the window in which a nightly re-extraction lands between the read and the write
 Builder can see. **The absence is not.** Every label written before this landed has no
 provenance and cannot acquire any, which is why this was done before round 2 rather than
 after it.
+
+---
+
+## DEC-96 — the `lib.http` split is real, and one quarter of it is policy
+
+**2026-08-02, D31.**
+
+D31 recorded that three of six ingest scripts imported `lib.http` solely for
+`DEFAULT_TIMEOUT` and then called `urllib.request.urlopen` directly, and that nothing
+anywhere said whether that was deliberate. It was open for weeks under an explicit
+instruction not to sweep it: *"making it silently uniform would change retry behaviour on
+three live sources to settle a documentation question."*
+
+**Decided: three of the four call sites move to `lib.http`; the fourth does not, and the
+asymmetry is the answer rather than a leftover.**
+
+| site | disposition |
+|---|---|
+| `weworkremotely.fetch_feed` | `http.get_bytes` |
+| `builtin-nyc.fetch_page` | `http.get_text` |
+| `google-serpapi.serpapi_search` | `http.get_json` |
+| `builtin-nyc.fetch_description` | stays on `urllib.request.urlopen` |
+
+**Why the fourth stays.** `builtin-nyc.py`'s `RateLimited` exists to abandon the detail
+crawl on the first 429, because *"the whole remaining budget gets spent hammering a host
+that already said no."* `lib.http` answers a 429 by making four more requests on a
+schedule, which is that sentence with a timer attached. The listing pass takes the
+opposite disposition in the same file — a handful of paced requests where a lost page
+costs a screen of cards — so the split now lives inside one script and is commented at
+both ends.
+
+**`max_retries=1` was considered and rejected.** `lib/http.py` formats and prints its
+`[retry] … waiting 8.3s (attempt 1/1)` line *before* it decides whether another attempt
+exists, so a one-attempt call announces a wait it never takes. In a pipeline whose stated
+failure mode is silence, a log line that is false costs more than the uniformity buys.
+Fixing that ordering in `lib/` to make one caller's opt-out read nicely is the
+caller-side-problem-solved-in-shared-code that `.claude/CLAUDE.md` warns against; it is
+left as it is.
+
+**`lib/` gained `get_bytes` and no behaviour change.** The retry loop moved into
+`get_bytes` and `get_text` became that decoded, byte-identically. `fetch_feed` needs bytes
+because every WWR feed opens with `<?xml version="1.0" encoding="UTF-8"?>` and
+`ET.fromstring` raises on a `str` carrying an encoding declaration — and
+`get_text(...).encode()` would have round-tripped through `errors="replace"`, so the bytes
+parsed would no longer be the bytes the server sent. That is the failure
+`evals/cassettes.py` § *the on-disk shape* already documents as worse than no fixture.
+
+**What actually kept this open was a false rationale, not a hard call.**
+`evals/cassettes.py` stated the four sites called urllib directly "to send a browser-ish
+User-Agent that lib/http.py does not take a parameter for." `lib/http.py:56-58` has always
+merged `headers=` over its default, and all four User-Agents survived the migration
+unchanged. Everything downstream — the harness docstring, `weworkremotely.md`'s open
+question, this register — reasoned from that sentence without testing it. `DEFECTS.md`'s
+standing lesson is *read the code, not the cite*; this is the same lesson about rationale.
+
+**Not done, deliberately:** `backend/api/contributor-worker/google-serpapi-worker.py:71,94`
+is the same pattern in the `api/` process, which D31 does not scope itself to and which is
+expected to be deprecated. Recorded in D31's disposition so the sweep does not read as
+half-finished.
+
+**Reversible?** Each migrated site is a one-line revert, and `get_bytes` is additive. The
+part that should not be reverted casually is the fourth row of that table, which is why it
+is pinned by a test that passes against the pre-decision tree
+(`backend/tests/test_ingest_retry.py`) rather than only by this paragraph.
