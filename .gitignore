@@ -23,6 +23,15 @@ dist/
 secrets.json
 credentials.json
 
+# cloudflared. `cloudflared tunnel create` writes ~/.cloudflared/<UUID>.json,
+# which is a BEARER CREDENTIAL for the tunnel -- anyone holding it can run the
+# tunnel and receive traffic for its hostnames. cert.pem from `cloudflared
+# login` is already covered by *.pem above. Neither belongs in deploy/, and
+# deploy/cloudflared/config.yml points at their real home outside the repo;
+# these two lines exist so that copying one in "just to test" cannot commit it.
+deploy/**/*.json
+.cloudflared/
+
 # Local database artefacts
 *.sql
 *.sql.gz
@@ -57,7 +66,24 @@ backend/evals/.cache/
 # in every git status and it has already been re-added once by a git add -A,
 # which is the exact thing 183b4dc exists to undo. Ignoring it makes the
 # decision durable instead of dependent on nobody typing -A.
-scripts/
+#
+# ANCHORED TO THE ROOT, and the anchor is the fix, not decoration. Written as a
+# bare `scripts/` this pattern matches at EVERY depth, so it also ignored
+# backend/scripts/ -- a directory with four tracked files in it. Tracked files
+# are unaffected by .gitignore, so nothing broke and nothing was red; what broke
+# was the NEXT file added there. Task 33 added backend/scripts/backup-jobs.sh
+# and `git status` did not show it. A backup script that is silently not in the
+# repo is the same failure mode as a backup that is silently not running.
+#   Verify both halves after editing:
+#     git check-ignore -v scripts/tranche-two-launcher.sh   # must still hit
+#     git check-ignore -v backend/scripts/backup-jobs.sh    # must exit 1
+/scripts/
 
 # flock target from the systemd unit ExecStart -- created on every run
 .run.lock
+
+# Per-run volume history, appended by run-daily.py and read by
+# tools/volume-check.py. Machine-local operational state, not code: it describes
+# what THIS host ingested, so committing it would mean one machine's quiet
+# Tuesday becoming another machine's floor. See config/volume-floors.json.
+.run-volumes.jsonl

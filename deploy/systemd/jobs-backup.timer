@@ -1,0 +1,28 @@
+[Unit]
+Description=Dump the jobs database daily at 04:30 America/New_York
+Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+
+[Timer]
+# 04:30 is chosen AGAINST THE OTHER TIMERS ON THIS MACHINE, not picked for
+# tidiness, and the constraint is real: dumping a database mid-write gives a
+# consistent snapshot (pg_dump takes one) but compares badly against a live
+# count in the verify step, and it competes for IO with the run it is dumping.
+#
+#   jobs-ingest      00:00, and its LLM steps dominate the wall clock -- the
+#                    five runs measured on 2026-08-02 finished between 00:10
+#                    and 01:07, and TimeoutStartSec allows three hours
+#   garmin-ingest    06:30
+#   garmin-backup    07:45
+#   events-ingest    08:00
+#
+# 04:30 sits after jobs-ingest's worst case and before the morning block, with
+# 300s of jitter that stays clear of both.
+OnCalendar=*-*-* 04:30:00
+# A dump missed because the machine was off runs at next boot. The point is that
+# the backup exists, not that it happened at a particular hour.
+Persistent=true
+RandomizedDelaySec=300
+Unit=jobs-backup.service
+
+[Install]
+WantedBy=timers.target

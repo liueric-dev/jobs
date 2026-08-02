@@ -1,0 +1,36 @@
+[Unit]
+Description=Report that %i failed
+Documentation=file:///home/eric/apps/jobs/backend/README.md
+# Brought in-tree by task 33, verbatim from ~/.config/systemd/user/.
+#
+# Replaces the `--deliver origin` notification that came free with hermes
+# cron. Without this, leaving that scheduler is a real regression: a failed
+# nightly run would sit in the journal unread.
+#
+# TEMPLATE UNIT: %i is the failing unit's name, so ONE of these serves every
+# unit in deploy/systemd/ -- ingest, backup, verify, volume-check, the tunnel
+# and both services. That is why each of them names OnFailure=jobs-failure@%n
+# and none of them defines its own notifier.
+#
+# WHAT IT DOES NOT COVER, and the gap is the whole of task 33's monitoring
+# section: this fires on a unit that EXITED NON-ZERO. Every failure mode that
+# matters in this pipeline exits zero -- an exhausted key, a revoked key, a
+# blocked scraper and a moved endpoint all return zero rows and raise nothing.
+# jobs-volume-check.service is the counterpart that catches those, and it works
+# by failing deliberately so that this unit has something to report.
+
+[Service]
+Type=oneshot
+Environment=HERMES_HOME=/home/eric/.hermes
+# `--to` is required and there is no default -- without it `hermes send` exits
+# 2/INVALIDARGUMENT and the notification is silently lost. That was found in
+# slice C only because the plan included a deliberate failure test; a real
+# failure would have been silent. `telegram` alone means the home channel;
+# `hermes send --list` enumerates targets.
+ExecStart=/bin/sh -c '{ echo "%i FAILED on $(hostname -s) at $(date -Is)"; echo; \
+  journalctl --user -u %i -n 40 --no-pager -o cat; } | \
+  /home/eric/.local/bin/hermes send --to telegram -f -'
+# If the notification itself cannot be delivered, say so in the journal rather
+# than leaving a silent gap where an alert should be.
+ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 0 || \
+  echo "jobs-failure: could not deliver the alert for %i (hermes send exit $EXIT_STATUS)"'

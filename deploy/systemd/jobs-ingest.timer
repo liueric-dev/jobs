@@ -1,0 +1,25 @@
+[Unit]
+Description=Run the job-discovery ingest daily at 00:00 America/New_York
+Documentation=file:///home/eric/apps/jobs/README.md
+# Brought in-tree by task 33, verbatim from ~/.config/systemd/user/.
+
+[Timer]
+# Local time, matching the old `0 0 * * *` hermes cron entry, so DST is handled
+# the way it was before.
+OnCalendar=*-*-* 00:00:00
+# A run missed because the machine was off fires at next boot. The Hermes
+# scheduler's catch-up behaviour was never characterised; this one is.
+Persistent=true
+# No RandomizedDelaySec: events-ingest runs at 08:00, so there is no collision,
+# and jitter would make "did it fire at midnight?" fuzzy during the soak. Add
+# it if anything else ever lands at 00:00.
+#
+# Task 33 added four timers and none of them lands at 00:00 -- jobs-backup at
+# 04:30, jobs-backup-verify Sunday 05:30, jobs-volume-check at 09:00,
+# jobs-volume-digest Monday 09:30 -- so the reasoning above still holds. The
+# volume check in particular is scheduled against this unit's WORST CASE, not
+# its start time; see jobs-volume-check.timer.
+Unit=jobs-ingest.service
+
+[Install]
+WantedBy=timers.target

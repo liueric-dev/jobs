@@ -1,0 +1,20 @@
+[Unit]
+Description=Rehearse a jobs restore weekly, Sunday 05:30 America/New_York
+Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+
+[Timer]
+# Sunday 05:30: after Sunday's own dump at 04:30, and clear of garmin-ingest at
+# 06:30. It therefore rehearses a dump made the same morning, which is the one
+# that matters -- a rehearsal of last week's file would pass while today's is
+# broken, and "the backup verified" would be true and useless.
+#
+# It is also clear of jobs-ingest at 00:00, which matters for a second reason:
+# the comparison is against a LIVE count, so a verify overlapping an ingest run
+# would report a mismatch caused by the clock rather than by the dump.
+OnCalendar=Sun *-*-* 05:30:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=jobs-backup-verify.service
+
+[Install]
+WantedBy=timers.target

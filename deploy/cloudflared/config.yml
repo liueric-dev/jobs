@@ -1,0 +1,89 @@
+# cloudflared ingress for the two services this project exposes.
+#
+# TEMPLATE. Every ANGLE-BRACKETED value below is the owner's to fill in and none
+# of them can be filled in from this repository -- they come from a Cloudflare
+# account, a domain, and one `cloudflared tunnel create`. See deploy/README.md
+# for the exact command sequence.
+#
+# WHY A TUNNEL AND NOT A FORWARDED PORT. It solves four problems at once and
+# costs nothing: no static IP, no inbound port open on the home router, TLS
+# terminated at Cloudflare's edge with a real certificate, and it works from
+# behind a residential ISP that blocks inbound servers. The alternative --
+# forward 443, run certbot, hope the ISP allows it, hope the dynamic IP holds --
+# has four failure modes where this has one.
+#
+# WHAT THIS DOES NOT DO, said plainly because it is easy to assume otherwise:
+# the tunnel authenticates the ORIGIN to Cloudflare, not the USER to the app.
+# Anyone on the internet can reach both hostnames below. The webapp's own Google
+# OAuth session is what keeps strangers out of it, and the contributor API's
+# bearer key is what keeps strangers out of that. A tunnel is not an
+# authorization layer and must never be treated as one.
+#
+# INSTALL: this file is the tracked copy. cloudflared reads
+# ~/.cloudflared/config.yml, so symlink rather than copy -- a copy drifts from
+# the repo silently, which is the failure this whole tranche is about:
+#
+#     ln -s ~/apps/jobs/deploy/cloudflared/config.yml ~/.cloudflared/config.yml
+#     cloudflared tunnel ingress validate    # parses this file, no traffic
+#     cloudflared tunnel ingress rule https://<webapp-hostname>/v1/health
+
+tunnel: <TUNNEL-UUID>
+
+# Written by `cloudflared tunnel create`, NOT by this repo, and never copied
+# into it: it is a bearer credential for the tunnel -- whoever holds it can
+# receive traffic for the hostnames below. .gitignore covers deploy/**/*.json
+# so that a copy made "just to test" cannot be committed.
+credentials-file: /home/eric/.cloudflared/<TUNNEL-UUID>.json
+
+# Cloudflare's edge already has the request for a while before the origin
+# answers; a slow LLM-backed page is not a reason to give up on the origin.
+originRequest:
+  connectTimeout: 10s
+  noTLSVerify: false
+
+ingress:
+  # ---- the webapp: what the ~30 Builders actually use --------------------
+  #
+  # Port 8421, confirmed at backend/webapp/config.py:124 (`PORT = _int("PORT",
+  # 8421)`), which also records that api/ holds 8420. frontend/serve.py mounts
+  # the client on this same origin deliberately -- the session cookie is the
+  # client's only credential, and a third origin that neither FRONTEND_ORIGIN
+  # nor ALLOWED_ORIGINS names gets its cookie dropped by the browser silently.
+  # So ONE hostname serves both the page and the API it calls, and CORS stops
+  # being involved at all.
+  #
+  # Three settings have to move together the moment this hostname is live, and
+  # each fails in a different, confusing place if it does not:
+  #   SESSION_COOKIE_SECURE=true      -- default is already true
+  #   GOOGLE_REDIRECT_URI=https://<webapp-hostname>/v1/auth/callback
+  #                                   -- and the SAME string in the Google
+  #                                      console, byte for byte, or the user
+  #                                      gets a Google error page rather than
+  #                                      an error from this service
+  #   FRONTEND_ORIGIN=https://<webapp-hostname>
+  - hostname: <webapp-hostname>
+    service: http://localhost:8421
+
+  # ---- the contributor API ------------------------------------------------
+  #
+  # Port 8420, per backend/api/README.md:66. A SEPARATE HOSTNAME rather than a
+  # path prefix on the one above, and that is the failure-domain boundary made
+  # visible: the two are different processes, different venvs and different
+  # Postgres roles (jobs_api can touch six tables and nothing else). One
+  # hostname with a path split would put them behind a single name, and the
+  # first person to reach for a shared session between them would find nothing
+  # in the way.
+  #
+  # backend/api/README.md's "Before opening this up" section lists two gaps
+  # that are harmless among trusted devices and real once strangers can call
+  # this -- unmetered claiming, and no per-contributor provenance. Neither is
+  # closed. Until they are, mint keys only for people you know, which is what
+  # the runbook's onboarding section says.
+  - hostname: <contributor-api-hostname>
+    service: http://localhost:8420
+
+  # Required terminator. cloudflared refuses to start without a catch-all, and
+  # 404 rather than a default backend is deliberate: a hostname added to the
+  # Cloudflare dashboard but not to this file must fail visibly, not land on
+  # whichever service happens to be listed first.
+  - service: http_status:404

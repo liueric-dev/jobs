@@ -1,0 +1,50 @@
+[Unit]
+Description=Daily job-discovery ingest and scoring
+Documentation=file:///home/eric/apps/jobs/backend/README.md
+# BROUGHT IN-TREE BY TASK 33, VERBATIM from ~/.config/systemd/user/. It ran for
+# a week as a REGULAR FILE there -- not a symlink, unlike every garmin unit --
+# so the only copy of the schedule that runs this pipeline existed on one
+# machine, outside version control, unbacked-up and undiffable. That is the same
+# class of problem as an unverified backup: it works right up until the disk
+# does not, and there is no way to tell it has drifted from what anyone intended
+# because there was nothing to drift from.
+#
+# Why systemd and not hermes cron: the Hermes scheduler resolves the script
+# path and requires path.relative_to(HERMES_HOME/scripts), explicitly blocking
+# symlink escape. Once this pipeline moved to ~/apps/jobs it could not be
+# scheduled there at all. See ~/apps/REORG.md finding F1. The old entry
+# (daily-jobs-ingest, 43f2e0330e75) is paused, not deleted, until this unit has
+# fired on its own.
+After=network-online.target
+Wants=network-online.target
+OnFailure=jobs-failure@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/eric/apps/jobs/backend
+# Establishes the environment rather than inheriting an ambient one. run-daily.py
+# also loads this same file via lib.envfile, deliberately: belt and braces,
+# so a manual run in a bare shell behaves like the scheduled one. This is the
+# fix for the 2026-07-25 run that failed all 7 steps -- hermes cron sanitises
+# secrets out of the subprocess environment and nothing put them back.
+EnvironmentFile=/home/eric/apps/jobs/backend/.env
+# flock is not for timer-vs-timer -- systemd already serialises a single unit.
+# It is for a hand-run overlapping the nightly one. run-daily.py's docstring
+# argues against a lock and is right about the single-trigger case; two things
+# it predates make the overlap expensive. api/ and this pipeline coordinate
+# through the same job_ingest_state claim row, so two concurrent runs stop
+# serialising; and the Google steps spend a metered SerpApi budget, which a
+# double run double-spends. -E 0 makes "already running" a silent success
+# rather than a false alarm.
+ExecStart=/usr/bin/flock -n -E 0 /home/eric/apps/jobs/backend/.run.lock \
+          /usr/bin/python3 /home/eric/apps/jobs/backend/run-daily.py
+# Two of the nine steps make LLM calls and dominate the wall clock: extract.py
+# makes one per newly-ingested posting and score.py runs a per-profile budget.
+# Generous compared to events' 5400 for that reason -- 3 hours is a hang, not a
+# slow night.
+TimeoutStartSec=10800
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jobs-ingest
+Nice=10
+IOSchedulingClass=idle

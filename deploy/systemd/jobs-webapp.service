@@ -1,0 +1,36 @@
+[Unit]
+Description=jobs webapp -- the Builders' frontend backend, on localhost:8421
+Documentation=file:///home/eric/apps/jobs/backend/webapp/README.md
+# Reachable from the internet only through cloudflared, which is a SEPARATE
+# unit on purpose. Neither Wants= nor Requires= the tunnel: this service is
+# perfectly useful on localhost with the tunnel down, and coupling them would
+# mean a Cloudflare outage stopping the app rather than merely hiding it.
+After=network-online.target
+Wants=network-online.target
+OnFailure=jobs-failure@%n.service
+
+[Service]
+Type=exec
+WorkingDirectory=/home/eric/apps/jobs/backend/webapp
+# Its OWN .env, its own venv and its own Postgres role. The three processes in
+# backend/ share schema.py and lib/ and nothing else -- none imports another --
+# and this unit is where that separation is either kept or quietly lost.
+EnvironmentFile=/home/eric/apps/jobs/backend/webapp/.env
+# The venv's uvicorn, never the system one. This venv sets
+# include-system-site-packages = false, so anything missing here is missing at
+# runtime and nowhere else -- an ImportError under uvicorn and in no test, which
+# backend/api/README.md:69-77 records having already happened once.
+ExecStart=/home/eric/apps/jobs/backend/webapp/.venv/bin/uvicorn app:app \
+          --host 127.0.0.1 --port 8421
+# 127.0.0.1, NOT 0.0.0.0. cloudflared connects from this same host, so binding
+# wider buys nothing and would make the service reachable from the LAN the
+# moment someone opens a firewall for an unrelated reason.
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jobs-webapp
+
+[Install]
+WantedBy=default.target

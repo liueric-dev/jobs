@@ -1,0 +1,30 @@
+[Unit]
+Description=Check per-source ingest volume daily at 09:00 America/New_York
+Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+
+[Timer]
+# 09:00, roughly eight hours after jobs-ingest is expected to have finished. Two
+# constraints set that, and they pull in opposite directions.
+#
+# Not earlier: the check must never race the run it is checking. jobs-ingest
+# starts at 00:00 and its LLM steps dominate the wall clock -- TimeoutStartSec
+# allows three hours -- so anything before ~04:00 could read a history that
+# tonight's run has not appended to yet and report the run as missing. That
+# false alarm is the worst possible one, because it is indistinguishable from
+# the true one it exists to raise.
+#
+# Not much later: the task's bar is that a source silently returning zero is
+# caught WITHIN A DAY, and max_run_age_hours in config/volume-floors.json is set
+# to 30 against this hour. 09:00 leaves the margin at both ends.
+#
+# Persistent=false, unlike every other timer here, and it is deliberate. A
+# missed CHECK is not worth catching up at boot: by the time the machine is back
+# the next scheduled run is minutes to hours away, and a catch-up run firing
+# during boot would alert on a history that is stale for the obvious reason.
+OnCalendar=*-*-* 09:00:00
+Persistent=false
+RandomizedDelaySec=600
+Unit=jobs-volume-check.service
+
+[Install]
+WantedBy=timers.target

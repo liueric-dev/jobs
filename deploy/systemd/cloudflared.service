@@ -1,0 +1,39 @@
+[Unit]
+Description=Cloudflare Tunnel for the jobs webapp and contributor API
+Documentation=file:///home/eric/apps/jobs/deploy/README.md
+# A USER unit, not a system one, matching every other unit this project owns.
+# The system-wide `cloudflared service install` would run as root and read
+# /etc/cloudflared/config.yml -- a second config location, outside the repo,
+# that nothing here would ever check. One tracked file, symlinked, is worth more
+# than root.
+#
+# This one DOES want the network, unlike the backup and ingest units: it is an
+# outbound QUIC connection to Cloudflare's edge and it is the only thing here
+# that cannot do its job offline.
+After=network-online.target
+Wants=network-online.target
+OnFailure=jobs-failure@%n.service
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate --config %h/.cloudflared/config.yml tunnel run
+# --no-autoupdate: an unattended binary swap under a live tunnel is a restart
+# nobody scheduled, at an hour nobody chose. Updates happen by hand, in the
+# runbook's maintenance section, where a failure is watched.
+#
+# Restart=always, not on-failure. The tunnel's normal bad day is a dropped
+# connection to the edge, which exits cleanly; on-failure would leave it down
+# after exactly the event it is supposed to survive.
+Restart=always
+RestartSec=5
+# Do not let a flapping tunnel disable itself. StartLimitIntervalSec=0 removes
+# systemd's default rate limit, which would otherwise stop retrying after five
+# restarts in ten seconds -- during, say, a router reboot -- and leave thirty
+# people locked out until someone noticed.
+StartLimitIntervalSec=0
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloudflared
+
+[Install]
+WantedBy=default.target

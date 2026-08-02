@@ -1,0 +1,19 @@
+[Unit]
+Description=Weekly per-source volume digest, Monday 09:30 America/New_York
+Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+
+[Timer]
+# Monday morning, half an hour after the daily check, so a week that ended badly
+# has already alerted and the digest arrives as context rather than as news.
+#
+# Persistent=true, unlike jobs-volume-check.timer. A missed alarm is worthless
+# once the moment has passed; a missed weekly report is not, because its job is
+# to be a habit -- a week with no digest should mean something is wrong, and
+# that only works if the digest is otherwise never absent.
+OnCalendar=Mon *-*-* 09:30:00
+Persistent=true
+RandomizedDelaySec=600
+Unit=jobs-volume-digest.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,24 @@
+[Unit]
+Description=Restore the newest jobs dump into a throwaway database and compare
+Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+# A SEPARATE UNIT from jobs-backup, and weekly rather than nightly, on purpose.
+# What a rehearsal catches is a dump that has STOPPED being restorable -- a slow
+# failure, not a sudden one -- so running it every night buys very little signal
+# over running it every week, and costs a full restore's write IO each time.
+#
+# What it must never become is a check that cannot fail. Run it by hand with
+# --self-test after any change to either script; that flag truncates job_facts
+# in the restored copy and the run is then expected to exit 1.
+OnFailure=jobs-failure@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/eric/apps/jobs/backend
+ExecStart=/home/eric/apps/jobs/backend/scripts/verify-jobs-backup.sh
+EnvironmentFile=-%h/.config/jobs-backup.env
+TimeoutStartSec=1800
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jobs-backup-verify
+Nice=10
+IOSchedulingClass=idle

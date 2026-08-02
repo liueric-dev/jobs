@@ -1,0 +1,68 @@
+{
+  "_comment": "Per-source volume floors for the nightly pipeline. Read by tools/volume-check.py, which is run by its own systemd timer a few hours after jobs-ingest and exits non-zero -- and therefore alerts through jobs-failure@ -- when a source has written less than its floor over its window. This is the deployment-level expression of the one rule this system turns on: EVERY failure mode here is silent. An exhausted key, a revoked key, a blocked scraper and a Workday tenant that moved its site path all return zero rows and raise nothing. An exit code answers 'did it run'; only volume answers 'did it get anything'.",
+
+  "_why_not_in_run_daily": "The floors are checked by a SEPARATE unit, not at the end of run-daily.py, for a reason that is not tidiness. The single hardest failure to notice is the run that never happened at all, and a check that lives inside the run cannot report the run's absence. tools/volume-check.py reads .run-volumes.jsonl -- which run-daily.py appends to on every run -- so it can fail on staleness (`max_run_age_hours` below) as well as on volume. It also keeps a low-volume night from turning jobs-ingest.service red, which would conflate 'a step crashed' with 'a source went quiet'; those need different responses and the same alert channel would stop meaning anything.",
+
+  "_instrument": "Every number below was read off the `written/dropped:` line run-daily.py:287-289 prints on every run, recovered from the journal on 2026-08-02 with:\n\n    journalctl --user -u jobs-ingest.service --since '-30 days' -o cat --no-pager | grep -F 'written/dropped'\n\nThat is deliberately the SAME instrument the check uses, so the floor and the measurement cannot drift apart the way a floor derived from a SQL count over jobs.first_seen would. They are not the same quantity: `written` is new + updated (run-daily.py:226), while first_seen counts only rows that were new, so a floor calibrated against first_seen would sit below the real signal and go blind to a source that stopped finding anything new but kept re-seeing old rows.",
+
+  "_n": "FIVE nightly runs, 2026-07-29 through 2026-08-02. That is the whole history the journal holds, and it is thin -- thin enough that these are STARTING floors, not calibrated ones. They are set to catch a source that has gone to ZERO or near it, which is the failure that actually happens here, and deliberately NOT to detect a modest dip: `ats` wrote 1143 on one night and 105 on another with nothing wrong either time, so any floor tight enough to see that swing would fire most weeks. A check that cries wolf is worse than no check, because it teaches the reflex that retires all the others. Re-derive from a longer window once .run-volumes.jsonl has one.",
+
+  "_window_rule": "WHY EACH SOURCE CARRIES ITS OWN WINDOW, AND IT IS THE CENTRAL DESIGN POINT. A per-night floor is wrong for five of the nine sources and would have fired on four of them during the five nights measured. hn-hiring wrote 0 on every one of those nights and 247 on 2026-07-24, because the source is a MONTHLY thread. nyc-open-data wrote 354 once and 0 on the four nights after. weworkremotely ran 0, 0, 3, 2, 2. Zero is that source's normal Tuesday, and a floor that calls it an outage produces exactly the alert fatigue this file exists to avoid. So a floor is a MINIMUM TOTAL OVER A TRAILING WINDOW OF RUNS, and the window is a property of the source's publishing rhythm, not a global constant.",
+
+  "_insufficient_history_rule": "A source is NOT checked until .run-volumes.jsonl REACHES BACK at least `window_days`. A fresh install, a restored machine or a newly-added source would otherwise alert on its first night for having no history, which trains the operator to ignore the channel before it has ever been right once. tools/volume-check.py reports those as `skipped (insufficient history)` and they are visible in --digest, so 'not checked yet' is never confused with 'checked and fine'.\n\nTHE TEST IS THE SPAN OF THE HISTORY, NOT THE COUNT OF RUNS INSIDE THE WINDOW, and the difference is not pedantic. `runs >= window_days` is the obvious form and it is wrong for a nightly pipeline: a 3-day window over one run a night holds two or three runs depending on where the timer's jitter lands, so the three-day sources -- ats, builtin-nyc, google-serpapi, google-apify, which are the four that actually run every night -- would have reported `skipped` on most days while the checker exited 0 and looked healthy. It was written that way first and caught by running the CLI against a synthetic healthy history, not by reading the code.",
+
+  "_rejected": "REJECTED -- a percentage-of-trailing-median floor. It is the obvious design and it fails on exactly the case that matters: a source that has been returning zero for a week has a trailing median of zero, so its floor becomes zero and the check silently agrees that nothing is wrong. A floor that adapts to the outage it is meant to detect is not a floor. Absolute numbers, re-derived by hand when the shape of a source changes, with this file recording when and from what.\n\nREJECTED -- alerting on `dropped` (the errors half of the line). Worth watching and already printed, but it is the LOUD failure: upsert_checked surfaces it and the count is on every run line. The silent one is written=0, and that is what this file is for.\n\nREJECTED -- one global floor over the whole run. The total is dominated by ats (roughly an order of magnitude above everything else), so ats alone can hold the total above any global floor while every other source is dead. Per-source is the entire point.",
+
+  "max_run_age_hours": 30,
+  "_max_run_age_hours": "The absence check, and the easiest failure in the system to miss. jobs-ingest.timer fires at 00:00 local (deploy/systemd/jobs-ingest.timer) and the five measured runs finished between 00:10 and 01:07, so a healthy history is never more than about 25 hours stale when the 09:00 check reads it. 30 hours leaves room for a long LLM night without leaving room for a missed one: a run that does not happen is caught by the next morning's check, which is the 'within a day' the task asks for. Persistent=true on the timer means a machine that was off catches up at boot, so this fires on a pipeline that is broken, not on a laptop that was closed.",
+
+  "sources": {
+    "ats": {
+      "floor": 200,
+      "window_days": 3,
+      "_comment": "Greenhouse/Lever/Ashby boards, ingest/ats.py -- the largest source by an order of magnitude and the most variable. Measured 671, 1058, 1143, 955, 105 over the five nights; the worst three consecutive nights total 2203. The floor is set an order of magnitude below that, at 200 over three nights, because the quantity being defended is 'the boards are still answering', not 'the boards are as busy as last week'. The 105 night is why: it is a normal night, and a floor set anywhere near the observed minimum would have called it an outage."
+    },
+    "workday": {
+      "floor": 10,
+      "window_days": 7,
+      "_comment": "ingest/workday.py. Only two runs of history -- 73 and 29 -- because the step is newer than the journal window, so this floor is the least-evidenced number in the file and should be re-derived first. Seven days rather than three for the same reason. docs/ingest/workday.md calls this the fragile gate, and the Workday `limit`>20 trap returns an empty array with no error, indistinguishable from 'no more results', so a silent zero here is the specific outcome most worth catching."
+    },
+    "builtin-nyc": {
+      "floor": 60,
+      "window_days": 3,
+      "_comment": "ingest/builtin-nyc.py. The steadiest source measured: 67, 61, 69, 63, 57, worst three consecutive nights 181. A floor of 60 over three nights is a third of that -- it tolerates two dead nights out of three and still catches a scraper that has been blocked outright, which is this source's real failure mode since it is an HTML scrape rather than an API."
+    },
+    "nyc-open-data": {
+      "floor": 1,
+      "window_days": 30,
+      "_comment": "ingest/nyc-open-data.py. Measured 354, 0, 0, 0, 0 -- and the zeros are correct. The feed is a full slice re-read every night, so a night where no posting changed produces only `unchanged` rows, which parse_upsert_summaries deliberately excludes (run-daily.py:210-214). Thirty days and a floor of one therefore says the only thing that can honestly be said about this source: over a month it must write SOMETHING, or the endpoint has moved. docs/ingest/nyc-open-data.md puts its yield near two relevant postings a day, which is consistent."
+    },
+    "weworkremotely": {
+      "floor": 1,
+      "window_days": 7,
+      "_comment": "ingest/weworkremotely.py, category RSS. Measured 0, 0, 3, 2, 2. Low absolute volume with real zeros in it, so the window carries the signal and the floor is the minimum that means anything at all: one posting a week. A blocked or moved feed shows up as a month of zeros, which this catches on day seven."
+    },
+    "hn-hiring": {
+      "floor": 1,
+      "window_days": 45,
+      "_comment": "ingest/hn-hiring.py. Zero on all five measured nights and 247 rows on 2026-07-24 -- the source is ONE MONTHLY THREAD, so nightly zero is its normal state and a nightly floor on it would be a permanent false alarm. Forty-five days is one month plus enough slack that a thread posted late, or a run missed around the turn of the month, does not fire. This is the source that most clearly proves per-source windows were necessary."
+    },
+    "google-serpapi": {
+      "floor": 40,
+      "window_days": 3,
+      "_comment": "ingest/google-serpapi.py. Measured 68, 56, 62, 59, 57 -- tight, because the step is paced against a fixed query bank rather than against how much the internet published. Worst three consecutive nights 172; floor 40. This is the source whose silent failure is most likely: the SerpApi free tier exhausts, and an exhausted key returns an empty result set rather than an error."
+    },
+    "google-apify": {
+      "floor": 3,
+      "window_days": 3,
+      "_comment": "ingest/google-apify.py. Measured 5, 7, 8, 5, 7; worst three consecutive nights 17. Small numbers by design -- the actor bills per result against the operator's own account, so the step is deliberately capped. Floor 3 over three nights: below that the token has been revoked or the actor has changed shape."
+    }
+  },
+
+  "unfloored": {
+    "tools/ats-discover": "DELIBERATELY NO FLOOR. It is discovery, not ingest, and run-daily.py:137-139 says the backlog drains over successive nights and the step then GOES QUIET ON ITS OWN. Measured 94, 29, 19 and then two nights of `-` (it reported no upsert summary at all, because the monthly re-probe watermark said it was not due). Quiet is success here, so any floor would invert the signal.",
+    "extract": "No upserts. extract.py writes job_facts through its own path and logs no upsert-summary line, so run-daily reports `-` rather than 0 (run-daily.py:215-216). Its health question is 'are new postings being extracted', which is a different measurement against job_facts and is not this file's job.",
+    "match": "No upserts; free arithmetic over rows extract already wrote.",
+    "score": "No upserts, and a deliberately budgeted number of LLM calls per active profile. A quiet night here means nobody logged in, which is a product signal and not an outage."
+  }
+}

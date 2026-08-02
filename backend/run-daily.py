@@ -53,6 +53,16 @@ need opposite responses -- the first is a quiet Tuesday, the second is data
 loss. The counts come from the `upsert-summary:` line lib.upsert.upsert_checked
 logs on every call; see parse_upsert_summaries() below.
 
+THOSE COUNTS ARE ALSO APPENDED to .run-volumes.jsonl, and that file is what
+turns the summary from something a human might read into something that fires.
+tools/volume-check.py runs on its own timer, reads the history back, and alerts
+when a source has written less than its floor over its window
+(config/volume-floors.json) -- or when the newest entry is too old, which is how
+a run that never happened gets noticed. The check is deliberately NOT here: a
+check inside the run cannot report the run's absence, and a low-volume night
+must not turn this script's exit code red, because "a step crashed" and "a
+source went quiet" need different responses.
+
 ENVIRONMENT: this script establishes its own environment from ./.env rather
 than assuming the caller did. The 2026-07-25 00:00 scheduled run failed all
 seven steps at once on missing DATABASE_URL and missing API keys, because
@@ -91,6 +101,7 @@ import re
 import sys
 import subprocess
 
+import volume_floors
 from lib import envfile
 from lib.upsert import SUMMARY_PREFIX
 
@@ -310,6 +321,34 @@ def main():
     print(f"run-daily: {len(STEPS) - len(failures)}/{len(STEPS)} step(s) ok, "
           f"{total_errors} record(s) dropped "
           f"[written/dropped: {', '.join(parts)}]")
+
+    # Append the same counts to .run-volumes.jsonl, keyed by the SAME labels the
+    # line above uses, so the floors in config/volume-floors.json are calibrated
+    # against exactly the quantity they are checked against.
+    #
+    # WHY RECORD RATHER THAN CHECK. The floors are evaluated by
+    # tools/volume-check.py on its own timer, not here, and the reason is not
+    # tidiness: the hardest failure in this system to notice is the run that
+    # never happened, and a check inside the run cannot report the run's
+    # absence. Writing the file is all this process can usefully do; deciding
+    # whether the file looks wrong -- including "the newest entry is thirty
+    # hours old" -- is a question only something outside the run can ask.
+    #
+    # It also keeps a quiet night out of this script's exit code. A source that
+    # went silent and a step that crashed need opposite responses, and one
+    # alert channel meaning both would very quickly mean neither.
+    labelled = {
+        script_name.removeprefix("ingest/").removesuffix(".py"): counts
+        for script_name, counts in volumes.items()
+    }
+    if volume_floors.record_run(labelled) is None:
+        # Never fatal: every step above has already done its real work, and a
+        # full disk here must not turn a successful ingest into a failed unit.
+        # Say so, though -- a history that silently stops growing looks exactly
+        # like a pipeline that is fine.
+        print("run-daily: could not append to "
+              f"{volume_floors.DEFAULT_HISTORY_PATH}; volume-check will see "
+              "this run as missing", file=sys.stderr)
 
     if failures:
         print(f"run-daily: {len(failures)}/{len(STEPS)} step(s) failed: {failures}")

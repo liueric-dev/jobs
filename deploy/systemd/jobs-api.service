@@ -1,0 +1,36 @@
+[Unit]
+Description=jobs contributor API -- the work queue, on localhost:8420
+Documentation=file:///home/eric/apps/jobs/backend/api/README.md
+# EXPECTED TO BE DEPRECATED. backend/api/ is the contributor work queue and
+# .claude/CLAUDE.md says so; this unit exists because the tunnel needs something
+# to point at while it is still the way contributors submit. If the queue is
+# retired, delete this unit and the second ingress rule in
+# deploy/cloudflared/config.yml together -- an ingress hostname with nothing
+# listening behind it is a 502 that looks like an outage.
+After=network-online.target
+Wants=network-online.target
+OnFailure=jobs-failure@%n.service
+
+[Service]
+Type=exec
+WorkingDirectory=/home/eric/apps/jobs/backend/api
+# A DELIBERATELY DIFFERENT, RESTRICTED CREDENTIAL from the pipeline's. This
+# service connects as `jobs_api`, a role that can do six things and nothing
+# else: no DELETE anywhere, no CREATE, no grant at all on the seven
+# pipeline-owned tables or the jobs_app view, and no CONNECT to the events
+# database. Before 2026-07-26 it shared the instance's only role, which was a
+# superuser -- so a leaked bearer token would have yielded COPY ... FROM
+# PROGRAM. Pointing this EnvironmentFile at backend/.env would undo all of that
+# in one line and nothing would fail; it would simply work, with more privilege.
+EnvironmentFile=/home/eric/apps/jobs/backend/api/.env
+ExecStart=/home/eric/apps/jobs/backend/api/.venv/bin/uvicorn app:app \
+          --host 127.0.0.1 --port 8420
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jobs-api
+
+[Install]
+WantedBy=default.target

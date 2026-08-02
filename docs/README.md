@@ -34,6 +34,7 @@ Per rule 3, nothing here counts anything. To count the documents, run
 |---|---|
 | [`DOCS-POLICY.md`](DOCS-POLICY.md) | What is each document for, how long does it stay true, and what retires it? |
 | [`MEASUREMENT-TRAPS.md`](MEASUREMENT-TRAPS.md) | What has already invalidated a measurement in this repo, and how do I not repeat it? |
+| [`RUNBOOK.md`](RUNBOOK.md) | How does a successor keep this running — restart a service, rotate a key, act on a source that has gone quiet, add an employer, onboard a contributor, and restore from a backup? |
 | [`WORKING-METHOD.md`](WORKING-METHOD.md) | How is work verified here — who commits, what is checked before implementing, and what a green suite does not tell you? |
 | [`scoring.md`](scoring.md) | What does a score mean, are two of them comparable, and where did every weight come from? ~~Part contract, part dated measurement~~ **split 2026-08-01 by task 43 (`DEC-70`); the measured half is [`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md), below.** |
 | [`tasks/refactor/AUDIT.md`](tasks/refactor/AUDIT.md) | What is the state of the run, and which instrument produced each figure? |

@@ -179,35 +179,58 @@ passwordless; the real connection string lives in `.env` (mode 600, gitignored)
 2026-07-24, and on 2026-07-26 this service moved off the superuser onto the
 restricted `jobs_api` role described above.
 
-### Phase 1 — tailnet only (current plan)
+**~~Not automated by this repo~~ — automated as of task 33.** The systemd unit,
+the tunnel config and the install sequence are tracked in
+[`deploy/`](../../deploy/README.md), and day-to-day operations are in
+[`docs/RUNBOOK.md`](../../docs/RUNBOOK.md). What remains manual is the part no
+repository can hold: a Cloudflare account, a domain, and one `cloudflared
+tunnel create`.
 
-Serving only machines their owner controls, over Tailscale:
+### ~~Phase 1 — tailnet only~~ — superseded by Cloudflare Tunnel, task 33
 
-1. **No TLS / reverse proxy / domain needed.** Tailscale is WireGuard —
-   transport is already encrypted and device-authenticated, so bearer tokens
-   over plain HTTP *inside the tailnet* are fine. Do not "fix" this by adding
-   a proxy; it buys nothing here.
-2. Bind to the tailnet interface rather than `0.0.0.0`.
-3. Run under a supervisor (systemd unit or container) so it restarts.
+~~Serving only machines their owner controls, over Tailscale: no TLS, reverse
+proxy or domain needed, bind to the tailnet interface, run under a
+supervisor.~~
 
-Note that for one person's own devices this service is optional — those
-machines can point `DATABASE_URL` straight at Postgres over the tailnet and
-use the existing ingest scripts. Running them through this API is worth it
-mainly to shake it out before external contributors exist.
+**Struck, not deleted, and the reasoning is worth the next reader's time
+because it was correct.** Tailscale is WireGuard — transport is already
+encrypted and device-authenticated, so bearer tokens over plain HTTP *inside*
+a tailnet genuinely are fine, and adding a proxy there genuinely does buy
+nothing. Nothing below contradicts that.
 
-### Phase 2 — public contributors
+What changed is the population, not the argument. Phase 1 was written for one
+person's own devices. This service now has to serve ~30 Builders who are not on
+anyone's tailnet and must never be put on one — putting them there would grant
+network-level access to a home network, which the phase-2 note below already
+said. Once every real caller is outside the tailnet, "phase 1" describes a
+configuration with no users, and keeping two transports alive to reach that
+state is more surface, not less.
 
-1. **Terminate TLS.** Tailscale Funnel can expose this service publicly over
-   HTTPS with a valid cert, no port-forwarding and no domain purchase;
-   Caddy/nginx works too. Bearer tokens over plaintext HTTP on the open
-   internet would leak on every request.
-2. **Never put contributors on the tailnet** — that grants network-level
-   access to the home network. They hit the HTTPS endpoint only.
-3. **Firewall Postgres** so it doesn't become reachable just because the host
+So there is one transport: **Cloudflare Tunnel**, from day one, for this service
+and for the webapp. Free tier; no static IP, no inbound port open, TLS
+terminated at the edge, and it works from behind a residential ISP that blocks
+inbound servers.
+
+### Phase 2 — public contributors, and what it takes
+
+1. **TLS is terminated by the tunnel.** Bearer tokens over plaintext HTTP on the
+   open internet leak on every request; this is the requirement Tailscale Funnel
+   was going to satisfy and Cloudflare now does. Caddy/nginx would also work and
+   would each need a port opened, which is the thing being avoided.
+2. **Bind to `127.0.0.1`, not `0.0.0.0`.** `cloudflared` connects from this same
+   host, so binding wider buys nothing and makes the service reachable from the
+   LAN the moment someone opens a firewall for an unrelated reason.
+   `deploy/systemd/jobs-api.service` does this.
+3. **Never put contributors on the tailnet.** Unchanged from the original text
+   and now the only thing the tailnet is mentioned for. They reach the HTTPS
+   hostname and nothing else.
+4. **Firewall Postgres** so it doesn't become reachable just because the host
    did.
-4. Set `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` to match how much of the query
-   bank external contributors should cover per day.
-5. **Close the two gaps below first.**
+5. Set `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` to match how much of the query bank
+   external contributors should cover per day.
+6. **The tunnel is not an authorization layer.** Anyone on the internet can
+   reach the hostname; the bearer key is the only thing keeping them out. Close
+   the two gaps below before minting a key for anyone you do not know.
 
 ### Before opening this up — known gaps
 

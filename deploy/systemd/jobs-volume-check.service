@@ -1,0 +1,33 @@
+[Unit]
+Description=Alert when an ingest source has gone quiet or a nightly run is missing
+Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+# THE SOFT-FAILURE COUNTERPART TO jobs-failure@. That unit covers a step that
+# exited non-zero. This one covers the failures that exit zero, which is all of
+# them that matter here: an exhausted API key returns zero rows, a revoked key
+# returns zero rows, a blocked scraper returns zero rows, a Workday tenant that
+# changed its site path returns zero rows. None of them raise, and a green
+# jobs-ingest.service says all four are fine.
+#
+# WHY THIS IS NOT PART OF run-daily.py, restated where an operator will read it:
+# the single hardest failure to notice is the run that never happened, and a
+# check that lives inside the run cannot report the run's absence. run-daily.py
+# appends its per-source counts to backend/.run-volumes.jsonl; this reads them
+# back, so staleness of the newest entry is a finding like any other.
+#
+# It also keeps a quiet night off jobs-ingest.service's exit code. "A step
+# crashed" and "a source went quiet" need different responses, and one alert
+# channel that means both very quickly means neither.
+OnFailure=jobs-failure@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/eric/apps/jobs/backend
+# System python3, no venv: the pipeline's only third-party dependency is
+# psycopg and this check does not even need that -- it reads one JSONL file and
+# one JSON config. A monitor with fewer dependencies than the thing it monitors
+# is a monitor that still works on the morning the thing is broken.
+ExecStart=/usr/bin/python3 /home/eric/apps/jobs/backend/tools/volume-check.py
+TimeoutStartSec=120
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jobs-volume-check

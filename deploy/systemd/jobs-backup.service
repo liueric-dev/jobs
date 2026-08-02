@@ -1,0 +1,32 @@
+[Unit]
+Description=Dump the jobs database
+Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+# The corpus is the asset. job_facts holds one LLM extraction per posting and is
+# written once per posting ever -- the property that keeps cost flat in users is
+# also what makes the table expensive to lose. Re-extraction is slow, and a
+# posting whose source has delisted it is not re-extractable at all.
+#
+# No After=network-online.target: this talks to a container on localhost. Adding
+# it would delay the unit waiting for something it does not use -- unless
+# JOBS_BACKUP_REMOTE points somewhere over the network, in which case the copy
+# step retries on the next run rather than blocking this one at boot.
+OnFailure=jobs-failure@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/eric/apps/jobs/backend
+ExecStart=/home/eric/apps/jobs/backend/scripts/backup-jobs.sh
+# The off-machine destination and the retention window. Kept in an environment
+# file OUTSIDE the repo because it carries a remote path and possibly a
+# credential: JOBS_BACKUP_REMOTE, JOBS_BACKUP_KEEP_DAYS, JOBS_BACKUP_DIR. The
+# `-` prefix means the unit still runs if the file is absent, in which case the
+# script warns on every run that the dump is on one disk -- loudly, and without
+# failing, because a local dump beats no dump.
+EnvironmentFile=-%h/.config/jobs-backup.env
+# 10 minutes is a hung docker exec, not a slow morning.
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jobs-backup
+Nice=10
+IOSchedulingClass=idle

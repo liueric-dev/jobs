@@ -393,10 +393,21 @@ encoding, and the grant/SQL parity check. The I/O halves are the manual
 checklist below; a test suite that needs a client secret to run is a test suite
 nobody runs.
 
-## Deployment (manual — not automated by this repo)
+## Deployment
+
+**~~Manual — not automated by this repo~~ — automated as of task 33.** The
+systemd unit (`deploy/systemd/jobs-webapp.service`), the tunnel ingress rule
+(`deploy/cloudflared/config.yml`) and the install sequence are tracked in
+[`deploy/`](../../deploy/README.md). Operations — restarting this service,
+rotating the Google client secret, what a `curl` that works on `localhost` and
+fails through the tunnel means — are in
+[`docs/RUNBOOK.md`](../../docs/RUNBOOK.md).
 
 **No credential is stored in this repo.** `DATABASE_URL` and the Google client
-secret live in `.env` (mode 600, gitignored) — see `.env.example`.
+secret live in `.env` (mode 600, gitignored) — see `.env.example`. Rotating
+either is an edit plus `systemctl --user restart jobs-webapp.service`; nothing
+is rebuilt and no tracked file changes. `backend/tests/test_secrets_rotation.py`
+pins that property rather than trusting it.
 
 ### Phase 1 — localhost / tailnet
 
@@ -405,19 +416,36 @@ plain HTTP on localhost, and change it back for anything else.
 
 ### Phase 2 — reachable from a browser you don't own
 
-1. **Terminate TLS.** The session cookie is a bearer credential; over plaintext
-   HTTP it leaks on every request. With TLS in place, `SESSION_COOKIE_SECURE`
-   must be `true` — its whole job is to stop the browser sending the cookie in
-   the clear.
+Task 33 chose **Cloudflare Tunnel** over Tailscale Funnel and over
+Caddy/nginx-plus-a-forwarded-port; `../api/README.md` § *Deployment* carries the
+argument, which applies identically here and is not restated. One hostname
+serves this service, and the page, and the API the page calls.
+
+1. **TLS is terminated by the tunnel**, so `SESSION_COOKIE_SECURE` stays `true`
+   — its whole job is to stop the browser sending the session cookie in the
+   clear, and the cookie is this client's only credential.
 2. **Add the deployed redirect URI to the Google console**, and set
    `GOOGLE_REDIRECT_URI` to match byte-for-byte. A mismatch is a Google error
-   page, not an error from this service.
-3. **Set `ALLOWED_ORIGINS`** to the real frontend origin. Once the frontend is
-   served from the same origin as this service, CORS stops being involved at
-   all and the list can be empty.
-4. **Firewall Postgres** so it doesn't become reachable just because the host
+   page, not an error from this service — which means it looks like Google is
+   broken rather than like a config line is wrong. **Only the owner can do
+   this**; it is a console click, not a file.
+3. **Set `FRONTEND_ORIGIN`** to the deployed origin. `ALLOWED_ORIGINS` can then
+   be empty: `frontend/serve.py` mounts the page on this service's *own* origin
+   deliberately, so CORS stops being involved at all. A third origin that
+   neither variable names gets its cookie dropped by the browser **silently**,
+   which is why the client is not served from a second dev server.
+4. **Bind to `127.0.0.1`, not `0.0.0.0`.** `cloudflared` connects from this same
+   host; binding wider only widens the LAN surface.
+   `deploy/systemd/jobs-webapp.service` does this.
+5. **Firewall Postgres** so it doesn't become reachable just because the host
    did.
-5. Run under a supervisor (systemd unit or container) so it restarts.
+6. Run under a supervisor — `deploy/systemd/jobs-webapp.service`, with
+   `Restart=always` and systemd's start-limit removed so a flapping restart
+   cannot disable the unit and lock the cohort out.
+
+**The tunnel is not an authorization layer.** Anyone on the internet can reach
+the hostname; the Google OAuth session is the only thing keeping strangers out
+of the app, and the *Known gaps* below are the places that matters.
 
 ### Known gaps
 
