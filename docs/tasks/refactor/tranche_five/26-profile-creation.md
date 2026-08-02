@@ -6,7 +6,8 @@ generator: none
 
 # 26 — Profile creation
 
-**Status:** todo. **Depends on:** 13, ~~and 27 declared itself dependent on this~~ **and 27,
+**Status:** ~~todo~~ **backend half DONE 2026-08-02; the screen half is task 32's and is
+not started.** **Depends on:** 13, ~~and 27 declared itself dependent on this~~ **and 27,
 which is DONE.** **Blocks:** 28, 29, 32.
 
 > **THE 26/27 ARROW WAS BACKWARDS AND IS CORRECTED, 2026-08-01.**
@@ -165,3 +166,97 @@ two diverge.
 - Cohort lifecycle behaviour is implemented and documented, not left implicit.
 - `migrate_profiles.py`'s scope is narrowed and its docstring updated.
 - The `app_users` → `profiles` mapping is explicit in the schema.
+
+---
+
+## What the work turned up, 2026-08-02
+
+Five of the seven done bullets are met. The two that are not are the two that need a
+screen, and they are **task 32's, not a remainder of this one** — see the correction at
+the top of this file. Nothing below builds UI and `frontend/` was not touched.
+
+Built: `builder_profiles` in `backend/webapp/schema_web.py`, resolution in a new
+`backend/webapp/onboarding.py` (`resolve`, `resolved_for`), `POST`/`GET /v1/onboarding`
+in the same file, and the narrowing in `backend/migrations/migrate_profiles.py`. Webapp
+suite `Ran 159` → `Ran 300`, OK.
+
+### The foreign key this file sketched cannot be written, and a better one can
+
+§ *Schema* asks for `parent_profile REFERENCES profiles(profile)`. The obstacle is not
+the referenced side — `profiles.profile` is `TEXT PRIMARY KEY` (`backend/schema.py:391`)
+and `schema_web.ensure_schema` already calls `schema.ensure_schema` first, on the same
+connection and the same admin credential, so shape, ordering and privilege all permit it.
+
+What forbids it is that **a foreign key is DDL on both tables**: Postgres implements
+referential integrity with system triggers, and the `ON DELETE`/`ON UPDATE` half is
+installed on the *referenced* table. So the constraint would put `pg_trigger` rows on a
+pipeline-owned table and make every `DELETE FROM profiles` this service's business —
+against the rule at the top of `schema_web.py`, which is that this module "never drops,
+alters or restates anything on the other side of that line."
+
+What was written instead is a **composite** FK entirely inside this service's ownership:
+
+```
+builder_profiles (app_user_id, parent_profile) REFERENCES app_users (id, profile)
+    ON DELETE CASCADE ON UPDATE CASCADE
+```
+
+with a redundant-looking `UNIQUE (id, profile)` on `app_users` to make it legal. It is
+the stronger constraint on the thing that can actually go wrong: a Builder's profile is
+now stored in two places — `app_users.profile`, which the session carries and every
+query in `jobs.py` scopes by, and `parent_profile`, which decides whose criteria resolve
+— and **they cannot disagree**. Two answers to "which cohort is this Builder in" is D66
+and D67 one level up.
+
+`ON UPDATE CASCADE` is also the cohort lifecycle, implemented rather than left implicit:
+`manage_app_users.py set-profile` is one `UPDATE app_users.profile`, and every override
+row follows it. A graduated Builder who is not moved keeps their old cohort profile and
+keeps working, which is what § *Cohort lifecycle* asks for.
+
+`app_users.profile → profiles.profile` therefore still has **no** FK, and that is now a
+recorded decision rather than an open one. It is enforced in three places instead: at
+write time by `manage_app_users.py`'s `profiles.load_one()` check (unchanged), at deploy
+time by a new `schema_web.profile_mapping_problems()` folded into `verify_schema()`, and
+at request time by `POST /v1/onboarding` refusing a session whose profile has no row.
+The deploy-time check is the one that closes the real hole — the hand-typed `UPDATE` the
+README tells operators not to do, which skips the CLI check.
+
+### Track subscriptions are derived, and derive nothing today
+
+§ *Onboarding* step 2 asks that seed judgements seed track subscriptions "from behaviour
+rather than a checkbox", so `derive_tracks()` reads `job_scores.primary_track` for the
+postings a Builder liked. **It returns an empty set for `pursuit` and will keep doing so
+until something changes.** `pursuit` has `daily_narrative_budget = 0`, so `score.py`
+writes no rows for it at all: `job_scores` held **zero** `pursuit` rows on 2026-08-02
+(`migrate_profiles.py` dry run: `existing job_scores : 0`). `config/pursuit-persona.json`'s
+`_no_buckets_comment` already records that `score.TRACKS`' five names "do not describe
+this population" and that fixing it is task 30's. The derivation is written now because
+the alternative was shipping the checkbox this file rejects; `tracks` stays NULL rather
+than `{}`, because "subscribed to no tracks" is not an answer anybody gave.
+
+### Two contract questions this file left open, now decided
+
+- **`interested`/`not_interested` → which event.** `frontend/fixtures/contract/MANIFEST.json`
+  recorded this as undecided. Decided: `interested` → `save` (the only cohort-visible
+  event, and it leaves the posting where the Builder can act on it), `not_interested` →
+  `dismiss`, with its permanence accepted and no invented `dismiss_reason`. Seed
+  judgements go through `jobs.record_events()` rather than a second INSERT, so
+  `visibility`, `match_score`, `criteria_version` and `app_user_id` are all the server's,
+  and `jobs.py` was not edited.
+- **Where the fifteen form fields live.** `prior_domain` stays on `app_users` — it exists
+  to decompose Axis B disagreement by background through `eval_labels.labeller_id`, which
+  is a fact about a labeller, not a matching input. `prior_years`, `situation` and
+  `schedule_constraints` are matching inputs and went on `builder_profiles`.
+
+### Still open, and deliberately not decided here
+
+- **`PRIOR_DOMAINS` still fails on the real user.** Unchanged, as instructed: widening it
+  moves a generated CHECK and is a decision. The field is optional in the request, so
+  that Builder can leave it NULL, which is the column's honest value.
+- **`SITUATIONS` and `SCHEDULE_CONSTRAINTS` are new vocabularies with thin derivations.**
+  `SCHEDULE_CONSTRAINTS` ships with the single value attested anywhere in the repo
+  (`no_overnight`); `SITUATIONS` has one attested value plus its implied negation. Both
+  are as unvalidated against real Builders as `PRIOR_DOMAINS` was on the day it shipped.
+- **Nothing filters on the resolved config yet.** `resolved_for()` is written and tested;
+  wiring it into `GET /v1/jobs` belongs with the screen that lets a Builder change these
+  values, because turning on a filter nobody can see would silently shrink thirty lists.

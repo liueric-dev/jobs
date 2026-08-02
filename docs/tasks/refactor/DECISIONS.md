@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-79`.** Allocated `DEC-46`–`DEC-78`. The count starts at 46 rather than at
+**Next free: `DEC-81`.** Allocated `DEC-46`–`DEC-80`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -2654,3 +2654,109 @@ opened rather than absorbed, because it is a second measurement and a second dec
 Reversible: yes — confined to `figure_hits()` and two module constants in
 `backend/tools/audit-docs.py`. Eight tests state what would be lost, each failing against
 the specific implementation it rules out.
+
+## DEC-79 — `builder_profiles` gets the foreign key that *can* be one, and `app_users.profile` keeps none
+
+**2026-08-02, task 26.**
+
+Task 26's Definition of done asks for the `app_users` → `profiles` mapping to be *"explicit
+in the schema"*. Today `app_users.profile` is bare `TEXT NOT NULL`, validated by
+`manage_app_users.py` calling `profiles.load_one()` rather than by the database — CLI-
+enforced, not DB-enforced. The task file calls that *"a design to replace rather than an
+unknown to discover"*. The obvious replacement is `REFERENCES profiles(profile)`.
+
+**Decided: do not add that foreign key. Add a composite one from `builder_profiles` to
+`app_users(id, profile)` instead**, backed by a new `UNIQUE (id, profile)` on `app_users` to
+give it a legal target.
+
+**The reason is mechanical, not stylistic, and it is the part worth keeping.** A foreign key
+is **DDL on both tables**. Postgres implements referential integrity with system triggers,
+and the `ON DELETE` / `ON UPDATE` half is installed on the **referenced** table — so
+`REFERENCES profiles(profile)` would put `pg_trigger` rows on a pipeline-owned table, take a
+lock on it that blocks the pipeline's own writes for the duration of the migration, and
+thereafter make every `DELETE FROM profiles` this service's business. `.claude/CLAUDE.md`
+§ *Layout* says the three processes share only `schema.py` and `lib/` and none imports
+another; `schema_web.py`'s own rule is that it never alters anything on the other side of
+that line. **A constraint that installs triggers on `profiles` alters `profiles`.** That is
+a stronger argument than the one the no-FK comment originally carried, which was closer to
+"we chose not to".
+
+**And it would enforce in the wrong direction anyway.** The failure worth catching is a
+Builder pointed at a profile that does not exist. An FK catches that at INSERT time on
+`app_users` — which `manage_app_users.py` already does, with a better error — and then
+spends the rest of its life refusing the pipeline's DELETEs, which nobody wanted.
+
+**Rejected: `REFERENCES profiles(profile)`** — for the two reasons above.
+**Rejected: leaving the mapping wholly unenforced**, which is what "CLI-enforced" meant and
+what the task asked to replace.
+
+So the constraint is enforced in three places, none of them a constraint on `profiles`:
+**write time** (`profiles.load_one()` on `add` and `set-profile`, the column's only two
+writers), **deploy time** (`verify_schema()` now re-checks the whole table, so a row written
+by a hand-typed `UPDATE` is a refusal to start rather than a 500 on that Builder's next
+click), and **request time** (`onboarding.py` refuses to write a `builder_profiles` row for
+a caller whose profile has no `profiles` row).
+
+**What the composite FK does buy** is the half that can be a constraint: the two places a
+Builder's profile name is stored **cannot disagree**. `ON UPDATE CASCADE` is load-bearing
+rather than decorative — `manage_app_users.py set-profile` exists precisely to move a
+Builder between profiles, and without the cascade that command would either fail or leave
+`builder_profiles.parent_profile` pointing at the old cohort. That is the same failure task
+29 recorded when an Axis B answer was nearly stamped with the wrong profile permanently.
+
+Reversible: yes, but not freely — dropping the composite FK is one statement, while dropping
+the `UNIQUE (id, profile)` it targets is a migration on a live table. Nothing outside
+`schema_web.py` and `onboarding.py` depends on either.
+
+## DEC-80 — a suppressed posting gets NO ROW in `cohort_signal`, and `save_bucket` is NOT NULL
+
+**2026-08-02, task 28.**
+
+Task 28's § *Implementation* sketches `save_bucket TEXT` with `null` as a fourth value —
+`'3-5' | '6-10' | '10+' | null` — implying one row per posting with any saves at all, the
+sub-threshold ones carrying `null`.
+
+**Decided: write no row below the threshold, and make `save_bucket` `NOT NULL`.**
+
+**The sketch enforces the suppression in the value and defeats it with the key.** The webapp
+role holds `SELECT` on this table, so under the sketch **the row's existence is itself the
+disclosure**: a row with `save_bucket IS NULL` says *"somebody saved this posting, and it is
+fewer than three people."* That is precisely what § *Rules* forbids — *"absence of a badge
+must not be readable as 'exactly one or two'"* — recreated one layer down, where the badge
+logic cannot see it.
+
+**It is the same shape as `D67`**, and that is why it is worth an entry rather than a
+comment: there, `visibility` correctly stored an application as `private` and the response
+body reported it cohort-wide, so the control was enforced in the column and defeated in the
+join. Here it would be enforced in the value and defeated in the primary key. A privacy
+control has to hold at the layer an attacker can actually query.
+
+`NOT NULL` plus a `CHECK` on the three labels then makes the bad state unrepresentable
+rather than merely unwritten — the same discipline as `evals label report` having no
+`--force`.
+
+**Rejected: the task file's own DDL sketch**, for the reason above. Its `null` was doing two
+different jobs — "below the floor" and "not computed" — and the endpoint cannot tell those
+apart, so neither can an auditor.
+
+**Two implementation facts that fall out of this and are easy to get wrong.**
+
+The `unsave` fold cannot be filtered on `cohort_anon`. `visibility_for()` maps only `save`,
+so **every `unsave` row is stored `private`** — filtering the whole fold on `cohort_anon`
+would delete every retraction and silently restore the overcount the fold exists to prevent.
+The visibility predicate therefore sits on the **counted** row only: a save contributes only
+if `cohort_anon`; a retraction is read regardless, because it can only ever remove somebody.
+The two instructions in the task file genuinely conflict on this point and the conflict is
+silent; the test that separates enforcement from convention inserts a `save` stored
+`private`, which an implementation filtering on the event name alone passes every other
+privacy test and fails.
+
+`ORDER BY occurred_at DESC, id DESC` — the `id` tiebreak is load-bearing, not tidiness.
+`occurred_at` is TEXT to the second and `record_events` stamps one `now` across a whole
+batch, so a save and an unsave of the same posting can share a timestamp exactly. Without
+the tiebreak the winner is arbitrary, and arbitrary in the direction that publishes a badge
+half the time.
+
+Reversible: yes, cheaply — `ALTER … DROP NOT NULL` and emit sub-threshold rows. The table is
+derived and rebuilt nightly, so nothing is lost, and the endpoint needs no change: it
+already renders a missing row and a NULL identically.

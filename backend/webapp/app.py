@@ -40,6 +40,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import auth
 import jobs
 import label
+import onboarding
 import schema_web
 from db import db
 
@@ -91,6 +92,11 @@ app.include_router(jobs.router)
 # auth.py's and label.py's existing 4xx bodies keep the shape their own tests
 # and the browser redirect flow already depend on.
 app.add_exception_handler(jobs.ContractError, jobs.contract_error_handler)
+# Profile creation (tranche_five/26). Registered AFTER the handler above and
+# deliberately raising jobs.ContractError rather than a type of its own, so a
+# 400 from onboarding comes back in the same envelope as a 400 from /v1/events
+# -- one error shape per API, which is what API-CONTRACT-v1.md specifies.
+app.include_router(onboarding.router)
 # The golden-set labelling surface. Server-rendered HTML rather than JSON,
 # because the people it exists for are ~10 Builder volunteers and frontend/
 # holds one file called .gitkeep -- see label.py.

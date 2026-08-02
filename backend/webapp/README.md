@@ -43,13 +43,15 @@ CREATE ROLE jobs_web LOGIN PASSWORD 'CHANGEME';
 GRANT CONNECT ON DATABASE jobs TO jobs_web;
 GRANT USAGE ON SCHEMA public TO jobs_web;
 GRANT SELECT ON public.jobs_app, public.jobs, public.job_matches,
-                 public.job_scores, public.job_facts, public.profiles TO jobs_web;
+                 public.job_scores, public.job_facts, public.profiles,
+                 public.cohort_signal TO jobs_web;
 GRANT SELECT, INSERT ON public.job_events TO jobs_web;
 GRANT USAGE, SELECT ON SEQUENCE public.job_events_id_seq TO jobs_web;
 GRANT SELECT, INSERT, UPDATE ON public.app_users TO jobs_web;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.app_sessions TO jobs_web;
 GRANT SELECT, INSERT, DELETE ON public.oauth_logins TO jobs_web;
 GRANT SELECT, INSERT, UPDATE ON public.builder_job_state TO jobs_web;
+GRANT SELECT, INSERT, UPDATE ON public.builder_profiles TO jobs_web;
 GRANT SELECT ON public.eval_label_sets, public.eval_label_items TO jobs_web;
 GRANT SELECT, INSERT ON public.eval_labels TO jobs_web;
 GRANT USAGE, SELECT ON SEQUENCE public.eval_labels_id_seq TO jobs_web;
@@ -116,18 +118,50 @@ session cookie.
 | `GET /v1/label/progress` | `{label_set, done, total}` for the signed-in labeller |
 
 `GET /v1/jobs` takes `limit` (≤100), `cursor`, `q`, `remote`, `nyc`,
-`min_score`, `since` and `exclude_dismissed`, and returns
-`{jobs, next_cursor, profile}`. Field names are the `jobs_app` column names
-unchanged, plus four booleans per row — `seen`, `saved`, `dismissed`,
-`applied` — for this profile.
+`min_score`, `since` and `include_dismissed`, and returns
+`{request_id, jobs, next_cursor, profile}`. Field names are the `jobs_app`
+column names unchanged, then five per-Builder state fields — `seen`, `applied`,
+`dismissed`, `saved` and the nullable `dismiss_reason` — then `cohort_signal`,
+then `rank`. **All of them are flat on the job object.** The nesting under
+`comp{}` / `why{}` / `state{}` that `API-CONTRACT-v1.md` describes is the target
+shape and is not what ships.
+
+> **Corrected 2026-08-02; the struck version is below because a client written
+> against it fails in ways that look like server bugs.** Six claims here were
+> wrong:
+>
+> | said | is |
+> |---|---|
+> | ~~`exclude_dismissed`~~ | **`include_dismissed`**, default `False`. Task 31 renamed it: the old one defaulted to *showing* dismissed rows, so a dismissal meant nothing unless the client opted in. The old name is silently ignored by FastAPI |
+> | ~~`{jobs, next_cursor, profile}`~~ | **four keys** — `request_id` rides beside them, and an event that does not echo it 400s with `missing_request_id` |
+> | ~~"four booleans"~~ | **five fields, four of them boolean**; `dismiss_reason` is a nullable string |
+> | ~~"for this profile"~~ | **per Builder.** Resolving these by profile *was* defects D66 and D67 — thirty Builders share `pursuit`, so one Builder's save read as everyone's. "For this profile" describes the defect, not the fix |
+> | ~~`{recorded, deduped, skipped}`~~ | **four keys** — `derived_skips` too |
+> | ~~event list~~ | missing **`undismiss`** |
+>
+> `cohort_signal` is new (task 28) and is `{"save_bucket": "3-5"\|"6-10"\|"10+"}`
+> or `null`. **A null is a privacy suppression, not an absence of data** — the
+> count is withheld below three Builders, because in a thirty-person cohort who
+> see each other in a classroom a count of one is close to an identifier. Do not
+> render it as "0 saves".
 
 Pagination is **keyset, not offset**: the list is re-ranked nightly whenever
 `match.py` rebuilds `job_matches`, and an offset taken before a re-rank and
-used after silently skips or repeats rows. Pass the `next_cursor` back.
+used after silently skips or repeats rows. Pass the `next_cursor` back. `rank`
+is 1-based and **continues across pages** — the render id and the next rank ride
+inside the opaque cursor, so page two starts at 5, not 1.
 
 `POST /v1/events` takes `{"events": [{"job_id": ..., "event": ...}]}` and
-returns `{recorded, deduped, skipped}`. `event` must be one of `impression`,
-`open`, `save`, `unsave`, `dismiss`, `applied`.
+returns `{recorded, deduped, skipped, derived_skips}`. `event` must be one of
+`impression`, `open`, `save`, `unsave`, `dismiss`, `undismiss`, `applied`.
+`skip` is **server-derived** and sending it is a 400.
+
+**This is the operator's summary, not the client author's contract.**
+[`../../frontend/README.md`](../../frontend/README.md) § *Things a client author
+will get wrong if nobody says them* owns that list — the two error envelopes, the
+four fields that arrive as JSON strings rather than arrays, and the rest — and it
+is derived from the code by `frontend/verify_fixtures.py`. Read it before writing
+a client; do not restate it here, or there will be two of it.
 
 ## The labelling surface — `/v1/label`
 
@@ -200,6 +234,29 @@ GRANT SELECT ON public.eval_label_sets, public.eval_label_items TO jobs_web;
 GRANT SELECT, INSERT ON public.eval_labels TO jobs_web;
 GRANT USAGE, SELECT ON SEQUENCE public.eval_labels_id_seq TO jobs_web;"
 ```
+
+**2026-08-02 adds two more tables, and one of them is not created by this
+service.** `builder_profiles` (task 26) is created by `init-schema` like the
+rest. **`cohort_signal` (task 28) is pipeline-owned** — it is declared in
+`backend/schema.py` and created by the pipeline's `ensure_schema()`, so
+`init-schema` does not create it and the GRANT below will fail with *"relation
+does not exist"* until a nightly run, or any pipeline script, has been through.
+That ordering is the same one the column check exists for: the two processes
+migrate on different schedules.
+
+```bash
+JOBS_ADMIN_DATABASE_URL=... .venv/bin/python manage_app_users.py init-schema
+psql -d jobs -c "
+GRANT SELECT, INSERT, UPDATE ON public.builder_profiles TO jobs_web;
+GRANT SELECT ON public.cohort_signal TO jobs_web;"
+```
+
+No sequence grant for either. `builder_profiles` is keyed `PRIMARY KEY
+(app_user_id)` on a TEXT column and `cohort_signal` on `(job_id,
+cohort_profile)` — neither has a `BIGSERIAL`, which is why `REQUIRED_SEQUENCES`
+is unchanged. `cohort_signal` is **SELECT-only on purpose**: the suppression
+threshold is computed by the pipeline's nightly fold and this service must not
+be able to write a bucket it did not compute.
 
 Then draw a set, from the pipeline side:
 
