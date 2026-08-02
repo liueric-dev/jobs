@@ -88,7 +88,7 @@ Nothing downstream is trustworthy until these land. None of them are large.
 
 | | Task | Lands | |
 |---|---|---|---|
-| 29 | [Two-axis labelling session](tranche_five/29-labelling-session.md) | Axis A extraction correctness, Axis B Builder preference — **labelling has started: 186 label rows over 31 of the 200 postings, all ten `overlap` rows answered, and ONE labeller. `evals label report` still refuses to report, correctly: with one labeller there is no inter-annotator ceiling to denominate a model score against** | in progress |
+| 29 | [Two-axis labelling session](tranche_five/29-labelling-session.md) | Axis A extraction correctness, Axis B Builder preference — ~~186 label rows over 31 postings, ONE labeller, and `evals label report` still refuses to report, correctly~~ **a second labeller answered the overlap block on 2026-08-02 and the report PRINTED: 271 rows / 36 postings / 2 labellers, exit 0.** The measurement is [`docs/labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md) and **it must not be tuned on** — the ceiling it produced sits *below* the floor on all five fields and rests on 6–10 items each. Still in progress: round 2 (~2026-08-09), more overlap, and the DoD's ≥100 distinct postings | in progress |
 
 ## Phase 7 — Ranking and display
 

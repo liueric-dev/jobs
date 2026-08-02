@@ -1,0 +1,4172 @@
+{
+  "fields": {
+    "advanced_degree_required": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7575059933447592,
+            1.0
+          ],
+          "agree2_k": 12,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 12,
+          "pairwise": 1.0,
+          "unan_k": 12,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7575059933447592,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8388748419471806,
+          1.0
+        ],
+        "agree2_k": 20,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 20,
+        "pairwise": 1.0,
+        "unan_k": 20,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8388748419471806,
+          1.0
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8063923194655637,
+          1.0
+        ],
+        "agree2_k": 16,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 16,
+        "pairwise": 1.0,
+        "unan_k": 16,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8063923194655637,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9035813714055363,
+          1.0
+        ],
+        "agree2_k": 36,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 36,
+        "pairwise": 1.0,
+        "unan_k": 36,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9035813714055363,
+          1.0
+        ]
+      }
+    },
+    "ai_involvement": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.5833333333333334,
+          "agree2_ci": [
+            0.31951131254954973,
+            0.8067396863412435
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "none <-> uses_ai_tools",
+              3
+            ],
+            [
+              "None <-> builds_llm_features",
+              1
+            ],
+            [
+              "builds_llm_features <-> uses_ai_tools",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 12,
+          "pairwise": 0.7222222222222222,
+          "unan_k": 7,
+          "unanimous": 0.5833333333333334,
+          "unanimous_ci": [
+            0.31951131254954973,
+            0.8067396863412435
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [
+            [
+              "builds_llm_features <-> none",
+              2
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 0.8333333333333334,
+          "unan_k": 6,
+          "unanimous": 0.75,
+          "unanimous_ci": [
+            0.40927543031016883,
+            0.9285207872478909
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.75,
+        "agree2_ci": [
+          0.531299122381256,
+          0.8881382985923343
+        ],
+        "agree2_k": 15,
+        "flips": [
+          [
+            "none <-> uses_ai_tools",
+            3
+          ],
+          [
+            "None <-> builds_llm_features",
+            1
+          ],
+          [
+            "builds_llm_features <-> uses_ai_tools",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 20,
+        "pairwise": 0.8333333333333334,
+        "unan_k": 15,
+        "unanimous": 0.75,
+        "unanimous_ci": [
+          0.531299122381256,
+          0.8881382985923343
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8063923194655637,
+          1.0
+        ],
+        "agree2_k": 16,
+        "flips": [
+          [
+            "builds_llm_features <-> none",
+            2
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 16,
+        "pairwise": 0.9166666666666666,
+        "unan_k": 14,
+        "unanimous": 0.875,
+        "unanimous_ci": [
+          0.639771727342413,
+          0.9650225122567595
+        ]
+      },
+      "overall": {
+        "agree2": 0.8611111111111112,
+        "agree2_ci": [
+          0.713404696106438,
+          0.9391818499086717
+        ],
+        "agree2_k": 31,
+        "flips": [
+          [
+            "none <-> uses_ai_tools",
+            3
+          ],
+          [
+            "builds_llm_features <-> none",
+            2
+          ],
+          [
+            "None <-> builds_llm_features",
+            1
+          ],
+          [
+            "builds_llm_features <-> uses_ai_tools",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 36,
+        "pairwise": 0.8703703703703703,
+        "unan_k": 29,
+        "unanimous": 0.8055555555555556,
+        "unanimous_ci": [
+          0.6497195700482261,
+          0.9024690458107127
+        ]
+      }
+    },
+    "comp_currency": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.9166666666666666,
+          "agree2_ci": [
+            0.646120088858883,
+            0.9851349055950829
+          ],
+          "agree2_k": 11,
+          "flips": [
+            [
+              "CAD <-> None",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 12,
+          "pairwise": 0.9444444444444443,
+          "unan_k": 11,
+          "unanimous": 0.9166666666666666,
+          "unanimous_ci": [
+            0.646120088858883,
+            0.9851349055950829
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "None <-> USD",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 0.9166666666666666,
+          "unan_k": 7,
+          "unanimous": 0.875,
+          "unanimous_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 0.5,
+          "agree2_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ],
+          "agree2_k": 1,
+          "flips": [
+            [
+              "None <-> USD",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 0.6666666666666666,
+          "unan_k": 1,
+          "unanimous": 0.5,
+          "unanimous_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.95,
+        "agree2_ci": [
+          0.763868806553258,
+          0.9911185511992047
+        ],
+        "agree2_k": 19,
+        "flips": [
+          [
+            "CAD <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 20,
+        "pairwise": 0.9666666666666668,
+        "unan_k": 19,
+        "unanimous": 0.95,
+        "unanimous_ci": [
+          0.763868806553258,
+          0.9911185511992047
+        ]
+      },
+      "messy": {
+        "agree2": 0.875,
+        "agree2_ci": [
+          0.639771727342413,
+          0.9650225122567595
+        ],
+        "agree2_k": 14,
+        "flips": [
+          [
+            "None <-> USD",
+            2
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 16,
+        "pairwise": 0.9166666666666666,
+        "unan_k": 14,
+        "unanimous": 0.875,
+        "unanimous_ci": [
+          0.639771727342413,
+          0.9650225122567595
+        ]
+      },
+      "overall": {
+        "agree2": 0.9166666666666666,
+        "agree2_ci": [
+          0.7817330875072737,
+          0.9712513886640066
+        ],
+        "agree2_k": 33,
+        "flips": [
+          [
+            "None <-> USD",
+            2
+          ],
+          [
+            "CAD <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 36,
+        "pairwise": 0.9444444444444444,
+        "unan_k": 33,
+        "unanimous": 0.9166666666666666,
+        "unanimous_ci": [
+          0.7817330875072737,
+          0.9712513886640066
+        ]
+      }
+    },
+    "comp_max": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7575059933447592,
+            1.0
+          ],
+          "agree2_k": 12,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 12,
+          "pairwise": 1.0,
+          "unan_k": 12,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7575059933447592,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "154000 <-> None",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "int",
+          "n": 8,
+          "pairwise": 0.9166666666666666,
+          "unan_k": 7,
+          "unanimous": 0.875,
+          "unanimous_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8388748419471806,
+          1.0
+        ],
+        "agree2_k": 20,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 20,
+        "pairwise": 1.0,
+        "unan_k": 20,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8388748419471806,
+          1.0
+        ]
+      },
+      "messy": {
+        "agree2": 0.9375,
+        "agree2_ci": [
+          0.7167126242970107,
+          0.9888806552353576
+        ],
+        "agree2_k": 15,
+        "flips": [
+          [
+            "154000 <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 16,
+        "pairwise": 0.9583333333333333,
+        "unan_k": 15,
+        "unanimous": 0.9375,
+        "unanimous_ci": [
+          0.7167126242970107,
+          0.9888806552353576
+        ]
+      },
+      "overall": {
+        "agree2": 0.9722222222222222,
+        "agree2_ci": [
+          0.8583028134672614,
+          0.9950795928601897
+        ],
+        "agree2_k": 35,
+        "flips": [
+          [
+            "154000 <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 36,
+        "pairwise": 0.9814814814814814,
+        "unan_k": 35,
+        "unanimous": 0.9722222222222222,
+        "unanimous_ci": [
+          0.8583028134672614,
+          0.9950795928601897
+        ]
+      }
+    },
+    "comp_min": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7575059933447592,
+            1.0
+          ],
+          "agree2_k": 12,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 12,
+          "pairwise": 1.0,
+          "unan_k": 12,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7575059933447592,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "95000 <-> None",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "int",
+          "n": 8,
+          "pairwise": 0.9166666666666666,
+          "unan_k": 7,
+          "unanimous": 0.875,
+          "unanimous_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 0.5,
+          "agree2_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ],
+          "agree2_k": 1,
+          "flips": [
+            [
+              "113878 <-> None",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 0.6666666666666666,
+          "unan_k": 1,
+          "unanimous": 0.5,
+          "unanimous_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8388748419471806,
+          1.0
+        ],
+        "agree2_k": 20,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 20,
+        "pairwise": 1.0,
+        "unan_k": 20,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8388748419471806,
+          1.0
+        ]
+      },
+      "messy": {
+        "agree2": 0.875,
+        "agree2_ci": [
+          0.639771727342413,
+          0.9650225122567595
+        ],
+        "agree2_k": 14,
+        "flips": [
+          [
+            "113878 <-> None",
+            1
+          ],
+          [
+            "95000 <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 16,
+        "pairwise": 0.9166666666666666,
+        "unan_k": 14,
+        "unanimous": 0.875,
+        "unanimous_ci": [
+          0.639771727342413,
+          0.9650225122567595
+        ]
+      },
+      "overall": {
+        "agree2": 0.9444444444444444,
+        "agree2_ci": [
+          0.8185534279135275,
+          0.9846300133358382
+        ],
+        "agree2_k": 34,
+        "flips": [
+          [
+            "113878 <-> None",
+            1
+          ],
+          [
+            "95000 <-> None",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 36,
+        "pairwise": 0.9629629629629629,
+        "unan_k": 34,
+        "unanimous": 0.9444444444444444,
+        "unanimous_ci": [
+          0.8185534279135275,
+          0.9846300133358382
+        ]
+      }
+    },
+    "customer_facing": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7575059933447592,
+            1.0
+          ],
+          "agree2_k": 12,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 12,
+          "pairwise": 1.0,
+          "unan_k": 12,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7575059933447592,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "False <-> True",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 8,
+          "pairwise": 0.9166666666666666,
+          "unan_k": 7,
+          "unanimous": 0.875,
+          "unanimous_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.95,
+        "agree2_ci": [
+          0.763868806553258,
+          0.9911185511992047
+        ],
+        "agree2_k": 19,
+        "flips": [
+          [
+            "False <-> True",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 20,
+        "pairwise": 0.9666666666666666,
+        "unan_k": 19,
+        "unanimous": 0.95,
+        "unanimous_ci": [
+          0.763868806553258,
+          0.9911185511992047
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8063923194655637,
+          1.0
+        ],
+        "agree2_k": 16,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 16,
+        "pairwise": 1.0,
+        "unan_k": 16,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8063923194655637,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 0.9722222222222222,
+        "agree2_ci": [
+          0.8583028134672614,
+          0.9950795928601897
+        ],
+        "agree2_k": 35,
+        "flips": [
+          [
+            "False <-> True",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 36,
+        "pairwise": 0.9814814814814814,
+        "unan_k": 35,
+        "unanimous": 0.9722222222222222,
+        "unanimous_ci": [
+          0.8583028134672614,
+          0.9950795928601897
+        ]
+      }
+    },
+    "employment_type": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.8333333333333334,
+          "agree2_ci": [
+            0.5519691377470267,
+            0.9530348578161462
+          ],
+          "agree2_k": 10,
+          "flips": [
+            [
+              "contract <-> unknown",
+              1
+            ],
+            [
+              "full_time <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 12,
+          "pairwise": 0.8888888888888888,
+          "unan_k": 10,
+          "unanimous": 0.8333333333333334,
+          "unanimous_ci": [
+            0.5519691377470267,
+            0.9530348578161462
+          ]
+        },
+        "builtin": {
+          "agree2": 0.5,
+          "agree2_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ],
+          "agree2_k": 1,
+          "flips": [
+            [
+              "full_time <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 0.6666666666666666,
+          "unan_k": 1,
+          "unanimous": 0.5,
+          "unanimous_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "full_time <-> unknown",
+              2
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 0.8333333333333334,
+          "unan_k": 6,
+          "unanimous": 0.75,
+          "unanimous_ci": [
+            0.40927543031016883,
+            0.9285207872478909
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [
+            [
+              "full_time <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 0.3333333333333333,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 0.0,
+          "agree2_ci": [
+            0.0,
+            0.7934506856227626
+          ],
+          "agree2_k": 0,
+          "flips": [
+            [
+              "full_time <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 0.3333333333333333,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.9,
+        "agree2_ci": [
+          0.6989663547715128,
+          0.9721335187862319
+        ],
+        "agree2_k": 18,
+        "flips": [
+          [
+            "contract <-> unknown",
+            1
+          ],
+          [
+            "full_time <-> unknown",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 20,
+        "pairwise": 0.9333333333333333,
+        "unan_k": 18,
+        "unanimous": 0.9,
+        "unanimous_ci": [
+          0.6989663547715128,
+          0.9721335187862319
+        ]
+      },
+      "messy": {
+        "agree2": 0.8125,
+        "agree2_ci": [
+          0.5699111903802586,
+          0.9340840092857187
+        ],
+        "agree2_k": 13,
+        "flips": [
+          [
+            "full_time <-> unknown",
+            5
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 16,
+        "pairwise": 0.7916666666666667,
+        "unan_k": 11,
+        "unanimous": 0.6875,
+        "unanimous_ci": [
+          0.44404355834740666,
+          0.8583535614521796
+        ]
+      },
+      "overall": {
+        "agree2": 0.8611111111111112,
+        "agree2_ci": [
+          0.713404696106438,
+          0.9391818499086717
+        ],
+        "agree2_k": 31,
+        "flips": [
+          [
+            "full_time <-> unknown",
+            6
+          ],
+          [
+            "contract <-> unknown",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 36,
+        "pairwise": 0.8703703703703702,
+        "unan_k": 29,
+        "unanimous": 0.8055555555555556,
+        "unanimous_ci": [
+          0.6497195700482261,
+          0.9024690458107127
+        ]
+      }
+    },
+    "gap_friendly_language": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7575059933447592,
+            1.0
+          ],
+          "agree2_k": 12,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 12,
+          "pairwise": 1.0,
+          "unan_k": 12,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7575059933447592,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8388748419471806,
+          1.0
+        ],
+        "agree2_k": 20,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 20,
+        "pairwise": 1.0,
+        "unan_k": 20,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8388748419471806,
+          1.0
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8063923194655637,
+          1.0
+        ],
+        "agree2_k": 16,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 16,
+        "pairwise": 1.0,
+        "unan_k": 16,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8063923194655637,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9035813714055363,
+          1.0
+        ],
+        "agree2_k": 36,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 36,
+        "pairwise": 1.0,
+        "unan_k": 36,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9035813714055363,
+          1.0
+        ]
+      }
+    },
+    "ml_research_required": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7575059933447592,
+            1.0
+          ],
+          "agree2_k": 12,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 12,
+          "pairwise": 1.0,
+          "unan_k": 12,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7575059933447592,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "bool",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8388748419471806,
+          1.0
+        ],
+        "agree2_k": 20,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 20,
+        "pairwise": 1.0,
+        "unan_k": 20,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8388748419471806,
+          1.0
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8063923194655637,
+          1.0
+        ],
+        "agree2_k": 16,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 16,
+        "pairwise": 1.0,
+        "unan_k": 16,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8063923194655637,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9035813714055363,
+          1.0
+        ],
+        "agree2_k": 36,
+        "flips": [],
+        "jaccard": null,
+        "kind": "bool",
+        "n": 36,
+        "pairwise": 1.0,
+        "unan_k": 36,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9035813714055363,
+          1.0
+        ]
+      }
+    },
+    "remote_policy": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7575059933447592,
+            1.0
+          ],
+          "agree2_k": 12,
+          "flips": [
+            [
+              "onsite <-> unknown",
+              2
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 12,
+          "pairwise": 0.8888888888888888,
+          "unan_k": 10,
+          "unanimous": 0.8333333333333334,
+          "unanimous_ci": [
+            0.5519691377470267,
+            0.9530348578161462
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.625,
+          "agree2_ci": [
+            0.3057423946026273,
+            0.8631557141764027
+          ],
+          "agree2_k": 5,
+          "flips": [
+            [
+              "onsite <-> unknown",
+              2
+            ],
+            [
+              "remote_anywhere <-> remote_local",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 0.7499999999999999,
+          "unan_k": 5,
+          "unanimous": 0.625,
+          "unanimous_ci": [
+            0.3057423946026273,
+            0.8631557141764027
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [
+            [
+              "onsite <-> unknown",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 0.3333333333333333,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8388748419471806,
+          1.0
+        ],
+        "agree2_k": 20,
+        "flips": [
+          [
+            "onsite <-> unknown",
+            2
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 20,
+        "pairwise": 0.9333333333333333,
+        "unan_k": 18,
+        "unanimous": 0.9,
+        "unanimous_ci": [
+          0.6989663547715128,
+          0.9721335187862319
+        ]
+      },
+      "messy": {
+        "agree2": 0.8125,
+        "agree2_ci": [
+          0.5699111903802586,
+          0.9340840092857187
+        ],
+        "agree2_k": 13,
+        "flips": [
+          [
+            "onsite <-> unknown",
+            3
+          ],
+          [
+            "remote_anywhere <-> remote_local",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 16,
+        "pairwise": 0.8333333333333334,
+        "unan_k": 12,
+        "unanimous": 0.75,
+        "unanimous_ci": [
+          0.5050168346449122,
+          0.8981793250878696
+        ]
+      },
+      "overall": {
+        "agree2": 0.9166666666666666,
+        "agree2_ci": [
+          0.7817330875072737,
+          0.9712513886640066
+        ],
+        "agree2_k": 33,
+        "flips": [
+          [
+            "onsite <-> unknown",
+            5
+          ],
+          [
+            "remote_anywhere <-> remote_local",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 36,
+        "pairwise": 0.8888888888888888,
+        "unan_k": 30,
+        "unanimous": 0.8333333333333334,
+        "unanimous_ci": [
+          0.6810920568872054,
+          0.9212955240498188
+        ]
+      }
+    },
+    "role_archetype": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.8333333333333334,
+          "agree2_ci": [
+            0.5519691377470267,
+            0.9530348578161462
+          ],
+          "agree2_k": 10,
+          "flips": [
+            [
+              "ai_operations <-> data",
+              1
+            ],
+            [
+              "solutions <-> support_ops",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 12,
+          "pairwise": 0.8888888888888888,
+          "unan_k": 10,
+          "unanimous": 0.8333333333333334,
+          "unanimous_ci": [
+            0.5519691377470267,
+            0.9530348578161462
+          ]
+        },
+        "builtin": {
+          "agree2": 0.5,
+          "agree2_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ],
+          "agree2_k": 1,
+          "flips": [
+            [
+              "admin_ops <-> support_ops",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 0.6666666666666666,
+          "unan_k": 1,
+          "unanimous": 0.5,
+          "unanimous_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.75,
+          "agree2_ci": [
+            0.40927543031016883,
+            0.9285207872478909
+          ],
+          "agree2_k": 6,
+          "flips": [
+            [
+              "forward_deployed <-> implementation_analyst",
+              1
+            ],
+            [
+              "infrastructure_compute <-> qa_test",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 0.8333333333333334,
+          "unan_k": 6,
+          "unanimous": 0.75,
+          "unanimous_ci": [
+            0.40927543031016883,
+            0.9285207872478909
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.625,
+          "agree2_ci": [
+            0.3057423946026273,
+            0.8631557141764027
+          ],
+          "agree2_k": 5,
+          "flips": [
+            [
+              "ai_operations <-> other",
+              1
+            ],
+            [
+              "marketing_ops <-> other",
+              1
+            ],
+            [
+              "other <-> program_management",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 0.7499999999999999,
+          "unan_k": 5,
+          "unanimous": 0.625,
+          "unanimous_ci": [
+            0.3057423946026273,
+            0.8631557141764027
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 0.0,
+          "agree2_ci": [
+            0.0,
+            0.7934506856227626
+          ],
+          "agree2_k": 0,
+          "flips": [
+            [
+              "data <-> other",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 0.3333333333333333,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.75,
+        "agree2_ci": [
+          0.531299122381256,
+          0.8881382985923343
+        ],
+        "agree2_k": 15,
+        "flips": [
+          [
+            "ai_operations <-> data",
+            1
+          ],
+          [
+            "ai_operations <-> other",
+            1
+          ],
+          [
+            "marketing_ops <-> other",
+            1
+          ],
+          [
+            "other <-> program_management",
+            1
+          ],
+          [
+            "solutions <-> support_ops",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 20,
+        "pairwise": 0.8333333333333334,
+        "unan_k": 15,
+        "unanimous": 0.75,
+        "unanimous_ci": [
+          0.531299122381256,
+          0.8881382985923343
+        ]
+      },
+      "messy": {
+        "agree2": 0.75,
+        "agree2_ci": [
+          0.5050168346449122,
+          0.8981793250878696
+        ],
+        "agree2_k": 12,
+        "flips": [
+          [
+            "admin_ops <-> support_ops",
+            1
+          ],
+          [
+            "data <-> other",
+            1
+          ],
+          [
+            "forward_deployed <-> implementation_analyst",
+            1
+          ],
+          [
+            "infrastructure_compute <-> qa_test",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 16,
+        "pairwise": 0.8333333333333334,
+        "unan_k": 12,
+        "unanimous": 0.75,
+        "unanimous_ci": [
+          0.5050168346449122,
+          0.8981793250878696
+        ]
+      },
+      "overall": {
+        "agree2": 0.75,
+        "agree2_ci": [
+          0.5892954623327166,
+          0.8624952233700517
+        ],
+        "agree2_k": 27,
+        "flips": [
+          [
+            "admin_ops <-> support_ops",
+            1
+          ],
+          [
+            "ai_operations <-> data",
+            1
+          ],
+          [
+            "ai_operations <-> other",
+            1
+          ],
+          [
+            "data <-> other",
+            1
+          ],
+          [
+            "forward_deployed <-> implementation_analyst",
+            1
+          ],
+          [
+            "infrastructure_compute <-> qa_test",
+            1
+          ],
+          [
+            "marketing_ops <-> other",
+            1
+          ],
+          [
+            "other <-> program_management",
+            1
+          ],
+          [
+            "solutions <-> support_ops",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 36,
+        "pairwise": 0.8333333333333333,
+        "unan_k": 27,
+        "unanimous": 0.75,
+        "unanimous_ci": [
+          0.5892954623327166,
+          0.8624952233700517
+        ]
+      }
+    },
+    "role_track": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.8333333333333334,
+          "agree2_ci": [
+            0.5519691377470267,
+            0.9530348578161462
+          ],
+          "agree2_k": 10,
+          "flips": [
+            [
+              "None <-> data_and_analytics",
+              1
+            ],
+            [
+              "solutions_and_implementation <-> technical_support",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 12,
+          "pairwise": 0.8888888888888888,
+          "unan_k": 10,
+          "unanimous": 0.8333333333333334,
+          "unanimous_ci": [
+            0.5519691377470267,
+            0.9530348578161462
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "business_operations <-> technical_support",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 0.9166666666666666,
+          "unan_k": 7,
+          "unanimous": 0.875,
+          "unanimous_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 0.0,
+          "agree2_ci": [
+            0.0,
+            0.7934506856227626
+          ],
+          "agree2_k": 0,
+          "flips": [
+            [
+              "business_analysis <-> data_and_analytics",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 0.3333333333333333,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [
+            [
+              "business_operations <-> revenue_operations",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 0.6666666666666666,
+          "unan_k": 1,
+          "unanimous": 0.5,
+          "unanimous_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.85,
+        "agree2_ci": [
+          0.6395811352592431,
+          0.9476312541037835
+        ],
+        "agree2_k": 17,
+        "flips": [
+          [
+            "None <-> data_and_analytics",
+            1
+          ],
+          [
+            "business_operations <-> technical_support",
+            1
+          ],
+          [
+            "solutions_and_implementation <-> technical_support",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 20,
+        "pairwise": 0.9,
+        "unan_k": 17,
+        "unanimous": 0.85,
+        "unanimous_ci": [
+          0.6395811352592431,
+          0.9476312541037835
+        ]
+      },
+      "messy": {
+        "agree2": 0.9375,
+        "agree2_ci": [
+          0.7167126242970107,
+          0.9888806552353576
+        ],
+        "agree2_k": 15,
+        "flips": [
+          [
+            "business_analysis <-> data_and_analytics",
+            1
+          ],
+          [
+            "business_operations <-> revenue_operations",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 16,
+        "pairwise": 0.9166666666666666,
+        "unan_k": 14,
+        "unanimous": 0.875,
+        "unanimous_ci": [
+          0.639771727342413,
+          0.9650225122567595
+        ]
+      },
+      "overall": {
+        "agree2": 0.8888888888888888,
+        "agree2_ci": [
+          0.7468519140963513,
+          0.9559335969968435
+        ],
+        "agree2_k": 32,
+        "flips": [
+          [
+            "None <-> data_and_analytics",
+            1
+          ],
+          [
+            "business_analysis <-> data_and_analytics",
+            1
+          ],
+          [
+            "business_operations <-> revenue_operations",
+            1
+          ],
+          [
+            "business_operations <-> technical_support",
+            1
+          ],
+          [
+            "solutions_and_implementation <-> technical_support",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 36,
+        "pairwise": 0.9074074074074071,
+        "unan_k": 31,
+        "unanimous": 0.8611111111111112,
+        "unanimous_ci": [
+          0.713404696106438,
+          0.9391818499086717
+        ]
+      }
+    },
+    "seniority_level": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.8333333333333334,
+          "agree2_ci": [
+            0.5519691377470267,
+            0.9530348578161462
+          ],
+          "agree2_k": 10,
+          "flips": [
+            [
+              "mid <-> senior",
+              2
+            ],
+            [
+              "director <-> senior",
+              1
+            ],
+            [
+              "junior <-> mid",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 12,
+          "pairwise": 0.7777777777777778,
+          "unan_k": 8,
+          "unanimous": 0.6666666666666666,
+          "unanimous_ci": [
+            0.39062208887279953,
+            0.8618799089087867
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "junior <-> mid",
+              1
+            ],
+            [
+              "junior <-> new_grad",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 0.8333333333333333,
+          "unan_k": 6,
+          "unanimous": 0.75,
+          "unanimous_ci": [
+            0.40927543031016883,
+            0.9285207872478909
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "junior <-> new_grad",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 0.9166666666666667,
+          "unan_k": 7,
+          "unanimous": 0.875,
+          "unanimous_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.85,
+        "agree2_ci": [
+          0.6395811352592431,
+          0.9476312541037835
+        ],
+        "agree2_k": 17,
+        "flips": [
+          [
+            "mid <-> senior",
+            2
+          ],
+          [
+            "director <-> senior",
+            1
+          ],
+          [
+            "junior <-> mid",
+            1
+          ],
+          [
+            "junior <-> new_grad",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 20,
+        "pairwise": 0.8333333333333334,
+        "unan_k": 15,
+        "unanimous": 0.75,
+        "unanimous_ci": [
+          0.531299122381256,
+          0.8881382985923343
+        ]
+      },
+      "messy": {
+        "agree2": 0.9375,
+        "agree2_ci": [
+          0.7167126242970107,
+          0.9888806552353576
+        ],
+        "agree2_k": 15,
+        "flips": [
+          [
+            "junior <-> mid",
+            1
+          ],
+          [
+            "junior <-> new_grad",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 16,
+        "pairwise": 0.9166666666666666,
+        "unan_k": 14,
+        "unanimous": 0.875,
+        "unanimous_ci": [
+          0.639771727342413,
+          0.9650225122567595
+        ]
+      },
+      "overall": {
+        "agree2": 0.8888888888888888,
+        "agree2_ci": [
+          0.7468519140963513,
+          0.9559335969968435
+        ],
+        "agree2_k": 32,
+        "flips": [
+          [
+            "junior <-> mid",
+            2
+          ],
+          [
+            "junior <-> new_grad",
+            2
+          ],
+          [
+            "mid <-> senior",
+            2
+          ],
+          [
+            "director <-> senior",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 36,
+        "pairwise": 0.8703703703703703,
+        "unan_k": 29,
+        "unanimous": 0.8055555555555556,
+        "unanimous_ci": [
+          0.6497195700482261,
+          0.9024690458107127
+        ]
+      }
+    },
+    "tech_stack": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 0.75,
+          "agree2_ci": [
+            0.4676946650664343,
+            0.9110583316059452
+          ],
+          "agree2_k": 9,
+          "flips": [],
+          "jaccard": 0.8472222222222222,
+          "kind": "set",
+          "n": 12,
+          "pairwise": 0.7777777777777777,
+          "unan_k": 8,
+          "unanimous": 0.6666666666666666,
+          "unanimous_ci": [
+            0.39062208887279953,
+            0.8618799089087867
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": 1.0,
+          "kind": "set",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.5,
+          "agree2_ci": [
+            0.21521606221387757,
+            0.7847839377861224
+          ],
+          "agree2_k": 4,
+          "flips": [],
+          "jaccard": 0.7212752525252525,
+          "kind": "set",
+          "n": 8,
+          "pairwise": 0.625,
+          "unan_k": 4,
+          "unanimous": 0.5,
+          "unanimous_ci": [
+            0.21521606221387757,
+            0.7847839377861224
+          ]
+        },
+        "greenhouse": {
+          "agree2": 0.625,
+          "agree2_ci": [
+            0.3057423946026273,
+            0.8631557141764027
+          ],
+          "agree2_k": 5,
+          "flips": [],
+          "jaccard": 0.8166666666666667,
+          "kind": "set",
+          "n": 8,
+          "pairwise": 0.75,
+          "unan_k": 5,
+          "unanimous": 0.625,
+          "unanimous_ci": [
+            0.3057423946026273,
+            0.8631557141764027
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": 1.0,
+          "kind": "set",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 0.0,
+          "agree2_ci": [
+            0.0,
+            0.7934506856227626
+          ],
+          "agree2_k": 0,
+          "flips": [],
+          "jaccard": 0.8151515151515151,
+          "kind": "set",
+          "n": 1,
+          "pairwise": 0.0,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 0.5,
+          "agree2_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": 0.8690476190476191,
+          "kind": "set",
+          "n": 2,
+          "pairwise": 0.5,
+          "unan_k": 1,
+          "unanimous": 0.5,
+          "unanimous_ci": [
+            0.09453120573423074,
+            0.9054687942657693
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": 1.0,
+          "kind": "set",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 0.7,
+        "agree2_ci": [
+          0.4810271816464765,
+          0.8545227551323956
+        ],
+        "agree2_k": 14,
+        "flips": [],
+        "jaccard": 0.8350000000000002,
+        "kind": "set",
+        "n": 20,
+        "pairwise": 0.7666666666666668,
+        "unan_k": 13,
+        "unanimous": 0.65,
+        "unanimous_ci": [
+          0.43285427668523624,
+          0.818808175898918
+        ]
+      },
+      "messy": {
+        "agree2": 0.625,
+        "agree2_ci": [
+          0.38641040545502714,
+          0.8151876744113636
+        ],
+        "agree2_k": 10,
+        "flips": [],
+        "jaccard": 0.8327155483405483,
+        "kind": "set",
+        "n": 16,
+        "pairwise": 0.6875,
+        "unan_k": 10,
+        "unanimous": 0.625,
+        "unanimous_ci": [
+          0.38641040545502714,
+          0.8151876744113636
+        ]
+      },
+      "overall": {
+        "agree2": 0.6666666666666666,
+        "agree2_ci": [
+          0.5033399787115652,
+          0.7978538117569468
+        ],
+        "agree2_k": 24,
+        "flips": [],
+        "jaccard": 0.8339846881513548,
+        "kind": "set",
+        "n": 36,
+        "pairwise": 0.7314814814814814,
+        "unan_k": 23,
+        "unanimous": 0.6388888888888888,
+        "unanimous_ci": [
+          0.4757507548555804,
+          0.7752440705348462
+        ]
+      }
+    },
+    "visa_sponsorship": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7575059933447592,
+            1.0
+          ],
+          "agree2_k": 12,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 12,
+          "pairwise": 1.0,
+          "unan_k": 12,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7575059933447592,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "enum",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8388748419471806,
+          1.0
+        ],
+        "agree2_k": 20,
+        "flips": [],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 20,
+        "pairwise": 1.0,
+        "unan_k": 20,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8388748419471806,
+          1.0
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8063923194655637,
+          1.0
+        ],
+        "agree2_k": 16,
+        "flips": [],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 16,
+        "pairwise": 1.0,
+        "unan_k": 16,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8063923194655637,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9035813714055363,
+          1.0
+        ],
+        "agree2_k": 36,
+        "flips": [],
+        "jaccard": null,
+        "kind": "enum",
+        "n": 36,
+        "pairwise": 1.0,
+        "unan_k": 36,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9035813714055363,
+          1.0
+        ]
+      }
+    },
+    "years_experience_max": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7575059933447592,
+            1.0
+          ],
+          "agree2_k": 12,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 12,
+          "pairwise": 1.0,
+          "unan_k": 12,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7575059933447592,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8388748419471806,
+          1.0
+        ],
+        "agree2_k": 20,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 20,
+        "pairwise": 1.0,
+        "unan_k": 20,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8388748419471806,
+          1.0
+        ]
+      },
+      "messy": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8063923194655637,
+          1.0
+        ],
+        "agree2_k": 16,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 16,
+        "pairwise": 1.0,
+        "unan_k": 16,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8063923194655637,
+          1.0
+        ]
+      },
+      "overall": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.9035813714055363,
+          1.0
+        ],
+        "agree2_k": 36,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 36,
+        "pairwise": 1.0,
+        "unan_k": 36,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.9035813714055363,
+          1.0
+        ]
+      }
+    },
+    "years_experience_min": {
+      "by_platform": {
+        "ashby": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.7575059933447592,
+            1.0
+          ],
+          "agree2_k": 12,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 12,
+          "pairwise": 1.0,
+          "unan_k": 12,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.7575059933447592,
+            1.0
+          ]
+        },
+        "builtin": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "google_jobs": {
+          "agree2": 0.875,
+          "agree2_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ],
+          "agree2_k": 7,
+          "flips": [
+            [
+              "0 <-> None",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "int",
+          "n": 8,
+          "pairwise": 0.9166666666666666,
+          "unan_k": 7,
+          "unanimous": 0.875,
+          "unanimous_ci": [
+            0.5291118177871464,
+            0.9775825085499433
+          ]
+        },
+        "greenhouse": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.6755924351161198,
+            1.0
+          ],
+          "agree2_k": 8,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 8,
+          "pairwise": 1.0,
+          "unan_k": 8,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.6755924351161198,
+            1.0
+          ]
+        },
+        "lever": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 1,
+          "pairwise": 1.0,
+          "unan_k": 1,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.20654931437723745,
+            1.0
+          ]
+        },
+        "nyc_open_data": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.20654931437723745,
+            1.0
+          ],
+          "agree2_k": 1,
+          "flips": [
+            [
+              "1 <-> 2",
+              1
+            ]
+          ],
+          "jaccard": null,
+          "kind": "int",
+          "n": 1,
+          "pairwise": 0.3333333333333333,
+          "unan_k": 0,
+          "unanimous": 0.0,
+          "unanimous_ci": [
+            0.0,
+            0.7934506856227626
+          ]
+        },
+        "weworkremotely": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        },
+        "workday": {
+          "agree2": 1.0,
+          "agree2_ci": [
+            0.34238022750665303,
+            1.0
+          ],
+          "agree2_k": 2,
+          "flips": [],
+          "jaccard": null,
+          "kind": "int",
+          "n": 2,
+          "pairwise": 1.0,
+          "unan_k": 2,
+          "unanimous": 1.0,
+          "unanimous_ci": [
+            0.34238022750665303,
+            1.0
+          ]
+        }
+      },
+      "clean": {
+        "agree2": 1.0,
+        "agree2_ci": [
+          0.8388748419471806,
+          1.0
+        ],
+        "agree2_k": 20,
+        "flips": [],
+        "jaccard": null,
+        "kind": "int",
+        "n": 20,
+        "pairwise": 1.0,
+        "unan_k": 20,
+        "unanimous": 1.0,
+        "unanimous_ci": [
+          0.8388748419471806,
+          1.0
+        ]
+      },
+      "messy": {
+        "agree2": 0.9375,
+        "agree2_ci": [
+          0.7167126242970107,
+          0.9888806552353576
+        ],
+        "agree2_k": 15,
+        "flips": [
+          [
+            "0 <-> None",
+            1
+          ],
+          [
+            "1 <-> 2",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 16,
+        "pairwise": 0.9166666666666667,
+        "unan_k": 14,
+        "unanimous": 0.875,
+        "unanimous_ci": [
+          0.639771727342413,
+          0.9650225122567595
+        ]
+      },
+      "overall": {
+        "agree2": 0.9722222222222222,
+        "agree2_ci": [
+          0.8583028134672614,
+          0.9950795928601897
+        ],
+        "agree2_k": 35,
+        "flips": [
+          [
+            "0 <-> None",
+            1
+          ],
+          [
+            "1 <-> 2",
+            1
+          ]
+        ],
+        "jaccard": null,
+        "kind": "int",
+        "n": 36,
+        "pairwise": 0.9629629629629629,
+        "unan_k": 34,
+        "unanimous": 0.9444444444444444,
+        "unanimous_ci": [
+          0.8185534279135275,
+          0.9846300133358382
+        ]
+      }
+    }
+  },
+  "model": {
+    "backend": "http",
+    "base_url": "",
+    "model": "deepseek-v4-flash"
+  },
+  "model_label": "deepseek-v4-flash",
+  "n_comparable": 36,
+  "n_records": 36,
+  "not_ok": [],
+  "platform_counts": {
+    "ashby": 12,
+    "builtin": 2,
+    "google_jobs": 8,
+    "greenhouse": 8,
+    "lever": 1,
+    "nyc_open_data": 1,
+    "weworkremotely": 2,
+    "workday": 2
+  },
+  "ranking": {},
+  "repeat": 3,
+  "task": "extract",
+  "whole_record": {
+    "k": 9,
+    "n": 36,
+    "rate": 0.25
+  }
+}

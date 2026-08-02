@@ -2759,3 +2759,69 @@ and `scratch_cafb8b05`, both with the pre-27 seven-column `job_events`, so both 
 this session. Noted, not dropped: `scratchdb` will only ever drop a name it could have
 created and it checks that immediately before the DROP, so removing them is a deliberate
 act rather than a tidy-up, and it is the owner's.
+
+## 2026-08-02 — task 29's third sitting: the report printed, and it was already lost
+
+**The measurement had been taken and none of it was in the repo.** A second labeller
+(`u_919ad2c305c2`) answered the ten `overlap` rows on 2026-08-02 and `evals label report`
+printed for the first time at exit 0. What the working tree held the next morning was
+`backend/evals/fixtures/golden-v1.jsonl`, **untracked**, and nothing else. The hydrated
+corpus, the extract run and the selfcheck the report reads were sitting in the previous
+session's `/tmp` scratchpad, which is garbage-collected; every entry point — `AUDIT.md`'s
+state table, `README.md`'s task 29 row, `HANDOFF.md` § START HERE, `LABELLING-NIGHT.md` —
+still said *one labeller* and *the report refuses, correctly*.
+
+**So a fresh session was being sent to arrange the thing that had already happened, and the
+only surviving copy of the result was outside the repo.** This is the failure mode
+`DOCS-POLICY.md` was written for, arriving from the direction it had not been written for:
+not a stale figure, an **absent** one.
+
+### What landed
+
+**The four inputs are frozen in `backend/evals/fixtures/`** — `golden-v1.jsonl`,
+`corpus-labelled36-2026-08-02.jsonl`, `run-labelled36-2026-08-02.jsonl` and
+`selfcheck-labelled36-2026-08-02.json`. The report re-runs from three of them with no
+database, no network and no LLM call, and was verified byte-identical to the output the
+scratchpad artifacts produce.
+
+**`backend/tools/hydrate-labelled-corpus.py`**, promoted from a scratch script. It is the
+non-obvious link in the chain: `labelset-pursuit-v1.jsonl` pins *which* postings were drawn
+and carries no `description_text`, so it cannot be fed to `evals run` at all. Verified to
+reproduce the committed corpus record for record.
+
+**[`docs/labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md)**,
+`kind: record`, which owns the three-quantity table and the reasons not to tune on it.
+`DEC-75` records why its floor is a per-corpus selfcheck rather than the committed n=120
+file — that file predates task 11 adding `role_track`, so the report was unrunnable against
+committed data on one field, and there is no `--force`.
+
+### The finding, and it is not the one the run has been waiting for
+
+**The ceiling came back below the floor on all five fields.** Two people agree with each
+other less often than the model agrees with itself, at 6–10 overlap items per field. A model
+number with an inverted band has nothing to be read between, so **the report exists and still
+cannot be tuned on** — task 30, task 13's weights and task 12's next bump are gated on a
+*usable* ceiling, which is not what a printable report is.
+
+`LABELLING-NIGHT.md` and task 29 § E both called the second labeller *"the cheapest
+unblock"*. They were right about the mechanism — the ceiling completed the moment those ten
+rows landed — and wrong about the consequence. The correction is not that either was
+careless: **a ceiling cannot be predicted before it is measured**, which is the whole reason
+`evals label report` refuses to invent one.
+
+**Two observations recorded with their confounds, and neither changes anything today.** The
+model does *worse* against human labels on clean ATS sources than on messy ones, on all five
+fields — the opposite direction from README § *Why evals moved to the front*, on 12–18 items
+a cell with overlapping intervals and `ashby` supplying most of the clean side. And the
+humans answer `no_track_fits` / `other` on about half the set, unchanged from the n=31
+reading. Both are in the record; **README is not corrected on this evidence and no vocabulary
+value was added.**
+
+### Method note
+
+**A ninth C4 row was added and the other four fields deliberately got none.** Requiring
+`ai_involvement` within 60 characters of `50%`/`61%` matches nothing outside the owner; the
+remaining fields' cells are values like 38/47/83% that no field-anchored pattern can hold
+without matching the record's own per-platform tables. `config/doc-figures.json`'s own
+standard — measure the pattern before writing the row, and a check that cries wolf is worse
+than no check — is what decided it.

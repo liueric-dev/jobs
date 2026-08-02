@@ -89,6 +89,7 @@ because you cannot tell which is current.
 
 | document | the question it answered |
 |---|---|
+| [`labelling-report-2026-08-02.md`](labelling-report-2026-08-02.md) | What did the first `evals label report` say — how does the model compare to human labels, and between what floor and what ceiling? Task 29's first three-quantity measurement. |
 | [`scoring-measured-2026-07-27.md`](scoring-measured-2026-07-27.md) | What did the four stages actually do on 2026-07-27 — the funnel, the two profiles' scales, and what the `staff` fix deleted? The measured half of [`scoring.md`](scoring.md), split out by `DEC-70`. |
 | [`pursuit-gate-volume.md`](pursuit-gate-volume.md) | How many postings a day would a widened Pursuit gate admit? |
 | [`pursuit-description-gate.md`](pursuit-description-gate.md) | What does the description-first cohort gate keep and drop? |

@@ -6,25 +6,34 @@ generator: none
 
 # Handoff — the `docs/tasks/refactor/` run
 
-## START HERE — a fresh session's sixty seconds, ~~2026-07-31~~ **2026-08-01**
+## START HERE — a fresh session's sixty seconds, ~~2026-07-31~~ ~~2026-08-01~~ **2026-08-02**
 
 *This file had eight "READ THIS FIRST" sections and now has three — the four that
 described finished work were archived on 2026-07-31 (task 34, § Orientation), and this
 block is the entry point. Everything below is context. Verify anything here before acting
 on it — the instrument is named in each case.*
 
-**State, verified 2026-07-31 by `python3 backend/tools/label-findings.py`:**
+**State, verified 2026-08-02 by `python3 backend/tools/label-findings.py`:**
 
 | | |
 |---|---|
-| labels | **186 rows over 31 of `pursuit-v1`'s 200 postings** |
-| labellers | **ONE** (`u_090b0ad12e99`), round 1 only |
-| `overlap` block | **all ten answered** — positions 0–30 contiguous |
-| `evals label report` | **exits 2, correctly.** Zero of task 29's three quantities exist |
+| labels | ~~186 rows over 31~~ **271 rows over 36** of `pursuit-v1`'s 200 postings |
+| labellers | ~~**ONE**~~ **TWO** (`u_090b0ad12e99` 35 postings, `u_919ad2c305c2` 11), round 1 only |
+| `overlap` block | **all ten answered, by both** — which is the entire inter-annotator ceiling |
+| `evals label report` | ~~**exits 2, correctly.** Zero of task 29's three quantities exist~~ **PRINTS, exit 0.** All three quantities exist: [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md) |
 | suites | ~~a number was typed here~~ **read [`AUDIT.md`](AUDIT.md), which owns the figure** — per `DOCS-POLICY.md` rule 2, and per rule 3 the reproducible answer is the `Ran N tests` line of `cd backend && python3 -m unittest discover -s tests` |
 
 ### ~~THE CURRENT SESSION IS PHASE 9~~ — **PHASE 9 IS CLOSED. Rolled forward 2026-08-01.**
 ### ~~**THE PRODUCT / API TRACK IS OPEN AND TASK 27 HAS LANDED.**~~ **27 AND 31 HAVE BOTH LANDED. Rolled forward 2026-08-01.**
+### **THE LABELLING NIGHT HAPPENED AND THE REPORT PRINTED — and the answer is "not yet". Rolled forward 2026-08-02.**
+
+**The first `evals label report` is [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md),
+and the one thing to carry out of it is that a measurement can arrive and change nothing.**
+The ceiling — two people on the same posting — came back **below** the model's own floor on
+all five fields, which means a model score has nothing to be read between. Do not tune on
+it, do not quote a cell from it without its n, and do not treat task 30 as unblocked. Every
+input is committed and the report is a pure function of three files, so re-run it rather
+than trusting this paragraph.
 
 **Tranche seven is complete: tasks 36–44, ending `b8c2943`.** ~~Nothing in `docs/` is the
 next session's work.~~ **The owner chose the product/API track. Task 27 — the position
@@ -34,7 +43,7 @@ worth keeping: it is the only work in the plan that **cannot be backfilled**, be
 
 | track | tasks | what it needs |
 |---|---|---|
-| **the labelling night** | 30, then 13's weights and 12's next bump | **a second labeller for about twenty minutes.** `evals label report` exits 2 by design at one labeller — there is no inter-annotator ceiling to denominate a model score against. All ten `overlap` rows are already answered on the owner's side, so a second person's ten are the **last** input needed, not the first. No session can do this |
+| **the labelling night** | 30, then 13's weights and 12's next bump | ~~a second labeller for about twenty minutes; no session can do this~~ **DONE 2026-08-02 — and it did not unblock them.** The report prints ([`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md)) and **the ceiling came back BELOW the floor on all five fields**, on 6–10 items each. What these tasks need is a *usable* ceiling: more labellers on the **same ten** overlap rows (more postings do nothing), round 2 ~2026-08-09, and an n=120 selfcheck covering `role_track`. Only the last is a session's to run |
 | **the product / API surface** | ~~24, 25, 26, 27,~~ ~~24, 25, 26, 28, 31, 32, 33~~ **24, 25, 26, 28, 32, 33** | **27 and 31 are done.** The rest is unblocked apart from ordering, **except 28 — see the D66/D67 note below, which is new and is a real blocker.** **Audit the premises first:** they were checked on 2026-07-31 and several were stale, and **two dependency arrows have now been found wrong, both pointing at 26** — 27 declared *"Depends on: 26"* while 26's own DoD needs 27's `visibility` column, and 31's *"Depends on: 27, 26"* needed nothing 26 builds. Corrections are in the task files and in [`API-CONTRACT-v1.md`](API-CONTRACT-v1.md), **which is a specification and not a description of the shipped API** |
 
 **Three things a session picking up this track next must not re-derive.**

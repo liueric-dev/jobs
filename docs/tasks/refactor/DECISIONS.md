@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-75`.** Allocated `DEC-46`–`DEC-74`. The count starts at 46 rather than at
+**Next free: `DEC-76`.** Allocated `DEC-46`–`DEC-75`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -2478,3 +2478,38 @@ true here and more obviously so — nothing recomputes an event.
 
 Reversible: yes. Adding a differently-named column later costs one `add_missing_columns`
 entry; nothing reads this one yet, by design (*"instrument now, consume later"*).
+
+## DEC-75 — the report's floor is a per-corpus selfcheck, and it supersedes nothing
+
+**2026-08-02, task 29.**
+
+`evals label report` needs three quantities per field and refuses per field for whichever
+of floor / ceiling / measured is missing. There is deliberately no `--force`. The committed
+floor — `docs/ingestion_tests/selfcheck-n120-2026-07-28.json` — covers 16 fields and
+**`role_track` is not one of them**: task 11 added that field after the measurement was
+taken. So the first report was unrunnable against committed data, on one field, for a
+reason that has nothing to do with the labels.
+
+**Decided: run `evals selfcheck --repeat 3` over the 36 labelled postings and use that as
+the floor**, committed as `backend/evals/fixtures/selfcheck-labelled36-2026-08-02.json`.
+108 live calls. The report, its method and its caveats are
+[`docs/labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md).
+
+**Rejected: re-run `selfcheck --n 120` covering `role_track` first, and report after.**
+Roughly ten times the calls, to unblock a report whose *ceiling* was going to be
+provisional regardless — and it defers the only measurement that can say whether the
+harness works end to end, which was the open question. The n=120 replacement is recorded as
+**owed, not skipped**: `AUDIT.md` § *What is open* carries it, and it is the one of the
+three unblocks that a session can do without people.
+
+**The consequence, and it is the part to carry:** the floor column in that report is
+measured on a different corpus from the committed self-consistency figures that
+[`AUDIT.md`](AUDIT.md) § *The three self-consistency metrics* owns. Same metric, different
+population — `ai_involvement` reads lower there than the committed `agree2` figure. **Neither
+supersedes the other and neither may be quoted as the other.** This is the same overloading
+that made one word describe three correct percentages in `DEC-71`; the fix is the same one,
+which is to name the corpus as well as the metric.
+
+Reversible: yes, and cheaply — a later n=120 selfcheck covering `role_track` replaces the
+`--selfcheck` argument and the report re-runs from committed files in seconds. Nothing was
+tuned against this floor, which is what keeps it reversible.

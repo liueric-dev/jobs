@@ -59,7 +59,8 @@ instrument, and every other document cites this one rather than restating them.
 | broken doc links | **0** | `python3 backend/tools/audit-doc-links.py` |
 | documentation policy | **all six checks 0**, and the baseline is empty — that emptiness is phase 9's exit gate | `python3 backend/tools/audit-docs.py`; wired into `backend/tests/test_docs_policy.py` |
 | defect register | 45 entries, `D01`–`D45` | [`../../ingest/DEFECTS.md`](../../ingest/DEFECTS.md) |
-| human labels | 186 rows / 31 postings / **one** labeller | `python3 backend/tools/label-findings.py` |
+| human labels | ~~186 rows / 31 postings / **one** labeller~~ **271 rows / 36 postings / two labellers**, round 1 (2026-08-02) | `python3 backend/tools/label-findings.py` |
+| model vs human | **measured 2026-08-02, and the ceiling is below the floor on all five fields** — owned by [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md), which carries the table and the reasons not to tune on it | the command in that document; every input is committed |
 | labelling rate | 93 s median (n=29) | `python3 backend/tools/label-findings.py --timing` |
 | model self-consistency | **three named metrics** — [§ *The three self-consistency metrics*](#the-three-self-consistency-metrics) below owns them | task 06; the command in that section |
 | cohort corpus | 940 rows at `facts_version = 3`; `role_archetype = other` on 31.3% | `python3 backend/tools/derive-role-tracks.py --archetypes` |
@@ -120,13 +121,33 @@ are, which the rate does not tell you*.
 
 ## What is open
 
-**Blocking everything downstream: a second labeller for about twenty minutes.** `evals
-label report` exits 2 by design while there is one labeller, because with one there is no
-inter-annotator ceiling to denominate a model score against — and `consensus()` promotes a
-majority of size one with nothing recording that it was of size one. The ten `overlap`
-rows are already answered on the owner's side, so a second person's ten are the *last*
-input needed. This is the owner's to arrange; no session can do it. It gates tasks 30, 13's
-weights, and 12's next bump.
+> ~~**Blocking everything downstream: a second labeller for about twenty minutes.** `evals
+> label report` exits 2 by design while there is one labeller, because with one there is no
+> inter-annotator ceiling to denominate a model score against — and `consensus()` promotes a
+> majority of size one with nothing recording that it was of size one. The ten `overlap`
+> rows are already answered on the owner's side, so a second person's ten are the *last*
+> input needed. This is the owner's to arrange; no session can do it. It gates tasks 30, 13's
+> weights, and 12's next bump.~~
+>
+> **Struck 2026-08-02: it happened.** A second labeller answered the overlap block, `evals
+> label report` printed at exit 0, and the result is
+> [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md).
+
+**What blocks now is not what that paragraph predicted.** The report exists and **still
+cannot be tuned on** — the ceiling it produced is *below* the floor on all five fields and
+rests on 6–10 items each. Tasks 30, 13's weights and 12's next bump are gated on a **usable**
+ceiling, not on a report. Three things would produce one, and only the third is a session's
+to do:
+
+1. **More overlap — more labellers on the *same* ten rows.** Not more postings: 25 of the 36
+   labelled postings carry one labeller and add nothing to the ceiling. The owner's to
+   arrange.
+2. **Round 2**, the same labeller re-answering the overlap block after the form's 7-day delay
+   (~2026-08-09), for the intra-annotator ceiling. The owner's to arrange.
+3. **An `evals selfcheck` at n=120 that covers `role_track`.** The committed
+   `docs/ingestion_tests/selfcheck-n120-2026-07-28.json` predates task 11 adding the field, so
+   the report cannot be run against it at all and a per-corpus selfcheck was substituted
+   (`DEC-75`). This one is a session's to run and costs LLM calls, not people.
 
 ~~**Not blocked, not started:** the product/API surface — tasks 24–28, 31, 32.~~
 **STARTED 2026-08-01. Task 27 is done** (`2687bc0`); 24, 25, 26, 28, 31, 32 remain. Its

@@ -6,7 +6,10 @@ generator: none
 
 # 29 — Two-axis labelling session
 
-**Status:** todo. **Depends on:** 07, 12, 26. **Blocks:** 30. ~~30, 31.~~
+**Status:** ~~todo~~ **in progress** — the report printed 2026-08-02
+([`docs/labelling-report-2026-08-02.md`](../../../labelling-report-2026-08-02.md)) and no
+DoD line is met; see § *Findings, 2026-08-02*.
+**Depends on:** 07, 12, 26. **Blocks:** 30. ~~30, 31.~~
 **Corrected 2026-07-30: this task does not block 31.**
 `tranche_six/31-dismiss-demotion.md:3` reads *"**Depends on:** 27, 26. **Blocks:**
 nothing"* — it does not name 29 — and **31's body never mentions labels at all**
@@ -261,7 +264,9 @@ Line by line, and the split is not where it looks:
 
 **The report is EXPECTED to refuse, and that is not a defect to work around.**
 `evals label report` exits 2 with `evals label report REFUSED:` for as long as there is one
-labeller. The ceiling column is bound to `labels.inter_annotator()`, which requires **two
+labeller. *(Written while that was the state. A second labeller arrived 2026-08-02 and it
+prints — the mechanism below is unchanged and is why it printed only then; see § Findings,
+2026-08-02.)* The ceiling column is bound to `labels.inter_annotator()`, which requires **two
 distinct `labeller_id`s on the same item** and skips every item where it does not find
 them; `labels.interpretable()` then refuses per field, and `Interpretable` is the only
 thing `report.render_labels()` accepts. **There is deliberately no `--force`** — the
@@ -786,3 +791,49 @@ is not a route around it.
 **1166 → 1171**, five added in `backend/tests/test_label_findings.py`. `backend/webapp/`
 under its own `.venv`: **`Ran 93 tests`, `OK`**, untouched by this change. Neither went
 down.
+
+## Findings, 2026-08-02 (third sitting — and the report printed)
+
+**A second labeller arrived and the task's central deliverable exists.** The three-quantity
+measurement is
+[`docs/labelling-report-2026-08-02.md`](../../../labelling-report-2026-08-02.md), which
+**owns those figures** under `DOCS-POLICY.md` rule 2. It is cited here and not restated;
+every input is committed and the report re-runs from three files with no database, no
+network and no LLM call.
+
+**State, `python3 tools/label-findings.py`:** 271 label rows / 36 postings / **2** labellers
+/ round 1. `u_919ad2c305c2` answered 11 postings including all ten `overlap` rows, 2026-08-02
+`00:52`–`01:09` UTC; the owner added five more postings the same night.
+
+**The one thing this file should carry forward, because it corrects its own § E.** E called
+the second labeller *"the cheapest unblock,"* and it was — but it unblocked a **report**, not
+an **answer**. The inter-annotator ceiling completed the moment those ten rows landed, and it
+came back **below the model's own floor on every one of the five fields**, on 6–10 items each.
+A model number with an inverted band has nothing to be read between. **E was right about the
+mechanism and wrong about what it would buy**, and the correction is not that E was careless:
+a ceiling cannot be predicted before it is measured, which is the entire reason the report
+refuses to invent one.
+
+**Effect on the Definition of done:** none of the lines move. Distinct postings are 36
+against ≥100; labellers are 2 against 5–10; the gate decision stays *evidence collected,
+decision still open*. **The one line that could have moved — a printable report — is now
+printable and still not decisive**, so the task stays **in progress** rather than closing on
+a technicality.
+
+**What C's vocabulary figures look like at n=36**, re-derived rather than re-quoted, and the
+population caveat above is unchanged — this is the stratified eval set, a quarter of it
+`gate_rejected` by construction, and not the cohort corpus:
+
+| answer | at n=31 (C, above) | **at n=36** |
+|---|---|---|
+| `role_track = no_track_fits` | 13 of 31 · 42% [0.26, 0.59] | **15 of 36 · 42% [0.27, 0.58]** |
+| `role_archetype = other` | 17 of 31 · 55% [0.38, 0.71] | **19 of 36 · 53% [0.37, 0.68]** |
+
+**The rate did not move.** C's conclusion is unchanged and no vocabulary change is proposed
+here either.
+
+**Next, and only the third is a session's to do:** more labellers on the *same ten* overlap
+rows (more postings add nothing to the ceiling — 25 of the 36 carry one labeller); round 2
+after the form's 7-day delay, ~2026-08-09, for the intra-annotator ceiling; and an
+`evals selfcheck` at n=120 covering `role_track`, which the committed n=120 file predates
+(`DEC-75`).

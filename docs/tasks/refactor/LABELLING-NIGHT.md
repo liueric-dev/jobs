@@ -196,6 +196,15 @@ solo sitting and a printable report.
 > standing between the labels already collected and a printable report.
 >
 > **It is not a ten-minute favour, and asking for it as one will fail on contact.**
+>
+> > **HAPPENED, 2026-08-02.** `u_919ad2c305c2` answered the overlap block — 11 postings, 66
+> > rows, `00:52`–`01:09` UTC — and `evals label report` printed at exit 0. The prediction in
+> > this block was right about the mechanics and wrong about the consequence: the ceiling
+> > completed *immediately*, and it came back **below the model's own floor on all five
+> > fields** at 6–10 items each, so the report it unblocked still cannot be tuned on.
+> > [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md) owns the
+> > table. **A second labeller was the last input needed for a report, not for an answer** —
+> > what the answer needs is a third, a fourth, and round 2.
 
 The other route is the **intra**-annotator ceiling — the owner re-answering those same ten
 rows seven days later — and it is deliberately *not* wired to the report's ceiling column.
@@ -213,6 +222,10 @@ after that is a trade you can make with a real number instead of a guess.
 > 0–30 are contiguous, so the ten `overlap` rows are complete.** By stratum: surfaced 19,
 > gate_rejected 9, below_floor 3. `next_item()` resumes at position 31; this paragraph is
 > the record of the first ten, not an instruction to redo them.
+>
+> **These counts are frozen at 2026-07-31 and are no longer the state of the table** — two
+> more sittings followed on 2026-08-02. For the current figures run
+> `python3 tools/label-findings.py`, which is what [`AUDIT.md`](AUDIT.md)'s row names.
 
 **Recommended: ~60 in the first sitting, 110 as the target across two or three, all 200
 only if the recall question earns it.** The strata are interleaved — every 50-row block is
@@ -265,8 +278,12 @@ turns every future Builder-session estimate from a guess into arithmetic.
 > re-derive has been issued three times in this run and re-quoted three times, which is the
 > whole reason the tool exists — the four lines of SQL are kept so the next session runs a
 > command instead of writing them. **It deliberately prints no model-vs-human agreement**;
-> `evals label report` still exits 2 for as long as there is one labeller and this is not a
-> route around that.
+> ~~`evals label report` still exits 2 for as long as there is one labeller~~ **that report
+> now prints (2026-08-02, two labellers) and is
+> [`../../labelling-report-2026-08-02.md`](../../labelling-report-2026-08-02.md)** — and this
+> tool is still not a route around it. The division stands: `label-findings.py` reports what
+> the humans said, `evals label report` is the only thing that puts a model number between a
+> floor and a ceiling.
 
 **Use the abstention.** *"I can't tell from this posting"* is stored as NULL and dropped
 from the agreement rates rather than folded in, because *"folding them in as a value would
