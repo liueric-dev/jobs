@@ -464,6 +464,30 @@ def cmd_label_status(args):
     for who, k in sorted(per_labeller.items()):
         print(f"  {who}: {k} label(s) on "
               f"{len(per_labeller_items.get(who, ()))} posting(s)")
+
+    # WHICH EXTRACTION EACH LABEL WAS FORMED AGAINST. Printed HERE and not in
+    # `label report`, whose figures are owned by
+    # docs/labelling-report-2026-08-02.md -- this command owns nothing and is
+    # already the "who has labelled what" surface.
+    #
+    # The three states are not interchangeable and the middle one is the one a
+    # reader will misread. `unrecorded` is every row written before 2026-08-02,
+    # when nothing captured this; `no extraction` is a posting that genuinely
+    # had no job_facts row, which is normal for the gate_rejected and
+    # below_floor strata and permanent. See labels.PROVENANCE_COLUMNS.
+    by_version = {}
+    for row in rows:
+        if not row["facts_version_known"]:
+            key = "unrecorded (written before 2026-08-02)"
+        elif row["facts_version"] is None:
+            key = "no extraction at label time"
+        else:
+            key = f"facts_version {row['facts_version']}"
+        by_version[key] = by_version.get(key, 0) + 1
+    if by_version:
+        print("labels by extraction provenance:")
+        for key, k in sorted(by_version.items()):
+            print(f"  {key}: {k}")
     return 0
 
 

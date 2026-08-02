@@ -189,6 +189,13 @@ REQUIRED_SEQUENCES = {
 REQUIRED_COLUMNS = {
     "job_events": ("request_id", "rank", "dwell_ms", "reason", "visibility",
                    "criteria_version"),
+    # Added to eval_labels 2026-08-02, and the migration that creates them is
+    # `evals label init` -- run by hand by an operator, not by the nightly
+    # pipeline. So the window this entry closes is WIDER than job_events':
+    # there, a nightly run repairs the drift within a day; here, nothing
+    # repairs it until someone remembers. labels.record() names both columns
+    # unconditionally.
+    "eval_labels": ("facts_version", "facts_version_known"),
 }
 
 #: eval_labels.id is BIGSERIAL for the same reason and needs the same grant.

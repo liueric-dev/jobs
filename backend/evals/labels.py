@@ -299,6 +299,63 @@ WEB_PRIVILEGES = {
     "eval_labels": ("SELECT", "INSERT"),
 }
 
+#: Pipeline-owned tables the labelling surface READS, kept apart from the
+#: label tables it owns. record() resolves facts_version from job_facts at
+#: write time (PROVENANCE_COLUMNS below), so a missing SELECT here is a 500 on
+#: a volunteer's submit rather than a refusal to start -- which is what
+#: verify_schema() exists to convert.
+#:
+#: NOT MERGED INTO WEB_PRIVILEGES, for two reasons that are easy to miss.
+#: `set(WEB_PRIVILEGES) == set(TABLES)` is an invariant with a test on it
+#: (tests/test_labels.py) and it is a true statement about this module's own
+#: tables. And webapp/schema_web.py does `REQUIRED_TABLES.update(
+#: WEB_PRIVILEGES)` over a dict that ALREADY declares job_facts at line 45 --
+#: identical today, so the merge would be invisible, and silently authoritative
+#: the day the two disagree. jobs_web already holds this grant; nothing new is
+#: issued.
+WEB_READS = {
+    "job_facts": ("SELECT",),
+}
+
+#: The two columns that record which extraction a label was formed against,
+#: in the shape lib.dbconn.add_missing_columns takes. Also spelled out in the
+#: CREATE TABLE in ensure_schema(); the test that they agree is in
+#: tests/test_labels.py and is deliberately not a shared constant feeding both.
+#:
+#: WHY TWO COLUMNS AND NOT ONE NULLABLE INTEGER. A single `facts_version`
+#: would collapse two states that mean opposite things:
+#:
+#:   facts_version IS NULL, known   the posting had NO job_facts row when the
+#:                                  judgement was made. Permanent and normal --
+#:                                  it is most of the `gate_rejected` and
+#:                                  `below_floor` strata, and those labels can
+#:                                  never be compared against model output at
+#:                                  any version, which is a fact worth having.
+#:   NOT known                      nobody was recording. Every row written
+#:                                  before 2026-08-02.
+#:
+#: A sentinel 0 for the first would put back exactly what task 11 took out
+#: when normalize() stopped laundering absence into sentinels. NOT NULL
+#: DEFAULT FALSE gives every pre-existing row the right answer without a
+#: backfill, and a backfill is not available anyway: today's
+#: job_facts.facts_version is today's value, not the one that was current when
+#: someone answered the form. The rule is job_events.rank's -- a guessed value
+#: is worse than a missing one. DEC-95.
+#:
+#: WHY IT IS ON THE LABEL AND NOT ON eval_label_items, where `platform` lives
+#: and where _FETCH_COLUMNS below is emphatic that a second copy does not
+#: belong. `platform` is a property of the POSTING and cannot change; this is
+#: a property of the LABELLING EVENT and is supposed to be able to disagree
+#: with the live table -- that disagreement is the entire signal. The
+#: precedent is `stratum` on eval_label_items, carried on the row because it
+#: is a property of the pipeline AT SAMPLING TIME. Round 2 is seven days after
+#: round 1 by design, so a re-extraction can land between one labeller's two
+#: answers, and per-item would average that away.
+PROVENANCE_COLUMNS = (
+    ("facts_version", "INTEGER"),
+    ("facts_version_known", "BOOLEAN NOT NULL DEFAULT FALSE"),
+)
+
 WEB_SEQUENCES = {
     # eval_labels.id is BIGSERIAL, so INSERT on the table is not sufficient on
     # its own -- nextval() is a separate privilege. api/ and webapp/ have each
@@ -371,6 +428,8 @@ def ensure_schema(conn):
             round_no    INTEGER NOT NULL DEFAULT 1,
             labelled_at TEXT NOT NULL,
             note        TEXT,
+            facts_version       INTEGER,
+            facts_version_known BOOLEAN NOT NULL DEFAULT FALSE,
             CONSTRAINT eval_labels_axis
                 CHECK (axis IN ('A', 'B')),
             CONSTRAINT eval_labels_axis_shape
@@ -403,6 +462,21 @@ def ensure_schema(conn):
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_eval_labels_set "
                  "ON eval_labels (label_set, job_id)")
+
+    # WHICH EXTRACTION THE LABEL WAS FORMED AGAINST. Added 2026-08-02; every
+    # row written before that carries the defaults, which is the honest answer
+    # and not a gap to be filled. See PROVENANCE_COLUMNS for why there are two
+    # of them and DEC-95 for why nothing is backfilled.
+    #
+    # In the DDL above as well as here, and the pairing is not redundant: the
+    # CREATE TABLE serves a database that does not exist yet and this serves
+    # the one that does. tests/test_labels.py asserts the two agree, because
+    # task 41a was a live production bug of exactly this shape -- a column
+    # added on one side of a pair, the other side not following, and the
+    # Workday gate dying on UndefinedColumn in the nightly run.
+    from lib import dbconn
+
+    dbconn.add_missing_columns(conn, "eval_labels", PROVENANCE_COLUMNS)
     conn.commit()
 
 
@@ -414,7 +488,8 @@ def verify_schema(conn, privileges=None, sequences=None):
     surfaces as a 500 on a real user's first click rather than as a refusal to
     start. Returns a list of problems; the caller decides whether to raise.
     """
-    privileges = WEB_PRIVILEGES if privileges is None else privileges
+    privileges = ({**WEB_PRIVILEGES, **WEB_READS} if privileges is None
+                  else privileges)
     sequences = WEB_SEQUENCES if sequences is None else sequences
     problems = []
     for table, needed in privileges.items():
@@ -920,13 +995,21 @@ def register_set(conn, label_set, rows, *, seed, profile, note=None):
 # --------------------------------------------------------------------------
 
 _LABEL_COLUMNS = ("axis", "label_set", "job_id", "field", "value", "profile",
-                  "labeller_id", "round_no", "labelled_at", "note")
+                  "labeller_id", "round_no", "labelled_at", "note",
+                  "facts_version", "facts_version_known")
 
 #: What fetch() returns: the label, plus the platform of the posting it is
 #: about. `platform` is NOT a column of `eval_labels` and must not become one
 #: -- it is a property of the posting, already recorded once on
 #: eval_label_items (ensure_schema above), and a second copy on every label
 #: row is a copy that can disagree with the first.
+#:
+#: `facts_version` IS a column of eval_labels and the distinction is exact,
+#: not a relaxation of the rule above: what is stored is the version that was
+#: current WHEN THE JUDGEMENT WAS MADE, and it is supposed to be able to
+#: disagree with today's job_facts. A copy that can never disagree is
+#: duplication; one that must be able to is a snapshot. PROVENANCE_COLUMNS
+#: gives the argument in full.
 #:
 #: It rides along on the read because the per-platform breakout task 29's
 #: Definition of done asks for (29:106) has to happen somewhere, and every
@@ -951,6 +1034,21 @@ def record(conn, *, axis, job_id, field, value, labeller_id, label_set=None,
     same round silently ignored rather than silently overwriting. A revision
     is round_no 2, which is the intra-annotator measurement. Quietly replacing
     round 1 would destroy the ceiling.
+
+    facts_version IS RESOLVED HERE AND NOT PASSED IN, for the same reason
+    validate() is called here: one place, and a route cannot forget. It is a
+    scalar subquery inside the INSERT rather than a SELECT before it, so there
+    is no window in which a re-extraction lands between the read and the write
+    and no second round trip on a form submit. job_facts.job_id is the primary
+    key (../schema.py), so it returns at most one row, and SQL NULL when the
+    posting has no extraction at all -- which is a real state, not a failure,
+    and is why facts_version_known is a separate column. See
+    PROVENANCE_COLUMNS.
+
+    THE COLUMNS MUST EXIST BEFORE THIS RUNS. That is ensure_schema()'s job and
+    webapp/schema_web.py's REQUIRED_COLUMNS is what makes a deploy that shipped
+    this INSERT ahead of the migration refuse to start rather than 500 on a
+    volunteer's first submit.
     """
     from lib.timeparse import utc_now_str
 
@@ -965,13 +1063,15 @@ def record(conn, *, axis, job_id, field, value, labeller_id, label_set=None,
         """
         INSERT INTO eval_labels (axis, label_set, job_id, field, value,
                                  profile, labeller_id, round_no, labelled_at,
-                                 note)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                 note,
+                                 facts_version, facts_version_known)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                (SELECT facts_version FROM job_facts WHERE job_id = %s), TRUE)
         ON CONFLICT DO NOTHING
         RETURNING id
         """,
         (axis, label_set, job_id, field, value, profile, labeller_id,
-         int(round_no), now or utc_now_str(), note),
+         int(round_no), now or utc_now_str(), note, job_id),
     ).fetchone()
     return row is not None
 

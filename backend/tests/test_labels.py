@@ -1120,6 +1120,126 @@ class TestGrantsAreDeclaredOnce(unittest.TestCase):
         for table in ("eval_label_sets", "eval_label_items"):
             self.assertEqual(labels.WEB_PRIVILEGES[table], ("SELECT",))
 
+    def test_the_pipeline_table_record_reads_is_declared_and_read_only(self):
+        # record() resolves facts_version from job_facts, so the labelling
+        # surface reads a table it does not own. Declared separately from
+        # WEB_PRIVILEGES so the invariant above stays a true statement about
+        # this module's own tables -- and so schema_web's REQUIRED_TABLES.update
+        # cannot silently overwrite the entry that file makes for itself.
+        self.assertEqual(labels.WEB_READS, {"job_facts": ("SELECT",)})
+        self.assertNotIn("job_facts", labels.WEB_PRIVILEGES)
+        for needed in labels.WEB_READS.values():
+            self.assertEqual(needed, ("SELECT",),
+                             "a pipeline-owned table is read here and never "
+                             "written -- job_facts belongs to extract.py")
+
+    def test_verify_schema_checks_what_the_module_reads_not_only_what_it_owns(self):
+        # The failure this closes: job_facts granted to jobs_web for the job
+        # list but not thought about here, then a GRANT tightened, and the
+        # first symptom is a 500 on a volunteer's submit rather than a service
+        # that refuses to start. Asserted through the default argument because
+        # that is what app.py's lifespan actually calls.
+        seen = {}
+
+        class _Conn:
+            def execute(self, sql, params=None):
+                if "to_regclass" in sql:
+                    seen.setdefault(params[0], set())
+                    return _Row(("public.x",))
+                if "has_table_privilege" in sql:
+                    seen[params[0]].add(params[1])
+                    return _Row((True,))
+                return _Row((True,))
+
+        class _Row:
+            def __init__(self, value):
+                self._value = value
+
+            def fetchone(self):
+                return self._value
+
+        labels.verify_schema(_Conn())
+        self.assertIn("public.job_facts", seen)
+        self.assertEqual(seen["public.job_facts"], {"SELECT"})
+
+
+class TestProvenanceIsDeclaredInBothPlaces(unittest.TestCase):
+    """The 41a shape: a column added on one side of a pair, the other side not
+    following, and the failure arriving in production as UndefinedColumn.
+
+    ensure_schema() writes the columns twice on purpose -- the CREATE TABLE
+    serves a database that does not exist yet, add_missing_columns serves the
+    one that does -- so nothing but a test keeps the two in agreement.
+    """
+
+    def _create_table_columns(self):
+        """The column names in ensure_schema()'s CREATE TABLE eval_labels.
+
+        Read from the source rather than from a shared constant: a constant
+        feeding both sides would make the assertion below a tautology, which
+        is the objection webapp/tests/test_grants.py records about its own
+        equivalent.
+        """
+        import re
+
+        with open(labels.__file__, encoding="utf-8") as fh:
+            source = fh.read()
+        block = re.search(
+            r"CREATE TABLE IF NOT EXISTS eval_labels \((.*?)\n        \)",
+            source, re.S)
+        self.assertIsNotNone(block, "could not find the eval_labels DDL")
+        names = []
+        for line in block.group(1).splitlines():
+            line = line.strip()
+            if not line or line.startswith(("CONSTRAINT", "CHECK", "OR ")):
+                continue
+            names.append(line.split()[0])
+        return names
+
+    #: eval_labels as it shipped. Anything the DDL names beyond this list is a
+    #: column added later, and every one of those has to be in
+    #: PROVENANCE_COLUMNS or the live database never gets it.
+    AS_SHIPPED = ("id", "axis", "label_set", "job_id", "field", "value",
+                  "profile", "labeller_id", "round_no", "labelled_at", "note")
+
+    def test_every_column_added_after_ship_is_also_in_the_migration(self):
+        added = [c for c in self._create_table_columns()
+                 if c not in self.AS_SHIPPED]
+        self.assertEqual(added, [name for name, _type in
+                                 labels.PROVENANCE_COLUMNS],
+                         "a column in the CREATE TABLE and not in "
+                         "PROVENANCE_COLUMNS reaches a fresh database and "
+                         "never reaches the live one")
+
+    def test_the_ddl_still_names_every_column_that_shipped(self):
+        # The other direction, and the cheaper mistake: editing the DDL and
+        # dropping a column that live rows already carry.
+        for column in self.AS_SHIPPED:
+            self.assertIn(column, self._create_table_columns())
+
+    def test_the_absent_state_is_a_boolean_and_never_a_sentinel_version(self):
+        # The whole argument for two columns. A sentinel 0 or -1 would make
+        # "this posting had no extraction" indistinguishable from a real
+        # version in exactly the query the column exists to answer, and it is
+        # what task 11's normalize() stopped doing.
+        types = dict(labels.PROVENANCE_COLUMNS)
+        self.assertEqual(types["facts_version"], "INTEGER",
+                         "no DEFAULT: a row whose posting has no facts must "
+                         "be NULL, not a number")
+        self.assertIn("NOT NULL DEFAULT FALSE", types["facts_version_known"],
+                      "every pre-existing row must read FALSE without a "
+                      "backfill -- that is what makes the migration honest")
+
+    def test_record_names_both_columns(self):
+        # The INSERT is the only writer. If it stops naming them, the default
+        # takes over and every new row reads as unrecorded -- silently, which
+        # is this system's failure mode.
+        import inspect
+
+        source = inspect.getsource(labels.record)
+        for name, _type in labels.PROVENANCE_COLUMNS:
+            self.assertIn(name, source)
+
 
 # --------------------------------------------------------------------------
 # Against a real Postgres: the constraints, which a fake connection cannot test
@@ -1262,6 +1382,97 @@ class TestSchemaAgainstPostgres(unittest.TestCase):
             profile="pursuit"))
         self.conn.commit()
         self.assertEqual(len(labels.fetch(self.conn)), 2)
+
+    # ----------------------------------------------------------------------
+    # Which extraction the label was formed against. DEC-95.
+    # ----------------------------------------------------------------------
+
+    def _posting(self, job_id, facts_version=None):
+        """A jobs row, and a job_facts row only if a version is given."""
+        import schema
+        self.conn.execute(
+            f"INSERT INTO {schema.TABLE} (id, platform, company_token, "
+            f"source_id, title, company_name, content_hash, first_seen, "
+            f"last_seen, status) VALUES (%s,'builtin','acme',%s,"
+            f"'Ops Lead','Acme','h','t','t','open')", (job_id, job_id))
+        if facts_version is not None:
+            self.conn.execute(
+                f"INSERT INTO {schema.FACTS_TABLE} (job_id, facts_version, "
+                f"extracted_at) VALUES (%s, %s, 't')",
+                (job_id, facts_version))
+        self.conn.commit()
+
+    def _provenance(self, job_id):
+        return self.conn.execute(
+            "SELECT facts_version, facts_version_known FROM eval_labels "
+            "WHERE job_id = %s", (job_id,)).fetchone()
+
+    def test_a_label_records_the_extraction_that_was_current(self):
+        self._posting("pv1", facts_version=3)
+        labels.record(self.conn, axis="A", job_id="pv1",
+                      field="seniority_level", value="mid",
+                      labeller_id="alice", label_set="s")
+        self.conn.commit()
+        self.assertEqual(self._provenance("pv1"), (3, True))
+
+    def test_a_posting_with_no_extraction_records_that_it_had_none(self):
+        # NOT a failure and not a gap: most of the gate_rejected and
+        # below_floor strata are exactly this, and the fact is permanent --
+        # those labels can never be compared against model output at any
+        # version. `known` is what separates it from "nobody was recording".
+        self._posting("pv2")
+        labels.record(self.conn, axis="A", job_id="pv2",
+                      field="seniority_level", value="mid",
+                      labeller_id="alice", label_set="s")
+        self.conn.commit()
+        self.assertEqual(self._provenance("pv2"), (None, True))
+
+    def test_a_label_on_a_posting_with_no_jobs_row_at_all_still_records(self):
+        # eval_labels carries no foreign key to jobs on purpose, and the
+        # subquery must not turn that into an error. It resolves to NULL.
+        labels.record(self.conn, axis="A", job_id="ghost",
+                      field="seniority_level", value="mid",
+                      labeller_id="alice", label_set="s")
+        self.conn.commit()
+        self.assertEqual(self._provenance("ghost"), (None, True))
+
+    def test_a_row_written_before_the_columns_existed_reads_as_unrecorded(self):
+        # THE ONE THAT MATTERS FOR THE 271 ROWS ALREADY IN THE LIVE TABLE.
+        # An INSERT that names neither column takes the defaults, and the
+        # defaults must say "nobody was recording" -- distinguishable from
+        # the row above, which says "there was nothing to record".
+        self.conn.execute(
+            "INSERT INTO eval_labels (axis, job_id, field, value, "
+            "labeller_id, round_no, labelled_at) VALUES "
+            "('A','legacy','seniority_level','mid','alice',1,'t')")
+        self.conn.commit()
+        self.assertEqual(self._provenance("legacy"), (None, False))
+
+    def test_ensure_schema_never_backfills_an_existing_row(self):
+        # A guessed value is worse than a missing one -- job_events.rank's
+        # rule, and the reason this migration is additive and nothing more.
+        # Re-running it must leave every existing row exactly as it was, even
+        # though job_facts now holds a version for this very posting.
+        self.conn.execute(
+            "INSERT INTO eval_labels (axis, job_id, field, value, "
+            "labeller_id, round_no, labelled_at) VALUES "
+            "('A','legacy2','seniority_level','mid','alice',1,'t')")
+        self._posting("legacy2", facts_version=3)
+        labels.ensure_schema(self.conn)
+        self.assertEqual(self._provenance("legacy2"), (None, False))
+
+    def test_fetch_carries_the_provenance_to_every_consumer(self):
+        # The export JSONL, corpus.load() and the agreement functions all take
+        # label rows and nothing else, so a column fetch() drops is a column
+        # that exists in the table and nowhere a reader can see it.
+        self._posting("pv3", facts_version=3)
+        labels.record(self.conn, axis="A", job_id="pv3",
+                      field="seniority_level", value="mid",
+                      labeller_id="alice", label_set="s")
+        self.conn.commit()
+        row, = [r for r in labels.fetch(self.conn) if r["job_id"] == "pv3"]
+        self.assertEqual(row["facts_version"], 3)
+        self.assertIs(row["facts_version_known"], True)
 
     def test_the_tables_ship_empty(self):
         self.assertEqual(labels.fetch(self.conn), [])

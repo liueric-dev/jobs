@@ -439,6 +439,36 @@ class TestGrantsCoverTheSQL(unittest.TestCase):
             {"request_id", "rank", "dwell_ms", "reason", "visibility",
              "criteria_version"})
 
+    def test_the_label_provenance_columns_are_verified_at_startup(self):
+        # Same failure, WIDER WINDOW. job_events' migration is the nightly
+        # pipeline's, so drift there repairs itself within a day; eval_labels'
+        # is `evals label init`, run by hand, so nothing repairs it until
+        # someone remembers. The symptom either way is a 500 on a volunteer's
+        # submit, and this is what converts it into a refusal to start.
+        self.assertEqual(
+            set(schema_web.REQUIRED_COLUMNS["eval_labels"]),
+            {"facts_version", "facts_version_known"})
+
+    def test_the_declared_label_columns_are_the_ones_record_names(self):
+        # Read from labels.record()'s own INSERT rather than from
+        # PROVENANCE_COLUMNS, so this is an independent statement about the
+        # writer rather than a restatement of the declaration.
+        import inspect
+        import re
+
+        from evals import labels
+
+        statements = re.findall(r"INSERT INTO eval_labels\s*\(([^)]*)\)",
+                                inspect.getsource(labels.record))
+        self.assertEqual(len(statements), 1,
+                         "record() is the only writer -- a second INSERT here "
+                         "is a second place to forget a column")
+        named = {c.strip() for c in statements[0].split(",")}
+        for column in schema_web.REQUIRED_COLUMNS["eval_labels"]:
+            self.assertIn(column, named,
+                          f"{column} is declared required but record() does "
+                          f"not name it")
+
     def test_the_declared_columns_are_the_ones_the_writers_name(self):
         # The drift this guards: adding a column to an INSERT and forgetting the
         # declaration re-opens the hole the test above closed, and nothing would

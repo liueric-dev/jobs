@@ -26,7 +26,7 @@ else does.** Defects are `D<n>` and live in
 [`docs/ingest/DEFECTS.md`](../../ingest/DEFECTS.md); task numbers live in
 [`README.md`](README.md).
 
-**Next free: `DEC-95`.** Allocated `DEC-46`–`DEC-93`. The count starts at 46 rather than at
+**Next free: `DEC-96`.** Allocated `DEC-46`–`DEC-95`. The count starts at 46 rather than at
 1 because these entries were first issued as `D46`–`D65`, continuing the defect register's
 count while it stood at `D45`. Task 39 re-prefixed them and **preserved every number** — a
 citation that says 52 still means this entry — and `DEFECTS.md` records `D46`–`D65` as burnt
@@ -3238,3 +3238,49 @@ before it existed — `search.py` imports `LIST_COLUMNS` and builds its column l
 dynamically, and the two client modules round-robin over a value that was always null. The
 bet those were written on paid, and it is worth recording as a bet that paid rather than
 as a coincidence.
+
+## DEC-95 — label provenance is two columns, and none of the 271 existing rows is backfilled
+
+**2026-08-02, `facts_version` on `eval_labels`.**
+
+Nothing on a label row recorded which extraction was current when the judgement was made.
+The three-quantity report joins labels to whatever `job_facts` holds **at report time**, so
+the next `FACTS_VERSION` bump — `OQ-5`'s `revenue_commercial` archetype is queued behind
+exactly this — would move every published agreement figure without a single label changing.
+Round 2 (~2026-08-09) makes it sharper: a re-extraction landing between one labeller's two
+sittings contaminates the intra-annotator ceiling, which is the one figure that ceiling must
+not contain.
+
+**Rejected: one nullable `facts_version INTEGER`.** It collapses two states that mean
+opposite things. A posting with no `job_facts` row — most of the `gate_rejected` and
+`below_floor` strata — is `NULL` and *permanently* so; those labels are not comparable
+against model output at any version, which is a fact worth being able to query. A row
+written before 2026-08-02 is also `NULL`, and means only that nobody was recording. Under
+one column the two are indistinguishable in exactly the query the column exists to answer.
+
+**Rejected: a sentinel `0` or `-1` for "no extraction".** That is what task 11's
+`normalize()` stopped doing when it quit laundering absence into sentinels, and re-admitting
+it here to save a column would be the same mistake in a smaller costume.
+
+**Decided: `facts_version INTEGER` beside `facts_version_known BOOLEAN NOT NULL DEFAULT
+FALSE`.** The default gives every pre-existing row the correct answer — *"nobody was
+recording"* — with no write and no guess.
+
+**And nothing is backfilled, which is the part that constrains later work.** Today's
+`job_facts.facts_version` is today's value, not the one that was current when someone
+answered the form; stamping it on the 271 existing rows would manufacture provenance that
+was never observed. The rule is `job_events.rank`'s, stated in `.claude/CLAUDE.md`: a
+guessed value is worse than a missing one. So the 271 rows labelled through 2026-08-02 —
+including all ten `overlap` rows the published ceiling rests on — stay unrecorded forever,
+and `evals label status` says so in as many words rather than reporting them as version 3.
+
+**Resolved at write time, in `record()`, as a scalar subquery inside the INSERT.** Not
+passed in by the caller: `webapp/label.py`'s route is one of two writers and the argument
+`record()`'s docstring already makes about `validate()` applies unchanged — one place, and a
+route cannot forget. A subquery rather than a `SELECT` before the `INSERT` because it closes
+the window in which a nightly re-extraction lands between the read and the write.
+
+**Reversible?** The columns are, trivially — additive, nothing reads them yet on a path a
+Builder can see. **The absence is not.** Every label written before this landed has no
+provenance and cannot acquire any, which is why this was done before round 2 rather than
+after it.

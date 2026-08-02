@@ -60,22 +60,22 @@ on effort. **Do not open that track expecting to write code.**
 `labels.inter_annotator()` needs is more labellers on the **same ten `overlap` rows**, and
 round 2 matures ~2026-08-09. `OQ-3`.
 
-**Three things a session can take today, none of them blocked and none of them started:**
+**Two things a session can take today, neither blocked and neither started.** ~~Three~~ —
+**`facts_version` on `eval_labels` landed 2026-08-02** (`DEC-95`,
+[record](sessions/2026-08-02-label-provenance.md)), before round 2 rather than
+after, which was the whole point of its deadline. The migration ran against the live
+database; every row labelled before it reads as unrecorded and stays that way, because a
+backfill was available and refused for `job_events.rank`'s reason. `evals label status`
+prints the breakdown.
 
-1. **`facts_version` on `eval_labels`, before round 2 rather than after.** Nothing records
-   which extraction a label was formed against (`evals/labels.py`, `ensure_schema`), which is
-   what turns `OQ-5`'s *"wait for the labelling to finish"* into a one-way door. Additive,
-   `dbconn.add_missing_columns` is the pattern, and `jobs_web` already holds SELECT on
-   `job_facts` (`webapp/schema_web.py:45`). **Deadline-shaped**: after round 2 the gap is
-   permanent for those rows.
-2. **`D31` — the three ingest scripts that call `urlopen` directly** rather than going
+1. **`D31` — the three ingest scripts that call `urlopen` directly** rather than going
    through `lib.http`'s retries. Session work, no owner input. **Read
    `ingest/builtin-nyc.py:233-241` before starting**: `fetch_description` refuses to retry a
    429 on purpose (*"collapsing this into 'no description, try the next one' is what turns a
    polite scraper into a rude one"*), so part of the split is **deliberate** and the answer
    is a mixed disposition, not a migration. `lib.http.get_text` returns `str`, and
    `weworkremotely.py` hands bytes to `ET.fromstring`.
-3. **`OQ-2`/`D75` — the impression dedup key**, if the owner takes it. It is one predicate
+2. **`OQ-2`/`D75` — the impression dedup key**, if the owner takes it. It is one predicate
    (`webapp/jobs.py:934-937`), and `job_events` is append-only, so every day it runs adds
    rows whose meaning has to be caveated permanently.
 
