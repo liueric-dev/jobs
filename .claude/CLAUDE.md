@@ -14,6 +14,12 @@ commit, after an audit found 168 places they contradicted the code. All of it is
 tag `refactor-freeze-2026-08-02`; nothing was destroyed. This file holds the rules; that one holds
 the state, the landmines and the open questions.
 
+**What is left to do lives in exactly two files, and between them that is the whole list.**
+`TASKS.md` owns the prefix `T-` and holds everything a session can do unaided. `DEV_TASKS.md`
+owns `OQ-` and holds everything needing a machine, an account, a device, other people, or a
+decision only the owner can take. A decision, once taken, goes to `docs/adr/` — not into prose
+here. Work tracked in neither file is not tracked.
+
 ## What this is
 
 A job discovery and tracking pipeline, retargeted from one software engineer's job search to the
@@ -58,8 +64,18 @@ cd backend/api    && .venv/bin/python -m unittest discover -s tests
 Both venvs set `include-system-site-packages = false`, so system `python3` cannot import either
 `app.py` — they need `fastapi`, which the top level does not have and is not getting.
 
-There is no linter and no formatter. `psycopg[binary]` is the pipeline's only third-party
-dependency and the intent is that it stays that way. The one exception is
+**`ruff` is the linter and formatter, as of 2026-08-03.** It is a *development and CI* tool,
+installed into a dev venv and configured in `backend/pyproject.toml`; it is deliberately absent
+from all three `requirements.txt`. This reverses a recorded decision — the tranche-nine README
+said wiring one in was "wrong for this repo regardless of where it came from" — on the reasoning
+in `TASK-52-harness.md`: a rule with no check is a suggestion, and the standard implementation of
+that is a linter and CI rather than a hand-rolled `audit-*.py` per rule. See `T-1` in `TASKS.md`.
+
+**What did not change, and must not:** `psycopg[binary]` is the pipeline's only third-party
+**runtime** dependency and the intent is that it stays that way. These scripts run unattended on
+several machines and every added package is another thing that can be missing on one of them. A
+dev tool is not a runtime dependency; a linter finding that would be fixed by importing a library
+is not a reason to import one. The one exception is
 `tools/learned-ranker-probe.py`, which imports numpy and sklearn and therefore **cannot run on a
 clean checkout** — treat any figure from it as unreproducible.
 

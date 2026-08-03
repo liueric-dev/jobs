@@ -93,3 +93,7 @@ backend/serp/.cache/
 # what THIS host ingested, so committing it would mean one machine's quiet
 # Tuesday becoming another machine's floor. See config/volume-floors.json.
 .run-volumes.jsonl
+
+# Dev-only virtualenv for ruff and other lint/CI tooling (T-1 in TASKS.md).
+# Deliberately NOT one of the three runtime venvs.
+.venv-dev/

@@ -1,0 +1,155 @@
+# CI. Landed 2026-08-03 as T-2 in TASKS.md.
+#
+# WHY THIS EXISTS: every result this repo relies on was verified by hand and
+# transcribed into a commit message. That is how the citation count got written
+# as 309, 308, 306 and 305 in four consecutive commits, and the pipeline suite
+# count four different ways in two days. A green run here is the claim; a number
+# in prose is a rumour.
+#
+# WHAT IT MUST NOT DO: report green on less. Twelve backend modules gate on
+# evals.scratchdb.available(), which swallows every connection error into
+# `return False` -- so a job without Postgres would SKIP those twelve and still
+# print OK. The `Ran N tests` counts and the zero-skip assertion below are what
+# stop that. If this workflow's counts drift from a local run, one of the two is
+# wrong and finding out which is the first thing this file bought.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  suites:
+    name: Three suites
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: jobs_ci
+          POSTGRES_PASSWORD: jobs_ci
+          POSTGRES_DB: jobs
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # scratchdb.scratch_url() reads this first, DATABASE_URL second, so the
+      # DB-gated modules run without a backend/.env existing in the checkout.
+      JOBS_SCRATCH_DATABASE_URL: postgresql://jobs_ci:jobs_ci@localhost:5432/jobs
+      DATABASE_URL: postgresql://jobs_ci:jobs_ci@localhost:5432/jobs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      # The pipeline's only runtime dependency, and the intent is that it stays
+      # that way. If this line ever needs a second package, that is a decision
+      # for docs/adr/, not a CI edit.
+      - name: Pipeline deps
+        run: pip install -r backend/requirements.txt
+
+      - name: Pipeline suite
+        working-directory: backend
+        run: python -m unittest discover -s tests -v 2>&1 | tee /tmp/pipeline.log
+
+      # Zero skipped is the current local state and it is load-bearing: a skip
+      # here means Postgres was unreachable and twelve modules passed
+      # vacuously. unittest prints the (skipped=N) suffix only when non-zero.
+      - name: No test may skip
+        run: |
+          if grep -q "skipped=" /tmp/pipeline.log; then
+            echo "::error::pipeline suite skipped tests -- Postgres unreachable?"
+            grep "skipped=" /tmp/pipeline.log
+            exit 1
+          fi
+
+      # webapp/ and api/ set include-system-site-packages = false and are built
+      # from their own requirements.txt. They are the second and third suites,
+      # not part of the first.
+      - name: webapp suite
+        working-directory: backend/webapp
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/python -m unittest discover -s tests
+
+      - name: api suite
+        working-directory: backend/api
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/python -m unittest discover -s tests
+
+  checkers:
+    name: Checkers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Two things and only two: the path exists, and the line is inside the
+      # file. It cannot tell you whether the line still says what you claim.
+      # A green run means citations RESOLVE, never that they are RIGHT.
+      # `0 new` is the gate; the known-drifted count is meant to shrink (T-18)
+      # and must never be added to in order to silence a finding.
+      - name: Citations resolve
+        working-directory: backend
+        run: python tools/audit-citations.py
+
+      # No build step, no npm, no package.json -- and that is a constraint to
+      # keep. check_client.mjs runs on plain node against the shipped fixtures.
+      - name: Frontend fixtures still describe the server
+        run: python frontend/verify_fixtures.py
+
+      - name: Client still agrees with the fixtures
+        run: node frontend/check_client.mjs
+
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      # NON-BLOCKING BY DESIGN, and this is the whole shape of T-1. The first
+      # baseline is 1076 findings across a tree written without a linter.
+      # Failing the build on it would mean either a single unreviewable
+      # 1076-finding sweep -- the exact move that produced the 42,777 lines of
+      # Markdown deleted on 2026-08-02 -- or turning the rules off until it
+      # passes. Neither is the point. The count comes down one rule per commit,
+      # and this step flips to blocking when it reaches zero. Until then it is
+      # a number on every run, which is more than the repo had.
+      - name: ruff baseline
+        working-directory: backend
+        continue-on-error: true
+        run: ruff check . --statistics
+
+      - name: ruff config is not a runtime dependency
+        run: |
+          if grep -rn "ruff" backend/requirements.txt backend/api/requirements.txt backend/webapp/requirements.txt; then
+            echo "::error::ruff is a dev tool and must not be a runtime dependency"
+            exit 1
+          fi

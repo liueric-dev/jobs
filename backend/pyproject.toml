@@ -1,0 +1,119 @@
+# Ruff configuration. Landed 2026-08-03 as T-1 in ../TASKS.md.
+#
+# WHY THIS FILE HOLDS ONLY [tool.ruff]:
+# Nothing in this repo is installed as a package. There is no build backend, no
+# [project] table and no packaging metadata, deliberately -- adding them would
+# imply an install step that does not exist and that the three venvs do not use.
+# This file is a linter config that happens to live at the conventional path.
+#
+# WHY THERE IS A LINTER AT ALL, given .claude/CLAUDE.md said there was not:
+# The tranche-nine README said wiring one in was "wrong for this repo regardless
+# of where it came from". Reversed 2026-08-03 by owner decision. The argument is
+# in ../TASK-52-harness.md, Layer 4: "a rule with no check is a suggestion" is
+# right, and the standard implementation of it is a linter plus CI rather than a
+# hand-rolled audit-*.py per rule. The two hand-rolled doc checkers this repo had
+# were deleted in 5046f98 along with the documents they checked, and nothing
+# caught the resulting drift at all.
+#
+# WHAT DID NOT CHANGE: ruff is a DEV tool. It is installed in backend/.venv-dev
+# and appears in none of the three requirements.txt. The pipeline's only runtime
+# dependency is still psycopg[binary]. `grep -rn ruff requirements.txt
+# api/requirements.txt webapp/requirements.txt` must keep printing nothing.
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+# Ruff's own defaults are NOT relied on. As of 0.16 the default select is far
+# wider than the documented E4/E7/E9/F, so a ruff upgrade would silently move
+# the baseline -- which is the same class of drift this repo just spent four
+# commits undoing. Selection is explicit below and pinned by CI.
+extend-exclude = [
+    ".venv",
+    ".venv-dev",
+    "api/.venv",
+    "webapp/.venv",
+    # Recorded HTTP bodies and the frozen eval corpora. Excluded for the same
+    # stated reason tools/audit-citations.py skips them: their contents are
+    # captured third-party data, not this repo's code, and judging them reports
+    # findings nobody can act on.
+    "evals/fixtures",
+]
+
+[tool.ruff.lint]
+# Landed against a RECORDED BASELINE, not a mass reformat. A large unreviewable
+# diff is the exact move that produced the 42,777 lines of Markdown deleted on
+# 2026-08-02. The baseline is in the commit that adds this file; the direction is
+# down, and the way down is one rule per commit.
+select = [
+    "F",      # pyflakes -- real errors: undefined names, unused imports
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "I",      # import sorting
+    "B",      # bugbear
+    "C4",     # comprehensions
+    "UP",     # pyupgrade
+    "SIM",    # simplify
+    "RUF",    # ruff-specific
+    "BLE",    # blind-except -- see T-11; this repo's failure mode is silence
+    "S",      # bandit. S608 is the f-string-SQL rule T-16 is about
+    "PIE",
+    "RET",
+    "ARG",
+    "DTZ",
+]
+
+# RUF100 (unused-noqa) is the largest single line item in the first baseline and
+# it is the most instructive one, so it stays selected rather than being hidden:
+#
+#   .venv-dev/bin/ruff check . --select E402            -> 0 findings
+#   .venv-dev/bin/ruff check . --output-format concise | grep -c 'unused: `E402`'
+#                                                       -> 301
+#
+# 301 `# noqa: E402` directives were written by hand, across the tree, for a
+# linter that was never run -- suppressing a finding ruff does not make. Whether
+# flake8 would have made it is unknown and this repo cannot claim either way,
+# because nothing ever checked. That is the whole thesis in one rule: the
+# convention was performed and the check behind it never existed.
+#
+# DO NOT `--fix` these. It is a 301-line diff with no behaviour change, and the
+# directives may well be correct for pycodestyle even though they are inert for
+# ruff. They come out, if they come out, as their own commit with that question
+# answered first.
+
+ignore = [
+    # Line length is reported by W505/E501 against a 100-column limit that most
+    # of this tree predates. Formatting is a separate commit from linting; until
+    # `ruff format` is run, E501 is noise that hides the findings that matter.
+    "E501",
+    # This repo prints. 1065 lines call print() against 5 modules importing logging,
+    # and the printed output is load-bearing -- DEBUG_PRINT_KEYS=1 is a
+    # convention across every ingest script. T-12 converts the failure paths
+    # only, deliberately and narrowly. A blanket rule against print() would
+    # recommend the wholesale conversion that T-12 exists to refuse.
+    "T201",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert on internals, build fixtures inline, and legitimately catch broad
+# exceptions to prove a failure path. The three suites are the specification;
+# they are not the place to be economical.
+"**/tests/*" = ["S101", "ARG", "BLE001", "B017", "SIM117", "DTZ"]
+
+# Migrations and tools splice table and schema identifiers into SQL from
+# module-level constants -- never from user input. See T-16 in ../TASKS.md,
+# which says plainly that this is not an injection hole, so that nobody reads a
+# suppression here as one being tolerated. The suppression is per-directory
+# rather than per-line only until T-16 walks the ~25 sites individually.
+"migrations/*" = ["S608"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["lib", "evals", "ingest", "serp", "tools", "migrations"]
+
+[tool.ruff.format]
+# Not yet run. `ruff format` over 171 files is a single unreviewable diff, which
+# is the move this repo is recovering from. It lands as its own commit, after
+# the lint baseline has come down, and never in the same commit as a behaviour
+# change. Configured here so that when it runs, it runs the same way everywhere.
+quote-style = "double"
+indent-style = "space"
