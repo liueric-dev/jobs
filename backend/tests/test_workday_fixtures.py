@@ -1,11 +1,11 @@
 """The four Workday CXS silent failures, driven through the REAL ingest loop.
 
-`docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:41` requires that
+`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:41` requires that
 each of the four "needs a cassette fixture from task 09 that reproduces it, and
 a test that fails loudly". Task 09 wrote the fixtures
 (`evals/workday_fixtures.py`) and this file proved they reproduce what they
 claim. Task 18 has now written the loop, so its Definition of done
-(18-...md:118-121) asks for one more thing: "Drive the real ingest loop through
+(`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:118-121) asks for one more thing: "Drive the real ingest loop through
 them and delete that file's stand-in `_collect_naively`/`_collect_reconciled`."
 
 WHAT WAS DELETED, WHAT WAS KEPT, AND WHY THAT IS NOT THE WHOLE INSTRUCTION
@@ -28,7 +28,7 @@ WHAT THE RECORDED PAGE ADDED, AND WHAT IT CONTRADICTS
 
 `workday_fixtures.recorded_list_page()` is real bytes (nvidia.wd5, lifted from
 the `ats-validation` recording), and it falsifies part of the task file:
-18-...md:27-30 attributes `startDate` and `jobRequisitionLocation` to the LIST
+`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:27-30 attributes `startDate` and `jobRequisitionLocation` to the LIST
 response, and the list carries neither. They are on the DETAIL document. See
 TestTheRecordingContradictsTheTaskFile below.
 """
@@ -342,7 +342,7 @@ class TestFailure3TheDataCentrePrefixVaries(unittest.TestCase):
                          if not line.lstrip().startswith("#"))
         code = code.split('"""')[0] + '"""'.join(code.split('"""')[2:])
         self.assertNotIn('"wd', code, "a literal wd-prefix in the code is a "
-                                      "default, and 18-...md:54 forbids one")
+                                      "default, and `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:54 forbids one")
         self.assertNotIn("'wd", code)
 
     def test_the_prefix_is_not_guessable_from_the_tenant(self):
@@ -502,7 +502,7 @@ class TestTheRecordingContradictsTheTaskFile(unittest.TestCase):
     """Real bytes, and the one thing constructed fixtures structurally cannot do.
 
     Everything else in `evals/workday_fixtures.py` encodes the shape
-    18-ingest-workday-cxs.md:20-37 DOCUMENTS. That makes those fixtures a
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:20-37 DOCUMENTS. That makes those fixtures a
     specification of the trap and not evidence about the endpoint -- their own
     module docstring says so. This class is the evidence, and it disagrees with
     the specification.
@@ -520,7 +520,7 @@ class TestTheRecordingContradictsTheTaskFile(unittest.TestCase):
         self.assertEqual(len(body["jobPostings"]), wf.PAGE_LIMIT)
 
     def test_the_task_file_is_wrong_about_the_list_response_fields(self):
-        """18-...md:27-30 says the list carries `startDate` (native ISO, "no
+        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:27-30 says the list carries `startDate` (native ISO, "no
         'posted 3 days ago' parsing") and `jobRequisitionLocation`. It carries
         neither -- it carries `postedOn`, which is exactly the relative string
         the task file says this source avoids. Both fields are on the DETAIL
@@ -532,7 +532,7 @@ class TestTheRecordingContradictsTheTaskFile(unittest.TestCase):
         for field in wf.LIST_FIELDS_THE_TASK_FILE_IS_WRONG_ABOUT:
             self.assertNotIn(
                 field, posting,
-                f"{field} is documented at 18-ingest-workday-cxs.md:27-30 as a "
+                f"{field} is documented at `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:27-30 as a "
                 f"LIST field. If it has appeared, the endpoint changed and "
                 f"normalize_listing() can be simplified.")
         self.assertRegex(posting["postedOn"], r"(?i)posted")

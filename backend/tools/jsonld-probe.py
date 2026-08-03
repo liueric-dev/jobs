@@ -5,15 +5,15 @@ Measure whether task 19 (the JSON-LD parser) is worth building.
 THIS IS A MEASUREMENT, NOT THE PARSER. Nothing here writes to the database,
 nothing here is on the nightly path, and no code in this file is intended to
 survive into the eventual ingest module. The deliverable is a number, its
-method, and its date -- see docs/jsonld-coverage.md.
+method, and its date -- see git show refactor-freeze-2026-08-02:docs/jsonld-coverage.md.
 
 WHAT IT MEASURES
     For each employer with a `never_found` row in `company_ats` (the exact
-    population task 19 exists to serve, per 19-jsonld-parser.md:15-17):
+    population task 19 exists to serve, per git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:15-17):
 
       1. Does the careers page -- or a job-detail page one hop from it --
          publish schema.org/JobPosting? Via JSON-LD, microdata or RDFa.
-      2. Which of the eight fields in 19-jsonld-parser.md:21-33 are actually
+      2. Which of the eight fields in git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:21-33 are actually
          present, per employer. `validThrough` matters most: it is the only
          closure signal that makes re-crawl affordable (19:69).
       3. Is there a sitemap.xml carrying job URLs, and do they have <lastmod>?
@@ -21,7 +21,7 @@ WHAT IT MEASURES
          two inputs to a postings/day estimate.
 
 WHY NOT extruct
-    19-jsonld-parser.md:53 says to use `extruct`. It is not installed, and
+    git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:53 says to use `extruct`. It is not installed, and
     backend/requirements.txt:1-6 is explicit that psycopg is "the pipeline's
     only third-party dependency ... every added package is another thing that
     can be missing on one of them." A measurement spike that decides whether
@@ -55,7 +55,7 @@ POLITENESS
       * One global request every --delay seconds AND at most one request per
         host every --host-delay seconds. Per host, not global, so one employer
         with a large sitemap cannot starve the other thirty-four
-        (19-jsonld-parser.md:80-82).
+        (git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:80-82).
       * NO retries, ever. Same reasoning as tools/ats-discover.py:47-49:
         retrying into a rate limit is how a probe becomes an incident.
       * A host answering 401/403/406/429/451 is blocklisted for the rest of
@@ -65,7 +65,7 @@ POLITENESS
         entitled to recognise this as automated traffic and refuse it.
       * --max-requests is a hard ceiling on the entire run and the number is
         reported. Default 400.
-      * NO Firecrawl. Task 20 needs that credit pool (19-jsonld-parser.md:89-92)
+      * NO Firecrawl. Task 20 needs that credit pool (git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:89-92)
         and a JS-rendered page is a finding here, not an obstacle to route
         around.
 
@@ -77,7 +77,7 @@ USAGE
         The probe. Writes one JSON document with every observation.
 
     python3 tools/jsonld-probe.py --summarize /path/results.json
-        Every headline number in docs/jsonld-coverage.md, printed. If a figure
+        Every headline number in git show refactor-freeze-2026-08-02:docs/jsonld-coverage.md, printed. If a figure
         in that document is not in this output, that figure is not measured.
 
     python3 tools/jsonld-probe.py --estimate /path/results.json
@@ -138,7 +138,7 @@ TIMEOUT = 10
 #: reported as truncated rather than silently read as "no JobPosting".
 MAX_BYTES = 3_000_000
 
-#: The eight fields of 19-jsonld-parser.md:23-32, in that order. `validThrough`
+#: The eight fields of git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:23-32, in that order. `validThrough`
 #: is bolded there and is the one that decides whether re-crawl is affordable.
 FIELDS = ["title", "description", "datePosted", "validThrough",
           "employmentType", "hiringOrganization.name", "jobLocation.address",
@@ -148,7 +148,7 @@ FIELDS = ["title", "description", "datePosted", "validThrough",
 #: itself carries no JobPosting. THREE, not thirty. The question is binary --
 #: "do detail pages carry structured data" -- and one page answers it while
 #: three survive two dead links. An unbounded crawl is the failure mode
-#: 19-jsonld-parser.md:46-50 warns about, and this file has no business
+#: git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:46-50 warns about, and this file has no business
 #: exercising it.
 DETAIL_LINKS_PER_EMPLOYER = 3
 
@@ -193,7 +193,7 @@ _WAF_BODY = re.compile(
 
 #: Page bodies that carry no server-rendered content. A single-page app shell
 #: is the DOMINANT expected finding for this population and it is a distinct
-#: outcome from "fetched, nothing there" -- 19-jsonld-parser.md:90-91 routes it
+#: outcome from "fetched, nothing there" -- git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:90-91 routes it
 #: to Firecrawl, which this run must not spend.
 _SPA_HINT = re.compile(
     r"<div[^>]+id=[\"'](root|app|__next|__nuxt)[\"']|"
@@ -481,7 +481,7 @@ def walk_jobpostings(node, out, depth=0):
     """Every JobPosting anywhere in a JSON-LD document.
 
     A GENERIC RECURSIVE WALK, and that is the design decision worth recording.
-    19-jsonld-parser.md:58-59 names three shapes to handle -- `@graph`
+    git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:58-59 names three shapes to handle -- `@graph`
     wrappers, bare arrays, and JobPosting nested inside `ItemList` -- and
     warns that missing them "silently ingests one posting from a page carrying
     twenty".
@@ -883,7 +883,7 @@ def sitemap_pass(fetcher, doc, per_employer=SITEMAP_SAMPLE):
     when its positive control found zero of four known-good ATS tokens.
 
     The sitemap does not care whether the listing renders client-side. It is
-    also the discovery path 19-jsonld-parser.md:42-45 puts first. So: take the
+    also the discovery path git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:42-45 puts first. So: take the
     job URLs the sitemap already declared, open a few, and look at the pages a
     real ingest would actually parse.
 
@@ -1258,7 +1258,7 @@ _LOOSE_DATE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})")
 
 
 def evidence(doc, population="all"):
-    """Every observation the prose in docs/jsonld-coverage.md cites.
+    """Every observation the prose in git show refactor-freeze-2026-08-02:docs/jsonld-coverage.md cites.
 
     WHY THIS MODE EXISTS. A previous agent on this project shipped a document
     claiming "every number below is printed by the tool" where four headline
@@ -1383,7 +1383,7 @@ def _freshness(rows, doc):
 # The estimate
 # --------------------------------------------------------------------------
 
-GATE_DOC = "docs/pursuit-gate-volume.md"
+GATE_DOC = "git show refactor-freeze-2026-08-02:docs/pursuit-gate-volume.md"
 
 
 def estimate(doc, conn, population="company_ats.never_found"):
@@ -1477,7 +1477,7 @@ def estimate(doc, conn, population="company_ats.never_found"):
 #:   board size of the ATS tokens already ingested.
 #: posting_lifetime_days: 30. Shorter means more churn means more new postings
 #:   per day, so 30 is generous; the ATS feeds in this pipeline show longer.
-#: relevant_fraction: the range docs/pursuit-gate-volume.md measured on the
+#: relevant_fraction: the range git show refactor-freeze-2026-08-02:docs/pursuit-gate-volume.md measured on the
 #:   corpus that already exists -- 13.7% clear the AI-vocab + entry-level +
 #:   NYC/remote gate, and 6.7% survived hand-checking (n=30). Using the
 #:   pipeline's own funnel rather than the n=6 gate result above, which cannot
@@ -1528,7 +1528,7 @@ def upper_bound(doc, conn, population, tier1_frac=None):
     lo = gross * GATE_FRACTIONS[0][1]
     hi = gross * GATE_FRACTIONS[1][1]
     print(f"\n  UPPER BOUND: {lo:.1f} - {hi:.1f} relevant postings/day.")
-    print(f"  TASK 19 CLAIMS 30-60/day (19-jsonld-parser.md:4).")
+    print(f"  TASK 19 CLAIMS 30-60/day (git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/19-jsonld-parser.md:4).")
     if hi > 0:
         print(f"  The claim is {30.0/hi:.0f}x - {60.0/lo:.0f}x the CEILING "
               f"measured here.")

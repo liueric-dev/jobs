@@ -2,7 +2,7 @@
 
 `tests/test_workday_fixtures.py` drives `ingest/workday.py` through the four
 documented ways the CXS endpoint loses data. This file covers the rest of the
-Definition of done (18-ingest-workday-cxs.md:114-131): the UPSTREAM GATE, which
+Definition of done (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:114-131): the UPSTREAM GATE, which
 is what makes this source affordable, plus normalization, tenant selection and
 the seen/fetched/surviving accounting.
 
@@ -284,7 +284,7 @@ class TestTheGateSuppliesEveryColumnTierSqlCanReference(unittest.TestCase):
 
 @requires_db
 class TestTheUpstreamGate(unittest.TestCase):
-    """18-...md:61-88, the architectural half of this task."""
+    """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:61-88, the architectural half of this task."""
 
     @classmethod
     def setUpClass(cls):
@@ -302,7 +302,7 @@ class TestTheUpstreamGate(unittest.TestCase):
     def test_an_uninformative_title_in_the_right_place_survives(self):
         """The whole reason the upstream filter is loose. "Operations
         Coordinator" at a hospital is the target population and no
-        title_include regex will ever match it -- 18-...md:80-85."""
+        title_include regex will ever match it -- `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:80-85."""
         self.assertEqual(
             self.survivors([listing("Operations Coordinator")]),
             ["Operations Coordinator"])
@@ -320,7 +320,7 @@ class TestTheUpstreamGate(unittest.TestCase):
             [])
 
     def test_an_unknown_location_does(self):
-        """18-...md:83's "neither-but-unknown". "2 Locations" is a placeholder
+        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:83's "neither-but-unknown". "2 Locations" is a placeholder
         and dropping on it would discard whatever the requisition really is."""
         self.assertEqual(
             self.survivors([listing("Operations Coordinator", "2 Locations")]),
@@ -452,7 +452,7 @@ class TestTenantSelection(unittest.TestCase):
         self.assertEqual(incomplete, ["No Data Centre"])
 
     def test_a_missing_data_centre_is_reported_and_never_guessed(self):
-        """18-...md:52-55, "never assume, never default". wd1/wd108/wd501 are
+        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:52-55, "never assume, never default". wd1/wd108/wd501 are
         all in use among the four tenants task 16 found; a wrong prefix answers
         404 or 422 and reads as a tenant with no open roles."""
         _, incomplete = workday.load_workday_tenants(self.conn)
@@ -480,7 +480,7 @@ class TestTenantSelection(unittest.TestCase):
 
 @requires_db
 class TestTheRatioIsAccounted(unittest.TestCase):
-    """18-...md:86-88: "Log the ratio: postings seen, postings detail-fetched,
+    """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:86-88: "Log the ratio: postings seen, postings detail-fetched,
     postings surviving the full gate. If detail-fetched/seen creeps toward 1.0,
     the upstream filter has stopped working and the window is about to blow."
     """
@@ -531,7 +531,7 @@ class TestTheRatioIsAccounted(unittest.TestCase):
         self.assertEqual(out.fetched, 2)
 
     def test_a_blocked_tenant_is_counted_not_retried(self):
-        """18-...md:104-106: inaccessible tenants are skipped and counted.
+        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:104-106: inaccessible tenants are skipped and counted.
         A 403 is a datum, not an obstacle to route around."""
         cas = wf.prefix_assumed()
         cas.interactions = [wf._post(0, {"error": "forbidden"}, status=403,

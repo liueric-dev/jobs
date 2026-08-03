@@ -1,6 +1,6 @@
 """The four Workday CXS silent failures, as replayable fixtures.
 
-Task 18 (`docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:40-59`)
+Task 18 (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:40-59`)
 lists four ways the Workday CXS endpoint loses data while returning success,
 and requires that each have "a cassette fixture from task 09 that reproduces
 it, and a test that fails loudly". This module is those four fixtures. Task
@@ -18,7 +18,7 @@ CONSTRUCTED, NOT RECORDED -- SAY SO PLAINLY
     demand anyway -- you cannot ask a stranger's Akamai to throttle you.
 
     What they encode is the request/response SHAPE documented at
-    18-ingest-workday-cxs.md:20-37, with the failure injected. That makes
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:20-37, with the failure injected. That makes
     them a specification of the trap rather than evidence of it. The moment
     task 16 produces a real tenant, `record_cassettes.py` should gain a
     recipe that records the happy path, and `page()` below should be checked
@@ -46,11 +46,11 @@ SITE = "External"
 DC = "wd5"
 WRONG_DC = "wd1"
 
-#: 18-ingest-workday-cxs.md:46: "Hardcode 20 and assert it."
+#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:46: "Hardcode 20 and assert it."
 PAGE_LIMIT = 20
 
 #: NVIDIA's numbers, from the published account at
-#: 18-ingest-workday-cxs.md:50 -- 1,960 of 2,000 jobs lost to a throttled
+#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:50 -- 1,960 of 2,000 jobs lost to a throttled
 #: page read as the end of the list.
 TOTAL = 2000
 THROTTLE_AT_OFFSET = 40
@@ -73,12 +73,12 @@ def jobs_url(dc=DC):
 
 
 def job_url(external_path):
-    """The PUBLIC url, per 18-ingest-workday-cxs.md:37."""
+    """The PUBLIC url, per `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:37."""
     return f"{host()}/en-US/{SITE}{external_path}"
 
 
 def body(offset=0, limit=PAGE_LIMIT, facets=None, search=""):
-    """The request body, exactly as documented at 18-...md:24.
+    """The request body, exactly as documented at `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:24.
 
     Key order is fixed because the cassette matches a POST on the sha256 of
     its body: two callers spelling the same request with different key order
@@ -91,7 +91,7 @@ def body(offset=0, limit=PAGE_LIMIT, facets=None, search=""):
 
 
 def posting(n):
-    """One jobPostings entry. Fields per 18-...md:27-30."""
+    """One jobPostings entry. Fields per `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:27-30."""
     return {
         "title": f"Registered Nurse {n}" if n % 3 else f"Data Analyst {n}",
         "locationsText": "New York, NY" if n % 2 else "Brooklyn, NY",
@@ -137,7 +137,7 @@ def _cassette(name, note, interactions, source=None):
 def limit_over_20():
     """limit=100 -> HTTP 200, `jobPostings: []`, no error field.
 
-    18-ingest-workday-cxs.md:44: "byte-identical to 'no more results'". The
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:44: "byte-identical to 'no more results'". The
     fixture holds BOTH bodies against the SAME url, so a test can show that
     the only difference between "everything" and "nothing" is the request --
     which is the whole reason this one is invisible. `total` is still 2000
@@ -216,7 +216,7 @@ WRONG_DC_BODY = {"errorCode": "HTTP_422", "errorCaseId": "38B497MS4CIBJB",
 def prefix_assumed():
     """wd1 (assumed) -> HTTP 422 with a JSON error body; wd5 (stored) -> the list.
 
-    18-ingest-workday-cxs.md:54: read `wd{N}` from `company_ats`, "never
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:54: read `wd{N}` from `company_ats`, "never
     assume, never default".
 
     THE MECHANISM, TRACED RATHER THAN ASSUMED. The status is what does the
@@ -288,7 +288,7 @@ def prefix_assumed():
 def result_cap():
     """total=12431, pages up to offset 10000, then empty forever.
 
-    18-ingest-workday-cxs.md:57: a single query cannot enumerate past the
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:57: a single query cannot enumerate past the
     cap. Reconciling against `total` DETECTS this one but cannot fix it --
     the fix is slicing by `appliedFacets` and merging, so the fixture also
     holds the faceted query, whose own `total` is under the cap and which
@@ -330,7 +330,7 @@ FIXTURES = {
 # ---------------------------------------------------------------------------
 #
 # ADDED BY TASK 18, AND NOT FROM READING ANYTHING. The four fixtures above
-# encode shapes 18-ingest-workday-cxs.md:20-59 documents. This one encodes a
+# encode shapes `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:20-59 documents. This one encodes a
 # shape measured on 2026-07-28 against all four live tenants in `company_ats`,
 # after the ingest loop this file was written for failed on every one of them
 # with "collected 40 of 0".
@@ -411,7 +411,7 @@ FIXTURES_FOUND_LIVE = {
 # WHAT IT PROVES THAT THE CONSTRUCTED FIXTURES CANNOT. It is the only thing
 # here that can falsify the SHAPE. It did, immediately: the real list response
 # carries `postedOn` ("Posted Today"), NOT the `startDate` and
-# `jobRequisitionLocation` that 18-ingest-workday-cxs.md:27-30 attributes to
+# `jobRequisitionLocation` that `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:27-30 attributes to
 # it. Those are on the DETAIL document. See recorded_shape_note().
 
 RECORDED_CASSETTE = "ats-validation"
@@ -425,7 +425,7 @@ RECORDED_SITE = "NVIDIAExternalCareerSite"
 RECORDED_LIST_FIELDS = ("title", "externalPath", "locationsText", "postedOn",
                         "bulletFields")
 
-#: Fields 18-ingest-workday-cxs.md:27-30 says the list carries and it does not.
+#: Fields `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:27-30 says the list carries and it does not.
 LIST_FIELDS_THE_TASK_FILE_IS_WRONG_ABOUT = ("startDate", "jobRequisitionLocation")
 
 
@@ -462,5 +462,5 @@ def recorded_shape_note():
     """One line naming what the recording contradicts. Printed by the test."""
     return (f"recorded {RECORDED_TENANT}.{RECORDED_DC} list fields: "
             f"{', '.join(RECORDED_LIST_FIELDS)}; NOT present despite "
-            f"18-ingest-workday-cxs.md:27-30: "
+            f"`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:27-30: "
             f"{', '.join(LIST_FIELDS_THE_TASK_FILE_IS_WRONG_ABOUT)}")
