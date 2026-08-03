@@ -24,7 +24,9 @@ on the four variables that decide whether it's viable at scale:
                        that rates everything 70-75 isn't discriminating.
 
 READ-ONLY. Never writes to `jobs` or `job_scores`. Pulls real unscored
-postings, scores them in memory, prints a comparison table.
+postings (or, with --only-scored, samples from evals/'s frozen fixture and
+looks up each one's current score), scores them in memory, prints a
+comparison table.
 
 USAGE
     # quick haiku-vs-sonnet check on 20 jobs, single calls
@@ -67,6 +69,7 @@ import os
 import sys
 import json
 import time
+import random
 import argparse
 import statistics
 import subprocess
@@ -80,6 +83,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import schema      # noqa: E402
 import score       # noqa: E402
 from lib import dbconn  # noqa: E402
+from evals import corpus  # noqa: E402  (frozen, per-platform-stratified fixtures)
+
+#: T-14: --only-scored used to sample with `ORDER BY first_seen DESC` against
+#: production, which silently excludes whole sources (greenhouse/ashby ingest
+#: continuously; wwr, hn and lever do not) and makes two runs a week apart
+#: incomparable -- see evals/corpus.py's own docstring. This is the fixture
+#: that replaces it. The default (unscored) path already used
+#: score.select_shortlist(), which is match_score-ordered, not recency --
+#: that path is unaffected.
+DEFAULT_CORPUS = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "evals", "fixtures", "corpus-v1.jsonl")
 
 #: How long to let one claude -p invocation run. Batches of 20 can take
 #: 60-90s on haiku; sonnet is slower. 180s gives headroom without hanging
@@ -96,33 +111,46 @@ JOB_RESULT_KEYS = (
 )
 
 
-def fetch_jobs(n, only_scored=False):
+def fetch_jobs(n, only_scored=False, corpus_path=DEFAULT_CORPUS):
     """Pull real postings for the benchmark. Unscored by default (the actual
-    backlog); --only-scored pulls jobs that have a production score so we can
-    compare quality against what GLM already produced."""
+    backlog, via score.select_shortlist -- already match_score-ordered, not
+    recency-biased). --only-scored samples from evals/'s frozen, per-platform
+    fixture instead of querying production by recency, then looks up each
+    sampled job's CURRENT production score so quality is still measured
+    against what GLM already produced -- that lookup is inherently live,
+    since "what you already trust" means today's score, not a frozen one.
+    """
     conn = dbconn.connect_or_exit("claude-bench", schema=schema.SCHEMA)
     persona = score.load_persona()
     profile = schema.resolve_profile(persona)
     if only_scored:
+        records = [r for r in corpus.load(corpus_path)
+                  if r.get("status") == schema.STATUS_OPEN
+                  and (r.get("description_text") or "").strip()]
+        picked = random.Random(0).sample(records, min(n, len(records)))  # noqa: S311 (reproducible sampling, not a security use)
+        ids = [r["id"] for r in picked]
         rows = conn.execute(
-            f"""SELECT j.id, j.title, j.company_name, j.location_raw, j.platform,
-                       j.description_text, s.fit_score, s.primary_track
-                FROM {schema.TABLE} j
-                JOIN {schema.SCORES_TABLE} s ON s.job_id = j.id AND s.profile = %s
-                WHERE j.status = %s AND s.fit_score IS NOT NULL
-                ORDER BY j.first_seen DESC LIMIT %s""",
-            (profile, schema.STATUS_OPEN, n)).fetchall()
-        cols = ["id", "title", "company_name", "location_raw", "platform",
-                "description_text", "fit_score", "primary_track"]
-    else:
-        # select_shortlist, not a relevance-tier query: narrative candidates
-        # are chosen by match_score now, so the benchmark runs against the
-        # same postings the pipeline would have spent a call on.
-        jobs = score.select_shortlist(conn, n, profile)
+            f"""SELECT job_id, fit_score, primary_track
+                FROM {schema.SCORES_TABLE}
+                WHERE profile = %s AND job_id = ANY(%s) AND fit_score IS NOT NULL""",
+            (profile, ids)).fetchall()
         conn.close()
+        scored = {jid: (fit, track) for jid, fit, track in rows}
+        jobs = []
+        for r in picked:
+            if r["id"] not in scored:
+                continue
+            job = corpus.job_fields(r)
+            job.update(corpus.facts_fields(r) or {})
+            job["fit_score"], job["primary_track"] = scored[r["id"]]
+            jobs.append(job)
         return jobs
+    # select_shortlist, not a relevance-tier query: narrative candidates
+    # are chosen by match_score now, so the benchmark runs against the
+    # same postings the pipeline would have spent a call on.
+    jobs = score.select_shortlist(conn, n, profile)
     conn.close()
-    return [dict(zip(cols, r)) for r in rows]
+    return jobs
 
 
 def build_batch_prompt(persona, jobs):
@@ -399,12 +427,15 @@ def main():
                          "(requires --only-scored or pre-scored jobs)")
     ap.add_argument("--only-scored", action="store_true",
                     help="use jobs that already have a production score")
+    ap.add_argument("--corpus", default=DEFAULT_CORPUS,
+                    help="frozen evals fixture --only-scored samples from "
+                         "(default: evals/fixtures/corpus-v1.jsonl)")
     ap.add_argument("--samples", type=int, default=0,
                     help="print this many side-by-side job examples")
     args = ap.parse_args()
 
     models = args.model or ["haiku", "sonnet"]
-    jobs = fetch_jobs(args.n, args.only_scored)
+    jobs = fetch_jobs(args.n, args.only_scored, args.corpus)
     if not jobs:
         print("claude-bench: no jobs matched.")
         sys.exit(1)

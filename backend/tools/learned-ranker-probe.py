@@ -51,6 +51,20 @@ OUT-OF-FOLD OR NOTHING
     the rules is a bootstrap of the DIFFERENCE on shared resamples rather than
     two point estimates eyeballed side by side.
 
+WHAT THE VERDICT IS NOT EVIDENCE OF (T-15)
+    `y` is `fit_score >= GOOD` -- the LLM's own judgment, L1. Every arm here is
+    trained AND evaluated against that same L1 label; L0 (a human's actual
+    placement decision, evals/labels.py) never enters this file. So "arm A
+    beats the rules" is evidence about a narrower question than it reads as:
+    it says facts + learned weights recover THIS MODEL'S OWN SCORE better
+    than hand-tuned weights do, which settles the weights-vs-features
+    engineering question this file exists to answer. It is not evidence that
+    fit_score matches what a human would actually decide -- that comparison
+    needs L0, and OQ-3's overlap set (36 postings, 10 with any overlap) is
+    below the row where a cross-validated number would mean anything (see
+    CLAUDE.md: "do not re-tune ... on a 20-row eval"). Revisit once round 2
+    closes.
+
 GUARDS, BECAUSE THIS IS THE FIFTH MEASUREMENT TRAP AND THERE WERE FOUR BEFORE
     * the sample and the rules scores come from calibrate-match.load_pairs and
       match.load_facts, not from a reimplementation, so "same postings, same
@@ -511,6 +525,12 @@ def main():
           f"repeats={args.repeats}x5-fold")
     print(f"  postings {n}   positives (fit>={GOOD}) {pos}  "
           f"({pos / n:.1%} base rate)")
+    print(f"  NOTE: ground truth below is fit_score >= {GOOD} -- the LLM's own "
+          f"judgment (L1), not a\n        human's (L0). A verdict says whether "
+          f"facts can recover THAT signal better than\n        hand-tuned "
+          f"weights can -- it is not evidence fit_score itself matches what a\n"
+          f"        person would decide. See this file's own \"WHAT THE VERDICT "
+          f"IS NOT EVIDENCE OF\".")
     if (n, pos) != (REFERENCE_N, REFERENCE_POSITIVES):
         print(f"  NOTE: the corpus has moved since this decision rule was "
               f"written ({REFERENCE_N}/{REFERENCE_POSITIVES}). The comparison "

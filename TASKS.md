@@ -283,28 +283,59 @@ beforehand is still present afterward.
 
 ---
 
-### T-14 — Two tools still select their corpus from production by recency
+### ~~T-14~~ — Two tools still select their corpus from production by recency
 
-`backend/tools/compare-models.py:84` and `backend/tools/claude-bench.py:113` both use
-`ORDER BY j.first_seen DESC` against production — the exact pattern `backend/evals/` exists to
-replace, and the one thing the measurement rules name as never acceptable, because it measures the
-easy sources. Any figure either has produced is not reproducible.
+**Closed 2026-08-03.** Checked first whether `evals run` already covers what these tools do, per
+this row's own instruction: it does not, quite. `evals/tasks/score.py` exists (contrary to
+`evals/README.md`'s own stale "Status" table, which still lists a score task as unbuilt) and
+`evals/models.py` already supports the `claude:MODEL` CLI backend `claude-bench.py` needs — but
+neither tool's *other* job, comparing a candidate against **today's live production score**, has an
+evals equivalent: a frozen fixture snapshot carries `job_facts` and `match_score`, never
+`job_scores.fit_score` (`evals/corpus.py`'s `FACT_COLUMNS`/`_pool_query` — no join to
+`job_scores` at all). Rebuilding that comparison inside `evals/` is a bigger lift than this row (a
+`score` fixture format change) and out of the ceiling for a `T-` row; deletion would also lose it
+outright. Neither of the row's two literal options fit cleanly, so the fix is the one thing they
+share: the corpus **selection** is what `ORDER BY first_seen DESC` breaks, and that part fixture-izes
+cleanly without touching the live-comparison feature.
 
-**Done when:** both read a frozen fixture from `backend/evals/fixtures/`, or both are deleted with
-the reason recorded. Deleting them is a real answer — check whether `evals run` already covers what
-they do before rebuilding.
+Both tools now sample from `backend/evals/fixtures/corpus-v1.jsonl` (overridable with `--corpus`)
+via `evals.corpus.load()`/`job_fields()`/`facts_fields()` — the same per-platform-stratified,
+pathology-seeded fixture `evals/` already snapshots and pins, instead of a recency-biased live
+query. `--only-scored`/`--vs-production` keep working exactly as before: after sampling, one
+`SELECT ... FROM job_scores WHERE job_id = ANY(%s)` looks up each sampled job's **current**
+score — that half is inherently live (`OQ-3`, the human-label round, is the reminder that "the
+number that answers the question" and "the number that is reproducible" are not always the same
+number). `claude-bench.py`'s default (unscored) path was already fine — `score.select_shortlist()`
+orders by `match_score`, not recency — so only its `--only-scored` branch changed.
+
+Verified against this repo's live Postgres: `select_jobs()`/`fetch_jobs(only_scored=True)` both
+return the same 6 of a 20-job frozen sample carrying a current `tech`-profile score, with facts
+merged in correctly (`build_prompt()` builds off the `summary` block exactly as `select_shortlist()`
+rows do). All three suites still print `OK` (1433/354/117); `ruff` on the three touched files went
+30 → 29 (one `S311` on the new `random.Random(0)` sampling, silenced with a named `noqa`, and one
+pre-existing finding fell out of `compare-models.py`'s old hand-rolled query in the process).
 
 ---
 
-### T-15 — `learned-ranker-probe.py` trains and evaluates on the same layer
+### ~~T-15~~ — `learned-ranker-probe.py` trains and evaluates on the same layer
 
-It defines `GOOD = 80` on `fit_score` (`backend/tools/learned-ranker-probe.py:149-152`), then scores
-itself with `average_precision_score` against that same `fit_score`-derived label. L1 is the layer
-you may train on and must not evaluate on. It also cannot run on a clean checkout — numpy and
-sklearn are deliberately absent — so its figures are unreproducible twice over.
+**Closed 2026-08-03, third option.** `y` really is `fit_score >= GOOD` end to end — training and
+the `average_precision_score` verdict both read L1, and L0 (`evals/labels.py`) never enters the
+file. Building a real L0 evaluation was ruled out rather than attempted: `OQ-3`'s overlap set is 36
+postings with 10 rows of actual overlap, below the row this file's own neighbor rule forbids
+tuning on ("do not re-tune ... on a 20-row eval"), so a cross-validated L0 number today would be
+exactly the kind of confident wrong answer this file's other four guards exist to prevent. Revisit
+once round 2 closes (`OQ-3`, due ~2026-08-09).
 
-**Done when:** it evaluates against L0 human labels, or it is deleted, or its docstring states in
-its output that its numbers are not evidence. Any of the three; not silence.
+Instead, both halves of the "not silence" option: a new docstring section, **WHAT THE VERDICT IS
+NOT EVIDENCE OF**, states plainly that a passing arm answers "do facts + learned weights recover
+this model's own score better than hand-tuned weights" — the weights-vs-features question this
+file exists to settle — and not whether `fit_score` matches an actual human placement decision.
+The same caveat prints at the top of every run's own stdout, immediately after the base-rate line,
+in the same style as the file's existing `LEAKAGE`/`VOID` guards, so a terminal run cannot miss it
+even though the script itself is unreproducible on a clean checkout (numpy/sklearn absent by
+design) and could not be executed here to confirm the print — `python3 -m py_compile` is what
+verified it.
 
 ---
 

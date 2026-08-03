@@ -6,9 +6,12 @@ Answers the only question that matters when swapping JOB_SCORING_MODEL: does
 the cheaper/faster model produce *usable* output, and does it broadly agree
 with what you already trust?
 
-READ-ONLY. This never writes to the `jobs` table -- it pulls real postings, scores
-them with each candidate model in memory, and prints a comparison. Run it as
-many times as you like without polluting scores.
+READ-ONLY. This never writes to the `jobs` table -- it samples real postings
+from evals/'s frozen fixture (backend/evals/fixtures/corpus-v1.jsonl by
+default; override with --corpus), scores them with each candidate model in
+memory, and prints a comparison. Run it as many times as you like without
+polluting scores. The corpus is now frozen rather than "whatever is newest",
+so two runs stay comparable -- see DEFAULT_CORPUS below.
 
 USAGE
     # compare the current default against a candidate
@@ -42,6 +45,7 @@ import os
 import sys
 import json
 import time
+import random
 import argparse
 import statistics
 import urllib.request
@@ -58,35 +62,52 @@ import schema  # noqa: E402  (schema.py)
 import score   # noqa: E402  (score.py -- for build_prompt and load_persona)
 import llm     # noqa: E402  (llm.py)
 from lib import dbconn  # noqa: E402
+from evals import corpus  # noqa: E402  (frozen, per-platform-stratified fixtures)
 
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "90"))
 
+#: T-14: sampling with `ORDER BY first_seen DESC` against production silently
+#: excludes whole sources (greenhouse/ashby ingest continuously; wwr, hn and
+#: lever do not) and makes two runs a week apart incomparable -- see
+#: evals/corpus.py's own docstring. This is the fixture that replaces it.
+DEFAULT_CORPUS = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "evals", "fixtures", "corpus-v1.jsonl")
 
-def select_jobs(conn, n, only_scored, profile):
-    """only_scored=True pulls jobs that already have a trusted score, so you
-    can compare candidates against real prior output as well as each other.
 
-    Scores live in job_scores keyed (job_id, profile), so "already scored"
-    means scored under THIS profile -- a LEFT JOIN, since without
-    --only-scored we still want unscored jobs and just no production column
-    to compare against."""
-    join = "LEFT JOIN"
-    where = "j.status = 'open' AND j.description_text IS NOT NULL"
+def select_jobs(corpus_path, n, only_scored, profile, conn=None):
+    """Sample from evals/'s frozen, per-platform-stratified fixture rather
+    than querying production by recency -- see DEFAULT_CORPUS above for why.
+
+    only_scored=True additionally looks up each sampled job's CURRENT
+    production score in job_scores (keyed (job_id, profile)) and keeps only
+    jobs that have one, so you can still compare candidates against real
+    prior output as well as each other. That part is inherently live --
+    "what you already trust" means today's score, not a frozen one -- so it
+    is the one piece that still needs `conn`.
+    """
+    records = [r for r in corpus.load(corpus_path)
+              if r.get("status") == "open" and (r.get("description_text") or "").strip()]
+    picked = random.Random(0).sample(records, min(n, len(records)))  # noqa: S311 (reproducible sampling, not a security use)
+    jobs = []
+    for r in picked:
+        job = corpus.job_fields(r)
+        job.update(corpus.facts_fields(r) or {})
+        job["fit_score"] = None
+        job["primary_track"] = None
+        jobs.append(job)
     if only_scored:
-        join = "JOIN"
-        where += " AND s.fit_score IS NOT NULL"
-    rows = conn.execute(
-        f"""SELECT j.id, j.title, j.company_name, j.location_raw, j.platform,
-                   j.description_text, s.fit_score, s.primary_track
-            FROM jobs j
-            {join} job_scores s ON s.job_id = j.id AND s.profile = %s
-            WHERE {where}
-            ORDER BY j.first_seen DESC LIMIT %s""",
-        (profile, n),
-    ).fetchall()
-    cols = ["id", "title", "company_name", "location_raw", "platform",
-            "description_text", "fit_score", "primary_track"]
-    return [dict(zip(cols, r)) for r in rows]
+        ids = [j["id"] for j in jobs]
+        rows = conn.execute(
+            """SELECT job_id, fit_score, primary_track FROM job_scores
+               WHERE profile = %s AND job_id = ANY(%s) AND fit_score IS NOT NULL""",
+            (profile, ids),
+        ).fetchall()
+        scored = {jid: (fit, track) for jid, fit, track in rows}
+        jobs = [j for j in jobs if j["id"] in scored]
+        for j in jobs:
+            j["fit_score"], j["primary_track"] = scored[j["id"]]
+    return jobs
 
 
 def build_prompt(persona, job):
@@ -206,6 +227,8 @@ def main():
     p.add_argument("--samples", type=int, default=2, help="side-by-side examples to print")
     p.add_argument("--profile", default=None,
                    help="score profile to compare against (default: persona.json's)")
+    p.add_argument("--corpus", default=DEFAULT_CORPUS,
+                   help="frozen evals fixture to sample from (default: evals/fixtures/corpus-v1.jsonl)")
     args = p.parse_args()
 
     specs = []
@@ -219,9 +242,12 @@ def main():
 
     persona = score.load_persona()
     profile = args.profile or schema.resolve_profile(persona)
-    conn = dbconn.connect_or_exit("compare-models", schema=schema.SCHEMA)
-    jobs = select_jobs(conn, args.n, args.only_scored, profile)
-    conn.close()
+    # Only --only-scored needs a live connection now -- see select_jobs().
+    conn = (dbconn.connect_or_exit("compare-models", schema=schema.SCHEMA)
+            if args.only_scored else None)
+    jobs = select_jobs(args.corpus, args.n, args.only_scored, profile, conn)
+    if conn:
+        conn.close()
 
     if not jobs:
         print("no jobs matched -- try without --only-scored")
