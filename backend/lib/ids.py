@@ -29,11 +29,13 @@ import hashlib
 import json
 import re
 import urllib.parse
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 ID_LENGTH = 24
 
 
-def make_id(*parts, length=ID_LENGTH):
+def make_id(*parts: Any, length: int = ID_LENGTH) -> str:
     """Stable primary key: sha256 of ":"-joined parts, truncated.
 
     Equivalent to the f-string interpolation the callers used before -- a
@@ -43,7 +45,8 @@ def make_id(*parts, length=ID_LENGTH):
     return hashlib.sha256(key.encode()).hexdigest()[:length]
 
 
-def content_hash(rec, fields, blank_if_falsy=()):
+def content_hash(rec: Mapping[str, Any], fields: Iterable[str],
+                  blank_if_falsy: Iterable[str] = ()) -> str:
     """Hash only the fields that represent real content.
 
     Deliberately excludes bookkeeping (raw_json, first_seen/last_seen,
@@ -104,7 +107,7 @@ def content_hash(rec, fields, blank_if_falsy=()):
 _TRACKING_PARAMS = re.compile(r"^(utm_|gclid|fbclid|ref|source$)", re.I)
 
 
-def decode_google_job_id(job_id):
+def decode_google_job_id(job_id: str | None) -> dict[str, Any] | None:
     """Google's base64 job_id blob as a dict, or None if it isn't one.
 
     Padding is restored explicitly -- Google strips trailing '=' and
@@ -120,7 +123,7 @@ def decode_google_job_id(job_id):
     return decoded if isinstance(decoded, dict) else None
 
 
-def normalize_apply_url(url):
+def normalize_apply_url(url: str | None) -> str:
     """Drop tracking params and the fragment, so one posting has one URL."""
     if not url:
         return ""
@@ -135,7 +138,8 @@ def normalize_apply_url(url):
          urllib.parse.urlencode(sorted(kept)), ""))
 
 
-def google_source_id(job, company_token, length=16):
+def google_source_id(job: Mapping[str, Any], company_token: str | None,
+                      length: int = 16) -> str:
     """Stable `source_id` for one Google Jobs posting.
 
     `htidocid` when the blob yields one. Otherwise a content fingerprint over

@@ -21,6 +21,7 @@ import html as html_module
 import json
 import re
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 NYC_PATTERN = re.compile(
     r"\b(new york|nyc|manhattan|brooklyn|queens|bronx|staten island)\b",
@@ -62,7 +63,7 @@ ISO_DATE_PREFIX = re.compile(r"^\s*\d{4}-\d{2}-\d{2}")
 MAX_DESCRIPTION_CHARS = 20000
 
 
-def bounded_json(obj, limit, long_field="description"):
+def bounded_json(obj: dict[str, Any], limit: int, long_field: str = "description") -> str:
     """json.dumps(obj) kept under `limit` chars and still VALID JSON.
 
     `json.dumps(obj)[:limit]` is not this. Slicing serialized JSON cuts
@@ -155,7 +156,7 @@ _TAG = re.compile(
 )
 
 
-def strip_html(markup, unescape=True):
+def strip_html(markup: str | None, unescape: bool = True) -> str | None:
     """Rough tag-stripper -- good enough for keyword heuristics and display,
     not meant to be a correct HTML parser. Truncated because raw_json
     preserves the untouched original for anything that needs it.
@@ -195,12 +196,12 @@ def strip_html(markup, unescape=True):
     return text[:MAX_DESCRIPTION_CHARS] if text else None
 
 
-def slugify(text):
+def slugify(text: str | None) -> str:
     text = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
     return text or "unknown"
 
 
-def guess_seniority(title):
+def guess_seniority(title: str | None) -> str:
     if not title:
         return "unknown"
     if SENIOR_PATTERN.search(title):
@@ -210,13 +211,13 @@ def guess_seniority(title):
     return "mid_or_unspecified"
 
 
-def classify_location(text):
+def classify_location(text: str | None) -> tuple[bool, bool]:
     """(is_nyc, is_remote) for a free-text location string."""
     text = text or ""
     return bool(NYC_PATTERN.search(text)), bool(REMOTE_PATTERN.search(text))
 
 
-def parse_relative_posted_at(text, now=None):
+def parse_relative_posted_at(text: str | None, now: datetime | None = None) -> str | None:
     """Convert Google's relative phrasing ("3 days ago") to a timestamp.
 
     SerpApi and Apify both return the relative form rather than an absolute
@@ -259,7 +260,7 @@ def parse_relative_posted_at(text, now=None):
     return None
 
 
-def posted_at_timestamp(value, now=None):
+def posted_at_timestamp(value: str | None, now: datetime | None = None) -> str | None:
     """A sortable absolute timestamp for whatever a source put in posted_at.
 
     WHY THIS IS SEPARATE FROM THE posted_at COLUMN
@@ -288,7 +289,7 @@ def posted_at_timestamp(value, now=None):
     return parse_relative_posted_at(value, now=now)
 
 
-def days_since(timestamp_str, now=None):
+def days_since(timestamp_str: str | None, now: datetime | None = None) -> float | None:
     """Fractional days since a bookkeeping timestamp, or None if unparseable."""
     if not timestamp_str:
         return None

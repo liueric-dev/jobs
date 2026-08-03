@@ -47,6 +47,8 @@ import json
 import os
 import sys
 from collections import Counter
+from collections.abc import Mapping
+from typing import Any
 
 import extract
 import llm
@@ -133,7 +135,8 @@ def _clamp(n, lo=0, hi=100):
     return max(lo, min(hi, n))
 
 
-def score_job(facts, criteria):
+def score_job(facts: Mapping[str, Any],
+               criteria: Mapping[str, Any]) -> tuple[int, list[dict[str, Any]]]:
     """(match_score, reasons) for one posting against one profile's criteria.
 
     Pure: no database, no clock, no config lookup. Everything it needs is in

@@ -1,10 +1,11 @@
-# Ruff configuration. Landed 2026-08-03 as T-1 in ../TASKS.md.
+# Dev tool configuration: ruff (T-1) and mypy (T-17). Landed 2026-08-03 / 2026-08-03.
 #
-# WHY THIS FILE HOLDS ONLY [tool.ruff]:
+# WHY THIS FILE HOLDS ONLY DEV-TOOL TABLES, NO [project]:
 # Nothing in this repo is installed as a package. There is no build backend, no
 # [project] table and no packaging metadata, deliberately -- adding them would
 # imply an install step that does not exist and that the three venvs do not use.
-# This file is a linter config that happens to live at the conventional path.
+# This file is where a dev tool's config lives if the tool reads pyproject.toml
+# by convention; it is not evidence of an install step.
 #
 # WHY THERE IS A LINTER AT ALL, given .claude/CLAUDE.md said there was not:
 # The tranche-nine README said wiring one in was "wrong for this repo regardless
@@ -144,3 +145,33 @@ known-first-party = [
 # change. Configured here so that when it runs, it runs the same way everywhere.
 quote-style = "double"
 indent-style = "space"
+
+# mypy configuration. T-17 in ../TASKS.md: "gradual typing on the seams only".
+#
+# WHY THESE FILES AND NO OTHERS. `files` below is the closed list T-17 names --
+# backend/lib/, schema.py, and match.py's score_job() -- the boundaries where a
+# wrong shape travels furthest, not a partial sweep of the whole tree. match.py
+# itself is NOT fully typed; only score_job() carries annotations, and
+# `check_untyped_defs = false` (mypy's own default, restated here so a future
+# mypy release changing its default cannot silently widen this file's claim)
+# means every other function in match.py is skipped rather than checked with
+# inferred Any types. Widening `files` to a directory this row did not type is
+# the same mistake ruff's own baseline section warns against: a claim of
+# cleanliness this repo cannot back up.
+#
+# WHY follow_imports = "silent". Every seam file imports untyped siblings --
+# schema.py imports lib.*, match.py imports extract/llm/profiles/relevance/
+# schema. Without this, mypy would also analyse and report on those files,
+# which is the opposite of "on the seams only": it would make the boundary
+# everything a seam file happens to import, decided by import graph rather than
+# by this row.
+[tool.mypy]
+python_version = "3.14"
+files = [
+    "lib",
+    "schema.py",
+    "match.py",
+]
+follow_imports = "silent"
+ignore_missing_imports = true
+warn_unused_ignores = true

@@ -99,6 +99,8 @@ TIMESTAMPS STAY TEXT HERE
 """
 
 import os
+from collections.abc import Iterable
+from typing import Any
 
 import psycopg
 from psycopg import sql
@@ -179,7 +181,7 @@ COHORT_BUCKETS = ((5, "3-5"), (10, "6-10"), (None, "10+"))
 COHORT_BUCKET_LABELS = tuple(label for _, label in COHORT_BUCKETS)
 
 
-def cohort_bucket(savers):
+def cohort_bucket(savers: int) -> str | None:
     """Bucket a distinct-Builder count, or None if it must be suppressed.
 
     Pure arithmetic, no I/O, so the suppression rule is unit-testable without a
@@ -264,7 +266,7 @@ SEARCH_WATCHER_BUCKET_LABELS = tuple(label for _, label in SEARCH_WATCHER_BUCKET
 SEARCH_SOURCES = ("builder", "seeded", "track")
 
 
-def search_watcher_bucket(watchers):
+def search_watcher_bucket(watchers: int) -> str | None:
     """Bucket a distinct-Builder watcher count, or None if it must be suppressed.
 
     Pure arithmetic, no I/O, deliberately identical in shape to cohort_bucket()
@@ -379,7 +381,7 @@ LEGACY_SCORING_COLUMNS = (
 )
 
 
-def resolve_profile(persona=None):
+def resolve_profile(persona: dict[str, Any] | None = None) -> str:
     """Which profile's scores we are reading or writing.
 
     JOBS_PROFILE wins so a one-off run can score against an alternate persona
@@ -392,7 +394,8 @@ def resolve_profile(persona=None):
             or DEFAULT_PROFILE)
 
 
-def spec(hash_fields, blank_if_falsy=("description_text",), sticky=()):
+def spec(hash_fields: tuple[str, ...], blank_if_falsy: tuple[str, ...] = ("description_text",),
+         sticky: tuple[str, ...] = ()) -> TableSpec:
     """A TableSpec for one source's hash field set.
 
     `computed` reopens a listing that reappears upstream: status back to
@@ -420,7 +423,7 @@ def spec(hash_fields, blank_if_falsy=("description_text",), sticky=()):
 GOOGLE_STICKY = ("posted_at", "posted_at_ts")
 
 
-def google_spec():
+def google_spec() -> TableSpec:
     """The spec for every Google Jobs writer -- both ingest scripts and api/.
 
     A function rather than three call sites passing the same arguments,
@@ -437,7 +440,7 @@ def google_spec():
     return spec(HASH_FIELDS_SHORT, sticky=GOOGLE_STICKY)
 
 
-def make_job_id(rec):
+def make_job_id(rec: dict[str, Any]) -> str:
     """Primary key: sha256("platform:token:source_id")[:24].
 
     Identical to the expression all six scripts used, so existing keys are
@@ -449,7 +452,7 @@ def make_job_id(rec):
     return ids.make_id(rec["platform"], rec["company_token"], rec["source_id"])
 
 
-def ensure_schema(conn):
+def ensure_schema(conn: psycopg.Connection) -> None:
     """Create the jobs tables. Idempotent.
 
     Refuses to run against the events database. See DATABASE, NOT SCHEMA
@@ -459,7 +462,8 @@ def ensure_schema(conn):
     exists in exactly one database and never in this one, so it is the cheapest
     honest way to ask "am I where I think I am".
     """
-    if conn.execute("SELECT to_regclass('public.events')").fetchone()[0] is not None:
+    events_check = conn.execute("SELECT to_regclass('public.events')").fetchone()
+    if events_check is not None and events_check[0] is not None:
         raise RuntimeError(
             "refusing to run: DATABASE_URL points at the events database "
             "(public.events exists here). The jobs tables live in the `jobs` "
@@ -971,7 +975,7 @@ _SEARCH_BUCKET_CHECK = (
     + ", ".join(f"'{v}'" for v in SEARCH_WATCHER_BUCKET_LABELS) + ")")
 
 
-def ensure_search_query_schema(conn):
+def ensure_search_query_schema(conn: psycopg.Connection) -> None:
     """The four tables behind tranche_four/25. Idempotent.
 
     WHY THEY ARE DECLARED HERE AND NOT IN webapp/schema_web.py. The webapp is
@@ -1250,7 +1254,7 @@ def _regrant(conn, view_name, grants):
         conn.execute(stmt)
 
 
-def ensure_app_view(conn):
+def ensure_app_view(conn: psycopg.Connection) -> None:
     """Create or refresh jobs_app. Idempotent, and safe to call every run.
 
     CREATE OR REPLACE VIEW cannot drop or reorder existing columns, so a change
@@ -1332,7 +1336,8 @@ def _ensure_fk_update_cascade(conn):
 
 # -- lifecycle ---------------------------------------------------------------
 
-def close_missing(conn, platform, token, seen_ids, now=None):
+def close_missing(conn: psycopg.Connection, platform: str, token: str,
+                   seen_ids: Iterable[str], now: str | None = None) -> int:
     """Close listings that were open but absent from this run's fetch.
 
     Only valid for sources returning a company's COMPLETE listing set -- the
@@ -1358,7 +1363,8 @@ def close_missing(conn, platform, token, seen_ids, now=None):
     return cur.rowcount
 
 
-def close_stale(conn, platform, stale_days, now=None):
+def close_stale(conn: psycopg.Connection, platform: str, stale_days: int,
+                 now: str | None = None) -> int:
     """Close listings not seen for `stale_days`.
 
     For sources returning a sampled slice rather than a full listing set,
@@ -1379,7 +1385,7 @@ def close_stale(conn, platform, stale_days, now=None):
     return cur.rowcount
 
 
-def prune_old_closed(conn, days):
+def prune_old_closed(conn: psycopg.Connection, days: int) -> int:
     from datetime import timedelta
     from lib.timeparse import utc_now
     cutoff = (utc_now() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")

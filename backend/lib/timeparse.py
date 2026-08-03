@@ -36,7 +36,8 @@ DST
     against the alternative of rejecting the value outright.
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, tzinfo
+from typing import Any
 from zoneinfo import ZoneInfo
 
 NYC = ZoneInfo("America/New_York")
@@ -48,7 +49,7 @@ UTC = timezone.utc
 _MIN_PLAUSIBLE_EPOCH = 946_684_800  # 2000-01-01T00:00:00Z
 
 
-def to_utc(value, assume_tz=NYC):
+def to_utc(value: Any, assume_tz: tzinfo = NYC) -> datetime | None:
     """Coerce a timestamp of unknown shape to an aware UTC datetime.
 
     Accepts: None/"" (-> None), datetime, date, epoch seconds (int/float or
@@ -104,12 +105,12 @@ def _from_epoch(seconds):
     return datetime.fromtimestamp(seconds, tz=UTC)
 
 
-def utc_now():
+def utc_now() -> datetime:
     """Aware current UTC time."""
     return datetime.now(UTC)
 
 
-def utc_now_str():
+def utc_now_str() -> str:
     """Bookkeeping timestamp: 'YYYY-MM-DDTHH:MM:SS', UTC, no offset suffix.
 
     This exact format is load-bearing and must not gain an offset or
@@ -121,7 +122,7 @@ def utc_now_str():
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def day_bounds_utc(days_ahead, tz=NYC):
+def day_bounds_utc(days_ahead: int, tz: tzinfo = NYC) -> tuple[datetime, datetime]:
     """(start, end) UTC instants for "local midnight today" .. "+days_ahead".
 
     Ingest windows are conceptually local -- "events over the next 90 days"

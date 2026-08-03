@@ -26,10 +26,13 @@ WHAT IS NOT HERE, AND WHY IT LOOKS HALF-FINISHED
 
 from datetime import timedelta
 
+import psycopg
+
 from . import dbconn
 from .timeparse import utc_now, utc_now_str
 
-def ensure_state_schema(conn, watermark_table="ingest_state", with_claims=False):
+def ensure_state_schema(conn: psycopg.Connection, watermark_table: str = "ingest_state",
+                         with_claims: bool = False) -> None:
     """Create the watermark table if absent.
 
     `with_claims` adds the `claimed_at` column try_claim() needs. It stays a
@@ -58,14 +61,16 @@ def ensure_state_schema(conn, watermark_table="ingest_state", with_claims=False)
 
 # -- watermarks --------------------------------------------------------------
 
-def get_watermark(conn, dataset, table="ingest_state"):
+def get_watermark(conn: psycopg.Connection, dataset: str,
+                   table: str = "ingest_state") -> str | None:
     row = conn.execute(
         f"SELECT last_success_at FROM {table} WHERE dataset = %s", (dataset,)  # noqa: S608 -- splices `table`, defaulted to the module's own constant "ingest_state"
     ).fetchone()
     return row[0] if row else None
 
 
-def set_watermark(conn, dataset, ts=None, table="ingest_state"):
+def set_watermark(conn: psycopg.Connection, dataset: str, ts: str | None = None,
+                   table: str = "ingest_state") -> None:
     """Record a successful run.
 
     Only call this when the fetch was *complete*. nyc-events-ingest used to
@@ -90,8 +95,9 @@ def set_watermark(conn, dataset, ts=None, table="ingest_state"):
 DEFAULT_CLAIM_TTL_MINUTES = 15
 
 
-def try_claim(conn, dataset, ttl_minutes=DEFAULT_CLAIM_TTL_MINUTES,
-              table="ingest_state"):
+def try_claim(conn: psycopg.Connection, dataset: str,
+              ttl_minutes: int = DEFAULT_CLAIM_TTL_MINUTES,
+              table: str = "ingest_state") -> bool:
     """Take a lease on `dataset`, or return False if someone else holds one.
 
     A stale claim (older than ttl_minutes) is stealable, so a crashed run
@@ -123,13 +129,14 @@ def try_claim(conn, dataset, ttl_minutes=DEFAULT_CLAIM_TTL_MINUTES,
     return won
 
 
-def release_claim(conn, dataset, table="ingest_state"):
+def release_claim(conn: psycopg.Connection, dataset: str, table: str = "ingest_state") -> None:
     conn.execute(f"UPDATE {table} SET claimed_at = NULL WHERE dataset = %s",  # noqa: S608 -- splices `table`, defaulted to the module's own constant "ingest_state"
                  (dataset,))
     conn.commit()
 
 
-def mark_success(conn, dataset, ts=None, table="ingest_state"):
+def mark_success(conn: psycopg.Connection, dataset: str, ts: str | None = None,
+                  table: str = "ingest_state") -> None:
     """Advance the watermark and drop the claim in one step.
 
     Called once a fetch actually succeeds. Releasing the claim here rather

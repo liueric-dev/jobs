@@ -471,14 +471,49 @@ nothing here added a `file:line` claim.
 
 ---
 
-### T-17 — Gradual typing on the seams only
+### ~~T-17~~ — Gradual typing on the seams only
 
-One of 171 modules imports `typing`. **Do not type the tree.** Type the boundaries where a wrong
-shape travels furthest: `backend/lib/`, `backend/schema.py`'s public functions, and `score_job()` —
-which is pure and unit-testable and is the one function the ranking rests on.
+**Closed 2026-08-03.** `mypy`, installed in `.venv-dev` alongside `ruff` (never in any of the three
+`requirements.txt` — grepped in CI same as `ruff`'s own bound check). `backend/pyproject.toml`
+gained `[tool.mypy]` with `files = ["lib", "schema.py", "match.py"]` and `follow_imports = "silent"`
+— the row's own "do not type the tree" as a checkable config, not a sentence: mypy never opens
+`extract.py`, `llm.py`, `profiles.py` or `relevance.py`, which every one of these three imports.
 
-**Done when:** a type checker runs in CI over exactly that subset and is clean, and the config makes
-clear it is a subset by design rather than an unfinished sweep.
+**Every public function in `backend/lib/`'s 8 modules got a signature** (`dbconn`, `envfile`, `http`,
+`ids`, `state`, `text`, `timeparse`, `upsert`), all 12 of `schema.py`'s public functions
+(`cohort_bucket` through `prune_old_closed`), and `match.py`'s `score_job()` — named by the row as
+the one function the ranking rests on. Private (`_`-prefixed) helpers were deliberately left
+unannotated: mypy's own default, `check_untyped_defs = false`, skips a function's body entirely when
+it carries no annotation at all, so an unannotated helper costs nothing and is never silently
+checked with inferred `Any`. **That default is restated explicitly in the config** rather than left
+implicit, so a future mypy release changing it cannot silently widen this row's claim.
+
+**Two real findings, both fixed, not suppressed on sight.** `schema.py:465`'s
+`conn.execute(...).fetchone()[0]` indexed a `tuple | None` — `to_regclass()` on a bare `SELECT`
+never actually returns no row, but mypy cannot know that, so the fix binds the row first and checks
+it, which is correct regardless. `lib/http.py`'s `get_bytes()` raises `last_exc` after the retry
+loop, which is `None` if `max_retries <= 0` — a real, pre-existing caller error out of this row's
+scope to fix, so it carries a named `# type: ignore[misc]` rather than a silent pass, same
+one-per-site discipline `T-16` set for `# noqa`.
+
+**One live-but-harmless case Python 3.14 itself changed underneath the row.** `lib/upsert.py`'s
+`UpsertResult.__add__` originally needed `"UpsertResult"` quoted (a self-referencing forward
+reference, evaluated while the class body is still executing) — but PEP 649's lazy annotations,
+default since 3.14 and this repo's pinned `target-version`, made the quotes both unnecessary and a
+`ruff --select UP037` finding on its own. Removed rather than left as a false-positive suppression.
+
+`.venv-dev/bin/mypy` (config-driven, no file args) reports **`Success: no issues found in 12 source
+files`**, reproduced in a scratch venv with nothing but `mypy` and `psycopg[binary]==3.3.4` (matching
+the pin in `requirements.txt`) to confirm CI's from-clean install path matches. New CI job `types`
+(`.github/workflows/ci.yml`) runs it **blocking**, unlike `ruff`'s own `continue-on-error` baseline
+step — there is no backlog here to land against gradually; a clean run is what the row asked for.
+
+**Zero new `ruff` findings.** 975 -> 977 net, but diffed line-by-line against a `git stash`
+before/after: the two apparent new entries were `lib/upsert.py`'s `UP037` on the quotes just removed
+above (a `--fix`, not a new problem) and every other delta is an unchanged finding at a shifted line
+number from the added `import` lines. All three suites still print `OK` at the same counts recorded
+at `T-16`: 1449 / 354 / 117. Both frontend checkers still pass (`verify_fixtures.py`,
+`check_client.mjs`'s 57 checks, 0 failed).
 
 ---
 

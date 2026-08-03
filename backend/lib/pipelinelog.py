@@ -37,7 +37,7 @@ class _StderrProxy:
         sys.stderr.flush()
 
 
-def get_logger(name):
+def get_logger(name: str) -> logging.Logger:
     """A DEBUG-level logger named `name`, writing through the one handler.
 
     The handler is installed on the root logger once per process; every

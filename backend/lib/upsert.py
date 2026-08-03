@@ -33,7 +33,11 @@ WHAT STAYS OUT
 """
 
 import sys
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
+from typing import Any
+
+import psycopg
 
 from . import ids
 from .timeparse import utc_now_str
@@ -71,14 +75,14 @@ class TableSpec:
     """
 
     table: str
-    columns: tuple
-    hash_fields: tuple
+    columns: tuple[str, ...]
+    hash_fields: tuple[str, ...]
     #: Keys whose falsy values hash as "" rather than "None". Required by the
     #: jobs scripts, which hashed `rec.get("description_text") or ""`.
-    blank_if_falsy: tuple = ()
-    computed: dict = field(default_factory=dict)
-    revive_column: str = None
-    revive_value: str = None
+    blank_if_falsy: tuple[str, ...] = ()
+    computed: dict[str, str] = field(default_factory=dict)
+    revive_column: str | None = None
+    revive_value: str | None = None
     id_column: str = "id"
     #: WHY THIS EXISTS -- the sliding `posted_at`.
     #:
@@ -98,9 +102,9 @@ class TableSpec:
     #: UPDATE. Dropping it from the write alone would leave the hash computed
     #: from the drifting value, so the row would still be counted changed on
     #: every run -- the churn, without even the corrected column.
-    sticky: tuple = ()
+    sticky: tuple[str, ...] = ()
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         _check_identifier(self.table)
         for name in (*self.columns, *self.computed, self.id_column):
             _check_identifier(name)
@@ -115,7 +119,7 @@ class TableSpec:
 
     # -- SQL built once per spec, not per row --------------------------------
 
-    def insert_sql(self):
+    def insert_sql(self) -> str:
         cols = [self.id_column, *self.columns, *self.computed,
                 "content_hash", "first_seen", "last_seen"]
         vals = ([f"%({self.id_column})s"]
@@ -125,7 +129,7 @@ class TableSpec:
         return (f"INSERT INTO {self.table} ({', '.join(cols)}) "  # noqa: S608 -- splices self.table/self.id_column, set once from a caller's TableSpec constant, never user input
                 f"VALUES ({', '.join(vals)})")
 
-    def update_sql(self):
+    def update_sql(self) -> str:
         # first_seen is deliberately absent: it records when we first saw the
         # row and must survive every later update.
         assignments = ([f"{c}=%({c})s" for c in self.columns]
@@ -135,7 +139,7 @@ class TableSpec:
         return (f"UPDATE {self.table} SET {', '.join(assignments)} "  # noqa: S608 -- splices self.table/self.id_column, set once from a caller's TableSpec constant, never user input
                 f"WHERE {self.id_column}=%({self.id_column})s")
 
-    def select_sql(self):
+    def select_sql(self) -> str:
         # Column order is the contract read by _existing_fields() below:
         # content_hash, then revive_column if set, then the sticky columns.
         cols = ["content_hash"]
@@ -145,11 +149,11 @@ class TableSpec:
         return (f"SELECT {', '.join(cols)} FROM {self.table} "  # noqa: S608 -- splices self.table/self.id_column, set once from a caller's TableSpec constant, never user input
                 f"WHERE {self.id_column} = %s")
 
-    def sticky_offset(self):
+    def sticky_offset(self) -> int:
         """Index of the first sticky column in a select_sql() row."""
         return 2 if self.revive_column else 1
 
-    def touch_sql(self):
+    def touch_sql(self) -> str:
         return (f"UPDATE {self.table} SET last_seen = %s "  # noqa: S608 -- splices self.table/self.id_column, set once from a caller's TableSpec constant, never user input
                 f"WHERE {self.id_column} = %s")
 
@@ -159,20 +163,22 @@ class UpsertResult:
     new: int = 0
     updated: int = 0
     unchanged: int = 0
-    errors: list = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
         # Lets callers keep the original `n, u, unc = upsert(...)` shape.
         return iter((self.new, self.updated, self.unchanged))
 
-    def __add__(self, other):
+    def __add__(self, other: UpsertResult) -> UpsertResult:
         return UpsertResult(self.new + other.new,
                             self.updated + other.updated,
                             self.unchanged + other.unchanged,
                             self.errors + other.errors)
 
 
-def upsert(conn, spec, records, id_fn, *, now=None, debug=False):
+def upsert(conn: psycopg.Connection, spec: TableSpec, records: Iterable[dict[str, Any]],
+           id_fn: Callable[[dict[str, Any]], str], *, now: str | None = None,
+           debug: bool = False) -> UpsertResult:
     """Write `records`, returning an UpsertResult.
 
     `id_fn(rec)` produces the primary key -- the two pipelines build it from
@@ -269,7 +275,7 @@ class UpsertErrorRate(RuntimeError):
     way they already treat one unreachable source.
     """
 
-    def __init__(self, message, result):
+    def __init__(self, message: str, result: UpsertResult) -> None:
         super().__init__(message)
         self.result = result
 
@@ -288,7 +294,7 @@ SUMMARY_PREFIX = "upsert-summary:"
 DEFAULT_THRESHOLD = 0.05
 
 
-def summary_line(result, table="?"):
+def summary_line(result: UpsertResult, table: str = "?") -> str:
     """The one line every upsert emits, in a form both a human reading
     journalctl and run-daily.py's parser can use."""
     return (f"{SUMMARY_PREFIX} table={table} new={result.new} "
@@ -300,7 +306,9 @@ def _stderr_logger(line):
     print(line, file=sys.stderr)
 
 
-def upsert_checked(*args, threshold=DEFAULT_THRESHOLD, logger=None, **kwargs):
+def upsert_checked(*args: Any, threshold: float = DEFAULT_THRESHOLD,
+                    logger: Callable[[str], None] | None = None,
+                    **kwargs: Any) -> UpsertResult:
     """Upsert, log any per-record errors, and raise if the failure rate
     exceeds `threshold`. Returns the full result including .errors.
 
@@ -327,8 +335,9 @@ def upsert_checked(*args, threshold=DEFAULT_THRESHOLD, logger=None, **kwargs):
     return result
 
 
-def check_error_rate(result, *, threshold=DEFAULT_THRESHOLD, label="",
-                     logger=None):
+def check_error_rate(result: UpsertResult, *, threshold: float = DEFAULT_THRESHOLD,
+                     label: str = "",
+                     logger: Callable[[str], None] | None = None) -> UpsertResult:
     """Raise UpsertErrorRate if `result`'s failure rate exceeds `threshold`.
 
     Separate from upsert_checked because the scripts that upsert inside a

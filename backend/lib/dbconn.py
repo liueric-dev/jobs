@@ -44,6 +44,7 @@ its host/database tail, which is what the existing scripts print on failure.
 """
 
 import os
+from collections.abc import Iterable
 
 import psycopg
 
@@ -74,7 +75,7 @@ import psycopg
 #: the role having no rights on the other database.
 
 
-def database_url():
+def database_url() -> str:
     """The connection string, or a hard failure.
 
     Deliberately raises rather than guessing -- see the note above. Callers
@@ -91,7 +92,7 @@ def database_url():
     return url
 
 
-def scrub_url(url=None):
+def scrub_url(url: str | None = None) -> str:
     """Everything after the '@' -- host/db, never the password.
 
     Must not raise: this is what failure paths print. Since database_url()
@@ -104,7 +105,8 @@ def scrub_url(url=None):
     return url.split("@")[-1] if url else "<DATABASE_URL not set>"
 
 
-def connect(schema=None, url=None, autocommit=False):
+def connect(schema: str | None = None, url: str | None = None,
+            autocommit: bool = False) -> psycopg.Connection:
     """Open a connection, optionally scoped to a Postgres schema.
 
     `schema="public"` issues `SET search_path TO public`. Pass it on EVERY
@@ -131,7 +133,7 @@ def connect(schema=None, url=None, autocommit=False):
     return conn
 
 
-def existing_columns(conn, table):
+def existing_columns(conn: psycopg.Connection, table: str) -> set[str]:
     """Columns of `table` in the connection's current schema.
 
     Scoped to current_schema() deliberately. information_schema.columns spans
@@ -146,7 +148,8 @@ def existing_columns(conn, table):
         (table,)).fetchall()}
 
 
-def add_missing_columns(conn, table, columns):
+def add_missing_columns(conn: psycopg.Connection, table: str,
+                         columns: Iterable[tuple[str, str]]) -> list[str]:
     """ALTER TABLE ADD COLUMN, but only for columns that are actually absent.
 
     `ADD COLUMN IF NOT EXISTS` looks idempotent and free. It is not: Postgres
@@ -175,7 +178,8 @@ def add_missing_columns(conn, table, columns):
     return added
 
 
-def connect_or_exit(label, schema=None, url=None, autocommit=False):
+def connect_or_exit(label: str, schema: str | None = None, url: str | None = None,
+                     autocommit: bool = False) -> psycopg.Connection:
     """connect(), or print the standard failure line and exit 1.
 
     Matches the message every script already printed, so cron output and any

@@ -163,3 +163,37 @@ jobs:
             echo "::error::ruff is a dev tool and must not be a runtime dependency"
             exit 1
           fi
+
+  types:
+    name: mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      # psycopg is installed so mypy can resolve its inline types (py.typed) for
+      # the seam files' `conn: psycopg.Connection` annotations -- a dev-venv
+      # concern, not a second runtime dependency. Pinned to match
+      # backend/requirements.txt (T-3) rather than floating.
+      - name: Install mypy
+        run: pip install mypy 'psycopg[binary]==3.3.4'
+
+      # BLOCKING, unlike ruff's baseline. T-17 scoped `[tool.mypy]`'s `files` to
+      # exactly backend/lib/, schema.py and match.py's score_job() -- the
+      # boundaries the row names -- and typed only that closed list, so there is
+      # no untyped backlog here to land against gradually the way ruff's 1076
+      # findings were. A clean run is the acceptance criterion T-17 states, not
+      # a number that comes down over time.
+      - name: mypy on the typed seams
+        working-directory: backend
+        run: mypy
+
+      - name: mypy config is not a runtime dependency
+        run: |
+          if grep -rn "mypy" backend/requirements.txt backend/api/requirements.txt backend/webapp/requirements.txt; then
+            echo "::error::mypy is a dev tool and must not be a runtime dependency"
+            exit 1
+          fi

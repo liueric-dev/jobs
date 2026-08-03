@@ -62,7 +62,7 @@ _LINE = re.compile(r"""
 """, re.VERBOSE)
 
 
-def parse(text):
+def parse(text: str) -> dict[str, str]:
     """{key: value} from env-file text. Later lines win, as in the shell."""
     out = {}
     for line in text.splitlines():
@@ -82,7 +82,7 @@ def parse(text):
     return out
 
 
-def load(path, override=False):
+def load(path: str, override: bool = False) -> list[str]:
     """Merge an env file into os.environ. Returns the keys actually set.
 
     `path` is required -- see the note above where the default used to be.

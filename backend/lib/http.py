@@ -23,6 +23,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
+from typing import Any
 
 DEFAULT_USER_AGENT = "hermes-ingest/1.0 (+https://github.com/hermes)"
 DEFAULT_TIMEOUT = 30
@@ -44,9 +46,13 @@ def _backoff(attempt, retry_after=None):
     return wait
 
 
-def get_bytes(url, *, headers=None, timeout=DEFAULT_TIMEOUT,
-              max_retries=DEFAULT_MAX_RETRIES, opener=None,
-              body_is_transient=None, data=None, method=None, label=None):
+def get_bytes(url: str, *, headers: dict[str, str] | None = None,
+              timeout: float = DEFAULT_TIMEOUT,
+              max_retries: int = DEFAULT_MAX_RETRIES,
+              opener: urllib.request.OpenerDirector | None = None,
+              body_is_transient: Callable[[str], bool] | None = None,
+              data: bytes | None = None, method: str | None = None,
+              label: str | None = None) -> bytes:
     """Fetch a URL as raw bytes, retrying transient failures.
 
     `opener` accepts a urllib opener so a caller can carry cookies (QPL needs
@@ -70,7 +76,7 @@ def get_bytes(url, *, headers=None, timeout=DEFAULT_TIMEOUT,
     if headers:
         hdrs.update(headers)
     tag = label or url.split("?")[0]
-    last_exc = None
+    last_exc: BaseException | None = None
 
     for attempt in range(max_retries):
         try:
@@ -104,10 +110,10 @@ def get_bytes(url, *, headers=None, timeout=DEFAULT_TIMEOUT,
         if attempt < max_retries - 1:
             time.sleep(wait)
 
-    raise last_exc
+    raise last_exc  # type: ignore[misc]  # last_exc is None only if max_retries <= 0, a pre-existing caller error this row does not change
 
 
-def get_text(url, **kwargs):
+def get_text(url: str, **kwargs: Any) -> str:
     """get_bytes() decoded. The shape almost every caller wants.
 
     `errors="replace"` rather than strict: an ingest run that dies on one
@@ -117,12 +123,13 @@ def get_text(url, **kwargs):
     return get_bytes(url, **kwargs).decode("utf-8", errors="replace")
 
 
-def get_json(url, **kwargs):
+def get_json(url: str, **kwargs: Any) -> Any:
     """get_text() parsed as JSON."""
     return json.loads(get_text(url, **kwargs))
 
 
-def post_json(url, payload, *, headers=None, **kwargs):
+def post_json(url: str, payload: Any, *, headers: dict[str, str] | None = None,
+              **kwargs: Any) -> Any:
     """POST a JSON body, parse a JSON response. Used by the NYPL GraphQL API."""
     hdrs = {"Content-Type": "application/json"}
     if headers:
@@ -132,6 +139,6 @@ def post_json(url, payload, *, headers=None, **kwargs):
         **kwargs))
 
 
-def urlencode(params):
+def urlencode(params: Any) -> str:
     """Re-exported so callers don't each import urllib.parse."""
     return urllib.parse.urlencode(params)
