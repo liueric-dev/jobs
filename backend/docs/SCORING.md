@@ -19,7 +19,7 @@ pipeline, see [`../README.md`](../README.md).
 
 The contract this argument used to point at — what a score means, whether two
 are comparable, the provenance of every weight, and what happens when a stage
-fails — was `docs/scoring.md`, deleted 2026-08-02:
+fails — was deleted 2026-08-02:
 `git show refactor-freeze-2026-08-02:docs/scoring.md`. Per-stage operation was
 `docs/ingest/`, deleted the same day and behind the same tag. `DEVELOPER.md` and
 `OVERVIEW.md`, once named here as companions, were deleted 2026-08-02.

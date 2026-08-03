@@ -3,7 +3,7 @@
 Workday CXS ingest -- the large non-tech NYC employers, with the relevance
 gate moved UPSTREAM into ingest.
 
-Task 18 (`docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`). Reads
+Task 18 (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`). Reads
 tenant/data-centre/site out of `company_ats` (task 16), walks each tenant's
 public CXS list endpoint, and fetches a detail page ONLY for the postings that
 survive an upstream filter. Writes `platform='workday'` rows to `jobs`.
@@ -12,7 +12,8 @@ WHY THE GATE MOVED UPSTREAM, AND WHY THAT IS THE WHOLE DESIGN
     A hospital system runs 2,000 open requisitions. One detail request per
     posting is 2,000 requests per tenant per night; across the tenants this
     plan expects, the detail fetches dominate the entire nightly window
-    (18-...md:63-73). Every other source in this pipeline ingests whole and
+    (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:63-73).
+    Every other source in this pipeline ingests whole and
     filters afterwards, because whole boards are cheap there. Here they are
     not.
 
@@ -31,14 +32,16 @@ WHY THE GATE MOVED UPSTREAM, AND WHY THAT IS THE WHOLE DESIGN
     against the list rows, before they are a table (`_tiers()`). No second
     copy of the matching logic exists, in any language.
 
-    18-...md:77-79 asks instead for "a function that evaluates a
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:77-79
+    asks instead for "a function that evaluates a
     title/location pair in Python against the same config". That would be the
     second copy, in the wrong dialect, and `relevance.py` is owned elsewhere
     this session in any case. The deviation is deliberate and is recorded in
-    `docs/ingest/workday.md`.
+    `git show refactor-freeze-2026-08-02:docs/ingest/workday.md`.
 
 WHY THE UPSTREAM FILTER IS DELIBERATELY LOOSE
-    18-...md:80-85: task 10's gate is description-first and at list time there
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:80-85:
+    task 10's gate is description-first and at list time there
     is no description, so filtering tightly here "would discard exactly the
     postings this refactor exists to find, since their titles are the
     uninformative part". "Operations Coordinator" at a hospital is the target
@@ -59,8 +62,9 @@ WHY THE UPSTREAM FILTER IS DELIBERATELY LOOSE
     `row_ok` predicate on its own. Tier 3 then means "excluded", tier 1 means
     "kept, location accepted", tier 2 means "kept, location not accepted" --
     and tier 2 survives only when the LIST RESPONSE could not say where the
-    job is (see `location_flags()`), which is 18-...md:83's "neither-but-
-    unknown".
+    job is (see `location_flags()`), which is
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:83's
+    "neither-but-unknown".
 
 ONLY DETAIL-FETCHED POSTINGS ARE STORED
     18-...md:110-113 settles this: "a posting you never detail-fetched is
@@ -137,7 +141,9 @@ TWO MORE THINGS ONLY A LIVE RUN COULD SAY, AND THEY BOTH CHANGED THE DESIGN
       `text.classify_location` answers (False, False) and the first version of
       the upstream gate dropped most of a New York hospital system's board on
       the strength of its own internal naming convention -- silently, and
-      exactly the mistake 18-...md:80-85 warns against. `location_flags()` now
+      exactly the mistake
+      `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:80-85
+      warns against. `location_flags()` now
       answers "unknown" for anything that is not recognisably a place; see
       `_PLACE_SHAPED`.
 
@@ -173,7 +179,9 @@ CONFIG
 
 SCHEDULE: not scheduled directly. See run-daily.py, which is the single cron
 entry point and calls this script as a subprocess. This script is NOT yet in
-its STEPS list -- see docs/ingest/workday.md for the line to add and where.
+its STEPS list -- see
+`git show refactor-freeze-2026-08-02:docs/ingest/workday.md` for the line to
+add and where.
 """
 
 import json
@@ -245,7 +253,9 @@ PRUNE_CLOSED_AFTER_DAYS = 30
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 
 #: Workday writes this instead of a place when a requisition spans several.
-#: It is the "neither-but-unknown" case at 18-...md:83, and it is why
+#: It is the "neither-but-unknown" case at
+#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:83,
+#: and it is why
 #: location_flags() returns None rather than False: FALSE would read as "known
 #: not to be in New York" and the upstream filter would drop it.
 MULTI_LOCATION = re.compile(r"^\s*\d+\s+locations?\s*$", re.I)
@@ -701,7 +711,8 @@ def apply_detail(rec, detail, listing=None):
     externalPath, locationsText, postedOn, remoteType and bulletFields, and
     `startDate` / `jobRequisitionLocation` / `location` live on the DETAIL
     document. That is the difference between an absolute date and "Posted
-    Yesterday", so it is not cosmetic; see docs/ingest/workday.md.
+    Yesterday", so it is not cosmetic; see
+    `git show refactor-freeze-2026-08-02:docs/ingest/workday.md`.
     """
     info = (detail or {}).get("jobPostingInfo") or {}
     out = dict(rec)

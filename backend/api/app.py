@@ -534,7 +534,8 @@ def _last_success(conn, dataset):
 # WHY THIS IS AT THE BOTTOM AND NOT WITH THE OTHER MODULE CONSTANTS ABOVE. Both
 # names below belong beside MAX_BODY_BYTES on every other consideration, and
 # they are here for one: ~45 citations of the form `backend/api/app.py:NNN`
-# live in docs/ingest/contributor-api.md, docs/RUNBOOK.md and three task files,
+# live in `git show refactor-freeze-2026-08-02:docs/ingest/contributor-api.md`,
+# `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md` and three task files,
 # and inserting anything above `submit()` invalidates all of them at once. That
 # is not hypothetical -- task 24's own Definition of done records re-citing
 # roughly thirty of them after the D01 fix shifted this file by eight lines.
@@ -585,8 +586,9 @@ def _validation_detail(exc):
     -- a reverse proxy, an error tracker, a tunnel's access log -- and that is a
     deployment decision made later by someone who will not be reading this file.
     So the fix is to make the response independent of the input rather than to
-    write down that nobody may log it. docs/RUNBOOK.md had done exactly that,
-    which is a rule, not a property.
+    write down that nobody may log it.
+    `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md` had done exactly
+    that, which is a rule, not a property.
 
     WHY A WHITELIST AND NOT A REDACTION. Stripping `input` out of the dicts
     exc.errors() returns would work today and would rest on knowing which keys

@@ -111,8 +111,9 @@ Stratified across all seven platforms, and deliberately seeded with the rows
 that break things — `PATHOLOGY` in `corpus.py`:
 
 - **`long_title`** — HN rows holding a comment body where a title belongs. The
-  longest in production runs to 415 characters; `docs/ingest/hn-hiring.md`
-  item 15 is about exactly these.
+  longest in production runs to 415 characters;
+  `git show refactor-freeze-2026-08-02:docs/ingest/hn-hiring.md` item 15 is
+  about exactly these.
 - **`no_description`** — rows `extract.py`'s selector excludes, so nothing has
   ever run a prompt against one.
 - **`tombstoned`** — rows whose `extraction_model` is `FAILED:%`. The sharpest

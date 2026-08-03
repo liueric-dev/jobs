@@ -16,11 +16,12 @@ do outreach — those stay manual on purpose.
   rather than as a description of the tree today.
 - [`../.claude/CLAUDE.md`](../.claude/CLAUDE.md) — the rules and invariants for changing this tree.
 
-The `docs/OVERVIEW.md` / `DEVELOPER.md` / `HANDOFF-match-quality.md` this list used to name were
+The `OVERVIEW.md` / `DEVELOPER.md` / `HANDOFF-match-quality.md` this list used to name were
 deleted on 2026-08-03 — every structural claim in them had gone false, and `DEVELOPER.md` carried a
 dated "verified item by item" header saying so of a `frontend/` that has been shipping since
-`3c0452f`. Read them with `git show refactor-freeze-2026-08-02:backend/docs/DEVELOPER.md` and so
-on; the 137 files under the repo-root `docs/` went the day before, behind the same tag.
+`3c0452f`. Read them with `git show refactor-freeze-2026-08-02:backend/docs/DEVELOPER.md` and
+`git show refactor-freeze-2026-08-02:backend/docs/OVERVIEW.md`; the 137 files under the repo-root
+`docs/` went the day before, behind the same tag.
 `HANDOFF-multimachine-google-jobs.md` (`kind: record`, frozen 2026-07-25) was the last document
 carrying that carve-out and was removed the same day (`OQ-16`) — no `kind: record` exception
 remains; only the one `kind: contract` file above and `kind: rationale` may claim to describe
