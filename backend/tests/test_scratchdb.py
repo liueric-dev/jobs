@@ -49,12 +49,16 @@ gates every DB test, so a developer with no Postgres sees skips rather than
 green.
 """
 
+import io
 import os
 import sys
 import unittest
+from contextlib import redirect_stderr
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import psycopg                                                # noqa: E402
 import schema                                                 # noqa: E402
 from evals import scratchdb                                   # noqa: E402
 from lib import envfile, state, upsert                        # noqa: E402
@@ -160,6 +164,27 @@ class TestTheGuards(unittest.TestCase):
         with self.assertRaises(RuntimeError) as caught:
             schema.ensure_schema(_EventsDatabaseConn())
         self.assertIn("events database", str(caught.exception))
+
+    def test_available_is_silent_on_a_plain_operational_error(self):
+        """T-11. 'no Postgres here' is the routine case and stays silent."""
+        with mock.patch.object(scratchdb, "scratch_url",
+                                return_value="postgresql://x"), \
+             mock.patch.object(scratchdb.psycopg, "connect",
+                               side_effect=psycopg.OperationalError("refused")), \
+             redirect_stderr(io.StringIO()) as captured:
+            self.assertFalse(scratchdb.available())
+        self.assertEqual(captured.getvalue(), "")
+
+    def test_available_prints_anything_else(self):
+        """T-11. A genuine driver bug must not read as 'no Postgres here'."""
+        with mock.patch.object(scratchdb, "scratch_url",
+                                return_value="postgresql://x"), \
+             mock.patch.object(scratchdb.psycopg, "connect",
+                               side_effect=TypeError("boom")), \
+             redirect_stderr(io.StringIO()) as captured:
+            self.assertFalse(scratchdb.available())
+        self.assertIn("TypeError", captured.getvalue())
+        self.assertIn("boom", captured.getvalue())
 
 
 class _ExplodingConn:

@@ -587,8 +587,13 @@ def record_workday_cxs():
             # and reading None here would report "no totals" as "failure 5 is
             # gone" and refuse a perfectly good recording.
             totals.append(json.loads(i.raw.decode("utf-8")).get("total"))
-        except Exception:
-            pass
+        except (ValueError, AttributeError) as e:
+            # totals[0] is read positionally as page 0's total below, so a
+            # silently dropped page would misalign totals against pages and
+            # could corrupt the exact evidence this recorder validates.
+            print(f"[warn] {tenant}.{dc}: page {i.url} did not parse as "
+                  f"JSON, dropping it from totals: {type(e).__name__}: {e}",
+                  file=sys.stderr)
     if len(pages) < 3:
         raise RuntimeError(
             f"recorded only {len(pages)} list page(s) against {tenant}.{dc} -- "

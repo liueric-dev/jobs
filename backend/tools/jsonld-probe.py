@@ -308,7 +308,10 @@ class Fetcher:
             return True
         try:
             return self.robots(url).can_fetch(USER_AGENT, url)
-        except Exception:
+        except Exception as e:
+            if self.verbose:
+                print(f"[debug] {url}: {type(e).__name__}: {e}",
+                      file=sys.stderr)
             return False
 
     def sitemaps_from_robots(self, url):
@@ -1337,7 +1340,7 @@ def _parse_date(s):
     s = s.strip()
     try:
         return datetime.date.fromisoformat(s[:10])
-    except Exception:
+    except ValueError:
         pass
     m = _LOOSE_DATE.match(s)
     if m:
@@ -1348,7 +1351,7 @@ def _parse_date(s):
             return None
     try:
         return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).date()
-    except Exception:
+    except ValueError:
         return None
 
 

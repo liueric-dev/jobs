@@ -45,10 +45,9 @@ every other row leans on, and what makes a session's claims checkable without ha
 `T-4` closed with them. Everything below now runs against CI rather than against a hand-transcribed
 count.
 
-**`T-11` and `T-13` are the two rows with a live correctness consequence** and are next.
-`T-13` gained urgency from `T-19`: `tools/provision-database.py` calls the GRANT-destroying path as
-its step 3, so the fallback is now reachable from a documented command rather than only from the
-nightly. Everything else is schedulable in any order.
+**`T-11` and `T-13` were the two rows with a live correctness consequence and are closed, 2026-08-03,
+alongside `T-20`** (a live migration, not toolchain debt, but also closed the same day — see its own
+row). Everything remaining below is schedulable in any order.
 
 **None of these rows is the critical path.** [`DEV_TASKS.md`](DEV_TASKS.md)'s `OQ-3` is — the
 scoring redesign completed 2026-07-28 and has never been validated, and every row here improves a
@@ -197,20 +196,37 @@ Every row below is already in `docs/STATE-OF-THE-SYSTEM.md` § 4a. What they gai
 criteria. **§ 0 of that file warns that nothing in it was adversarially verified**, so re-derive
 each against the tree before working it — `47dd212` is the worked example of what happens otherwise.
 
-### T-11 — The seven silent `except Exception` sites
+### ~~T-11~~ — The seven silent `except Exception` sites
 
-Silence is this system's stated failure mode, and these seven swallow an exception into a `pass` or
-a falsy return with nothing logged: `backend/evals/record_cassettes.py:591`,
-`backend/evals/scratchdb.py:99`, `backend/lib/ids.py:119`, `backend/tools/jsonld-probe.py:312`,
-`:1341`, `:1352`, `backend/tools/verify-date-filter.py:86`.
+**Closed 2026-08-03.** `backend/evals/scratchdb.py:85-116`'s `available()` — the one of the seven
+with a real consequence, since twelve modules gate on it via `skipUnless` — now splits
+`psycopg.OperationalError` (every connection-level failure: refused, timed out, wrong credentials,
+confirmed empirically to carry no finer SQLSTATE to split on further) from anything else. The
+routine case, no Postgres on this machine, stays exactly as silent as before; a genuine driver bug
+now prints one stderr line naming the exception type before returning the same `False`, so it is no
+longer indistinguishable from the routine case. The `skipUnless` contract every gated module relies
+on is unchanged.
 
-`scratchdb.py:99` is the one with a consequence and `docs/STATE-OF-THE-SYSTEM.md` § 2 names it: it
-opens a real connection inside the bare handler, so **an unreachable Postgres and a genuine driver
-bug both read as a skip.** Twelve modules gate on it. That one gets a distinguishable signal, not
-just a log line.
+The other six narrow rather than log, per the row's own "logs before returning or narrows to the
+exception it means" — narrowing was cleaner because each is an expected decode/parse-fallback case,
+not a failure: `backend/lib/ids.py:118` and `backend/tools/verify-date-filter.py:85` (the same
+base64/JSON decode logic, duplicated, fixed independently rather than deduplicated — out of scope
+here) both narrow to `except ValueError:`, which on this Python is a complete narrowing since
+`binascii.Error`, `json.JSONDecodeError` and `UnicodeDecodeError` are all `ValueError` subclasses.
+`backend/tools/jsonld-probe.py:1343,1350,1354`'s `_parse_date` narrows all three attempts the same
+way, confirmed both `datetime.date.fromisoformat` and `datetime.datetime.fromisoformat` raise only
+`ValueError` on this Python. `backend/evals/record_cassettes.py:590` narrows to `except (ValueError,
+AttributeError):` and does log — unlike the others this one is positional (`totals[0]` is assumed to
+be page 0's total), so a silently dropped parse would misalign the exact evidence this recorder
+validates. `backend/tools/jsonld-probe.py:311`'s `allowed()` does real network I/O transitively and
+reuses this same file's own pre-existing `self.verbose` debug-print convention rather than a new
+one.
 
-**Done when:** each of the seven either logs before returning or narrows to the exception it means;
-`scratchdb.available()` distinguishes unreachable from broken; all three suites print `OK`.
+Two new tests in `backend/tests/test_scratchdb.py`'s `TestTheGuards` pin `available()`'s two
+branches with a mocked `psycopg.connect`. All three suites print `OK` (1433 / 354 / 117, 0
+skipped) — pipeline is +4 over the `1429` recorded at `a80f254` (2 here, 2 from T-13 below). `ruff`
+went **down** 1085 → 1078: narrowing five blind `except Exception` sites removes their `BLE001`
+findings.
 
 ---
 
@@ -231,15 +247,31 @@ byte-identical to before on a successful run.
 
 ---
 
-### T-13 — `ensure_app_view`'s DROP fallback destroys GRANTs
+### ~~T-13~~ — `ensure_app_view`'s DROP fallback destroys GRANTs
 
-A column reorder raises `InvalidTableDefinition`, the handler DROPs the view, and `DROP VIEW` takes
-every GRANT with it — with no re-grant anywhere in the repo. It surfaces on the *next* nightly run
-as the webapp refusing to start (`backend/schema.py:1215-1223`). `OQ-7` is the recorded instance of
-this class costing a day of the whole webapp being down while the row read as a nicety.
+**Closed 2026-08-03.** The fallback now re-grants. Two new helpers in `backend/schema.py`:
+`_view_grants(conn, view_name)` reads `pg_class.relacl` via `aclexplode` — not
+`information_schema.role_table_grants`, which is restricted to rows where the *connecting* role is
+grantor or grantee and would silently miss a grant a separate admin role issued, confirmed by live
+experiment against this repo's real Postgres. `_regrant(conn, view_name, grants)` reissues each
+captured `(grantee, privilege, is_grantable)` via `psycopg.sql.Identifier`/`sql.SQL`, never raw
+f-string splicing, since these values come from catalog introspection rather than a module
+constant. `PUBLIC` (grantee oid `0`, which casts to `'-'` rather than the string `'PUBLIC'`) is
+special-cased as a SQL keyword. `ensure_app_view` (`backend/schema.py:1253`) now calls
+`_view_grants` before the `DROP` and `_regrant` after the `CREATE OR REPLACE`, inside the same
+`except psycopg.errors.InvalidTableDefinition:` branch.
 
-**Done when:** the fallback re-grants, or refuses and says what to run; a test creates the view,
-grants, forces the reorder path, and asserts the grant survives.
+Confirmed this does not conflict with `docs/adr/0004-provision-database-issues-no-grants.md` — that
+ADR is about `provision-database.py` inventing *new* privilege decisions on a bare database, and its
+own "Consequences" section names this row by number as the accepted fix for this exact hazard. This
+fix only carries a grant forward across the DROP that this function itself causes; no new privilege
+decision is made.
+
+New file `backend/tests/test_schema_ensure_app_view.py`, two cases, both run live against this
+repo's Postgres: a minimal stand-in view forced down the `InvalidTableDefinition` path by a genuine
+column reorder, and the real `jobs_app` view itself, corrupted via rename-and-reselect so the next
+`ensure_app_view()` call hits the DROP branch on its own. Both assert a `GRANT ... TO PUBLIC` issued
+beforehand is still present afterward.
 
 ---
 
@@ -359,7 +391,26 @@ by pushing it.
 
 ---
 
-### T-20 — Apply the Google Jobs id migration, written and dry-run-verified 2026-07-25 and never run
+### ~~T-20~~ — Apply the Google Jobs id migration, written and dry-run-verified 2026-07-25 and never run
+
+**Closed 2026-08-03.** Preconditions checked immediately before `--apply`: `pgrep -af score.py`
+empty (no real process — the only match was the invoking shell echoing its own command text, not a
+hit), and a fresh backup taken (`docker exec nyc-events-postgres pg_dump -U jobs_pipeline -d jobs |
+gzip > ~/backups/pre-googleid-20260803.sql.gz`, ~36MB). The dry run immediately before `--apply`
+matched this row's own recorded numbers exactly — no drift in the 9 days since they were last
+checked: 1344 rows, 1180 re-key-only, 24 merge groups, 576 scores on affected rows, 1 collision.
+
+`python3 migrations/migrate_google_ids.py --apply` reported `rows removed: 24`, `google_jobs rows
+now: 1320 (distinct source_id: 1320)`, no `FAILED groups` line and no `WARNING` line. Verified
+directly per the row's own done-when: `SELECT count(*), count(DISTINCT source_id) FROM jobs WHERE
+platform='google_jobs'` → `(1320, 1320)`. Re-ran the dry run afterward to confirm idempotency, per
+the script's own docstring claim: `merge groups: 0`, `re-key only: 0`, `nothing to do -- every row
+is already keyed on a stable id.` `--keep-stats` was deliberately not passed — the script truncated
+94 rows of `google_jobs_query_stats`, which is not data loss (see the row's own reasoning below: the
+table measured SerpApi cache expiry under the broken key, not real novelty). All three suites still
+print `OK` (1433 / 354 / 117, 0 skipped) against the migrated database.
+
+**Original finding, kept below for history:**
 
 **Found 2026-08-03 while closing `OQ-16`** (the last `kind: record` handoff document, about to be
 deleted). Its Step 3 was left `NOT APPLIED` at write time, pending confirmation nothing was

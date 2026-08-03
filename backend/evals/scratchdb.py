@@ -61,6 +61,7 @@ THE public.events REFUSAL IS KEPT, DELIBERATELY
 
 import os
 import re
+import sys
 import uuid
 from contextlib import contextmanager
 
@@ -87,6 +88,18 @@ def available():
     Used by `skipUnless`: a developer without Postgres running still gets a
     green suite, and the DB-backed tests announce themselves as skipped
     rather than passing vacuously.
+
+    Distinguishes two different failures. Every connection-level problem --
+    refused, timed out, wrong host, wrong credentials, wrong database --
+    surfaces from psycopg as some form of `psycopg.OperationalError`: even
+    "connection refused" and "password authentication failed" carry no more
+    specific SQLSTATE and arrive as the bare class (confirmed against
+    psycopg 3.3). That is the ROUTINE case -- a laptop with no Postgres --
+    and stays silent exactly as it does today. Anything else is not that,
+    and silence there is the exact defect docs/STATE-OF-THE-SYSTEM.md § 2
+    names: a genuine driver bug reads as the identical skip to every module
+    that gates on this. That gets one loud stderr line before the same
+    `False`, so the skipUnless contract every caller depends on is unchanged.
     """
     url = scratch_url()
     if not url:
@@ -95,7 +108,12 @@ def available():
         with psycopg.connect(url, connect_timeout=5) as conn:
             conn.execute("SELECT 1")
         return True
-    except Exception:
+    except psycopg.OperationalError:
+        return False
+    except Exception as e:
+        print(f"scratchdb.available(): {type(e).__name__}: {e} -- this is "
+              f"not 'Postgres isn't running', something is broken",
+              file=sys.stderr)
         return False
 
 

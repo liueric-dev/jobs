@@ -82,7 +82,7 @@ def decode_job_id(job_id):
     try:
         padded = job_id + "=" * (-len(job_id) % 4)
         return json.loads(base64.b64decode(padded))
-    except Exception:
+    except ValueError:
         return None
 
 

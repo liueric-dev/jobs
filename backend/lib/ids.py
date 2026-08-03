@@ -115,7 +115,7 @@ def decode_google_job_id(job_id):
     try:
         padded = job_id + "=" * (-len(job_id) % 4)
         decoded = json.loads(base64.b64decode(padded))
-    except Exception:
+    except ValueError:
         return None
     return decoded if isinstance(decoded, dict) else None
 

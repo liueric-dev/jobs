@@ -101,6 +101,7 @@ TIMESTAMPS STAY TEXT HERE
 import os
 
 import psycopg
+from psycopg import sql
 
 from lib import dbconn, ids, state
 from lib.upsert import TableSpec
@@ -1209,12 +1210,55 @@ WHERE j.status = '{STATUS_OPEN}'
 """
 
 
+def _view_grants(conn, view_name):
+    """[(grantee, privilege, is_grantable), ...] currently on view_name.
+
+    Reads pg_class.relacl via aclexplode rather than
+    information_schema.role_table_grants: that view is restricted (by the
+    SQL standard) to rows where the CONNECTING role is grantor or grantee,
+    and in a real deployment the grant to jobs_web may have been issued by
+    a separate admin role -- this must see it regardless of who granted it.
+    Excludes the connecting role's own privileges: aclexplode reports the
+    owner's implicit privileges as explicit rows, and those were never
+    taken away by the DROP below, so reissuing them would be a no-op that
+    only adds noise.
+    """
+    return conn.execute(
+        """
+        SELECT CASE WHEN a.grantee = 0 THEN 'PUBLIC'
+                    ELSE a.grantee::regrole::text END,
+               a.privilege_type,
+               a.is_grantable
+        FROM pg_class c
+        CROSS JOIN LATERAL aclexplode(c.relacl) AS a
+        WHERE c.oid = to_regclass(%s)
+          AND a.grantee::regrole::text <> current_user
+        """, (view_name,)).fetchall()
+
+
+def _regrant(conn, view_name, grants):
+    """Reissue exactly the grants _view_grants captured -- continuity of an
+    existing privilege decision, not a new one. See docs/adr/0004 for why
+    this repo never has this function invent one instead."""
+    for grantee, privilege, grantable in grants:
+        grantee_sql = (sql.SQL("PUBLIC") if grantee == "PUBLIC"
+                       else sql.Identifier(grantee))
+        stmt = sql.SQL("GRANT {} ON {} TO {}").format(
+            sql.SQL(privilege), sql.Identifier(view_name), grantee_sql)
+        if grantable:
+            stmt = stmt + sql.SQL(" WITH GRANT OPTION")
+        conn.execute(stmt)
+
+
 def ensure_app_view(conn):
     """Create or refresh jobs_app. Idempotent, and safe to call every run.
 
     CREATE OR REPLACE VIEW cannot drop or reorder existing columns, so a change
     that removes one needs an explicit DROP first -- deliberately noisy, since
-    anything reading the view would break.
+    anything reading the view would break. DROP VIEW takes every GRANT on the
+    view with it, so the grants are captured before the DROP and reissued
+    after -- not decided, only carried across the DROP that would otherwise
+    lose them silently until the next nightly run refuses to serve the webapp.
     """
     try:
         conn.execute(_APP_VIEW_SQL)
@@ -1222,8 +1266,10 @@ def ensure_app_view(conn):
     except psycopg.errors.InvalidTableDefinition:
         # Column set changed incompatibly; replace it outright.
         conn.rollback()
+        grants = _view_grants(conn, APP_VIEW)
         conn.execute(f"DROP VIEW IF EXISTS {APP_VIEW}")
         conn.execute(_APP_VIEW_SQL)
+        _regrant(conn, APP_VIEW, grants)
         conn.commit()
 
 
