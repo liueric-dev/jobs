@@ -19,7 +19,7 @@ WHY THIS EXISTS
     can only record them.
 
 WHERE THE SEAM IS, AND WHY IT IS NOT lib/http.py
-    `docs/ingestion_tests/05-fetcher-harness.md:63` describes this module as
+    `git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:63` describes this module as
     "record/replay for lib/http.py". That would cover two of the six sources.
     When this was written, four sites built their own request and called
     urllib directly, and this paragraph said they did it "to send a

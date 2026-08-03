@@ -8,7 +8,7 @@ REQUEST BODY. A submit body is a SerpApi response the contributor fetched with
 their own key, so whatever a worker sent came back out in the response.
 
 WHY IT IS A DEFECT AND NOT A CRISIS. The only recipient is the sender, who
-already has the bytes. `docs/tasks/refactor/tranche_six/33-deployment.md`
+already has the bytes. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_six/33-deployment.md`
 recorded it and declined to fix it because another stream owned this file. It
 becomes an exposure the moment anything in front of the service logs response
 bodies -- a reverse proxy, an error tracker, a tunnel access log -- and that is

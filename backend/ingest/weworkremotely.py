@@ -148,7 +148,7 @@ def parse_posted_at(pub_date_text):
 #: report order. Named rather than counted anonymously, because the summary
 #: line's whole job is to tell an exclude-pattern change that started eating
 #: real engineering titles apart from a quiet week -- and one total cannot.
-#: weworkremotely.md:309-312 states the consequence of not having these:
+#: `git show refactor-freeze-2026-08-02:docs/ingest/weworkremotely.md:309-312` states the consequence of not having these:
 #: such a change "would produce no signal at all".
 #:
 #: DROPS ARE NOT DEDUPES. `cross_listed` is counted here too but reported

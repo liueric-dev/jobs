@@ -119,7 +119,7 @@ def ensure_ats_schema(conn):
             ats TEXT NOT NULL,
             token TEXT NOT NULL,
             -- Workday needs all three of tenant/dc/site and they are stored
-            -- separately on purpose: 18-ingest-workday-cxs.md:54 forbids
+            -- separately on purpose: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:54` forbids
             -- guessing the data centre, because wd1 vs wd5 is a 404 and a 404
             -- there looks exactly like a tenant with no open roles.
             workday_site TEXT,

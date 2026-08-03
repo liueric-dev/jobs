@@ -14,7 +14,7 @@ psycopg import lives, and the point of this file is that it has none.
 WHY THIS IS ITS OWN MODULE, AND WHY BOTH PROCESSES IMPORT IT
     Caching correctness is entirely a property of normalisation. Two Builders
     typing "AI Operations" and "ai  operations!" have to land on ONE row or
-    the whole argument in tranche_four/25-search-queries.md -- "the fifth
+    the whole argument in `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_four/25-search-queries.md` -- "the fifth
     Builder to search 'AI operations NYC' costs nothing" -- is false. A second
     implementation of `normalize()` in webapp/ would not fail loudly; it would
     quietly halve the hit rate, and the only symptom would be a provider bill.
@@ -298,7 +298,7 @@ REGISTER_QUERY_SQL = """
 #: Register the caller as a watcher, or un-retire their own previous watch.
 #:
 #: KEYED ON app_user_id, NOT ON profile, AND THIS IS THE CORRECTION THAT MAKES
-#: THE FEATURE POSSIBLE. tranche_four/25-search-queries.md writes this table as
+#: THE FEATURE POSSIBLE. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_four/25-search-queries.md` writes this table as
 #: `(query_id, profile, created_at)`. `profile` in this system is the COHORT --
 #: thirty Builders share one, which webapp/schema_web.py:297-301 states as the
 #: reason builder_job_state exists at all -- so keying on it would make thirty

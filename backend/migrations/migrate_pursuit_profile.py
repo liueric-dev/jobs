@@ -5,7 +5,8 @@ INACTIVE.
 
 WHAT THIS WRITES, AND WHAT IT DELIBERATELY DOES NOT
     relevance_json  REAL. The description-first, conjunctive cohort gate that
-                    task 10 measured -- see docs/pursuit-description-gate.md
+                    task 10 measured -- see
+                    `git show refactor-freeze-2026-08-02:docs/pursuit-description-gate.md`
                     for the numbers and the hand-check behind every list. The
                     gate itself now lives in config/pursuit-relevance.json;
                     COHORT_RELEVANCE below is loaded from it.
@@ -109,8 +110,8 @@ from lib import dbconn  # noqa: E402
 PROFILE = "pursuit"
 
 # ---------------------------------------------------------------------------
-# The gate. Every list is measured; docs/pursuit-description-gate.md records
-# the method, the date and the hand-check behind it.
+# The gate. Every list is measured; `git show refactor-freeze-2026-08-02:docs/pursuit-description-gate.md`
+# records the method, the date and the hand-check behind it.
 #
 # IT LIVES IN config/pursuit-relevance.json, NOT HERE. It was a literal in
 # this file until 2026-07-29, which made a migration script that REFUSES TO

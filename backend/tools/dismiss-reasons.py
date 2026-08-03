@@ -5,7 +5,7 @@ What the cohort's dismissals say about `config/pursuit-criteria.json`.
 READ-ONLY. No LLM call, no API key, no write of any kind.
 
 WHY THIS IS A REPORT AND NOT A LOOP
-    `docs/tasks/refactor/tranche_six/31-dismiss-demotion.md` is explicit, and
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_six/31-dismiss-demotion.md` is explicit, and
     the reasoning is worth keeping in front of whoever runs this:
 
         "do not implement feature-level demotion as a learned adjustment yet.

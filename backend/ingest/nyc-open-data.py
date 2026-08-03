@@ -223,7 +223,7 @@ HASH_FIELDS = ("title", "location_raw", "department", "job_url",
 #: heading each is written under.
 #:
 #: THE ORDER IS DELIBERATE AND IT IS NOT THE ORDER THE TASK FILE GIVES.
-#: docs/tasks/refactor/tranche_three/14-ingest-nyc-open-data.md:44 asks for
+#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/14-ingest-nyc-open-data.md:44` asks for
 #: `job_description + minimum_qual_requirements + preferred_skills`, and
 #: justifies concatenating all three with "the AI/automation vocabulary
 #: usually appears in `preferred_skills`, not the description". Both halves

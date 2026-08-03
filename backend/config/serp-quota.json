@@ -6,7 +6,7 @@
     "have rows here.",
     "",
     "THE NUMBERS BELOW ARE NOT THE AUTHORITY AND MUST NOT BE READ AS ONE.",
-    "They are seeded from docs/tasks/refactor/ADDENDUM-google-jobs-providers.md",
+    "They are seeded from `git show refactor-freeze-2026-08-02:docs/tasks/refactor/ADDENDUM-google-jobs-providers.md`",
     "section 2, whose own note says several entries are reported secondhand,",
     "and 23-serp-abstraction.md says to verify each against the provider on",
     "first integration. quota.Ledger asks the PROVIDER how much is left and",

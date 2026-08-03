@@ -66,7 +66,7 @@ docker exec "$CONTAINER" createdb -U "$PGUSER" "$SCRATCH"
 # privilege table is a security boundary -- jobs_api's six grants are what stop
 # a leaked bearer token reaching the pipeline's tables. Those grants ride in the
 # separate roles-only dump that backup-jobs.sh takes, and NOTHING REHEARSES IT.
-# A real restore must re-verify the grants by hand; docs/RUNBOOK.md says how.
+# A real restore must re-verify the grants by hand; `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md` says how.
 docker exec -i "$CONTAINER" pg_restore -U "$PGUSER" -d "$SCRATCH" --no-owner <"$dump"
 
 if [ "$self_test" = 1 ]; then

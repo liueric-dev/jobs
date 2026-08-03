@@ -3,7 +3,7 @@
 THIS IS A SPECIFICATION FIXTURE, NOT A LABEL. Nothing in this module may ever
 reach `eval_labels`: an answer key written from a specification tests the
 specification, and recording it as a label would let a fixture's assumptions be
-read back later as evidence about a model. HANDOFF.md:805-808 states the rule
+read back later as evidence about a model. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:805-808` states the rule
 this module is bound by -- "Fixtures written from a specification test the
 specification. All three failure modes task 18 found live were invisible to the
 four constructed fixtures, because those encode the shapes the task file

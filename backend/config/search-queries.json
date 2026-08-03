@@ -2,7 +2,7 @@
   "_comment": [
     "Seeded searches: one per role_track, so a Builder who does not yet know",
     "what role they want is shown a catalogue instead of a blank input.",
-    "tranche_four/25-search-queries.md: 'Search is the refinement tool, not the",
+    "`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_four/25-search-queries.md`: 'Search is the refinement tool, not the",
     "entry point. A blank input is the wrong first experience for this",
     "population.'",
     "",

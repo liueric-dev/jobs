@@ -296,7 +296,7 @@ def main():
     ap.add_argument("--daily", type=int, default=43,
                     help="N eligible postings/day for the derived sentence. "
                          "Default 43, measured 2026-06-28..2026-07-27 -- "
-                         "docs/pursuit-gate-volume.md.")
+                         "`git show refactor-freeze-2026-08-02:docs/pursuit-gate-volume.md`.")
     ap.add_argument("--daily-upper", type=int, default=80,
                     help="second N to project, since 43 is a floor (the last "
                          "seven complete days ran 80/day)")

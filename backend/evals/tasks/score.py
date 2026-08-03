@@ -11,7 +11,7 @@ WHAT THIS CAN MEASURE, AND WHAT IT CANNOT
     disagreement. There is no fact of the matter about whether 72 is the right
     fit_score, and a labeller asked to produce one is inventing a number
     rather than recording an observation
-    (docs/ingestion_tests/04-score-validation.md:8-37).
+    (`git show refactor-freeze-2026-08-02:docs/ingestion_tests/04-score-validation.md:8-37`).
 
     Under the Pursuit scope it is weaker still: ~30 Builders at different
     stages with no single target role means fit_score accuracy is not merely

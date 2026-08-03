@@ -9,10 +9,11 @@ WHAT THIS COMPUTES
     see schema.py's DDL comment for why absence rather than a NULL bucket is
     the privacy-correct representation.
 
-    It runs on the nightly cycle (run-daily.py) rather than at read time.
-    tranche_five/28-cohort-aggregation.md: live computation invites a timing
-    side channel, and timing is the strongest deanonymiser available in a room
-    where thirty people can see each other.
+    It runs on the nightly cycle (run-daily.py) rather than at read time -- per
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_five/28-cohort-aggregation.md`,
+    live computation invites a timing side channel, and timing is the
+    strongest deanonymiser available in a room where thirty people can see
+    each other.
 
 WHY job_events AND NOT builder_job_state
     builder_job_state carries saved_at per Builder and is the obvious source.

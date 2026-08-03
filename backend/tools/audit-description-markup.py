@@ -60,7 +60,7 @@ WHAT --remediate DOES, AND WHY IT IS THE STRONGEST OF THE THREE OPTIONS
     and zero LLM calls.
 
     The repo owner's standing stance is that database contents are STAGING DATA
-    -- optimise for build speed, not preservation (HANDOFF.md:28-33). This tool
+    -- optimise for build speed, not preservation (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:28-33`). This tool
     still defaults to a dry run, because a destructive default that is only ever
     typed once is a destructive default nobody reads twice.
 """
