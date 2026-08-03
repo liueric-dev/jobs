@@ -270,7 +270,12 @@ There is no target; there is a direction.
 
 ---
 
-### T-19 — This project has never been stood up from nothing, and CI proved it
+### ~~T-19~~ — This project had never been stood up from nothing, and CI proved it
+
+**Closed 2026-08-03.** `backend/tools/provision-database.py` creates all 23 objects across the five
+DDL entry points, and CI runs it before the suites. Verified by reproducing the CI failure against a
+throwaway `postgres:16` container, provisioning, and running all three suites green against it —
+1428 / 352 / 117. The finding is kept below, because it is worth more than the fix.
 
 **Found by `T-2`'s first run**, which is the whole reason that row exists:
 `https://github.com/liueric-dev/jobs/actions/runs/30815935804`. The pipeline suite ran **1428 with
@@ -289,25 +294,27 @@ when either table is absent is deliberate and documented at `backend/webapp/sche
 the caller already reports it, and a second complaint derived from the first would bury it. That
 was checked before this row was written.
 
-**What this actually says:** every green webapp suite to date has depended on a `public` schema
-that was provisioned by hand on one machine over several months. Whether this project can be stood
-up from an empty database is **unknown**, and the two failures are the first evidence anyone has
-asked. That is a bigger finding than the two tests.
+**What it actually said:** every green webapp suite until 2026-08-03 depended on a `public` schema
+provisioned by hand on one machine over several months. The two tests were the messenger; the
+finding was that the DDL had no single entry point and nobody had noticed, because the one machine
+that mattered never needed one.
 
-**Two ways to resolve, and they are not equivalent:**
+**How it was closed.** The DDL was spread across five functions in four modules — `ensure_schema`,
+`ensure_search_query_schema` and `ensure_app_view` in `backend/schema.py`, `ensure_schema` in
+`backend/evals/labels.py`, and `ensure_schema` in `backend/webapp/schema_web.py`. Nothing invoked
+all five. `backend/tools/provision-database.py` now does, in the one order that works, and CI runs
+it before the suites. **No GRANTs** — `verify_schema()` checks
+`has_table_privilege(current_user, ...)`, so a database whose owner is the connecting role has
+nothing to issue, and a deployment's three roles are still a by-hand step in
+`backend/webapp/README.md`. A tool that hands out privileges is a different tool.
 
-1. **Provision `public` in CI** — pipeline `schema.ensure_schema()`, then `webapp/manage_app_users.py
-   init-schema`, then the GRANTs that `backend/webapp/README.md` says are issued by hand.
-   *Recommended*, because it answers the bigger question as a side effect and the answer is
-   currently unknown. Expect it to surface more than these two tests.
-2. **Make the two tests hermetic** — narrower, faster, and it leaves the bigger question unasked.
+**It carries one hazard, stated at the top of the file.** Step 3 is `schema.ensure_app_view()`,
+whose fallback DROPs the view on a column reorder — taking every GRANT with it, with no re-grant
+anywhere in the repo (`backend/schema.py:1215-1223`, and `T-13`). Unreachable on an empty database;
+real against a populated deployment. `--verify-only` exists for that.
 
-**Done when:** the webapp job is green on a clean database *and* the reason it is green is
-provisioning rather than a suppression. **A skip does not count** — `T-2`'s no-skip guard exists
-because a job that quietly runs less is worse than one that fails.
-
----
-
-## Closed — kept so citations resolve
-
-*(none yet)*
+**Two things `T-2` proved by being red rather than green.** The pipeline suite ran 1428 with zero
+skipped against the service container on the very first run, so the DB gating and the no-skip guard
+both work. And the failure was *reproducible on a laptop* — a throwaway `postgres:16` container
+reproduced it exactly, which is what allowed the fix to be verified before it was pushed instead of
+by pushing it.

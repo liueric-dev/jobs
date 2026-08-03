@@ -108,7 +108,23 @@ ignore = [
 "migrations/*" = ["S608"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["lib", "evals", "ingest", "serp", "tools", "migrations"]
+# `config` and `schema_web` are here for a reason worth recording, because it is
+# the first case where ruff's autofix WOULD HAVE BROKEN THE PROGRAM.
+#
+# webapp/ and api/ are reached by a sys.path insert, not installed, so isort read
+# `config` as third-party and `schema_web` as first-party and wanted schema_web
+# moved ABOVE config. Every module in those packages imports `config` first
+# precisely because that module performs the insert -- reorder it and the next
+# import fails. `ruff check --fix` on tools/provision-database.py proposed
+# exactly that swap. Naming them first-party makes isort's order (config, then
+# schema_web) agree with the one the code requires.
+#
+# This is the argument for the recorded baseline in [tool.ruff.lint]: a linter is
+# a source of findings, not of edits, until each rule has been looked at once.
+known-first-party = [
+    "lib", "evals", "ingest", "serp", "tools", "migrations",
+    "config", "schema", "schema_web", "profiles", "searchnorm",
+]
 
 [tool.ruff.format]
 # Not yet run. `ruff format` over 171 files is a single unreviewable diff, which

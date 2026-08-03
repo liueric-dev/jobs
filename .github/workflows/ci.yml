@@ -58,6 +58,16 @@ jobs:
       - name: Pipeline deps
         run: pip install -r backend/requirements.txt
 
+      # T-19. Two webapp tests read public.* by hardcoded name, so an empty
+      # public is not a neutral starting state -- and until this step existed,
+      # nothing in the repo could create one from nothing. This is the step that
+      # makes "can this project be stood up from an empty database" a question
+      # with an answer, every run. It issues no GRANTs: verify_schema() checks
+      # has_table_privilege(current_user, ...) and jobs_ci owns everything here.
+      - name: Provision public from nothing
+        working-directory: backend
+        run: python tools/provision-database.py
+
       - name: Pipeline suite
         working-directory: backend
         run: python -m unittest discover -s tests -v 2>&1 | tee /tmp/pipeline.log
