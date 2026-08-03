@@ -27,6 +27,14 @@ Definition of done against the tree, and four audited the documentation adversar
 scripts that constitute the method, the salvage and extraction tools, the raw structured results
 and the extracted registers are all in `orientation-2026-08-02/` beside this file.
 
+**Both workflows were retired 2026-08-03 and the archived copies do not run.** They shell out to
+`tools/audit-docs.py` and read ~40 paths under `docs/`, all deleted in the commit that produced
+this file — the method audited prose against code, and the prose is gone. They are kept as the
+record of how this file was made, not as something to invoke; the registered
+`/orientation-from-code` and `/orientation-phase2` skills were removed with them.
+`salvage.py` regenerates `orientation-phase2.js`'s inlined ground truth from `phase1.json`, so
+nothing was lost by dropping the 443 KB working copy.
+
 **Three things to distrust:**
 
 1. **No finding here was adversarially verified.** The skeptic phase was cut for cost. Each claim
@@ -43,16 +51,17 @@ and the extracted registers are all in `orientation-2026-08-02/` beside this fil
 
 **There are three executable stages, not four.** `backend/relevance.py` reads and writes no rows —
 it is a pure SQL-fragment builder with no database access, no `main()` and no `__main__` guard, and
-it does not appear in `run-daily.py`'s step list (`backend/relevance.py:1-335`). The executable
+it does not appear in `run-daily.py`'s step list (`backend/relevance.py:1-334`). The executable
 stages are `extract.py` → `match.py` → `score.py`.
 
 **`run-daily.py` runs 14 steps, not nine.** `STEPS` holds 14 entries: `tools/ats-discover.py`, 8
 ingest scripts, `searchqueries.py`, then extract, match, score, and `cohort.py`
-(`backend/run-daily.py:120-254`). The docstring says "nine" in six places and the systemd unit
-comment says nine (`backend/run-daily.py:15,18,34,77,115,260,294`;
-`deploy/systemd/jobs-ingest.service:41`); the last recorded run printed twelve. Runtime output is
-correct because it uses `len(STEPS)`. **Three different counts are in circulation and none is
-current.**
+(`backend/run-daily.py:124-241`). Runtime output was always correct because it uses `len(STEPS)`.
+
+*Corrected 2026-08-03.* The stale "nine" is gone from all seven places in `run-daily.py`'s own
+docstring, from `deploy/systemd/jobs-ingest.service:41` and from `tools/cost-test.py:113` — the
+2026-08-02 commit had fixed it only in `.claude/CLAUDE.md`. The surviving comments name no count
+at all, which is the durable fix: `len(STEPS)` cannot drift.
 
 **Two steps cost LLM calls: extract and score.** That claim survives the count drift.
 
@@ -62,12 +71,17 @@ current.**
 `load_facts()` coerces a NULL `tech_stack` to `[]` (`backend/match.py:396-402`,
 comment at `:283-285`).
 
-**A deferral is not a failure.** Holds. But `extract.mark_extract_failed()`'s `ON CONFLICT` does
-not clear the fact columns, so a posting that extracted at v2 and tombstones at v3 keeps its v2
-facts under a `FAILED:` label (`backend/extract.py:990-993`). Ranking is safe because
-`match.load_facts()` filters `extraction_model NOT LIKE 'FAILED:%'`; any reader that does not check
-that column sees stale facts stamped with the current `facts_version`.
-`score.mark_score_failed()` fixed the analogous hole (`backend/score.py:874-890`); this one was not.
+**A deferral is not a failure.** Holds.
+
+*The tombstone hole beside it was closed 2026-08-03.* `extract.mark_extract_failed()`'s
+`ON CONFLICT` used to update only `facts_version`, `extracted_at` and `extraction_model`, so a
+posting that extracted at v2 and tombstoned at v3 kept its v2 facts under a `FAILED:` label and
+the current `facts_version`. It now NULLs every fact column plus `extraction_passes` and
+`vote_unanimity`, mirroring `score.mark_score_failed()`, which had closed the identical hole one
+stage over. Ranking was always safe — `match.load_facts()` filters
+`extraction_model NOT LIKE 'FAILED:%'` — but the `jobs_app` view does not, and served the stale
+values. **No row leaves the view because of this:** its four completeness filters are all on
+`jobs`, never on `job_facts`.
 
 **Versions are cache keys — with two exceptions that matter.** `_STALE_ANY` has exactly three
 arms, not four: `criteria_version` is recorded for provenance and deliberately excluded
@@ -98,8 +112,16 @@ code — but the "shares only `schema.py` and `lib/`" claim understates the coup
 |---|---|
 | pipeline | top level, system `python3`, no venv. `psycopg[binary]` is its only dependency |
 | `backend/webapp/` | own venv, `include-system-site-packages = false`. Port 8421 |
-| `backend/api/` | own venv, same setting. Port 8420. **Cannot currently start** — see § 4 |
+| `backend/api/` | own venv, same setting. Port 8420. May not start — a **live-DB** question, not a code one; § 4 |
 | `frontend/` | no build step, no npm, no `package.json`. Five screens, all routed |
+
+**`backend/docs/` is not this file's tree and survived the 2026-08-02 purge**, which deleted only
+the repo-root `docs/`. Two files remain, both with a declared `kind:` header and neither a
+contract: `SCORING.md` (`kind: rationale` — the weight provenance and cost model, append-only and
+dated by construction) and `HANDOFF-multimachine-google-jobs.md` (`kind: record` — frozen
+2026-07-25, history not state). `DEVELOPER.md`, `OVERVIEW.md` and `HANDOFF-match-quality.md` were
+deleted 2026-08-03 in the follow-up commit; every structural claim in them had gone false, and
+`backend/README.md` had already been rewritten to say they were gone before they were.
 
 **The real import graph:** `webapp/` additionally imports the pipeline's `profiles`
 (`onboarding.py:54`), `searchnorm` (`search.py:55`) and `evals.labels` (`label.py:156`); `api/`
@@ -128,12 +150,13 @@ screen — indistinguishable from being logged out, with no error text anywhere.
 
 | suite | command | result |
 |---|---|---|
-| pipeline | `cd backend && python3 -m unittest discover -s tests` | `Ran 1469`, OK, 0 skipped |
+| pipeline | `cd backend && python3 -m unittest discover -s tests` | `Ran 1425`, OK, 0 skipped |
 | webapp | `cd backend/webapp && .venv/bin/python -m unittest discover -s tests` | `Ran 352`, OK, 0 skipped |
 | api | `cd backend/api && .venv/bin/python -m unittest discover -s tests` | `Ran 117`, OK, 0 skipped |
 
-*This commit retires the 48 doc-policy tests along with the documents they checked; the pipeline
-suite reads 1421 after it. Re-run rather than quoting these.*
+*1469 → 1421 when the 48 doc-policy tests retired with the documents they checked, → 1425 with
+`tests/test_citations.py`. **Re-run rather than quoting these** — that is the rule these three
+numbers have already broken twice.*
 
 **Zero tests skipped in any suite.** Twelve backend modules gate on `scratchdb.available()` and all
 twelve ran: each calls `envfile.load(backend/.env)` at import time, three lines above the gate, so
@@ -184,11 +207,20 @@ forward commit, so a mechanical revert scan under-reports what was undone.
 
 ### (a) Needs work — someone could pick these up
 
-- **`api/` cannot start.** `verify_schema()` raises: `public.submission_log` is missing column
-  `action`. Task 24 added it to `qc.ensure_schema` but `manage_users.py init-schema` was never
-  re-run (`backend/api/app.py:143-168`). Recovery needs `JOBS_ADMIN_DATABASE_URL`, which is absent
-  from `backend/api/.env`; `jobs_api` has no CREATE on public and does not own the table, so it
-  cannot self-repair. **The mechanism is working as designed and is currently tripping.**
+- **`api/` may not start — but nothing in the code says so, and this entry was wrong twice.**
+  Re-checked 2026-08-03. `verify_schema()` is at `backend/api/app.py:82` (not `:143`; the column
+  loop is `:143-154`, the raise `:156-161`), and it requires `submission_log.action`
+  (`query_claims.py:128`). **There is no mismatch between the two definitions:**
+  `qc.ensure_schema` creates the table *with* `action TEXT` (`query_claims.py:233`) *and*
+  backfills it via `dbconn.add_missing_columns` (`:244`), so `manage_users.py init-schema`
+  satisfies the check on a fresh or an existing database. What remains is a claim about **live
+  database state** — that init-schema has not been run against the deployed DB — which this repo
+  can neither confirm nor refute. Run it and see.
+  The recovery claim was also wrong: `JOBS_ADMIN_DATABASE_URL` is indeed absent from
+  `backend/api/.env`, but `manage_users.py:42` reads
+  `os.environ.get("JOBS_ADMIN_DATABASE_URL", qc.DATABASE_URL)` and **falls back**. If anything
+  blocks self-repair it is that `jobs_api` lacks CREATE on public — a grant question, not an
+  env-file one.
 - **`renders.forgetAll()` is exported and called by nothing.** `signOut()` clears `user` and the
   hash but not `renders`' `seen` Map or `events`' `impressed` Set. Sign out and in as a different
   Builder in one tab and the detail page attaches the previous Builder's `(request_id, rank)` to
@@ -208,15 +240,32 @@ forward commit, so a mechanical revert scan under-reports what was undone.
   `ORDER BY j.first_seen DESC` against production** — the exact pattern the evals package exists to
   replace. Any comparison made with either is not reproducible
   (`backend/tools/compare-models.py:84`; `claude-bench.py:113`).
-- **`tools/learned-ranker-probe.py` imports numpy and sklearn**, neither of which is installable
-  here. It also fits against `fit_score`, which is the L1 layer nothing may train on
-  (`backend/tools/learned-ranker-probe.py:128-136`).
-- **Stale `file:line` citations throughout.** Four in `schema.py`/`extract.py`/`state.py`, four in
-  `config/pursuit-criteria.json`, and a systematic ~+280-line drift in `evals/labels.py`'s
-  self-citations (`_item_key()` cited at `:1329`, actually `:1595`). The convention is what makes
-  claims checkable and there is no checker for it.
-- Dead imports: `relevance` in `score.py:250`, `schema` in `webapp/search.py:54`,
-  `urllib.request` in `ingest/hn-hiring.py:78` and `ingest/google-apify.py:77`.
+- **`tools/learned-ranker-probe.py` trains and evaluates on the same layer.** Re-checked
+  2026-08-03, and this entry overstated one half and misstated the other. The numpy/sklearn
+  imports are **not** a defect: they are wrapped in `try/except ImportError` ending in a
+  `sys.exit` that prints the throwaway-venv recipe (`:127-143`), which is the tool announcing that
+  scikit-learn is deliberately not a repo dependency. The real problem is narrower and worse — it
+  defines `GOOD = 80` on `fit_score` (`:149-152`), draws its pairs from
+  `calibrate-match.load_pairs` (`:181-215`), and then scores itself with `average_precision_score`
+  against that same `fit_score`-derived label. Training and evaluating on one layer.
+  **And the rule as this file stated it was wrong:** § 6 puts *never train* on **L0**, not L1
+  (`backend/evals/__main__.py` and § 6 below). L1 is the layer you may train on and must not
+  *evaluate* on. Figures from this tool are unreproducible for the dependency reason anyway.
+- **Stale `file:line` citations throughout, and the count here was low by two orders of
+  magnitude.** The estimate ("four in `schema.py`/`extract.py`/`state.py`, four in
+  `config/pursuit-criteria.json`") is nearer 300, and the drift is not uniform —
+  `evals/labels.py`'s self-citations run +266 (`_item_key()` cited `:1329`, actually `:1595`) but
+  `model_vs_human()`'s `no_consensus` runs +338, so no single offset fixes them. **The dangerous
+  class resolves and is still wrong:** `extract.py:404` cites `lib/text.py:119` for a regex that
+  was *deleted*, not moved (`lib/text.py:184` says so outright). The convention is what makes
+  claims checkable and there is still no checker for it.
+- ~~Dead imports~~ **Fixed 2026-08-03, and one of the four was not dead.** `relevance` in
+  `score.py`, `urllib.request` in `ingest/hn-hiring.py` and `ingest/google-apify.py` were removed
+  (`urllib.error` on the following line of each is live — do not remove that). **`schema` in
+  `webapp/search.py` stays:** nothing in the module references `schema.`, but
+  `webapp/tests/test_search_signal.py:97` asserts `search.schema is schema`, pinning that the
+  route and the nightly fold read one `SEARCH_MIN_WATCHERS` rather than two that can drift. It is
+  now commented as such. A grep-only audit calls this dead; the suite does not.
 
 ### (b) Needs the owner — a decision, an account, a device, or a person
 
@@ -226,9 +275,13 @@ forward commit, so a mechanical revert scan under-reports what was undone.
    Opposite signals; only you can settle it. **This also decides task 24 and the Contribute surface.**
 2. **Deployment is entirely owner-side.** A Cloudflare account, a domain, and one
    `cloudflared tunnel create` to fill `deploy/cloudflared/config.yml`'s placeholders; a
-   `cloudflared` binary (`/usr/local/bin/cloudflared` does not exist); install the **twelve absent
-   units** — and note the three that *are* installed are stale regular-file copies dated
-   2026-07-26, not symlinks, so editing `deploy/systemd/` today changes nothing that runs.
+   `cloudflared` binary (`/usr/local/bin/cloudflared` does not exist); install the **eleven absent
+   units** — `deploy/systemd/` holds 14 and 3 are installed, so the "twelve" here was off by one.
+   Re-verified 2026-08-03: the three live at `~/.config/systemd/user/` (**user** units, not
+   `/etc/systemd/system/`, where none of them appear), are dated 2026-07-26, are regular-file
+   copies rather than symlinks — unlike the `garmin-*` units beside them, which *are* symlinked —
+   and **differ from the repo copies today**, so editing `deploy/systemd/` changes nothing that
+   runs.
 3. **`~/.config/jobs-backup.env` does not exist**, so backups would run local-disk-only, tolerated
    silently by the `-` prefix. No verified restore has been performed.
 4. **The volume alarm is inert in both directions** — `backend/.run-volumes.jsonl` does not exist

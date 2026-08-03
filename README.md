@@ -13,7 +13,7 @@ AI-adjacent roles, all industries, NYC.
 |---|---|---|
 | [`backend/`](backend/) | the pipeline that finds, dedupes and scores postings | live |
 | [`backend/webapp/`](backend/webapp/) | Google SSO, ranked jobs, engagement events | live, port 8421 |
-| [`backend/api/`](backend/api/) | the contributor work queue | expected to be deprecated; **currently cannot start** |
+| [`backend/api/`](backend/api/) | the contributor work queue | expected to be deprecated; may not start against the deployed DB |
 | [`frontend/`](frontend/) | the client | shipping — five screens, no build step |
 | [`deploy/`](deploy/) | systemd units and cloudflared ingress | files tracked; not installed on any machine |
 
