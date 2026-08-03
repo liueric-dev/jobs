@@ -84,6 +84,7 @@ const events = await import("./js/events.mjs");
 const detailView = await import("./js/detail.mjs");
 const onboardingView = await import("./js/onboarding.mjs");
 const searchView = await import("./js/search.mjs");
+const renders = await import("./js/renders.mjs");
 
 // -- helpers ----------------------------------------------------------------
 
@@ -412,7 +413,8 @@ it("the caveat under every heading is present and says what it must", () => {
   assert.match(tracks.CAVEAT, /different group/,
                "the heading must not read as a fact about a posting: "
                + "11.3% of postings change whether they belong to ANY track "
-               + "between runs (docs/ingestion_tests/selfcheck-n120-2026-08-02.md)");
+               + "between runs (backend/evals/fixtures/results/"
+               + "selfcheck-n120-2026-08-02.json)");
 });
 
 // -- cohort_signal -------------------------------------------------------------
@@ -1209,6 +1211,57 @@ it("an event with no request_id is dropped rather than guessed at", async () => 
   await events.sendAction(null, { event: "save", job_id: "j" });
   assert.equal(sent.length, 0);
 });
+
+// -- signing out ---------------------------------------------------------------
+// One tab, one JS heap. Sign out and in as a different Builder and any render
+// state left behind gets attributed to the wrong person -- silently, because a
+// (request_id, rank) pair is well-formed whoever it came from. app.mjs's
+// signOut() is what clears it; these assert the two modules it clears CAN be
+// cleared, which is the half a unit check can reach without a browser.
+
+it("renders.forgetAll() drops the previous Builder's render context", () => {
+  renders.remember("req_A", [{ id: "j1", rank: 3 }]);
+  assert.deepEqual(renders.contextFor("j1"), { requestId: "req_A", rank: 3 },
+                   "precondition: a remembered render resolves");
+
+  renders.forgetAll();
+
+  assert.equal(renders.contextFor("j1"), null,
+               "a signed-out Builder's (request_id, rank) must not survive into "
+               + "the next session -- the detail page resolves out of this map");
+});
+
+it("a second Builder's render replaces rather than inherits", () => {
+  renders.forgetAll();
+  renders.remember("req_A", [{ id: "j1", rank: 3 }]);
+  renders.forgetAll();
+  renders.remember("req_B", [{ id: "j1", rank: 9 }]);
+
+  assert.deepEqual(renders.contextFor("j1"), { requestId: "req_B", rank: 9 },
+                   "the new session's render must win outright");
+});
+
+it("events.forgetImpressions() lets the same job be re-impressed after sign-out",
+   async () => {
+     renders.forgetAll();
+     sent = [];
+     await events.impression("req_A", "j1", 1);
+     await events.flush();
+     assert.equal(sent.length, 1, "precondition: the first impression sends");
+
+     sent = [];
+     await events.impression("req_A", "j1", 1);
+     await events.flush();
+     assert.equal(sent.length, 0, "a re-scroll in one render is not a second impression");
+
+     events.forgetImpressions();
+     sent = [];
+     await events.impression("req_A", "j1", 1);
+     await events.flush();
+     assert.equal(sent.length, 1,
+                  "after sign-out the memory is gone, so the next Builder's "
+                  + "impression of the same job is sent rather than swallowed");
+   });
 
 // -- run -----------------------------------------------------------------------
 

@@ -300,10 +300,18 @@ export async function searchResults(queryId, { limit = 25, cursor = null } = {})
  *
  * EVERY VALIDATION FAILURE FAILS THE WHOLE BATCH (jobs.py:503-512), so a
  * caller must not mix a speculative event into a batch of real ones.
+ *
+ * `keepalive` is for the unload path in events.mjs and is the ONLY thing that
+ * differs there. It used to be a second hand-written fetch() with its own copy
+ * of credentials, its own headers and no BASE -- which meant the endpoint was
+ * spelled twice and the copy nobody watches was the one that skipped
+ * `Accept: application/json` and would have broken silently the day BASE
+ * stopped being "". One spelling, one option.
  */
-export function postEvents(requestId, events) {
+export function postEvents(requestId, events, { keepalive = false } = {}) {
   return request("/v1/events", {
     method: "POST",
+    keepalive,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ request_id: requestId, events }),
   });

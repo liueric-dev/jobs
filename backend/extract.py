@@ -981,7 +981,33 @@ def mark_extract_failed(conn, job_id, model_label):
     Stored at the current version rather than a sentinel so that a future
     FACTS_VERSION bump gives every tombstoned job one more chance under the
     new prompt -- which is usually exactly what a prompt change is for.
+
+    IT CLEARS THE FACT COLUMNS, and that is a fix rather than tidying. This is
+    the same hole score.mark_score_failed() closed one stage over, left open
+    here: the ON CONFLICT clause used to update only facts_version,
+    extracted_at and extraction_model, so a posting that extracted cleanly at
+    v2 and tombstoned at v3 kept its v2 summary, seniority_level, archetype,
+    remote_policy and comp fields -- stamped with the CURRENT facts_version and
+    labelled 'FAILED:'. A row whose facts say one thing and whose provenance
+    says another, and every reader that does not also select extraction_model
+    believes the facts.
+
+    match.load_facts() does check, filtering `extraction_model NOT LIKE
+    'FAILED:%%'` -- but ../schema.py's jobs_app view does not: it is a bare
+    LEFT JOIN on job_facts, so the webapp served the stale values with no way
+    to tell. Clearing them loses nothing real. The facts were evidence about a
+    posting under a prompt that has since changed, and the attempt that would
+    have refreshed them is the one that just failed.
+
+    NO ROW LEAVES jobs_app BECAUSE OF THIS. The view's four completeness
+    filters -- company_name, title, job_url, description_text -- are all on
+    `jobs`, never on job_facts, so a tombstoned posting still lists; it lists
+    with empty facts instead of wrong ones.
+
+    extraction_passes and vote_unanimity go too. They describe a vote that
+    produced values, and there are no values.
     """
+    nulls = ", ".join(f"{c}=NULL" for c in _FACT_COLUMNS)
     conn.execute(
         f"""
         INSERT INTO {schema.FACTS_TABLE}
@@ -990,7 +1016,10 @@ def mark_extract_failed(conn, job_id, model_label):
         ON CONFLICT (job_id) DO UPDATE SET
             facts_version=EXCLUDED.facts_version,
             extracted_at=EXCLUDED.extracted_at,
-            extraction_model=EXCLUDED.extraction_model
+            extraction_model=EXCLUDED.extraction_model,
+            {nulls},
+            extraction_passes=NULL,
+            vote_unanimity=NULL
         """,
         (job_id, schema.FACTS_VERSION, utc_now_str(),
          llm.failed_label(model_label)),

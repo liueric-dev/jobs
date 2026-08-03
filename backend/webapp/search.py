@@ -51,6 +51,12 @@ import config  # noqa: F401  (must come first -- performs the sys.path insert)
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+#: NOT UNUSED, AND DO NOT REMOVE IT AS DEAD. Nothing in this module references
+#: `schema.` -- the reference is from outside: tests/test_search_signal.py
+#: asserts `search.schema is schema`, pinning that this route and the nightly
+#: fold in ../searchqueries.py read ONE SEARCH_MIN_WATCHERS rather than two
+#: copies that can drift. A watcher floor that disagrees across the process
+#: boundary suppresses a badge on one side and shows it on the other.
 import schema
 import searchnorm
 from auth import User, require_user

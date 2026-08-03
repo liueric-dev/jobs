@@ -41,7 +41,7 @@ MAX_LIMIT = 100
 
 #: The closed set of interaction types a CLIENT may send. job_events.event is
 #: free TEXT, so this allowlist is the only thing keeping the table analysable a
-#: year from now, when the learned ranker in docs/SCORING.md wants to read it. A
+#: year from now, when the learned ranker in ../docs/SCORING.md wants to read it. A
 #: typo'd event name is worse than a rejected one: it is silently unusable
 #: training data.
 #:
@@ -67,7 +67,8 @@ EVENT_NAMES = CLIENT_EVENT_NAMES + SERVER_EVENT_NAMES
 #: is IMPORTED from schema_web above and is not defined here any more -- so that
 #: the CHECK on builder_job_state.dismiss_reason and this request validator read
 #: one tuple. `jobs.DISMISS_REASONS` still resolves, which is what every
-#: existing citation names (tests/test_events.py, docs/ingest/engagement-events.md).
+#: existing citation names (tests/test_events.py, and the defect register at
+#: refactor-freeze-2026-08-02).
 
 #: Who may see an event, set server-side by event type and NEVER by the client.
 #: Only a save is cohort-visible. An application is private on purpose: in a
@@ -254,8 +255,10 @@ def _like(term):
 #: derived from the append-only log rather than written as a current answer.
 #:
 #: IT USED TO READ `e.profile = v.profile`, AND THAT WAS DEFECTS D66 AND D67
-#: (docs/ingest/DEFECTS.md). Thirty Builders share the `pursuit` profile, so
-#: one Builder's impression marked the row `seen` for all thirty and one
+#: (defect register, deleted 2026-08-02:
+#: `git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`). Thirty
+#: Builders share the `pursuit` profile, so one Builder's impression marked
+#: the row `seen` for all thirty and one
 #: Builder's application marked it `applied` for all thirty. D67 was the
 #: sharper one: visibility_for("applied") correctly stores an application as
 #: `private` and API-CONTRACT-v1.md calls it private, and the response body
@@ -740,13 +743,16 @@ def derive_skips(conn, profile, app_user_id, request_id, rank, now):
     a first-render-per-day signal. Narrowing the dedup key would change an
     existing documented behaviour ("a list re-render is not new information")
     for a different task's benefit, so it is recorded here and in
-    docs/ingest/engagement-events.md rather than changed in passing.
+    docs/ingest/engagement-events.md (deleted 2026-08-02; behind
+    refactor-freeze-2026-08-02) rather than changed in passing.
 
     THE DERIVATION IS CONFINED TO ONE BUILDER AT BOTH ENDS -- it reads only the
     caller's own impressions (`imp.app_user_id = %s`, bound to user.id) and only
     the caller's own actions veto them (`other.app_user_id = imp.app_user_id`).
-    Both are defect D68 (docs/ingest/DEFECTS.md), which has two halves, and this
-    is the paragraph that says why neither is redundant with the request_id
+    Both are defect D68 (register deleted 2026-08-02:
+    `git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`), which has two
+    halves, and this is the paragraph that says why neither is redundant with
+    the request_id
     beside them.
 
     request_id DOES NOT ESTABLISH WHOSE RENDER THIS IS. new_request_id() mints
@@ -888,9 +894,12 @@ def record_events(batch: EventBatch, user: User = Depends(require_user)):
 
     THE 24-HOUR IMPRESSION DEDUP IS STILL KEYED (profile, job_id) AND IS NOT
     NARROWED TO app_user_id. That is not an oversight left over from the
-    column: it is an OPEN DECISION belonging to the repo owner, recorded in
-    tranche_five/27-event-schema.md, API-CONTRACT-v1.md and
-    docs/ingest/engagement-events.md, and it has a real consequence -- one
+    column: it is an OPEN DECISION belonging to the repo owner. It was recorded
+    in tranche_five/27-event-schema.md, API-CONTRACT-v1.md and
+    docs/ingest/engagement-events.md, all deleted 2026-08-02 --
+    `git show refactor-freeze-2026-08-02:docs/ingest/engagement-events.md` --
+    and it is carried forward in docs/STATE-OF-THE-SYSTEM.md § 4. It has a real
+    consequence: one
     Builder's render suppresses another Builder's impression of the same job
     for the rest of the window. Adding the column makes narrowing it POSSIBLE
     for the first time; it does not make the decision. derive_skips' docstring

@@ -13,7 +13,8 @@
 // survives a reload without the API process needing a catch-all route.
 
 import { me, getOnboarding, logout, loginUrl, ApiError } from "./api.mjs";
-import { setErrorHandler, flush, stopObserving } from "./events.mjs";
+import { setErrorHandler, flush, stopObserving, forgetImpressions } from "./events.mjs";
+import { forgetAll } from "./renders.mjs";
 import { toast, hideToast, errorBlock } from "./ui.mjs";
 import { esc } from "./format.mjs";
 import * as today from "./today.mjs";
@@ -192,6 +193,23 @@ function showSignIn(error) {
   </div>`;
 }
 
+/**
+ * Sign out, and forget everything about the Builder who was signed in.
+ *
+ * THE THREE forget CALLS ARE NOT TIDYING. This is one tab and one JS heap, so
+ * signing out and back in as a different Builder used to leave `renders`' seen
+ * Map holding the PREVIOUS Builder's (request_id, rank) pairs -- and the
+ * detail page resolves its render context out of exactly that map. The next
+ * Builder's open/save/applied events were attributed to a render that was
+ * never theirs, which is unusable training data written confidently.
+ *
+ * flush() FIRST, and the order is the whole point: the outgoing Builder's
+ * queued events are theirs and must reach the server before the state that
+ * explains them is dropped.
+ *
+ * stopObserving() because an IntersectionObserver left watching a torn-down
+ * screen would keep raising impressions against a signed-out session.
+ */
 async function signOut() {
   await flush();
   try {
@@ -199,6 +217,9 @@ async function signOut() {
   } catch (e) {
     console.warn("logout failed", e);
   }
+  stopObserving();
+  forgetAll();
+  forgetImpressions();
   user = null;
   location.hash = "";
   showSignIn(null);

@@ -247,7 +247,6 @@ from datetime import datetime, timedelta, timezone
 
 import schema  # schema.py
 import profiles  # profiles.py
-import relevance  # relevance.py -- kept for the cost tools
 import llm  # llm.py
 from lib import dbconn
 from lib.timeparse import utc_now_str

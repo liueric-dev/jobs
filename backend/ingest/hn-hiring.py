@@ -75,8 +75,7 @@ import sys
 import re
 import html as html_module
 import json
-import urllib.request
-import urllib.error
+import urllib.error  # NOT urllib.request: fetching is lib.http's. See below.
 from datetime import datetime, timezone
 
 

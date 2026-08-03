@@ -55,6 +55,18 @@ let chain = Promise.resolve(null);
 let onError = () => {};
 export function setErrorHandler(fn) { onError = fn; }
 
+/**
+ * Drop the sent-impression memory. Called on sign-out, with renders.forgetAll().
+ *
+ * `impressed` is keyed (requestId, jobId) and requestId is per render, so a new
+ * Builder's renders could not collide with an old one's -- but the Set is the
+ * only thing in this module that outlives a session, and leaving one user's
+ * state in memory while another is signed in is the shape of the bug, not the
+ * collision itself. It costs nothing to clear and it means "signed out" is
+ * true of this module too.
+ */
+export function forgetImpressions() { impressed.clear(); }
+
 function schedule() {
   if (timer !== null) return;
   timer = setTimeout(() => { timer = null; flush(); }, FLUSH_INTERVAL_MS);
@@ -158,24 +170,27 @@ async function drain() {
 }
 
 /**
- * Last-ditch flush when the page is going away. fetch() with keepalive rather
- * than navigator.sendBeacon: a beacon with a string body is sent as
- * text/plain, which FastAPI answers with a 422 rather than reading as JSON.
+ * Last-ditch flush when the page is going away. keepalive rather than
+ * navigator.sendBeacon: a beacon with a string body is sent as text/plain,
+ * which FastAPI answers with a 422 rather than reading as JSON.
+ *
+ * GOES THROUGH api.postEvents LIKE EVERY OTHER CALLER. It used to re-spell the
+ * POST inline, which meant this path -- the one nobody watches -- quietly had
+ * its own copy of credentials, no BASE and no Accept header.
+ *
+ * The catch is still swallowing, and now deliberately rather than by accident:
+ * `postEvents` returns a promise, so the old synchronous try/catch could never
+ * have seen an HTTP error or a rejection anyway. `.catch()` is where a refused
+ * unload batch actually arrives. There is nothing to do with it -- the queue
+ * is already spliced and the page is going -- but a console line means the
+ * loss is observable in a devtools session rather than invisible.
  */
 function flushOnUnload() {
   if (queue.length === 0) return;
   for (const [requestId, events] of groupByRender(queue.splice(0, queue.length))) {
-    try {
-      fetch("/v1/events", {
-        method: "POST",
-        credentials: "same-origin",
-        keepalive: true,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request_id: requestId, events }),
-      });
-    } catch {
-      // The page is unloading; there is nowhere left to report this.
-    }
+    postEvents(requestId, events, { keepalive: true }).catch((e) => {
+      console.warn("unload event batch lost", e, events);
+    });
   }
 }
 

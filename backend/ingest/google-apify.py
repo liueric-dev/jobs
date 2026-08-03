@@ -74,8 +74,7 @@ import os
 import sys
 import json
 import time
-import urllib.request
-import urllib.error
+import urllib.error  # NOT urllib.request: fetching is lib.http's. See below.
 from datetime import datetime, timedelta, timezone
 
 
