@@ -112,7 +112,7 @@ from . import metrics
 #: to read that instability against. `role_track` HAS NO TASK 06 FIGURE AT ALL
 #: -- it postdates that measurement (task 11 added it) and its nine-value
 #: vocabulary is explicitly provisional, derived pre-Phase-3 from a tech-heavy
-#: corpus. See docs/role-track-derivation.md.
+#: corpus. See `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md`.
 #:
 #: It is here because task 30 groups its precision figures BY this vocabulary,
 #: so an unvalidated vocabulary would silently condition every per-track number
@@ -138,9 +138,10 @@ AXIS_A_FIELDS = ("ai_involvement", "seniority_level", "role_archetype",
                  "remote_policy", "role_track")
 
 #: Fields in tasks/extract.py PRIORITY_FIELDS that are NOT on the form, with
-#: the measurement that took them off it. `03-metrics-and-golden-set.md:116`
-#: is the instruction: let the selfcheck narrow the set, and record the rest as
-#: known-unstable rather than dropping them silently.
+#: the measurement that took them off it. The instruction is
+#: `git show refactor-freeze-2026-08-02:docs/ingestion_tests/03-metrics-and-golden-set.md:116`:
+#: let the selfcheck narrow the set, and record the rest as known-unstable
+#: rather than dropping them silently.
 #:
 #: `tech_stack` self-agrees 70.4% exact across three identical runs (task 06,
 #: n=115). A field that cannot agree with ITSELF will not be rescued by a human
@@ -909,8 +910,9 @@ def redraw_refusal(conn, label_set, rows):
     them under someone who has already answered silently changes what their
     answers were answers to. The set tables would not even record the move
     (ON CONFLICT DO NOTHING), but save_set() rewrites the committed fixture,
-    which is what report time reads. HANDOFF.md:275 calls this window closed as
-    prose; this is the prose in code.
+    which is what report time reads.
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:275`
+    calls this window closed as prose; this is the prose in code.
     """
     stored = conn.execute(
         "SELECT n, job_id_sha256 FROM eval_label_sets WHERE label_set = %s",
@@ -1205,9 +1207,10 @@ def labeller_rank(conn, label_set, labeller_id):
 #: answer twice. Served an hour later, that measures whether they REMEMBER
 #: their first answer, which is a fact about human memory and not about the
 #: field's difficulty, and it would come back near 100% and be quoted as a
-#: ceiling. docs/ingestion_tests/03-metrics-and-golden-set.md:25 specifies the
-#: quantity as "5-10 jobs labelled twice, A WEEK APART" and the delay is that
-#: phrase, in code.
+#: ceiling. The quantity is specified at
+#: `git show refactor-freeze-2026-08-02:docs/ingestion_tests/03-metrics-and-golden-set.md:25`
+#: as "5-10 jobs labelled twice, A WEEK APART" and the delay is that phrase,
+#: in code.
 #:
 #: Seven days, from that line, not tuned. Shortening it does not buy a faster
 #: measurement, it buys a different and weaker one.
@@ -1346,8 +1349,8 @@ def next_item(conn, label_set, labeller_id, *, round_no=1, now=None,
       that distinction is the point.
 
       It is also 10 rows, which is what
-      docs/ingestion_tests/03-metrics-and-golden-set.md:25 asks for ("5-10
-      jobs labelled twice"), at ~10 minutes of a volunteer's time.
+      `git show refactor-freeze-2026-08-02:docs/ingestion_tests/03-metrics-and-golden-set.md:25`
+      asks for ("5-10 jobs labelled twice"), at ~10 minutes of a volunteer's time.
 
     THE DELAY IS PART OF THE QUEUE, see ROUND_TWO_DELAY_DAYS. This function
     does not enforce it -- round_two_ready() does, so that a caller can say
@@ -1693,8 +1696,9 @@ def intra_annotator(rows, field_kinds, *, axis=AXIS_A, platforms=None):
 
     ITS BREAKOUT IS COMPUTED AND NOT PRINTED, and that is a judgement rather
     than an omission. The original design is 5-10 jobs labelled twice
-    (03-metrics-and-golden-set.md:25), so a per-platform cell here is n=1 or
-    n=2 -- thin by any reading of is_thin(), and a table of `~` cells is
+    (`git show refactor-freeze-2026-08-02:docs/ingestion_tests/03-metrics-and-golden-set.md:25`),
+    so a per-platform cell here is n=1 or n=2 -- thin by any reading of
+    is_thin(), and a table of `~` cells is
     noise on the page. It is in the returned dict because the JSON consumer
     can pool it across sessions, where the printed table cannot.
     """
@@ -1848,9 +1852,9 @@ def model_vs_human(rows, model_values, field_kinds, *, axis=AXIS_A,
     would be inventing model answers in an eval corpus -- a fabricated ground
     truth, which is the one thing this whole module exists to keep out of the
     measurement -- and it would do so in a file with no generator script:
-    docs/tasks/refactor/HANDOFF.md:1043-1047 records that it and
-    pursuit-criteria-goldens.json "were produced ad hoc and re-pinned by hand
-    once already". That goldens file pins scores and ranks for 30 of these
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:1043-1047`
+    records that it and pursuit-criteria-goldens.json "were produced ad hoc and
+    re-pinned by hand once already". That goldens file pins scores and ranks for 30 of these
     job_ids and tests/test_match.py asserts them (its PURSUIT_CORPUS_FILE,
     test_match.py:414), so the rows are load-bearing for a second measurement
     as well. Note it is NOT covered by tests/test_evals.py:454's sha256 pin,
@@ -1977,7 +1981,9 @@ class Uninterpretable(ValueError):
     Raised, never warned. CLAUDE.md: "Any measurement without that floor
     beside it is uninterpretable" -- and a warning is a thing people read
     once. Task 16 set the precedent that the tool refuses to print one
-    denominator alone (DECISIONS.md:174); this is that rule for this table.
+    denominator alone
+    (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/DECISIONS.md:174`);
+    this is that rule for this table.
     """
 
 
@@ -2086,8 +2092,9 @@ def interpretable(*, floor, ceiling, measured, fields=None):
 # labels against labels, or a model against labels; `match_score` does not
 # appear. That join is the entire evidence base for two decisions:
 #
-#   task 30's experiment (30-within-track-ordering.md:32) -- "bucket the
-#   labelled postings by `match_score`" and ask whether a posting at 88 beats
+#   task 30's experiment, recorded at
+# git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_six/30-within-track-ordering.md:32
+#   -- "bucket the labelled postings by `match_score`" and ask whether a posting at 88 beats
 #   one at 81 in Builder judgement more often than chance. Its whole claim
 #   ladder rests on the answer.
 #
@@ -2150,8 +2157,9 @@ def _scored_strata(strata, caller):
     let a caller ask for a precision figure "over the whole set" and get one
     computed over three quarters of it, labelled as if it were the whole -- a
     stratum measured against the wrong population, which is the defect
-    trap 4.1 (docs/MEASUREMENT-TRAPS.md at refactor-freeze-2026-08-02) is about and the one
-    that has already cost this project a rewritten conclusion.
+    trap 4.1
+    (`git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`) is about
+    and the one that has already cost this project a rewritten conclusion.
 
     The module's own precedent is model_vs_human(), which raises for axis B
     (labels.py:1554) rather than returning an empty block: when the question
@@ -2423,10 +2431,9 @@ def recall_bound(rows, set_rows, *, profile, round_no=1):
     Mixing them into a precision denominator would be a fresh instance of the
     defect this project has already paid for -- a stratum measured against the
     wrong population, trap 4.1. CLAUDE.md cited these traps as
-    docs/MEASUREMENT-TRAPS.md; that file existed but was deleted 2026-08-02 with
-    the rest of docs/, and it is where the 4.1-4.7 numbering every citation in
-    this package uses comes from. Read it with
-    `git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`.
+    `git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`; that file
+    existed but was deleted 2026-08-02 with the rest of docs/, and it is where
+    the 4.1-4.7 numbering every citation in this package uses comes from.
 
     RETURNED AS A COUNT AND AN INTERVAL, WITH NO `rate` KEY. metrics.wilson()
     over k of n bounds the proportion, so 2 of 50 reads "[0.6%, 8.5%] of what
