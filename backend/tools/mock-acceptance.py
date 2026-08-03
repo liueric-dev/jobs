@@ -162,7 +162,7 @@ PERMISSIVE_PERSONA = {
 
 #: Base only, so this profile's job_matches rows are visibly uninformative
 #: rather than plausibly wrong -- the same argument
-#: migrations/migrate_pursuit_profile.py:424 makes for its own stand-in.
+#: migrations/migrate_pursuit_profile.py:187-202 makes for its own stand-in.
 PERMISSIVE_CRITERIA = {
     "_comment":
         "`base` only: every row scores 50 and the ordering carries no "
@@ -652,7 +652,8 @@ def ranking_quality(scored, k=metrics.TOP_K):
         one of the deliberately awkward ones this corpus was built out of, so
         every drop removes a hard case and makes the ranker look better.
 
-        That is trap 4.1 (backend/docs/HANDOFF-match-quality.md:147) pointing
+        That is trap 4.1 (docs/MEASUREMENT-TRAPS.md at
+        refactor-freeze-2026-08-02) pointing
         the other way -- there MATCH_FLOOR hid the easy low end and cost a
         ranking 0.619 -> 0.326; here extraction failure hides the hard end and
         pays it back with interest.

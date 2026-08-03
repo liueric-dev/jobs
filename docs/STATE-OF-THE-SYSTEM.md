@@ -251,14 +251,17 @@ forward commit, so a mechanical revert scan under-reports what was undone.
   **And the rule as this file stated it was wrong:** § 6 puts *never train* on **L0**, not L1
   (`backend/evals/__main__.py` and § 6 below). L1 is the layer you may train on and must not
   *evaluate* on. Figures from this tool are unreproducible for the dependency reason anyway.
-- **Stale `file:line` citations throughout, and the count here was low by two orders of
-  magnitude.** The estimate ("four in `schema.py`/`extract.py`/`state.py`, four in
-  `config/pursuit-criteria.json`") is nearer 300, and the drift is not uniform —
-  `evals/labels.py`'s self-citations run +266 (`_item_key()` cited `:1329`, actually `:1595`) but
-  `model_vs_human()`'s `no_consensus` runs +338, so no single offset fixes them. **The dangerous
-  class resolves and is still wrong:** `extract.py:404` cites `lib/text.py:119` for a regex that
-  was *deleted*, not moved (`lib/text.py:184` says so outright). The convention is what makes
-  claims checkable and there is still no checker for it.
+- **Stale `file:line` citations throughout — 309 of them, and there is a checker now.**
+  `tools/audit-citations.py` counts them and `tests/test_citations.py` fails the suite on a *new*
+  one; the existing 309 are accepted in `config/citation-baseline.json` with their reason. The
+  original estimate here ("four in `schema.py`/`extract.py`/`state.py`, four in
+  `config/pursuit-criteria.json`") was low by two orders of magnitude, and the drift is not
+  uniform — `evals/labels.py`'s self-citations run +266 (`_item_key()` cited `:1329`, actually
+  `:1595`) but `model_vs_human()`'s `no_consensus` runs +338, so no single offset fixes them.
+  Eight `migrate_pursuit_profile.py` citations pointing past a 333-line file were fixed
+  2026-08-03. **The class the checker cannot see is the dangerous one:** `extract.py:404` cites
+  `lib/text.py:119` for a regex that was *deleted*, not moved — the line resolves and the claim is
+  false (`lib/text.py:184` says so outright).
 - ~~Dead imports~~ **Fixed 2026-08-03, and one of the four was not dead.** `relevance` in
   `score.py`, `urllib.request` in `ingest/hn-hiring.py` and `ingest/google-apify.py` were removed
   (`urllib.error` on the following line of each is live — do not remove that). **`schema` in

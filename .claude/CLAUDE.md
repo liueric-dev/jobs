@@ -185,8 +185,15 @@ style. Read the ones in `config/relevance.json` before writing new ones. **With 
 are the primary written rationale in the repo**; treat deleting one as deleting a decision record.
 
 **Cite `file:line` when explaining a claim about the code.** That is what makes a claim checkable.
-Be aware that a number of existing citations have drifted and no longer resolve — verify one before
-relying on it, and note there is no checker for this.
+`tools/audit-citations.py` now checks it, and `tests/test_citations.py` runs it in the suite, so a
+**new** citation naming a file or a line that does not exist is a red test. It checks two things
+and only two: the path exists, and the line is within the file. **It cannot tell you whether the
+line still says what you claim** — that class is real and this tree has instances.
+
+309 already-drifted citations are accepted in `config/citation-baseline.json` rather than swept in
+one commit. That file is meant to shrink; do not add to it to silence a finding. If what you are
+citing is one of the 137 documents deleted on 2026-08-02, cite it as
+`git show refactor-freeze-2026-08-02:<path>` — the checker allows that form deliberately.
 
 ## Do not
 

@@ -67,7 +67,7 @@ ABSENT MEANS PRESERVE, NOT RESET
                              ON CONFLICT branch wrote NULL. Running this
                              against `pursuit` would have erased the
                              description-first cohort gate task 10 measured
-                             (migrations/migrate_pursuit_profile.py:126-365)
+                             (migrations/migrate_pursuit_profile.py:101-333)
                              and silently widened it to the shared software
                              title filter.
       daily_narrative_budget --budget defaulted to 20 and was always passed,

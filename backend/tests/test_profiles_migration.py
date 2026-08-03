@@ -244,7 +244,7 @@ class TestCohortConfigFilesAreImportable(unittest.TestCase):
         self.assertTrue([k for k in self.relevance if k.startswith("_")])
 
     def test_the_persona_has_no_placeholders_left(self):
-        """migrate_pursuit_profile.py:371-396 wrote four PLACEHOLDER strings to
+        """migrate_pursuit_profile.py:160-185 wrote four PLACEHOLDER strings to
         satisfy validate(). Task 13 replaces them, and 'the key exists' is not
         the property that matters -- 'it is not still the placeholder' is."""
         for key in ("background_summary", "strengths", "honest_gaps",
