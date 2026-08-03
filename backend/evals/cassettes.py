@@ -8,8 +8,10 @@ WHY THIS EXISTS
     source, so a normalizer can be exercised against the real bytes an API
     returned instead of against a hand-written approximation of them.
 
-    That is not a nicety. `docs/ingest/DEFECTS.md` disposes ten defects as
-    "fix with harness -- task 09" precisely because the failing input is a
+    That is not a nicety. The defect register (deleted 2026-08-02:
+    `git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`) disposes ten
+    defects as "fix with harness -- task 09" precisely because the failing
+    input is a
     shape nobody would invent: a Built In card whose company anchor is
     missing so the title/company zip slips by one (D02), a WWR item with no
     counters (D05), an Apify run that is already SUCCEEDED when the start

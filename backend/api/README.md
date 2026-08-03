@@ -296,8 +296,9 @@ restricted `jobs_api` role described above.
 
 **~~Not automated by this repo~~ — automated as of task 33.** The systemd unit,
 the tunnel config and the install sequence are tracked in
-[`deploy/`](../../deploy/README.md), and day-to-day operations are in
-[`docs/RUNBOOK.md`](../../docs/RUNBOOK.md). What remains manual is the part no
+[`deploy/`](../../deploy/README.md), and day-to-day operations were in
+`docs/RUNBOOK.md`, deleted 2026-08-02 —
+`git show refactor-freeze-2026-08-02:docs/RUNBOOK.md`. What remains manual is the part no
 repository can hold: a Cloudflare account, a domain, and one `cloudflared
 tunnel create`.
 

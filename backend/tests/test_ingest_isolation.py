@@ -2,8 +2,10 @@
 
 WHAT THIS COVERS AND WHY IT IS A NEW MODULE
 
-`docs/ingest/DEFECTS.md` D18, D19 and D21 are all the same sentence said three
-ways: work that can fail is done OUTSIDE the block that would have contained
+Defects D18, D19 and D21 (in the defect register, deleted 2026-08-02:
+`git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`) are all the same
+sentence said three ways: work that can fail is done OUTSIDE the block that
+would have contained
 the failure, so one bad unit ends the run instead of ending itself.
 
   D18  config keys subscripted after the guarded load returned

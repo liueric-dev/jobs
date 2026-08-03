@@ -9,8 +9,9 @@ parse halves are task 09's cassette harness, and these become cassette-backed
 there." This is that. `evals/ingest_modules.py` imports them by path, and
 every assertion below runs the script's OWN fetch and normalize functions
 over bytes the real endpoint really sent -- no hand-written sample payloads,
-because the audit defects (`docs/ingest/DEFECTS.md`) live in shapes nobody
-would think to write down.
+because the audit defects (register deleted 2026-08-02:
+`git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`) live in shapes
+nobody would think to write down.
 
 THE CONTRACT EVERY SOURCE OWES. `schema.py:118-120`: "Every normalize_*
 function must supply every key here: upsert binds them as named parameters,

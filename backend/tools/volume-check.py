@@ -139,7 +139,12 @@ def main(argv=None):
         print(f"  {finding}", file=sys.stderr)
     print("", file=sys.stderr)
     _print_rows(rows, stream=sys.stderr)
-    print("\nSee docs/RUNBOOK.md, 'A source has gone quiet'.", file=sys.stderr)
+    #: The runbook was deleted 2026-08-02 with the rest of docs/. This prints a
+    #: command rather than a path because an operator reading it is already at a
+    #: shell, and a bare dead path is what sent them nowhere before.
+    print("\nSee 'A source has gone quiet' in:\n"
+          "  git show refactor-freeze-2026-08-02:docs/RUNBOOK.md",
+          file=sys.stderr)
     return 1
 
 

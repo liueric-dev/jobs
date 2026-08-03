@@ -38,7 +38,7 @@ EnvironmentFile=/home/eric/apps/jobs/backend/.env
 # rather than a false alarm.
 ExecStart=/usr/bin/flock -n -E 0 /home/eric/apps/jobs/backend/.run.lock \
           /usr/bin/python3 /home/eric/apps/jobs/backend/run-daily.py
-# Two of the nine steps make LLM calls and dominate the wall clock: extract.py
+# Exactly two steps make LLM calls and dominate the wall clock: extract.py
 # makes one per newly-ingested posting and score.py runs a per-profile budget.
 # Generous compared to events' 5400 for that reason -- 3 hours is a hang, not a
 # slow night.

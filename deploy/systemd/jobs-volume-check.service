@@ -1,6 +1,6 @@
 [Unit]
 Description=Alert when an ingest source has gone quiet or a nightly run is missing
-Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+Documentation=file:///home/eric/apps/jobs/docs/STATE-OF-THE-SYSTEM.md
 # THE SOFT-FAILURE COUNTERPART TO jobs-failure@. That unit covers a step that
 # exited non-zero. This one covers the failures that exit zero, which is all of
 # them that matter here: an exhausted API key returns zero rows, a revoked key

@@ -1,6 +1,6 @@
 [Unit]
 Description=Send the weekly per-source volume digest
-Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+Documentation=file:///home/eric/apps/jobs/docs/STATE-OF-THE-SYSTEM.md
 # The third of the three monitoring requirements, and the one that is a REPORT
 # rather than an alarm: surface per-source counts somewhere a human sees them
 # weekly WITHOUT GOING LOOKING.

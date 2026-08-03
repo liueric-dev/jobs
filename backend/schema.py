@@ -453,7 +453,7 @@ def ensure_schema(conn):
 
     Refuses to run against the events database. See DATABASE, NOT SCHEMA
     above: since the split, a wrong DATABASE_URL is no longer a harmless
-    mistake -- it would create these 13 tables in `public` alongside
+    mistake -- it would create these 14 tables in `public` alongside
     `public.events`, and nothing downstream would report it. `public.events`
     exists in exactly one database and never in this one, so it is the cheapest
     honest way to ask "am I where I think I am".
@@ -841,9 +841,11 @@ def ensure_schema(conn):
     #     profile, so "did this Builder see it" was not a question the table
     #     could answer at all. webapp/jobs.py resolved `seen` and `applied` from
     #     it anyway, by profile, which made one Builder's impression everyone's
-    #     -- defects D66 and D67 in docs/ingest/DEFECTS.md, both recorded as
-    #     BLOCKED-BY this column. `applied` was the sharper half: visibility
-    #     above correctly stores an application as 'private' and the response
+    #     -- defects D66 and D67 in the defect register (deleted 2026-08-02;
+    #     `git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`), both
+    #     recorded as BLOCKED-BY this column. `applied` was the sharper half:
+    #     visibility above correctly stores an application as 'private' and
+    #     the response
     #     body then reported it cohort-wide, so the control was enforced in the
     #     column and defeated in the join. Task 31 had already moved `dismissed`
     #     and `saved` onto builder_job_state (webapp/schema_web.py), which
@@ -928,8 +930,10 @@ def ensure_schema(conn):
     # hn_seen_comments is hn-hiring.py's dedup ledger and is load-bearing for
     # correctness: it, not the jobs table, is the source of truth for "this HN
     # comment was already parsed."  google_jobs_query_stats is append-only
-    # history for the not-yet-built adaptive-cadence feature (see
-    # docs/DEVELOPER.md); nothing reads it yet, but both Google scripts write it
+    # history for the not-yet-built adaptive-cadence feature (described in
+    # docs/DEVELOPER.md, deleted 2026-08-02; it is not on any current roadmap
+    # -- see docs/STATE-OF-THE-SYSTEM.md § 4 for what is actually open);
+    # nothing reads it yet, but both Google scripts write it
     # on every run and previously carried identical copies of this DDL.
     conn.execute("""
         CREATE TABLE IF NOT EXISTS hn_seen_comments (

@@ -4,9 +4,13 @@ Run:  python3 -m unittest tests.test_frontend_fixtures
 
 WHY THIS FILE EXISTS
 
-`docs/DOCS-POLICY.md` rule 7 sets the bar at **"fails a suite someone is already
-running"**, not at "has a script". `frontend/verify_fixtures.py` was the same
-shape of gap `backend/tools/audit-doc-links.py` was before task 36: a checker
+The bar is **"fails a suite someone is already running"**, not "has a script".
+(It was `docs/DOCS-POLICY.md` rule 7, deleted 2026-08-02 --
+`git show refactor-freeze-2026-08-02:docs/DOCS-POLICY.md`. The rule outlived the
+document: it is why `tools/audit-citations.py` is pinned by
+`tests/test_citations.py` rather than left to be typed.)
+`frontend/verify_fixtures.py` was the same shape of gap
+`backend/tools/audit-doc-links.py` was before task 36: a checker
 that exits 0 and is wired into nothing. Grepped 2026-08-02 -- no module under
 `backend/tests/` or `backend/webapp/tests/` referenced it, `.git/hooks` holds
 only `.sample` files, and there is no CI configuration in the repo. It had held
@@ -21,8 +25,9 @@ breaks is a shape check -- add a column to `LIST_COLUMNS` in
 
 WHY IT SHELLS OUT INSTEAD OF IMPORTING
 
-`tests/test_docs_policy.py` imports its two checkers because it asserts on the
-*findings* they return. This one asserts on the **exit status**, which is the
+A checker whose *findings* a test asserts on should be imported --
+`tests/test_docs_policy.py` did that, and retired 2026-08-02 with the documents
+it checked. This one asserts on the **exit status**, which is the
 whole contract `frontend/README.md` documents (`python3 frontend/verify_fixtures.py`
 -> 0 or 1), so running it the way a person runs it is the honest test. It is
 stdlib-only and reads `backend/webapp/*.py` with `ast` rather than importing

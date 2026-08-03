@@ -485,8 +485,9 @@ class TestPursuitCriteriaComments(unittest.TestCase):
                          if k.startswith("_") and isinstance(v, str))
         for stale in ("95%", "90%"):
             self.assertNotIn(stale, prose,
-                             f"{stale} self-agreement is superseded -- see "
-                             f"docs/ingestion_tests/README.md:150-160")
+                             f"{stale} self-agreement is superseded -- the live "
+                             f"figure is 85.2% agree2 on seniority_level, from "
+                             f"evals/fixtures/results/selfcheck-n120-2026-07-28.json")
         self.assertIn("85.2%", prose)
 
     def test_every_archetype_in_the_extractor_vocabulary_is_priced(self):

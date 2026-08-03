@@ -12,10 +12,10 @@ match.py (free per-profile ranking) and score.py (narratives for the top
 of each active profile's ranking) -- one after another, in that order, in
 the same process tree.
 
-WHY A WRAPPER: all nine steps write to the same Postgres instance on the
+WHY A WRAPPER: every step in STEPS writes to the same Postgres instance on the
 same machine and shouldn't run concurrently. An earlier version solved that
 with a flock-based lock shared between independently-scheduled cron jobs --
-correct, but more machinery than the problem needed, since all nine should
+correct, but more machinery than the problem needed, since they should
 always run together once a day anyway. A single entry point that calls them
 in sequence guarantees the same non-overlap with nothing to reason about.
 
@@ -31,7 +31,7 @@ jobs-ingest.service wraps this in `flock -n -E 0`, where -E 0 makes "already
 running" a silent success rather than a false alarm. The lock lives in the
 unit, not here, so a deliberate manual run can still bypass it.
 
-NOTE ON RUNTIME: two of the nine steps make LLM calls and dominate the
+NOTE ON RUNTIME: exactly two steps make LLM calls and dominate the
 wall clock. extract.py makes one per newly-ingested posting -- flat in the
 number of profiles, since the facts it produces are shared. score.py makes
 at most daily_narrative_budget per ACTIVE profile. The other seven steps
@@ -74,7 +74,7 @@ override a single key. See lib/envfile.py.
 The .env file is read by both systemd and lib.envfile, which do not parse
 identically -- stay inside the intersection documented in .env.example.
 
-INSTALL: lives at ~/apps/jobs/backend alongside the nine scripts listed in STEPS.
+INSTALL: lives at ~/apps/jobs/backend alongside the scripts listed in STEPS.
     python3 -m pip install --user 'psycopg[binary]'
     Nothing else. lib/ is part of this repo, not an installed package.
 
@@ -112,8 +112,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ENV_FILE = os.environ.get("JOBS_ENV_FILE", os.path.join(SCRIPT_DIR, ".env"))
 
 #: Steps that cannot do anything useful without these. Checked once here so a
-#: misconfigured run reports one actionable line, instead of nine steps each
-#: printing their own version of the same failure -- which is exactly what the
+#: misconfigured run reports one actionable line, instead of every step
+#: printing its own version of the same failure -- which is exactly what the
 #: 2026-07-25 run did (see envfile.py).
 REQUIRED_ENV = ("DATABASE_URL",)
 #: A step is a script name, or a script name plus arguments. Order matters
@@ -257,7 +257,7 @@ def run_step(step):
 
 #: One `key=value` pair of a lib.upsert.summary_line(). Parsed rather than
 #: passed back structurally because the steps are SUBPROCESSES: giving them a
-#: side channel would mean a temp file or an extra fd in nine scripts, where
+#: side channel would mean a temp file or an extra fd in every script, where
 #: the line they already have to log says everything needed.
 _SUMMARY_FIELD = re.compile(r"(\w+)=(\d+)")
 
@@ -291,7 +291,7 @@ def parse_upsert_summaries(text):
 def main():
     # Before anything else: this process IS the environment every step
     # inherits (run_step passes os.environ.copy()), so establishing it here
-    # covers all nine at once. Values already exported win -- see
+    # covers every step at once. Values already exported win -- see
     # envfile.load()'s override=False rationale -- which is what lets the
     # unit's EnvironmentFile= take precedence over this file.
     envfile.load(ENV_FILE)

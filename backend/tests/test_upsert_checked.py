@@ -5,9 +5,10 @@ WHAT THIS PINS
 `lib/upsert.py`'s UpsertResult.__iter__ yields (new, updated, unchanged) and
 NOT .errors, so `n, u, unc = upsert(...)` reads naturally and silently threw
 away every per-record failure. It did so at eight call sites -- all six ingest
-scripts and both API write paths (`docs/ingest/DEFECTS.md` D01). A run that
-dropped a hundred records reported success: no alert, no non-zero exit, no log
-line, and a corpus quietly smaller than it should be, which looks exactly like
+scripts and both API write paths (D01 in the defect register, deleted
+2026-08-02: `git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`). A run
+that dropped a hundred records reported success: no alert, no non-zero exit,
+no log line, and a corpus quietly smaller than it should be, which looks exactly like
 a slow hiring week.
 
 So this file asserts, for the spec each of those eight paths actually writes

@@ -1,6 +1,6 @@
 [Unit]
 Description=Dump the jobs database
-Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+Documentation=file:///home/eric/apps/jobs/docs/STATE-OF-THE-SYSTEM.md
 # The corpus is the asset. job_facts holds one LLM extraction per posting and is
 # written once per posting ever -- the property that keeps cost flat in users is
 # also what makes the table expensive to lose. Re-extraction is slow, and a

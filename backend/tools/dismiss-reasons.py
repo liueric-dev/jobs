@@ -27,8 +27,10 @@ WHY IT READS builder_job_state AND NOT job_events
 
     ~~`job_events` has no `app_user_id` column~~ -- IT DOES, since 2026-08-01
     (`../schema.py`, `add_missing_columns` on `EVENTS_TABLE`; defects D66/D67 in
-    `docs/ingest/DEFECTS.md`). That was the original reason this tool read the
-    other table and it is no longer true, so it is corrected rather than left to
+    the defect register, deleted 2026-08-02:
+    `git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`). That was the
+    original reason this tool read the other table and it is no longer true, so
+    it is corrected rather than left to
     mislead the next reader into thinking the log cannot be grouped by Builder.
     It can. Note the column is NULLABLE AND UNBACKFILLED: rows written before
     that date carry NULL, so any per-Builder count over `job_events` must say

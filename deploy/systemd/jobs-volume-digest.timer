@@ -1,6 +1,6 @@
 [Unit]
 Description=Weekly per-source volume digest, Monday 09:30 America/New_York
-Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+Documentation=file:///home/eric/apps/jobs/docs/STATE-OF-THE-SYSTEM.md
 
 [Timer]
 # Monday morning, half an hour after the daily check, so a week that ended badly

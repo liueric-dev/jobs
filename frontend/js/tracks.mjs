@@ -30,9 +30,11 @@
 // js/search.mjs's header states the rule; nothing here groups a query.
 //
 // THE AXIS IS NOT A FACT ABOUT A POSTING, and the UI must not present it as
-// one. docs/ingestion_tests/selfcheck-n120-2026-08-02.md owns the figures:
-// agree2 88.7% at n=115, and 11.3% of postings change whether they belong to
-// ANY track between two runs of the same prompt at temperature 0. Separately
+// one. backend/evals/fixtures/results/selfcheck-n120-2026-08-02.json owns the
+// figures and both reproduce from it -- .fields.role_track.overall.agree2 is
+// 0.8870 at n_comparable 115, so 11.3% of postings change whether they belong
+// to ANY track between two runs of the same prompt at temperature 0. NAME THE
+// METRIC when quoting this: agree2, not pairwise and not unanimous. Separately
 // and on a different instrument, humans answered `no_track_fits` on 15 of 36
 // labelled postings -- a prevalence, not an instability, and neither number
 // bounds the other. Hence CAVEAT below, rendered under every group heading.

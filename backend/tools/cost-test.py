@@ -110,8 +110,8 @@ DEFAULT_CORPUS = os.path.join(BACKEND, "evals", "fixtures", "corpus-v1.jsonl")
 
 #: The systemd window, from ~/.config/systemd/user/jobs-ingest.service's
 #: TimeoutStartSec=10800. Not a soft target -- systemd kills the unit at it,
-#: mid-run, and the nine steps are sequential so extraction shares it with
-#: six ingest fetches and score.py. Timer is OnCalendar=*-*-* 00:00:00
+#: mid-run, and the steps are sequential so extraction shares it with every
+#: ingest fetch and score.py. Timer is OnCalendar=*-*-* 00:00:00
 #: America/New_York.
 RUN_DAILY_WINDOW_SECS = 10800
 

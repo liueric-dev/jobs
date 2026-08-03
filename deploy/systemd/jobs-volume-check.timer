@@ -1,6 +1,6 @@
 [Unit]
 Description=Check per-source ingest volume daily at 09:00 America/New_York
-Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+Documentation=file:///home/eric/apps/jobs/docs/STATE-OF-THE-SYSTEM.md
 
 [Timer]
 # 09:00, roughly eight hours after jobs-ingest is expected to have finished. Two

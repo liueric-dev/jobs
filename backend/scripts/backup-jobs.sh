@@ -115,7 +115,8 @@ if [ -n "${JOBS_BACKUP_REMOTE:-}" ]; then
 else
   echo "WARNING: JOBS_BACKUP_REMOTE is unset -- this dump is on the same disk" \
        "as the database it came from, and protects against DROP TABLE and" \
-       "nothing else. See docs/RUNBOOK.md, 'Where the backups are'." >&2
+       "nothing else. See 'Where the backups are' in:" \
+       "git show refactor-freeze-2026-08-02:docs/RUNBOOK.md" >&2
 fi
 
 # Prune. -mtime is applied to the dumps and their sidecars by globs that move

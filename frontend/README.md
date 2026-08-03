@@ -9,12 +9,21 @@
 > against these fixtures turned up*, which is the part worth reading first if you
 > are about to touch the API.
 
-`docs/tasks/refactor/API-CONTRACT-v1.md` § *Mocking* asks for one realistic
+`API-CONTRACT-v1.md` § *Mocking* asks for one realistic
 response per endpoint, frozen as JSON, so the client can be built before the
 backend lands and so the fixtures become contract tests both sides run
 afterwards. This is that, split in two, because the frozen contract and the
 shipped API genuinely differ and **that difference is the frontend's whole
 problem**.
+
+> **Where the contract is.** `API-CONTRACT-v1.md` is cited by name throughout
+> this file, `backend/webapp/` and `js/`. It lived at
+> `docs/tasks/refactor/API-CONTRACT-v1.md` and was deleted 2026-08-02 with the
+> rest of `docs/`. It is the one deleted document still governing live code, so
+> read it before changing a response shape:
+> `git show refactor-freeze-2026-08-02:docs/tasks/refactor/API-CONTRACT-v1.md`.
+> `fixtures/contract/` is that document rendered as JSON and is the part of it
+> that did survive in the tree.
 
 ```
 index.html app.css   the client. One page, hash routes, no build step.
@@ -231,7 +240,7 @@ a question `job_events` could answer: it had a `profile` and no user id, and
 thirty Builders share the one `pursuit` profile, so counting distinct rows
 counted one person's three saves as three people's — a privacy control
 returning a wrong answer, which is worse than returning `null`. Defects **D66**
-and **D67** in `docs/ingest/DEFECTS.md` were the same missing column surfacing
+and **D67** in `docs/ingest/DEFECTS.md@refactor-freeze-2026-08-02` were the same missing column surfacing
 in `state.seen` and `state.applied`, and both are now **fixed**: the join
 resolves by `app_user_id` (`jobs.py:286-291`), `POST /v1/events` writes it, and
 pre-column rows carry NULL and resolve to `false` for everyone rather than
@@ -266,7 +275,7 @@ exist at all, not because the count was low.~~
 > verifier now derives `COHORT_FIELDS` and refuses to pass on a tuple it does
 > not recognise — see § *What building against these fixtures turned up*, item 5.
 
-If you are reading this well after 2026-08-01, check `docs/ingest/DEFECTS.md`
+If you are reading this well after 2026-08-01, check `docs/ingest/DEFECTS.md@refactor-freeze-2026-08-02`
 and `docs/tasks/refactor/HANDOFF.md` rather than trusting this section. The
 blocked/unblocked status of a field is the fastest-rotting sentence in this
 file.
@@ -586,8 +595,9 @@ node frontend/check_client.mjs          # client half: the code still agrees wit
 
 Both are wired into `backend/tests/test_frontend_fixtures.py`, so
 `cd backend && python3 -m unittest discover -s tests` runs them. That is
-`docs/DOCS-POLICY.md` rule 7's actual bar — *"fails a suite someone is already
-running"* — and neither had met it. The node one skips where node is absent; it
+the actual bar — *"fails a suite someone is already running"* — and neither had
+met it. (The bar was `docs/DOCS-POLICY.md` rule 7, deleted 2026-08-02;
+`git show refactor-freeze-2026-08-02:docs/DOCS-POLICY.md`.) The node one skips where node is absent; it
 is not a dependency of this repo.
 
 `verify_fixtures.py` reads **seven** modules, and two of them are **not** under

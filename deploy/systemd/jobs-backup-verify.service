@@ -1,6 +1,6 @@
 [Unit]
 Description=Restore the newest jobs dump into a throwaway database and compare
-Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+Documentation=file:///home/eric/apps/jobs/docs/STATE-OF-THE-SYSTEM.md
 # A SEPARATE UNIT from jobs-backup, and weekly rather than nightly, on purpose.
 # What a rehearsal catches is a dump that has STOPPED being restorable -- a slow
 # failure, not a sudden one -- so running it every night buys very little signal

@@ -2,8 +2,10 @@
 
 WHAT THIS FILE IS FOR
 
-D31 (`docs/ingest/DEFECTS.md`) sat open for weeks because it was a decision
-rather than a bug: three of the six ingest scripts imported `lib.http` solely
+D31 (in the defect register, deleted 2026-08-02:
+`git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`) sat open for
+weeks because it was a decision rather than a bug: three of the six ingest
+scripts imported `lib.http` solely
 for `DEFAULT_TIMEOUT` and then called `urllib.request.urlopen` directly, and
 nothing anywhere recorded whether that was deliberate or an unfinished
 migration. It was both. On 2026-08-02 three of the four raw-urlopen sites

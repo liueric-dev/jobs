@@ -1,6 +1,6 @@
 [Unit]
 Description=Rehearse a jobs restore weekly, Sunday 05:30 America/New_York
-Documentation=file:///home/eric/apps/jobs/docs/RUNBOOK.md
+Documentation=file:///home/eric/apps/jobs/docs/STATE-OF-THE-SYSTEM.md
 
 [Timer]
 # Sunday 05:30: after Sunday's own dump at 04:30, and clear of garmin-ingest at
