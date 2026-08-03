@@ -8,7 +8,7 @@ budget: 400
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-19`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-20`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -267,6 +267,44 @@ another — so no single offset fixes them. Work them by owning file, a few per 
 
 **Done when:** the count is lower than when the commit started and the tool still reports `0 new`.
 There is no target; there is a direction.
+
+---
+
+### T-19 — This project has never been stood up from nothing, and CI proved it
+
+**Found by `T-2`'s first run**, which is the whole reason that row exists:
+`https://github.com/liueric-dev/jobs/actions/runs/30815935804`. The pipeline suite ran **1428 with
+zero skipped** against the Postgres service — matching local exactly, so the DB gating and the
+no-skip guard both work. The webapp suite ran **352, the same count as local, and two failed.**
+
+Both failures are in `backend/webapp/tests/test_builder_profiles.py:395-415`. They open a
+`web_scratch_schema()` like every test around them, but the code they exercise —
+`schema_web.profile_mapping_problems()` and `schema_web.verify_schema()` — reads `public.*` **by
+hardcoded name**, so the scratch schema is not what they measure. On a clean database `public` is
+empty, `verify_schema()` reports all 23 objects missing, and the assertion for one specific problem
+never gets there.
+
+**Do not "fix" `profile_mapping_problems()` to complain about the missing table.** Returning empty
+when either table is absent is deliberate and documented at `backend/webapp/schema_web.py:818-820`:
+the caller already reports it, and a second complaint derived from the first would bury it. That
+was checked before this row was written.
+
+**What this actually says:** every green webapp suite to date has depended on a `public` schema
+that was provisioned by hand on one machine over several months. Whether this project can be stood
+up from an empty database is **unknown**, and the two failures are the first evidence anyone has
+asked. That is a bigger finding than the two tests.
+
+**Two ways to resolve, and they are not equivalent:**
+
+1. **Provision `public` in CI** — pipeline `schema.ensure_schema()`, then `webapp/manage_app_users.py
+   init-schema`, then the GRANTs that `backend/webapp/README.md` says are issued by hand.
+   *Recommended*, because it answers the bigger question as a side effect and the answer is
+   currently unknown. Expect it to surface more than these two tests.
+2. **Make the two tests hermetic** — narrower, faster, and it leaves the bigger question unasked.
+
+**Done when:** the webapp job is green on a clean database *and* the reason it is green is
+provisioning rather than a suppression. **A skip does not count** — `T-2`'s no-skip guard exists
+because a job that quietly runs less is worse than one that fails.
 
 ---
 
