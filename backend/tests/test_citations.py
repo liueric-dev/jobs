@@ -18,9 +18,15 @@ which is exactly what `frontend/verify_fixtures.py` was, and what
 
 WHAT IS AND IS NOT PINNED HERE
 
-Pinned: no NEW unresolvable citation. The 309 that were already broken when
-the checker landed are in `config/citation-baseline.json`, with the reason,
-and do not fail the suite.
+Pinned: no NEW unresolvable citation. The ones already broken when the checker
+landed are in `config/citation-baseline.json`, with the reason, and do not fail
+the suite. Their COUNT is not written down here on purpose -- run the tool for
+it; a number in prose is what `.claude/CLAUDE.md` warns goes stale silently,
+and this one had already been quoted three different ways by the time the
+checker was three commits old.
+
+Pinned: the answer does not depend on whether the pipeline has run on this
+machine. See TestIgnoredPathsAreNotJudged.
 
 NOT pinned, and deliberately: that the baseline shrinks. A test that demanded
 progress would either be trivially satisfiable or permanently red, and the
@@ -54,6 +60,16 @@ def _run(*args):
                           capture_output=True, text=True, cwd=BACKEND)
 
 
+def _load_tool():
+    """The tool as a module. Its filename has a hyphen, so it cannot be
+    imported by name."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("audit_citations", TOOL)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 class TestTheCheckerItself(unittest.TestCase):
     """The regex has been wrong twice; both times it was suffix ordering."""
 
@@ -67,15 +83,7 @@ class TestTheCheckerItself(unittest.TestCase):
         `.jsonl` missing entirely produced another ~40. Python's `|` takes the
         first alternative that matches, not the longest, so the suffix list
         must stay length-sorted and must stay complete."""
-        sys.path.insert(0, os.path.join(BACKEND, "tools"))
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("audit_citations", TOOL)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-        finally:
-            sys.path.pop(0)
-
+        mod = _load_tool()
         for text, expected in (
             ("a/b/corpus-v1.jsonl", "a/b/corpus-v1.jsonl"),
             ("a/b/MANIFEST.json", "a/b/MANIFEST.json"),
@@ -86,6 +94,47 @@ class TestTheCheckerItself(unittest.TestCase):
                 m = mod.CITATION.search(text)
                 self.assertIsNotNone(m, f"{text} did not match at all")
                 self.assertEqual(m.group(1), expected)
+
+
+class TestIgnoredPathsAreNotJudged(unittest.TestCase):
+    """A git-ignored path is present or absent depending on what has been RUN
+    on this machine, not on what the tree contains, so the checker declines to
+    judge citations to one.
+
+    The case that forced this: `backend/.run-volumes.jsonl` is written by the
+    nightly ingest. Two citations to it were baselined from a tree that had
+    never run the pipeline; on a machine that HAD run it, the checker reported
+    them as "now resolve and can be dropped". Dropping them would have made the
+    next clean checkout report them as NEW and turn
+    test_no_citation_broke_that_was_not_already_broken red on an unrelated edit.
+
+    These assertions are about ignore RULES, never about file presence, so they
+    hold either way round -- which is the property under test.
+    """
+
+    def test_an_ignored_path_is_reported_ignored_and_a_tracked_one_is_not(self):
+        mod = _load_tool()
+        got = mod._ignored(["backend/.run-volumes.jsonl", "backend/extract.py"])
+        self.assertEqual(got, {"backend/.run-volumes.jsonl"})
+
+    def test_a_finding_against_an_ignored_path_is_dropped(self):
+        mod = _load_tool()
+        kept = ("x -> backend/extract.py:1", "desc", ["backend/extract.py"])
+        dropped = ("y -> backend/.run-volumes.jsonl",
+                   "desc", ["backend/.run-volumes.jsonl"])
+        self.assertEqual(mod._drop_ignored([kept, dropped]),
+                         [(kept[0], kept[1])])
+
+    def test_git_failing_does_not_silently_empty_the_report(self):
+        """If the helper cannot answer, nothing is treated as ignored. A
+        checker that goes quiet when a subprocess breaks reports success for
+        the wrong reason, which is this repo's stated failure mode."""
+        mod = _load_tool()
+        real, mod.REPO = mod.REPO, os.path.join(BACKEND, "no-such-dir-here")
+        try:
+            self.assertEqual(mod._ignored(["backend/.run-volumes.jsonl"]), set())
+        finally:
+            mod.REPO = real
 
 
 class TestTheTreeHasNoNewDrift(unittest.TestCase):

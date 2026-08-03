@@ -146,17 +146,18 @@ goes out without the session cookie and returns 401, which the client renders as
 screen — indistinguishable from being logged out, with no error text anywhere.
 `serve.py:78` mounting the page onto the webapp process is what makes it work.
 
-### The suites, as the runner printed them (2026-08-02)
+### The suites, as the runner printed them (2026-08-03)
 
 | suite | command | result |
 |---|---|---|
-| pipeline | `cd backend && python3 -m unittest discover -s tests` | `Ran 1425`, OK, 0 skipped |
+| pipeline | `cd backend && python3 -m unittest discover -s tests` | `Ran 1428`, OK, 0 skipped |
 | webapp | `cd backend/webapp && .venv/bin/python -m unittest discover -s tests` | `Ran 352`, OK, 0 skipped |
 | api | `cd backend/api && .venv/bin/python -m unittest discover -s tests` | `Ran 117`, OK, 0 skipped |
 
 *1469 → 1421 when the 48 doc-policy tests retired with the documents they checked, → 1425 with
-`tests/test_citations.py`. **Re-run rather than quoting these** — that is the rule these three
-numbers have already broken twice.*
+`tests/test_citations.py`, → 1428 with its three git-ignore cases. **Re-run rather than quoting
+these** — that is the rule this one number has now broken three times in two days, which is the
+whole argument for `Ran N tests` over anything written down.*
 
 **Zero tests skipped in any suite.** Twelve backend modules gate on `scratchdb.available()` and all
 twelve ran: each calls `envfile.load(backend/.env)` at import time, three lines above the gate, so
@@ -221,14 +222,17 @@ forward commit, so a mechanical revert scan under-reports what was undone.
   `os.environ.get("JOBS_ADMIN_DATABASE_URL", qc.DATABASE_URL)` and **falls back**. If anything
   blocks self-repair it is that `jobs_api` lacks CREATE on public — a grant question, not an
   env-file one.
-- **`renders.forgetAll()` is exported and called by nothing.** `signOut()` clears `user` and the
-  hash but not `renders`' `seen` Map or `events`' `impressed` Set. Sign out and in as a different
-  Builder in one tab and the detail page attaches the previous Builder's `(request_id, rank)` to
-  the new Builder's events (`frontend/js/renders.mjs:60-62` vs `app.mjs:195-205`). No test covers
-  a sign-out/sign-in cycle.
-- **`POST /v1/events` is spelled twice** — once via `api.postEvents`, once as a literal in the
-  unload flush with its own copy of credentials and keepalive (`frontend/js/events.mjs:165-180` vs
-  `api.mjs:304-310`). The unload path is the one nobody watches.
+- ~~`renders.forgetAll()` is exported and called by nothing~~ **Fixed 2026-08-03.** `signOut()`
+  now flushes first — the outgoing Builder's events are theirs — then calls `stopObserving()`,
+  `forgetAll()` and a new `events.forgetImpressions()` (`frontend/js/app.mjs:17,221-222`;
+  `events.mjs:68`). Three checks in `frontend/check_client.mjs:1222-1257` cover the
+  sign-out/sign-in cycle that nothing covered before, and they were verified to fail with the fix
+  reverted.
+- ~~`POST /v1/events` is spelled twice~~ **Fixed 2026-08-03.** The unload flush goes through
+  `api.postEvents` with a `keepalive` option like every other caller, and its rejection is at least
+  logged (`frontend/js/events.mjs:30,191`; `api.mjs:304-314`). The old literal could only ever have
+  caught a synchronous `fetch()` throw — never a rejection or an HTTP error — while the queue was
+  already spliced, so a refused unload batch vanished silently.
 - **`ensure_app_view`'s DROP fallback destroys GRANTs with no re-grant anywhere in the repo.** A
   column reorder raises `InvalidTableDefinition`, the handler DROPs the view, and DROP VIEW takes
   every GRANT with it. It surfaces on the *next* nightly run as the webapp refusing to start
@@ -251,17 +255,23 @@ forward commit, so a mechanical revert scan under-reports what was undone.
   **And the rule as this file stated it was wrong:** § 6 puts *never train* on **L0**, not L1
   (`backend/evals/__main__.py` and § 6 below). L1 is the layer you may train on and must not
   *evaluate* on. Figures from this tool are unreproducible for the dependency reason anyway.
-- **Stale `file:line` citations throughout — 309 of them, and there is a checker now.**
+- **Stale `file:line` citations throughout — 305 as of 2026-08-03, and there is a checker now.**
   `tools/audit-citations.py` counts them and `tests/test_citations.py` fails the suite on a *new*
-  one; the existing 309 are accepted in `config/citation-baseline.json` with their reason. The
-  original estimate here ("four in `schema.py`/`extract.py`/`state.py`, four in
+  one; the existing ones are accepted in `config/citation-baseline.json` with their reason.
+  **Run the tool for the number rather than quoting this line** — it has already been stated as
+  309, 308, 306 and 305 in four consecutive commits, and only the tool is current. The original
+  estimate here ("four in `schema.py`/`extract.py`/`state.py`, four in
   `config/pursuit-criteria.json`") was low by two orders of magnitude, and the drift is not
   uniform — `evals/labels.py`'s self-citations run +266 (`_item_key()` cited `:1329`, actually
   `:1595`) but `model_vs_human()`'s `no_consensus` runs +338, so no single offset fixes them.
   Eight `migrate_pursuit_profile.py` citations pointing past a 333-line file were fixed
-  2026-08-03. **The class the checker cannot see is the dangerous one:** `extract.py:404` cites
-  `lib/text.py:119` for a regex that was *deleted*, not moved — the line resolves and the claim is
-  false (`lib/text.py:184` says so outright).
+  2026-08-03. **The class the checker cannot see is the dangerous one**, and the tree's one known
+  instance was closed 2026-08-03: `extract.py:404` cited `lib/text.py:119` for a
+  `re.sub(r"<[^>]+>", " ", text)` that had been folded into `_TAG` — the line resolved and the
+  claim was false. The comment now names `_TAG` (`backend/extract.py:399-423`;
+  `lib/text.py:152-155`) and the worked example lives at `git show 20ee7d0:backend/extract.py`,
+  because keeping a false comment in the tree to demonstrate a limitation is paying for the lesson
+  twice.
 - ~~Dead imports~~ **Fixed 2026-08-03, and one of the four was not dead.** `relevance` in
   `score.py`, `urllib.request` in `ingest/hn-hiring.py` and `ingest/google-apify.py` were removed
   (`urllib.error` on the following line of each is live — do not remove that). **`schema` in
@@ -287,8 +297,14 @@ forward commit, so a mechanical revert scan under-reports what was undone.
    runs.
 3. **`~/.config/jobs-backup.env` does not exist**, so backups would run local-disk-only, tolerated
    silently by the `-` prefix. No verified restore has been performed.
-4. **The volume alarm is inert in both directions** — `backend/.run-volumes.jsonl` does not exist
-   and the timer is not installed. `tools/volume-check.py` exits 1 with `no_history`.
+4. **The volume alarm is half wired, and the missing half is the half that fires.** Re-checked
+   2026-08-03: history is now accruing — `backend/.run-volumes.jsonl` exists and
+   `tools/volume-check.py` **exits 0**, reporting `9 source(s) evaluated, 1 run(s) in history` with
+   every source `skip … (insufficient history)`. It no longer exits 1 with `no_history`. What is
+   still missing is the reader: `jobs-volume-check.timer` is not installed, so nothing runs the
+   check. `systemctl --user list-unit-files` shows only `jobs-failure@.service`,
+   `jobs-ingest.service` and `jobs-ingest.timer`. One run is also not enough history to compare
+   against — that accrues on its own; the timer will not.
 5. **Which of the two committed n=115 selfchecks is the floor of record?** See § 6. Neither JSON
    carries a supersession marker.
 6. **Name the tracks.** `config/pursuit-persona.json`'s `_no_buckets_comment` records that

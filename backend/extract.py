@@ -400,20 +400,30 @@ JOB POSTING TO EXTRACT FROM:
 #: shape, each of which is markup and none of which is prose.
 #:
 #: THIS IS A STRIPPER LEAK, NOT A SCRAPER BUG, and that is why the gate belongs
-#: to extraction rather than to any one ingest script. strip_html() removes tags
-#: with `re.sub(r"<[^>]+>", " ", text)` (lib/text.py:119), which is correct until
-#: an attribute VALUE contains ">". Modern Tailwind class names do:
+#: to extraction rather than to any one ingest script. strip_html() strips with
+#: `_TAG` (lib/text.py:152-155), whose FIRST alternative treats a double-quoted
+#: attribute value as opaque. Before that alternative existed the pattern was a
+#: bare `re.sub(r"<[^>]+>", " ", text)`, which ended a tag at the first ">" in
+#: the source -- including one inside a quoted value. Modern Tailwind class
+#: names contain them:
 #:
 #:     <section class="... [&:has([data-writing-block])>*]:pointer-events-auto ...
-#:                                                     ^ the regex ends the tag HERE
+#:                                                     ^ the old regex ended the tag HERE
 #:
 #: so everything after that ">" -- the rest of the class list, then
-#: `data-testid="conversation-turn-136"`, then the real closing ">" -- is emitted
-#: as TEXT. Every contaminated row in the corpus is that one mechanism, and it
-#: fires source-independently: on greenhouse, where an employer pasted a rendered
-#: page into their own JD editor (the markup is in the API's `content` field --
-#: see ingest/ats.py:584,716, it is not something this pipeline added), and on
-#: google_jobs, where a careers page was scraped.
+#: `data-testid="conversation-turn-136"`, then the real closing ">" -- was
+#: emitted as TEXT. Every contaminated row in the corpus is that one mechanism,
+#: and it fired source-independently: on greenhouse, where an employer pasted a
+#: rendered page into their own JD editor (the markup is in the API's `content`
+#: field -- see ingest/ats.py:584,716, it is not something this pipeline added),
+#: and on google_jobs, where a careers page was scraped.
+#:
+#: THE GATE DID NOT BECOME DEAD WHEN _TAG DID. `<[^>]+>` survives as _TAG's
+#: second alternative (lib/text.py:154) and still fires for everything the
+#: quote-aware form cannot parse -- unbalanced quotes, single-quoted values --
+#: and the contaminated rows already in the table were stored before the fix and
+#: were never re-stripped. This gate reads what is in description_text now, not
+#: what a fresh strip would produce.
 #:
 #: `\]:[a-z]` and not `\]:`. The looser form matches "[ONSITE]: We are looking
 #: for..." -- standard Who's Hiring prose -- and hn_whoishiring row

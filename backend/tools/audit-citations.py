@@ -18,12 +18,18 @@ thing it exists to prevent:
   * A line number past the end of the file it names -- CHECKED, and mechanical.
   * A citation whose line still exists but no longer says anything like what
     the citing comment claims -- **NOT CHECKED, and not checkable here.**
+  * Whether a path is present because the tree contains it or because the
+    pipeline has run -- SIDESTEPPED. Git-ignored paths are not judged; see
+    `_drop_ignored`.
 
-That third class is real and this repo has at least one: `extract.py:404` cited
-`lib/text.py:119` for a `re.sub(r"<[^>]+>", " ", text)` that was deleted rather
-than moved, and `lib/text.py:184` now says outright "Tag stripping is `_TAG`
-above, not `<[^>]+>`". The line number resolves. The claim is false. A green run
-of this tool means the citations RESOLVE, never that they are RIGHT.
+That third class is real, and the worked example is HISTORICAL rather than
+in-tree -- do not go looking for it here and conclude this tool is lying.
+`git show 20ee7d0:backend/extract.py` line 404 cited `lib/text.py:119` for a
+`re.sub(r"<[^>]+>", " ", text)` that had been folded into `_TAG` rather than
+left where it was, while `lib/text.py:184` said outright "Tag stripping is
+`_TAG` above, not `<[^>]+>`". The line number resolved. The claim was false, and
+this tool was green across it for as long as it stood. A green run means the
+citations RESOLVE, never that they are RIGHT.
 
 WHY A BASELINE RATHER THAN A SWEEP. There are dozens of drifted citations in
 the tree and fixing them all in one commit would be a large, unreviewable diff
@@ -62,8 +68,15 @@ SUFFIXES = (".py", ".mjs", ".js", ".md", ".jsonl", ".json", ".sh", ".service",
 
 #: Directories never scanned. `.venv` holds two vendored FastAPI trees whose
 #: own docs cite paths that mean nothing here.
-SKIP_DIRS = {".git", ".venv", "venv", "__pycache__", "node_modules",
-             ".cache", ".claude"}
+#:
+#: `.claude` IS NOT HERE, and was: skipping it exempted `.claude/CLAUDE.md` --
+#: the file that imposes the cite-`file:line` rule in the first place, and the
+#: densest collection of citations in the repo -- from the checker enforcing it.
+#: Nothing else under `.claude/` is tracked, and `_tracked_files()` reads
+#: `git ls-files`, so the gitignored working files there are still never read.
+#: It was scanning clean when it was added, so this costs nothing today; the
+#: point is that the next drifted citation in it fails the suite.
+SKIP_DIRS = {".git", ".venv", "venv", "__pycache__", "node_modules", ".cache"}
 
 #: docs/orientation-2026-08-02/ is the frozen raw output of the audit that
 #: produced STATE-OF-THE-SYSTEM.md. Its citations were correct when written and
@@ -209,6 +222,62 @@ def _resolve(path, citing_file, basenames):
     return AMBIGUOUS
 
 
+def _ignore_candidates(path):
+    """The forms `_resolve` would have tried, for an ignore check.
+
+    A citation that did not resolve names no file, so there is nothing to test
+    but the shapes it could have meant: the path as written, and the same under
+    each search root.
+    """
+    out = [path]
+    for root in SEARCH_ROOTS:
+        if root:
+            out.append(os.path.normpath(os.path.join(root, path)))
+    return [p for p in out if not p.startswith("..")]
+
+
+def _ignored(paths):
+    """Which of these repo-relative paths git ignores. ONE call, not one each.
+
+    `git check-ignore` consults the index by default, so a TRACKED file is never
+    reported here even when a pattern would otherwise match it -- tracked files
+    stay judgeable, which is the whole population this tool exists to check.
+    """
+    paths = sorted({p for p in paths if p})
+    if not paths:
+        return set()
+    proc = subprocess.run(["git", "-C", REPO, "check-ignore", "--stdin", "-z"],
+                          input="\0".join(paths) + "\0",
+                          capture_output=True, text=True)
+    # 0 = some ignored, 1 = none ignored, >1 = git itself failed. On a real
+    # failure report nothing as ignored: a checker that goes quiet when its
+    # helper breaks is worse than one that over-reports.
+    if proc.returncode > 1:
+        return set()
+    return {p for p in proc.stdout.split("\0") if p}
+
+
+def _drop_ignored(candidates):
+    """Findings whose target is a git-ignored path are not findings.
+
+    THE RESULT MUST NOT DEPEND ON WHETHER THE PIPELINE HAS RUN, and without
+    this it did. `backend/.run-volumes.jsonl` is written by the nightly ingest
+    and is ignored (`.gitignore:95`), so it is absent on a clean checkout and
+    present on any machine that has run `run-daily.py`. Two citations to it went
+    into the baseline from a tree that had never run, and this tool then told
+    the next machine they "now resolve and can be dropped" -- advice that would
+    have turned the clean checkout red through `tests/test_citations.py`. That
+    is the same cries-wolf failure the (citing file, citation text) key was
+    introduced to prevent, arriving by a different road.
+
+    Runtime state is unjudgeable here for the same reason the corpora are: the
+    honest answer is neither "resolves" nor "missing".
+    """
+    ignored = _ignored(p for _, _, cands in candidates for p in cands)
+    return [(key, desc) for key, desc, cands in candidates
+            if not any(p in ignored for p in cands)]
+
+
 def _line_count(rel, cache):
     if rel not in cache:
         full = os.path.join(REPO, rel)
@@ -281,7 +350,7 @@ def scan():
                 continue
             if target is None:
                 findings.append((key, f"{rel}:{lineno} cites {path!r}, which "
-                                      f"does not exist"))
+                                      f"does not exist", _ignore_candidates(path)))
                 continue
 
             if start:
@@ -290,8 +359,8 @@ def scan():
                 if total and worst > total:
                     findings.append(
                         (key, f"{rel}:{lineno} cites {path}:{m.group(0).split(':', 1)[1]}, "
-                              f"but {target} has only {total} lines"))
-    return findings
+                              f"but {target} has only {total} lines", [target]))
+    return _drop_ignored(findings)
 
 
 def load_baseline():
@@ -375,9 +444,11 @@ def _write_baseline(findings):
             "behind the refactor-freeze-2026-08-02 tag."),
         "_what_this_cannot_catch": (
             "A citation whose line number still resolves but whose target no "
-            "longer says what the citing comment claims. extract.py:404 vs "
-            "lib/text.py is the worked example in the tool's docstring. A green "
-            "run means citations RESOLVE, not that they are RIGHT."),
+            "longer says what the citing comment claims. The worked example is "
+            "historical and is not in the working tree: `git show "
+            "20ee7d0:backend/extract.py` line 404 vs lib/text.py, described in "
+            "the tool's docstring. A green run means citations RESOLVE, not "
+            "that they are RIGHT."),
         "accepted": {k: d for k, d in sorted(findings)},
     }
     with open(BASELINE, "w", encoding="utf-8") as fh:

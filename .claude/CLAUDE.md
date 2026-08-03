@@ -187,13 +187,20 @@ are the primary written rationale in the repo**; treat deleting one as deleting 
 **Cite `file:line` when explaining a claim about the code.** That is what makes a claim checkable.
 `tools/audit-citations.py` now checks it, and `tests/test_citations.py` runs it in the suite, so a
 **new** citation naming a file or a line that does not exist is a red test. It checks two things
-and only two: the path exists, and the line is within the file. **It cannot tell you whether the
-line still says what you claim** — that class is real and this tree has instances.
+and only two: the path exists, and the line is within the file. It declines to judge a third —
+a **git-ignored** path, whose presence depends on whether the pipeline has been run here rather
+than on the tree. **It cannot tell you whether the line still says what you claim.** That class is
+real; the one known instance was closed 2026-08-03, which is not evidence there are no others.
+**This file is in scope** — it was exempt until 2026-08-03, so a bad `file:line` added here is now
+a red test like anywhere else.
 
-309 already-drifted citations are accepted in `config/citation-baseline.json` rather than swept in
-one commit. That file is meant to shrink; do not add to it to silence a finding. If what you are
-citing is one of the 137 documents deleted on 2026-08-02, cite it as
-`git show refactor-freeze-2026-08-02:<path>` — the checker allows that form deliberately.
+The already-drifted citations are accepted in `config/citation-baseline.json` rather than swept in
+one commit. **Run `python3 tools/audit-citations.py` for the count** — it has been written down as
+309, 308, 306 and 305 in four consecutive commits, which is the same way every count in prose in
+this repo has gone wrong. That file is meant to shrink; do not add to it to silence a finding. If
+what you are citing is one of the 137 documents deleted on 2026-08-02, cite it as
+`git show refactor-freeze-2026-08-02:<path>` — the checker allows that form deliberately, and does
+not validate it, so get the path right.
 
 ## Do not
 
