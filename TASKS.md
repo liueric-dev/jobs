@@ -122,15 +122,23 @@ local is wrong and that is the first thing this row bought.**
 
 ---
 
-### T-3 — Pin the three `requirements.txt`
+### ~~T-3~~ — Pin the three `requirements.txt`
 
-All three carry `>=` floors and there is no lockfile. The stated reason for the stdlib rule is that
-the pipeline runs unattended on several machines; unpinned floors undercut exactly that. Pin to
-`==` with the floor and its rationale preserved in the existing comment headers — those headers are
-`_comment`-style decision records and deleting one is deleting a decision.
+**Closed 2026-08-03.** All three now pin `==` at the version already installed in the interpreter
+each file governs — the pipeline's system `python3`, `api/.venv`, `webapp/.venv` — instead of a
+floor: `psycopg[binary]==3.3.4` in `backend/requirements.txt`; `fastapi==0.140.0`,
+`uvicorn[standard]==0.51.0`, `psycopg[binary]==3.3.4`, `pydantic==2.13.4` in
+`backend/api/requirements.txt`; the same four plus `httpx==0.28.1` in
+`backend/webapp/requirements.txt`. Every existing comment header is untouched — only the
+specifier changed.
 
-**Done when:** no `>=` remains in any of the three files, every pin has the installed version it
-was taken from, and all three suites plus both frontend checkers pass against the pinned set.
+`.github/workflows/ci.yml:53,111,142` install fresh via `pip install -r` on Python 3.14 with no
+lockfile and no cache carried between runs, so pinning to versions already validated locally is
+the same environment CI installs on a clean runner, not a departure from it.
+
+`grep -rn ">=" requirements.txt api/requirements.txt webapp/requirements.txt` is empty. All three
+suites still print `OK` at the same counts recorded at `f0c3e52`: 1433 / 354 / 117. Both frontend
+checkers still pass: `verify_fixtures.py` and `node check_client.mjs` (57 checks, 0 failed).
 
 ---
 
