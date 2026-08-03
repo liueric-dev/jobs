@@ -78,7 +78,7 @@ def record_ats_greenhouse():
 def record_ats_greenhouse_no_content():
     """The same board WITHOUT ?content=true -- the missing-`content` payload.
 
-    `05-fetcher-harness.md:73-76` wants "a Greenhouse payload with a missing
+    `git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:73-76` wants "a Greenhouse payload with a missing
     `content` field" among the awkward responses, and no live board offers
     one: every posting on every board carries the field when it is asked
     for. Dropping the query parameter produces the identical shape from the
@@ -103,7 +103,7 @@ def record_ats_greenhouse_domsoup():
     """A LIVE greenhouse posting whose `content` is a pasted browser DOM.
 
     THE FIXTURE FOR TASK 35, and it is a recording rather than a constructed
-    string for the reason HANDOFF.md:571-574 states: fixtures written from a
+    string for the reason `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:571-574` states: fixtures written from a
     specification test the specification. Nobody would invent
     `[&:has([data-writing-block])>*]:pointer-events-auto` -- and that exact
     token is the defect, because the ">" inside the class attribute is what
@@ -151,7 +151,8 @@ def record_ats_greenhouse_domsoup():
 
     # REFUSE TO RECORD BYTES THAT NO LONGER CARRY THE DEFECT. A cassette that
     # has quietly stopped reproducing its own failure reads like coverage and
-    # is worse than none -- the lesson task 18 wrote down (HANDOFF.md:565-570).
+    # is worse than none -- the lesson task 18 wrote down
+    # (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:565-570`).
     # If Taboola fixes this job description, this recipe must fail loudly so
     # the fixture is re-sourced rather than silently downgraded to two clean
     # postings that assert nothing.
@@ -424,7 +425,9 @@ ATS_VALIDATION_PROBES = (
     ("workday", "nvidia", {"workday_dc": "wd1",
                            "workday_site": "NVIDIAExternalCareerSite"},
      "WRONG DATA CENTRE, right tenant -- wd1 instead of wd5. This is the "
-     "18-ingest-workday-cxs.md:54 failure: a guessed dc 404s, and a 404 here "
+     "`git show refactor-freeze-2026-08-02:"
+     "docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:54` failure: "
+     "a guessed dc 404s, and a 404 here "
      "is indistinguishable from a tenant with no open roles unless the dc is "
      "stored and used. Hence workday_dc being its own column"),
     ("smartrecruiters", "Ubisoft", {},
@@ -490,10 +493,10 @@ def record_ats_validation():
 #: live Workday tenants in `company_ats` (Moelis 43 is smaller but sits behind
 #: an `Experienced-Hires` site that is not the shape task 18 walks; nyp 367 and
 #: nordstrom 862 are both several times the bytes for no extra shape).
-#: `docs/ingest/workday.md:553-557` names this tenant, this size and this
-#: request count.
+#: `git show refactor-freeze-2026-08-02:docs/ingest/workday.md:553-557` names
+#: this tenant, this size and this request count.
 #:
-#: All three coordinates, not just the token: 18-ingest-workday-cxs.md:54
+#: All three coordinates, not just the token: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:54`
 #: forbids guessing the data centre, and `wd108` is not derivable from `msk`.
 WORKDAY_CXS = ("msk", "wd108", "MSKCC_Careers_Primary")
 
@@ -505,7 +508,7 @@ def record_workday_cxs():
     holds one nvidia.wd5 list page, and `workday_fixtures.recorded_list_page()`
     lifts it rather than recording a second one. What it cannot hold is a
     WALK: it is a single page, and every multi-page failure in
-    `docs/ingest/workday.md:241-249` is about what the second page does.
+    `git show refactor-freeze-2026-08-02:docs/ingest/workday.md:241-249` is about what the second page does.
     NVIDIA's board is 2,000 postings -- 100 pages -- so walking it to get that
     would commit megabytes to prove pagination. msk was 79 postings when this
     was recorded on 2026-07-28: FOUR pages, the last one short (20+20+20+19,

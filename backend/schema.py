@@ -151,14 +151,14 @@ COHORT_SIGNAL_TABLE = "cohort_signal"
 #: DISPLAY PREFERENCE, which is why it is a constant here rather than a literal
 #: in the query or a config knob.
 #:
-#: The argument is in tranche_five/28-cohort-aggregation.md § The small-N
-#: problem and it is arithmetic, not caution. Thirty Builders who see each other
+#: The argument is in `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_five/28-cohort-aggregation.md`
+#: § The small-N problem and it is arithmetic, not caution. Thirty Builders who see each other
 #: in a classroom: "1 Builder saved this", plus knowing who was on their laptop,
 #: plus a posting for a role someone mentioned out loud, is an identification.
 #: An aggregate is not automatically anonymous at this scale.
 #:
 #: LOWERING IT TO SEE OUTPUT IS THE ONE THING NOT TO DO. The live cohort is two
-#: labellers today (docs/labelling-report-2026-08-02.md), so at 3 this table is
+#: labellers today (`git show refactor-freeze-2026-08-02:docs/labelling-report-2026-08-02.md`), so at 3 this table is
 #: empty by construction -- and an empty badge is the CORRECT rendering of a
 #: two-person cohort, not a bug to tune away. webapp/tests/test_cohort_signal.py
 #: TestSuppression pins that 2 savers produce no row.
@@ -235,7 +235,7 @@ SEARCH_RESULTS_TABLE = "search_query_results"
 #: TestSuppression pins that two watchers and zero watchers are indistinguishable.
 #:
 #: LOWERING IT TO SEE OUTPUT IS THE ONE THING NOT TO DO -- the live cohort is
-#: two labellers today (docs/labelling-report-2026-08-02.md), so this table is
+#: two labellers today (`git show refactor-freeze-2026-08-02:docs/labelling-report-2026-08-02.md`), so this table is
 #: empty by construction, and an empty badge is the CORRECT rendering of a
 #: two-person cohort rather than a bug to tune away.
 SEARCH_MIN_WATCHERS = 4
@@ -327,7 +327,7 @@ def search_watcher_bucket(watchers: int) -> str | None:
 #: policy" -- while the mechanism itself remains unexercised in production.
 #: The first hn_whoishiring row to become eligible is the first real test of
 #: vote_facts(); do not treat 3 as a passing grade for it. See
-#: docs/facts-v3-diff.md.
+#: `git show refactor-freeze-2026-08-02:docs/facts-v3-diff.md`.
 #:
 #: STRANDED ROWS ARE EXPECTED AND ARE NOT A BUG. _eligible_sql requires
 #: j.status = open (extract.py:405), so a bump never reaches facts rows whose
@@ -721,7 +721,7 @@ def ensure_schema(conn: psycopg.Connection) -> None:
     #     (extract.ROLE_TRACK), a coarser grain than role_archetype and a
     #     separate axis rather than a rollup of it. NULLABLE BY DESIGN: the
     #     clustering it was derived from covers 83.2% of the corpus and
-    #     docs/role-track-derivation.md is explicit that the tail below n=5 is
+    #     `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md` is explicit that the tail below n=5 is
     #     not trustworthy, so "no track fits this" has to be representable
     #     rather than rounded to the nearest one. The vocabulary itself is
     #     PROVISIONAL -- derived pre-Phase-3 from a tech-heavy corpus, and
@@ -736,7 +736,7 @@ def ensure_schema(conn: psycopg.Connection) -> None:
     # this", plus rows stranded below FACTS_VERSION.
     #
     # A corpus statistic here has a shelf life of one night
-    # (docs/facts-v3-diff.md). Measure it through jobs_app, not this table --
+    # (`git show refactor-freeze-2026-08-02:docs/facts-v3-diff.md`). Measure it through jobs_app, not this table --
     # the view inner-joins job_matches and applies four completeness
     # predicates, so what reaches a Builder is a strict subset.
     dbconn.add_missing_columns(conn, FACTS_TABLE, [
@@ -936,7 +936,8 @@ def ensure_schema(conn: psycopg.Connection) -> None:
     # correctness: it, not the jobs table, is the source of truth for "this HN
     # comment was already parsed."  google_jobs_query_stats is append-only
     # history for the not-yet-built adaptive-cadence feature (described in
-    # docs/DEVELOPER.md, deleted 2026-08-02; it is not on any current roadmap
+    # `git show 5046f98:backend/docs/DEVELOPER.md`, deleted 2026-08-03; it is
+    # not on any current roadmap
     # -- see docs/STATE-OF-THE-SYSTEM.md § 4 for what is actually open);
     # nothing reads it yet, but both Google scripts write it
     # on every run and previously carried identical copies of this DDL.

@@ -4,8 +4,9 @@ WHAT CHANGED, AND WHY IT IS A TABLE NOW
     `ats.py` used to read `config/companies.json` -- 68 hand-verified tech
     tokens -- on every run. Task 16 built `company_ats` (see
     `migrations/migrate_company_ats.py:113-141` for the DDL and
-    `docs/ats-token-discovery.md` for what is in it), and
-    `16-ats-token-discovery.md:34` states the rule this module implements:
+    `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md` for what is in it), and
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/16-ats-token-discovery.md:34`
+    states the rule this module implements:
     "store as a simple seeded table, not a config file -- it will grow
     continuously." Adding an employer is an INSERT, never a deploy.
 
@@ -32,7 +33,7 @@ WHICH STATUSES ADMIT A TOKEN -- AND WHY IT IS NOT JUST 'valid'
                    per-company error list this script already keeps; the cost
                    of not trying is that a token blocked once at validation
                    time is never pulled again, which is the same silence
-                   `docs/ats-token-discovery.md:177-186` is about. Rows
+                   `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md:177-186` is about. Rows
                    admitted this way are counted separately on the summary
                    line so the decision stays visible.
 
@@ -44,7 +45,7 @@ WHICH STATUSES ADMIT A TOKEN -- AND WHY IT IS NOT JUST 'valid'
                    (`ats_discovery.py:490-491`). Excluded by the platform
                    filter before status is even considered.
 
-    Read `docs/ats-token-discovery.md:35-60` before treating any of this as a
+    Read `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md:35-60` before treating any of this as a
     coverage measurement: task 16's positive control found 0 of 4 known-good
     tokens because those boards render client-side, so absence from this
     table is not evidence of absence in the world.
@@ -133,7 +134,8 @@ def load_companies(conn, platforms=HANDLED_PLATFORMS,
 #: token in it was confirmed live by a direct HTTP call. Used as
 #: first/last_validated_at on a seeded row rather than "now", because
 #: stamping today's date on a check made in July is how a 60-day staleness
-#: rule gets quietly disarmed (docs/ats-token-discovery.md:344-350).
+#: rule gets quietly disarmed
+#: (`git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md:344-350`).
 COMPANIES_JSON_VERIFIED_AT = "2026-07-23T00:00:00Z"
 
 SEED_DISCOVERED_VIA = "companies-json-seed"

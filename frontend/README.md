@@ -18,10 +18,10 @@ problem**.
 
 > **Where the contract is.** `API-CONTRACT-v1.md` is cited by name throughout
 > this file, `backend/webapp/` and `js/`. It lived at
-> `docs/tasks/refactor/API-CONTRACT-v1.md` and was deleted 2026-08-02 with the
+> `git show refactor-freeze-2026-08-02:docs/tasks/refactor/API-CONTRACT-v1.md`
+> and was deleted 2026-08-02 with the
 > rest of `docs/`. It is the one deleted document still governing live code, so
-> read it before changing a response shape:
-> `git show refactor-freeze-2026-08-02:docs/tasks/refactor/API-CONTRACT-v1.md`.
+> read it before changing a response shape.
 > `fixtures/contract/` is that document rendered as JSON and is the part of it
 > that did survive in the tree.
 
@@ -49,7 +49,7 @@ red. ~~Search (task 25) is the next row; it has no route and no table yet.~~
 > and `#/search/<id>` (one query's results), and `js/search.mjs` reads the id out
 > of the hash itself rather than claiming a second row for a distinction only it
 > cares about. **Contribute (task 24) is the next row**, and is the last of the
-> six surfaces in `docs/tasks/refactor/tranche_six/32-frontend.md`.
+> six surfaces in `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_six/32-frontend.md`.
 
 Build the client's types against `contract/`. Build the client's **parser**
 against `shipped/`, because that is what the server sends.
@@ -240,7 +240,7 @@ a question `job_events` could answer: it had a `profile` and no user id, and
 thirty Builders share the one `pursuit` profile, so counting distinct rows
 counted one person's three saves as three people's — a privacy control
 returning a wrong answer, which is worse than returning `null`. Defects **D66**
-and **D67** in `docs/ingest/DEFECTS.md@refactor-freeze-2026-08-02` were the same missing column surfacing
+and **D67** in `git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md` were the same missing column surfacing
 in `state.seen` and `state.applied`, and both are now **fixed**: the join
 resolves by `app_user_id` (`jobs.py:286-291`), `POST /v1/events` writes it, and
 pre-column rows carry NULL and resolve to `false` for everyone rather than
@@ -275,8 +275,9 @@ exist at all, not because the count was low.~~
 > verifier now derives `COHORT_FIELDS` and refuses to pass on a tuple it does
 > not recognise — see § *What building against these fixtures turned up*, item 5.
 
-If you are reading this well after 2026-08-01, check `docs/ingest/DEFECTS.md@refactor-freeze-2026-08-02`
-and `docs/tasks/refactor/HANDOFF.md` rather than trusting this section. The
+If you are reading this well after 2026-08-01, check
+`git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`
+and `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md` rather than trusting this section. The
 blocked/unblocked status of a field is the fastest-rotting sentence in this
 file.
 
@@ -432,7 +433,7 @@ independently, since `role_track` is NULL on every pre-task-11 row anyway"* was
 **wrong twice**: `:534` is the `profiles` DDL, and the comment it meant (now
 `:725`) had itself gone stale when task 12 re-extracted. Measured through the
 view on 2026-08-02: **134 of 166 visible `pursuit` rows carry a track, all nine
-values present.** Re-measure before quoting — `docs/facts-v3-diff.md` records
+values present.** Re-measure before quoting — `git show refactor-freeze-2026-08-02:docs/facts-v3-diff.md` records
 that a corpus statistic here has a shelf life of one night.
 
 **2. There is no way to ask for saved postings.** `GET /v1/jobs` takes eight
@@ -596,8 +597,8 @@ node frontend/check_client.mjs          # client half: the code still agrees wit
 Both are wired into `backend/tests/test_frontend_fixtures.py`, so
 `cd backend && python3 -m unittest discover -s tests` runs them. That is
 the actual bar — *"fails a suite someone is already running"* — and neither had
-met it. (The bar was `docs/DOCS-POLICY.md` rule 7, deleted 2026-08-02;
-`git show refactor-freeze-2026-08-02:docs/DOCS-POLICY.md`.) The node one skips where node is absent; it
+met it. (The bar was rule 7 of
+`git show refactor-freeze-2026-08-02:docs/DOCS-POLICY.md`, deleted 2026-08-02.) The node one skips where node is absent; it
 is not a dependency of this repo.
 
 `verify_fixtures.py` reads **seven** modules, and two of them are **not** under
