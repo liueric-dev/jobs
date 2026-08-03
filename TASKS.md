@@ -169,16 +169,63 @@ described a state of the world that then changed, and not one had been false whe
 
 ---
 
-### T-10 — A migration runner and a `schema_migrations` table
+### ~~T-10~~ — A migration runner and a `schema_migrations` table
 
-`backend/migrations/` holds ten scripts and **nothing records which have been applied** — no table,
-no runner (`docs/STATE-OF-THE-SYSTEM.md` § 5). On any box but this one, the only way to know is to
-inspect the schema and infer. Stdlib only; no Alembic, which would be a runtime dependency for a
-problem a table and a loop solve.
+**Closed 2026-08-03.** New `backend/migrations/runner.py`, stdlib only, registering all ten existing
+scripts by name (filename, no rewrite). It creates `schema_migrations(name, applied_at, note)` on
+first use and never guesses at real-world state by parsing a script's own report text — a second,
+drifting copy of logic each script already owns, the same reasoning CLAUDE.md gives against
+reimplementing relevance matching. Three actions: `--status` (default) reports every registered name
+applied-or-not from the table; `--apply NAME` invokes `python3 migrations/<NAME>.py --apply` once and
+records it on exit 0 — a NAME already recorded is a no-op, **the underlying script is not
+re-invoked**, which is what makes running it twice apply nothing the second time without leaning on
+each script's own idempotency contract a second time; `--mark-applied NAME --note "..."` bootstraps
+history for a migration already applied by hand before this runner existed, since guessing that from
+output text would be exactly the reimplementation this design avoids.
 
-**Done when:** a new runner under `backend/migrations/` reports, on `--status`, all ten as applied
-or not-applied; running it twice applies nothing the second time; and the existing ten scripts are
-registered without being rewritten.
+**Deliberately no `--apply-all`.** Four of the ten scripts document a real, non-destructive-but-real
+effect on a bare re-run — `migrate_profiles.py --apply` refreshes a live profile's criteria/persona
+from whatever the config file currently says, `migrate_pursuit_profile.py --apply` without `--active`
+deactivates an active profile, `migrate_company_ats.py --apply` inserts from whatever `--seed-file`
+currently points at. Each is an operator decision by that script's own docstring; a blanket apply-all
+would make ten of those decisions on a shrug. Naming one keeps it exactly as explicit as running the
+script directly always was.
+
+**Bootstrapped against this box's real Postgres, read-only.** Every one of the ten was checked via
+its own existing dry-run report (each documents this as safe and read-only; none was passed
+`--apply`) and is `--mark-applied`, with the evidence in its note — `python3 migrations/runner.py
+--status` now reports 10/10 applied here. Two are genuinely one-shot and match prior closed rows:
+`migrate_google_ids` (T-20's own verified numbers) and `migrate_scores` (legacy columns already
+gone). Four are schema-plus-report scripts that add columns and either backfill a fact
+(`migrate_extraction_passes`, 0 rows pending) or deliberately never backfill
+(`migrate_score_versions`, columns present, backfill not its job) or derive a value from raw_json
+(`migrate_ats_descriptions`, `migrate_description_rehash`, both "to rewrite: 0" over the same 11,121
+rows). The remaining three — `migrate_company_ats`, `migrate_profiles`, `migrate_pursuit_profile` —
+are seed/refresh scripts meant to run again whenever a config file changes, not one-shot migrations;
+"applied" for these three means the object each creates already exists with real (non-placeholder)
+content, recorded as such in the note, not that no future run is warranted.
+
+**On a box without this history, `--status` reports honestly, not optimistically**: an unmarked
+migration reads `NOT APPLIED` even if it was in fact run by hand years ago and nobody typed
+`--mark-applied` — the table records what the runner has been told, not an omniscient scan. That is
+the tradeoff for not parsing ten scripts' differently-shaped report text to guess.
+
+New `backend/tests/test_migrations_runner.py`, 11 cases: `TestRegistry` pins the ten names against
+`os.listdir()` with no database; the rest run against `evals.scratchdb.scratch_schema()` (never
+`public`, never a real migration script — `subprocess.run` is mocked for the apply-tracking cases) and
+cover table idempotency, `ON CONFLICT DO UPDATE`'s overwrite-not-duplicate, `--status` covering every
+registered name exactly once, and the row's own acceptance criterion directly: two calls to
+`apply_one` for the same name leave `subprocess.run`'s call count at 1. Two more invoke the real
+script end-to-end for argument validation only (an unregistered `--apply` name, `--mark-applied`
+without `--note`) — both are rejected before anything could be invoked or recorded.
+
+All three suites still print `OK`: pipeline is `1449`, `+11` over the `1438` on record after `T-12`
+(`34a1ed8`) — exactly the new test file, webapp and api unchanged. Citations still `0 new` at `273`
+known-drifted, unmoved by two new files with no `file:line` citations in either. `ruff`
+`1085 -> 1088`, all three `S603` (`subprocess` call) on the two new files' three `subprocess.run`
+call sites — the same finding `run-daily.py`'s own pre-existing `run_step()` already carries
+unsuppressed in the baseline, so this follows rather than breaks that precedent; no new finding in
+any other category.
 
 ---
 
