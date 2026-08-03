@@ -1,12 +1,12 @@
 [Unit]
 Description=jobs contributor API -- the work queue, on localhost:8420
 Documentation=file:///home/eric/apps/jobs/backend/api/README.md
-# EXPECTED TO BE DEPRECATED. backend/api/ is the contributor work queue and
-# .claude/CLAUDE.md says so; this unit exists because the tunnel needs something
-# to point at while it is still the way contributors submit. If the queue is
-# retired, delete this unit and the second ingress rule in
-# deploy/cloudflared/config.yml together -- an ingress hostname with nothing
-# listening behind it is a 502 that looks like an outage.
+# STAYING, NOT DEPRECATED -- OQ-1, decided 2026-08-03. backend/api/ is the
+# contributor work queue; the credential-issuance mechanism it will use is
+# still an open question (DEC-84) and this unit does not depend on which one
+# gets picked. IF THAT EVER CHANGES: delete this unit and the second ingress
+# rule in deploy/cloudflared/config.yml together -- an ingress hostname with
+# nothing listening behind it is a 502 that looks like an outage.
 After=network-online.target
 Wants=network-online.target
 OnFailure=jobs-failure@%n.service

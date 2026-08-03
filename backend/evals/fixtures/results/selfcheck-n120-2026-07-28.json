@@ -1,4 +1,5 @@
 {
+  "_comment": "OQ-9, decided 2026-08-03: this run and selfcheck-n120-2026-08-02.json disagree by up to 9.6 points (remote_policy) on the same frozen corpus and model, five days apart, with no code change identified as the cause. Neither run supersedes the other -- the decision is to quote BOTH as a range per field and tune/act against the LOWER of the two. This file is the lower bound for seniority_level (85.2% agree2), remote_policy (81.7% agree2) and tech_stack (70.4% agree2); the 2026-08-02 file is lower for ai_involvement (90.4% agree2). See docs/STATE-OF-THE-SYSTEM.md § 6.",
   "fields": {
     "advanced_degree_required": {
       "by_platform": {

@@ -14,8 +14,6 @@ do outreach — those stay manual on purpose.
 - [`docs/SCORING.md`](docs/SCORING.md) — `kind: rationale`. Why the weights are what they are, what
   was rejected, and the cost model. Append-only and dated by construction, so read it as argument
   rather than as a description of the tree today.
-- [`docs/HANDOFF-multimachine-google-jobs.md`](docs/HANDOFF-multimachine-google-jobs.md) —
-  `kind: record`. Frozen 2026-07-25; history, not current state.
 - [`../.claude/CLAUDE.md`](../.claude/CLAUDE.md) — the rules and invariants for changing this tree.
 
 The `docs/OVERVIEW.md` / `DEVELOPER.md` / `HANDOFF-match-quality.md` this list used to name were
@@ -23,6 +21,11 @@ deleted on 2026-08-03 — every structural claim in them had gone false, and `DE
 dated "verified item by item" header saying so of a `frontend/` that has been shipping since
 `3c0452f`. Read them with `git show refactor-freeze-2026-08-02:backend/docs/DEVELOPER.md` and so
 on; the 137 files under the repo-root `docs/` went the day before, behind the same tag.
+`HANDOFF-multimachine-google-jobs.md` (`kind: record`, frozen 2026-07-25) was the last document
+carrying that carve-out and was removed the same day (`OQ-16`) — no `kind: record` exception
+remains; only the one `kind: contract` file above and `kind: rationale` may claim to describe
+this tree below the repo root. Its still-live facts moved before deletion rather than being lost
+with it — the multi-machine locking section above, and `TASKS.md`'s `T-20`.
 
 This file is setup and operation. It has not been audited line by line; where it disagrees with
 `STATE-OF-THE-SYSTEM.md`, that file is newer and was written from the code.
@@ -293,6 +296,10 @@ Two columns worth knowing about:
 
 ## How multiple machines stay out of each other's way
 
+**Not currently in use.** No second machine runs this pipeline today, and none
+is planned (confirmed 2026-07-26). The coordination mechanism below is built
+and correct; it has simply never had a second caller.
+
 There are 32 Google Jobs queries but only ~8 SerpApi credits/day on the free
 tier. If two machines each independently picked "the stalest query," they'd
 pick the *same* one and waste two credits on identical results.
@@ -309,10 +316,15 @@ even under simultaneous writes; the loser moves to the next-stalest query.
 
 Two consequences worth knowing:
 
-- **A query that succeeded in the last 20 hours won't be handed out again**
-  (`GOOGLE_JOBS_MIN_HOURS_BETWEEN_RUNS`). So the daily budget is shared across
-  *all* your machines, not multiplied by them. A machine that finds nothing
-  stale exits cleanly having spent nothing.
+- **"The daily budget is shared across all your machines, not multiplied by
+  them" is wrong for any bucket larger than its `daily_budget`.** Locking
+  prevents two machines claiming the *same* query in the same instant; it does
+  not prevent machine A claiming 2 of a bucket's 8 slots, machine B then
+  sorting stalest-first and seeing those 2 as freshest, and claiming the
+  *next* 2 before `last_success_at` reflects A's run. Two machines can cover
+  16/day from one 8-credit bucket, up to the bucket size at enough machines.
+  Harmless today because only one machine runs this — real the day a second
+  one does, and unfixed as of 2026-08-03.
 - **Failures are safe.** `last_success_at` only advances on success, so a
   failed or interrupted run loses nothing — the next run sees the true gap and
   automatically widens its "posted since" filter (`today` → `3days` → `week` →

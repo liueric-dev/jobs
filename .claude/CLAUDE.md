@@ -117,8 +117,10 @@ clean checkout** — treat any figure from it as unreproducible.
 ## Layout
 
 **`backend/` holds three deliberately separate processes** — the nightly pipeline at the top level,
-`api/` (the contributor work queue, expected to be deprecated, and which **may not start against
-the deployed database**) and `webapp/` (port 8421). Each has its own `.env`, venv and Postgres role.
+`api/` (the contributor work queue — **staying, per `OQ-1` decided 2026-08-03**, not deprecated;
+the credential mechanism it will issue is still open and not to be guessed at; and it **may not
+start against the deployed database**) and `webapp/` (port 8421). Each has its own `.env`, venv
+and Postgres role.
 
 **Do not restore the stronger claim that `api/` cannot start.** This file said so until 2026-08-03
 and the code refuted it twice: `qc.ensure_schema` creates `submission_log` *with* `action TEXT` and
@@ -214,8 +216,9 @@ preserve, not a defect to go fix.
 **`agree2`**. **Name the metric whenever you quote one of these** — the same run yields `agree2`
 94.8%, `pairwise` 90.7% and `unanimous` 87.0% for `ai_involvement`, all correct and all in
 circulation; `--repeat 3` is the *run*, not the metric. A second n=115 run on the same frozen corpus
-five days later disagrees by up to 9.6 points, and **which is the floor of record is an open owner
-decision** — `docs/STATE-OF-THE-SYSTEM.md` § 6 has both, with their file paths.
+five days later disagrees by up to 9.6 points (`remote_policy`). **OQ-9 decided 2026-08-03: quote
+both as a range and act on the lower bound** — neither run supersedes the other, each carries a
+`_comment` saying so, and `docs/STATE-OF-THE-SYSTEM.md` § 6 has the per-field floors.
 
 `docs/STATE-OF-THE-SYSTEM.md` § 5 carries the rest, several of which will bite before these do.
 

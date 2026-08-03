@@ -277,6 +277,21 @@ REQUIRED_FIELDS = (
 #:
 #: Kept in the same order as the prompt's schema line (build_prompt below), so
 #: a track added to one and not the other is visible in a diff.
+#:
+#: OQ-8, decided 2026-08-03: THIS TUPLE IS NOT GETTING PURSUIT-DESCRIBING
+#: NAMES. Two of these five values -- "Re-Entry & Growth" and "Poor Fit" --
+#: are fit judgments, not job families, which is a tell that this is the
+#: original single-user job search's vocabulary rather than a role taxonomy.
+#: Renaming it to something Pursuit-shaped (e.g. "AI Integration" ->
+#: "AI Engineer/Integration") would be exactly the invented narrowness
+#: config/pursuit-persona.json's `_population_not_person_comment` warns
+#: against: the cohort has no single target role. The role-shaped label
+#: belongs on a different axis entirely -- extract.ROLE_TRACK, which is
+#: per-job rather than per-profile, already has nine cluster-derived slugs
+#: with hand-written plain-language copy (config/search-queries.json), and is
+#: already live end-to-end (webapp/jobs.py's LIST_COLUMNS, frontend fixtures).
+#: This tuple stays as-is and stays dead code for pursuit, where
+#: daily_narrative_budget is 0.
 TRACKS = ("Core SWE", "AI Integration", "Bridge & Solutions",
           "Re-Entry & Growth", "Poor Fit")
 

@@ -17,7 +17,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-17`.**
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-18`.**
 Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
 citations to it keep resolving.
 
@@ -81,60 +81,31 @@ human ceiling sits **above** the model floor on at least the fields it currently
 
 ---
 
-### OQ-9 — Which of the two n=115 selfchecks is the floor of record?
-
-**Why it is yours:** decision. Costs nothing, unblocks immediately, and is the cheapest row here.
-
-**What:** Two committed self-consistency runs on the same frozen corpus, five days apart,
-disagree by up to 9.6 points. Neither carries a supersession marker, so both are "current" and
-both are quoted.
-
-**How to do it.** Read both, pick one, and write the reason into the loser:
-
-```bash
-ls backend/evals/fixtures/results/
-#   selfcheck-n120-2026-07-28.json     <- the original
-#   selfcheck-n120-2026-08-02.json     <- the re-run
-```
-
-Three defensible answers, and my recommendation is the third:
-
-1. **The later run.** Newer, same corpus, same model. But "newer" is not a reason on its own.
-2. **The lower of the two, per field.** Conservative; you can never be accused of overstating.
-3. **Both, as a range, with the lower bound as the number you act on.** *Recommended* — the
-   spread is the finding. A model that moves 9.6 points at temperature 0 across five days has a
-   stability problem, and collapsing that to one number deletes the most important thing you
-   learned. Quote it as a range, tune against the floor.
-
-Whichever you pick, add a `_comment` to the superseded file saying so and dating it — that is
-the house convention and the reason `config/*.json` survived the purge.
-
-**What it unblocks:** every figure quoted from either run, including the ones in
-`.claude/CLAUDE.md` and `docs/STATE-OF-THE-SYSTEM.md`.
-
-**Done when:** one file carries a supersession marker naming the other, and § 6 of
-`docs/STATE-OF-THE-SYSTEM.md` states the decision rather than presenting both.
-
 ---
 
-### OQ-1 — Is `backend/api/` being retired or kept warm, and who issues a contributor credential?
+### OQ-1 — `backend/api/` stays; who issues a contributor credential is still open
 
-**Why it is yours:** decision, and it is a product call rather than a technical one.
+**Why it is yours:** decision, and it is a product call rather than a technical one. **The parent
+question is answered as of 2026-08-03: the crowdsourcing service stays.** `deploy/systemd/
+jobs-api.service`'s deprecation marking is therefore stale and should not be acted on as written.
+The credential-issuance sub-question is deliberately still open — owner's words: "I don't know
+what the current plan for implementation is. It may change" — so this row is not closeable by
+picking one of `DEC-84`'s three options today; it would be answering a question that is not yet
+stable enough to answer.
 
-**What:** Two signals point opposite ways. `deploy/systemd/jobs-api.service` says the service is
-deprecated and says to delete the unit and its cloudflared ingress rule **together** — an ingress
-hostname with nothing behind it is a 502 that reads as an outage. Meanwhile tranche work landed
-in `api/` on 2026-08-02.
+**What:** `api/` is the crowdsourcing service — volunteers run a worker script on their own
+machine with their own SerpApi account, claim queries from this server's priority queue, and
+submit raw results back, so nobody but the operator ever touches Postgres (`backend/api/
+app.py`'s module docstring, `backend/api/README.md`). It is unrelated to labelling. `OQ-12`
+(closed 2026-08-03) found zero contributors have ever been onboarded, so there is no live
+credential to migrate — whatever mechanism gets picked, it is greenfield, not a cutover.
 
-**How to do it.** Answer the parent question first — *is there a contributor work queue in this
-product a year from now?* Then the credential question resolves itself. If yes, pick one of
-`DEC-84`'s three options for issuing a credential:
+**How to do it, once the implementation plan firms up.** Pick one of `DEC-84`'s three options for
+issuing a credential:
 
 1. Grant `jobs_web` INSERT on `jobs_api`'s tables — simplest, weakest isolation.
 2. A server-to-server mint — most work, cleanest boundary.
 3. A request queue you service by hand — no code, does not scale, fine for ~30 Builders.
-
-If no: delete the unit and the ingress rule together, drop `api/`, and close task 24.
 
 ```bash
 # what exists today
@@ -142,80 +113,87 @@ backend/api/manage_users.py list          # contributors and keys
 backend/api/manage_users.py create        # mint a contributor + API key
 ```
 
-**What it unblocks:** task 24, the Contribute surface (currently unbuilt), and `OQ-12`.
+**`OQ-12`, closed 2026-08-03: no contributor API key has ever been minted or handed to anyone.**
+Whatever mechanism eventually gets picked here has zero existing users to migrate.
 
-**Done when:** either `api/` is gone from the tree and the unit list, or task 24 has a chosen
-credential path written into `DEC-84`.
-
----
-
-### OQ-2 — The 24h impression dedup key
-
-**Why it is yours:** decision. One line of code; the code will not choose for you because the
-choice is about what an impression *means*.
-
-**What:** The dedup key is `(profile, job_id)` and holds no `app_user_id`. Thirty Builders share
-the `pursuit` profile, so **the first Builder to load the list suppresses every other Builder's
-impression of those postings for the window** — and skips are derived from impressions, so they
-inherit it. `backend/webapp/jobs.py:897` states in capitals that this is yours and not an
-oversight; `941cd94` deliberately left it alone.
-
-**How to do it.** The original framing asked `(profile, job_id)` vs `(profile, job_id,
-request_id)` and **that was the wrong question** — the binding axis is `app_user_id`. The real
-options:
-
-1. `(app_user_id, job_id)` — *recommended*. One Builder's render no longer speaks for another's.
-   This is almost certainly what "a list re-render is not new information" was meant to say.
-2. `(app_user_id, job_id, request_id)` — every render counts. Truer to the event stream, noisier.
-3. Leave it. Only defensible if you decide the cohort is the unit of analysis and no per-Builder
-   figure will ever be computed. Say so in the `_comment` if you pick it.
-
-**What it unblocks:** every per-Builder engagement figure, and the L2 layer generally. Note that
-existing `job_events` rows were written under the current key and **must not be backfilled** —
-a guessed rank is worse than a missing one.
-
-**Done when:** the key is chosen, `webapp/jobs.py`'s comment records the decision and its date,
-and the replay tests cover a second Builder seeing the same posting.
+**Done when:** the implementation plan for `api/` firms up and task 24 has a chosen credential
+path written into `DEC-84`. Not blocked on anything except that plan existing.
 
 ---
 
-### OQ-8 — Name the tracks, or ship the grouping with the vocabulary it has
-
-**Why it is yours:** decision. Building the mechanism was ungated; choosing the names is not.
-
-**What:** `backend/score.py:280` defines `TRACKS` as the author's five-value enum — Core SWE /
-AI Integration / Bridge & Solutions / Re-Entry & Growth / Poor Fit. `config/pursuit-persona.json`
-records that these **"do not describe this population"** and assigns naming to task 30.
-
-**How to do it.** Harmless today — `daily_narrative_budget` is 0, so nothing is written for this
-profile — but it blocks the display half of task 30 independently of the labelling experiment.
-Either write five names that describe Pursuit Builders, or decide the grouping ships using
-`extract.ROLE_TRACK`'s nine slugs with the hand-written plain-language copy it already has.
-The second is a real answer, not a punt.
-
-**What it unblocks:** task 30's display half.
-
-**Done when:** `score.TRACKS` and the persona `_comment` agree, and neither says the names are
-wrong.
+---
 
 ---
 
-### OQ-5 — Apply the `revenue_commercial` archetype?
+### OQ-5 — Apply the `revenue_commercial` archetype, once round 2 closes
 
-**Why it is yours:** decision, and it is partly a one-way door.
+**Why it is yours:** decision, and it is partly a one-way door. **Decided 2026-08-03, staged
+rather than applied** — this is now a timing row, not an open question.
 
-**What:** Proposed in `DEC-64`/`DEC-65` and deliberately unapplied. It is a `FACTS_VERSION` bump
-and `pursuit-v1` is mid-labelling.
+**What:** Proposed in `DEC-64`/`DEC-65`, apply it. Checked before touching anything, per this
+row's own "weigh how many that is before deciding": `python3 -m evals label status` shows **all
+271 labels collected so far (2 labellers) are unrecorded provenance** — every one predates
+`DEC-95`'s facts_version-stamping fix, so none of them would survive a re-extraction. `job_facts`
+is keyed on `job_id` alone (`backend/schema.py`), with no version history, so a bump now would
+silently overwrite the exact facts every current label was formed against, on the corpus round
+`OQ-3` calls the single highest-priority item in this whole file (due ~2026-08-09).
 
-**How to do it.** Cheaper to answer than it was: labels written from 2026-08-02 carry the
-`facts_version` they were formed against (`DEC-95`), so a bump no longer silently re-denominates
-the agreement figures — it shows up as a version split in `python3 -m evals label status`. Rows
-labelled *before* that date are unrecorded and always will be, so the bump is one-way for those
-and only those. Weigh how many that is before deciding.
+**How to do it, once round 2 closes:**
 
-**What it unblocks:** `role_archetype = other` stops being a catch-all.
+1. Add `"revenue_commercial"` to `extract.ARCHETYPE` (27th value).
+2. Bump `schema.FACTS_VERSION` 3 → 4 (both vocabularies interpolate into `extract._INSTRUCTIONS`,
+   whose own comment asks for a bump on exactly this kind of change).
+3. Price it in both criteria files — **already decided and staged as a `_comment` in each,
+   so this step is transcription, not re-deriving**: `config/criteria.json` → **-30** (the
+   `marketing_ops`/`pm` tier — non-technical commercial/GTM work, off the author's SWE target);
+   `config/pursuit-criteria.json` → **10** (the `solutions`/`it_internal`/`business_systems`
+   bridge tier — 63% of the pursuit `other` rows that got a `role_track` at all landed on
+   `business_operations` or `revenue_operations`, so this is a plausible entry-level reach).
+4. Bump the count at `tests/test_extract.py`'s ARCHETYPE-length assertion, 26 → 27.
+5. Consider adding one disambiguating clause to `_INSTRUCTIONS` for the `revenue_commercial` vs
+   `solutions` overlap (pre-sales solutions architecture reads as either) — the same tension
+   `implementation_analyst` already carries against `forward_deployed`/`solutions`.
+6. Let the next nightly run re-extract, or run `extract.py` by hand. Not a cost question —
+   task 12 measured a full re-extraction at 863 calls / ~28 min / ~\$0.33.
 
-**Done when:** either applied with the bump recorded, or the row is struck with the reason.
+**What it unblocks:** `role_archetype = other` stops being a catch-all for commercial/GTM work.
+
+**Done when:** round 2 closes, the five steps above land together in one change, and the two
+staged `_comment`s are replaced by real `archetypes` entries.
+
+---
+
+### OQ-17 — The archetype/track vocabularies read tech-leaning; review after round 2
+
+**Why it is yours:** decision, and a genuinely bigger one than OQ-5 — this is a request to
+re-examine the whole superset, not just add one value.
+
+**What:** Flagged 2026-08-03 alongside OQ-5. Both vocabularies say this about themselves
+already: `extract.ROLE_TRACK`'s own comment calls its nine values "PROVISIONAL" and derived
+from "a pre-Phase-3 corpus" that is "overwhelmingly software companies and ATS-clean postings,"
+and `config/pursuit-criteria.json`'s `_archetypes_other_comment` says the 26-value `ARCHETYPE`
+superset was "derived from a tech-heavy corpus" and that 44% of the actual cohort corpus —
+entry-level, all-industry, NYC — goes unnamed by it. So the "options lean toward tech" read is
+not a misimpression; it is a documented, load-bearing caveat in the code, not yet acted on.
+
+**How to do it.** `backend/tools/derive-role-tracks.py` exists precisely to re-run this
+derivation, and its own task file (deleted, behind `refactor-freeze-2026-08-02`) sequenced the
+re-run for **after Phase 3** adds non-tech sourcing — which has not landed yet. Re-running it
+today would re-derive a vocabulary from the same tech-heavy corpus that produced the one being
+questioned. Before spending a session on this: (1) check whether Phase 3 sourcing has landed
+enough non-tech employers to change the corpus mix meaningfully, (2) if not, this is a
+re-derivation to schedule after that lands, not before; (3) if it has, re-run
+`derive-role-tracks.py --archetypes --tracks` and read the result against the same
+employer-spread discipline `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md`
+used (read `emp` first — a
+candidate whose mass sits at one employer is that employer's hiring spree, not a vocabulary
+gap).
+
+**What it unblocks:** a vocabulary that describes the all-industry NYC cohort this pipeline
+now serves, rather than the original SWE-focused, tech-heavy corpus it was derived from.
+
+**Done when:** either Phase 3 sourcing is confirmed to have landed and the re-derivation is
+run and reviewed, or this row is struck with the reason it is still premature.
 
 ---
 
@@ -241,60 +219,35 @@ are not failures.
 
 ---
 
-### OQ-16 — Does the `kind: record` handoff carve-out stay?
-
-**Why it is yours:** decision, and it sets policy for every future document.
-
-**What:** `backend/docs/HANDOFF-multimachine-google-jobs.md` is the last handoff document — 362
-lines, `kind: record`, frozen 2026-07-25, self-labelled "history rather than state." The purge
-deleted every other one.
-
-**How to do it.** The emergent rule after the purge is *no document may claim current state
-except the three `kind: contract` files*, with `kind: record` as a carve-out for frozen history.
-Either:
-
-1. **Keep the carve-out** — it is honest, the header is explicit, and nobody has been misled by
-   it. Cost: one more document that a future session has to classify before trusting.
-2. **Close it** — lift the two or three still-live facts into `backend/README.md` and read the
-   rest from `git show refactor-freeze-2026-08-02:backend/docs/HANDOFF-multimachine-google-jobs.md`.
-   Cost: half an hour. Benefit: the rule becomes "three contracts and READMEs", with no
-   exceptions to explain.
-
-**Done when:** either the file is gone, or `.claude/CLAUDE.md` states the carve-out as policy.
-
 ---
 
 ### OQ-4a — Install the eleven absent systemd units
 
-**Why it is yours:** machine. No account needed — this one is just a terminal.
+**Why it is yours:** machine. No account needed — this one is just a terminal. **The one live
+consequence is fixed as of 2026-08-03** — the rest of the eleven are not installed and stay open
+below.
 
-**What:** `deploy/systemd/` holds 14 units and **3 are installed**. The three that are live are
-**user** units at `~/.config/systemd/user/`, dated 2026-07-26, and they **differ from the repo
-copies today** — so editing `deploy/systemd/` changes nothing that runs.
+**`jobs-volume-check.timer` is now installed and enabled.** `systemctl --user list-timers` shows
+it scheduled for `Tue 2026-08-04 09:00:11 EDT` (`RandomizedDelaySec=600` on top of the unit's
+09:00 `OnCalendar`); `python3 tools/volume-check.py` still runs clean at exit 0. **Still open, and
+not closeable today:** the "Done when" below needs a few days of nightly history to accrue before
+the check reports a real comparison instead of `insufficient history` on every source — that part
+is a clock, not a task.
 
-**The one with a live consequence:** `jobs-volume-check.timer` is not installed. History is now
-accruing (`backend/.run-volumes.jsonl` exists and `tools/volume-check.py` exits 0), but nothing
-runs the check, so **the only alarm watching for silent ingest failure is not watching.** This
-repo's stated failure mode is silence — exhausted keys, revoked keys, blocked scrapers and
-changed endpoints all return zero rows rather than raising.
-
-**How to do it.**
+**The other ten of the fourteen `deploy/systemd/` units remain uninstalled**, including the three
+already-live units that have drifted from their repo copies (comment-only drift, checked
+2026-08-03 — `jobs-ingest.service`'s repo copy dropped a stale "nine steps" comment the live copy
+still carries, no functional difference found). Diff each against its repo copy before overwriting
+if this row is picked up again:
 
 ```bash
-systemctl --user list-unit-files | grep jobs     # what is live now: 3
+systemctl --user list-unit-files | grep jobs     # what is live now: 3 + jobs-volume-check.timer
 ls deploy/systemd/                               # what exists: 14
-
-# diff each live unit against its repo copy BEFORE overwriting -- they have drifted
 diff ~/.config/systemd/user/jobs-ingest.service deploy/systemd/jobs-ingest.service
-
-cp deploy/systemd/jobs-volume-check.{service,timer} ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now jobs-volume-check.timer
 ```
 
-**Done when:** `systemctl --user list-timers` lists `jobs-volume-check.timer`, and after a few
-nightly runs `python3 tools/volume-check.py` reports a comparison rather than
-`insufficient history` on every source.
+**Done when:** after a few nightly runs, `python3 tools/volume-check.py` reports a comparison
+rather than `insufficient history` on every source.
 
 ---
 
@@ -349,28 +302,6 @@ localhost-only and written down as such.
 
 ---
 
-### OQ-12 — Has any contributor API key ever been minted and handed to a person?
-
-**Why it is yours:** you are the only one who would know. `api_keys` is empty in this database;
-a key minted elsewhere would not show up here.
-
-**How to do it.**
-
-```bash
-cd backend/api && .venv/bin/python manage_users.py list
-```
-
-If one was ever issued off this machine, revoke it unless you know who holds it:
-
-```bash
-.venv/bin/python manage_users.py revoke <key_hash_prefix>
-```
-
-**What it unblocks:** `OQ-1` — if the answer is "yes, and people are using it", retiring `api/`
-is a migration rather than a deletion.
-
-**Done when:** answered yes or no, and written into `OQ-1`.
-
 ---
 
 ### OQ-13 — Registrations that block work: Adzuna, USAJobs, Firecrawl
@@ -405,19 +336,17 @@ hostname as an authorised redirect URI in Google Cloud Console, then load it on 
 
 ---
 
-### OQ-6 — `D31` needs a decision, not a fix
-
-**Why it is yours:** decision. **Likely already answered — verify before working it.** `4d6f7aa`
-(2026-08-02) is titled *"D31 decided"* and reads as closed; this row survives only because the
-register tracking it was deleted before the row was struck. Confirm and close it.
-
----
-
 ## Closed — kept so citations resolve
 
 | # | what it was | outcome |
 |---|---|---|
 | ~~OQ-7~~ | The live database was missing task 25's five search objects and `cohort_signal`'s GRANT | **Closed 2026-08-02.** `init-schema` created them; the seven GRANTs were issued by hand. The lesson worth keeping: this row read as a nicety for a day **while the whole webapp was down** — `verify_schema()` raised in the lifespan and the process exited. Nobody had started it |
+| ~~OQ-6~~ | `D31` (urlopen call sites bypassing `lib.http`'s retries) needed an owner decision, not a fix | **Closed 2026-08-03 — confirmed already decided.** `4d6f7aa` (2026-08-02), *"D31 decided — three of four urlopen sites reach lib.http, and one must not"*, resolved it: `fetch_feed`, `fetch_page` and `serpapi_search` now go through `lib.http`; `builtin-nyc.fetch_description` stays on raw `urllib.request.urlopen` deliberately, because `lib.http`'s retry-on-429 schedule would spend four extra requests before `RateLimited` could abandon the detail pass. This row only survived because the register tracking `D31` was deleted in the 2026-08-02 purge before the row was struck there too |
+| ~~OQ-9~~ | Two n=115 selfchecks, five days apart, disagreed by up to 9.6 points with no supersession marker on either | **Closed 2026-08-03.** Owner picked option 3: both as a range, act on the lower bound. Both `evals/fixtures/results/selfcheck-n120-*.json` files now carry a `_comment` recording this; `docs/STATE-OF-THE-SYSTEM.md` § 6 and `.claude/CLAUDE.md`'s landmine paragraph state the decision and the per-field floors instead of presenting both as open |
+| ~~OQ-2~~ | The 24h impression dedup was keyed `(profile, job_id)`, so one Builder's render suppressed thirty Builders' impressions of the same jobs | **Closed 2026-08-03.** Owner picked option 1: `(app_user_id, job_id)`. `backend/webapp/jobs.py`'s `record_events` NOT EXISTS predicate now binds `prior.app_user_id` instead of `prior.profile`; the existing `idx_job_events_user_job` partial index already served it, so no schema change was needed. Existing rows are not backfilled. Two new replay tests in `tests/test_event_replay.py` (`TestSkipReplay`) cover both directions — a second Builder's impression is no longer deduped by the first, and the same Builder's re-render still is. Full webapp suite (354 tests) green |
+| ~~OQ-8~~ | `score.TRACKS`'s five-value enum "does not describe this population" (persona `_comment`); task 30's display half needed a browsable vocabulary | **Closed 2026-08-03.** These are two different "track" concepts, not one. `score.TRACKS` is the narrative LLM call's per-profile vocabulary, two of whose five values ("Re-Entry & Growth", "Poor Fit") are fit judgments rather than job families — renaming it for Pursuit would be exactly the invented narrowness the persona `_comment` warns against, and it's dead code for this profile anyway (`daily_narrative_budget` is 0). `extract.ROLE_TRACK` is the separate, per-job, already-live nine-slug vocabulary task 11 built for this purpose, with hand-written plain-language copy already in `config/search-queries.json`. Decision: task 30's display half ships with `ROLE_TRACK`; `score.TRACKS` is left as-is. Recorded in `score.py`'s `TRACKS` comment and the persona's `_no_buckets_comment` |
+| ~~OQ-16~~ | Whether the `kind: record` carve-out (one document allowed to claim frozen history rather than current state) stays | **Closed 2026-08-03 — carve-out removed, option 2.** The last `kind: record` handoff document is deleted, recoverable at `git show refactor-freeze-2026-08-02:backend/docs/HANDOFF-multimachine-google-jobs.md`. Its still-live facts moved before deletion rather than being lost with it: the multi-machine shared-budget bug it found moved to `backend/README.md`'s locking section, and its Step 3 (a dry-run-verified id migration for `google_jobs` rows, checked today and confirmed **still unapplied 9 days later**) became `TASKS.md`'s `T-20` — a genuinely live finding this closure surfaced, not mere history. The rest was already duplicated in code comments (`lib/ids.py`). Rule is now unqualified: only the three `kind: contract` files may claim current state, no exceptions |
+| ~~OQ-12~~ | Whether any contributor API key has ever been minted and handed to a person | **Closed 2026-08-03. No.** Owner confirmed none were generated; `cd backend/api && .venv/bin/python manage_users.py list` (with `api/.env` exported into the shell) returns `no contributors yet` — `api_keys` is empty. Written into `OQ-1`: retiring `api/` would be a deletion, not a migration, if that is the direction chosen |
 
 ---
 

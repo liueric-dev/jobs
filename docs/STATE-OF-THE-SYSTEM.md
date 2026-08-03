@@ -116,12 +116,20 @@ code — but the "shares only `schema.py` and `lib/`" claim understates the coup
 | `frontend/` | no build step, no npm, no `package.json`. Five screens, all routed |
 
 **`backend/docs/` is not this file's tree and survived the 2026-08-02 purge**, which deleted only
-the repo-root `docs/`. Two files remain, both with a declared `kind:` header and neither a
-contract: `SCORING.md` (`kind: rationale` — the weight provenance and cost model, append-only and
-dated by construction) and `HANDOFF-multimachine-google-jobs.md` (`kind: record` — frozen
-2026-07-25, history not state). `DEVELOPER.md`, `OVERVIEW.md` and `HANDOFF-match-quality.md` were
-deleted 2026-08-03 in the follow-up commit; every structural claim in them had gone false, and
+the repo-root `docs/`. One file remains, with a declared `kind:` header and not a contract:
+`SCORING.md` (`kind: rationale` — the weight provenance and cost model, append-only and dated by
+construction). `DEVELOPER.md`, `OVERVIEW.md` and `HANDOFF-match-quality.md` were deleted
+2026-08-03 in the follow-up commit; every structural claim in them had gone false, and
 `backend/README.md` had already been rewritten to say they were gone before they were.
+`HANDOFF-multimachine-google-jobs.md` (`kind: record`) was the last of that kind and was removed
+2026-08-03 (`OQ-16`, decided: close the carve-out rather than keep an exception for one frozen
+document). Its two still-live facts moved before deletion: the SerpApi multi-machine locking
+section's known bug moved to `backend/README.md`, and its unapplied id-migration (Step 3) became
+`TASKS.md`'s `T-20`. The rest — SerpApi account mechanics, the `htidocid` stable-id rationale — was
+already duplicated in code comments (`lib/ids.py`) and is readable from `git show
+refactor-freeze-2026-08-02:backend/docs/HANDOFF-multimachine-google-jobs.md` if the full narrative
+is ever wanted. **The rule is now unqualified: no document may claim current state except the
+three `kind: contract` files, with no carve-out.**
 
 **The real import graph:** `webapp/` additionally imports the pipeline's `profiles`
 (`onboarding.py:54`), `searchnorm` (`search.py:55`) and `evals.labels` (`label.py:156`); `api/`
@@ -237,9 +245,12 @@ forward commit, so a mechanical revert scan under-reports what was undone.
   column reorder raises `InvalidTableDefinition`, the handler DROPs the view, and DROP VIEW takes
   every GRANT with it. It surfaces on the *next* nightly run as the webapp refusing to start
   (`backend/schema.py:1215-1223`).
-- **The 24h impression dedup is keyed `(profile, job_id)`, not `(app_user_id, job_id)`.** Thirty
-  Builders share the `pursuit` profile, so one Builder's render suppresses another's impression —
-  and the skips derived from it (`backend/webapp/jobs.py:934-937`).
+- ~~The 24h impression dedup is keyed `(profile, job_id)`, not `(app_user_id, job_id)`~~ **Fixed
+  2026-08-03 (OQ-2).** Thirty Builders share the `pursuit` profile, so one Builder's render used to
+  suppress another's impression — and the skips derived from it — for the rest of the window.
+  Rekeyed to `(app_user_id, job_id)` (`backend/webapp/jobs.py:950-954`); the existing
+  `idx_job_events_user_job` partial index already served the new predicate, so no schema change was
+  needed. Existing `job_events` rows written under the old key are not backfilled.
 - **`tools/compare-models.py` and `tools/claude-bench.py` still select their corpus with
   `ORDER BY j.first_seen DESC` against production** — the exact pattern the evals package exists to
   replace. Any comparison made with either is not reproducible
@@ -376,11 +387,24 @@ All four reproduce exactly from that file's `.fields.<field>.overall.agree2`, n_
 **A second n=115 run on the same frozen corpus and the same model, five days later, disagrees
 substantially** (`evals/fixtures/results/selfcheck-n120-2026-08-02.json`): `ai_involvement` 0.9043 vs 0.9478,
 `seniority_level` 0.8957 vs 0.8522, `remote_policy` 0.9130 vs 0.8174, `tech_stack` 0.7739 vs
-0.7043. Wilson intervals overlap heavily. **Which is the floor of record is an open owner
-decision** — the newer run is the only one carrying a `role_track` floor, and neither JSON carries
-a supersession marker. Candidate explanations that cannot be separated from code: a silent
-provider-side revision behind the `deepseek-v4-flash` label, a prompt change in `extract.py`
-between the dates, or sampling noise.
+0.7043. Wilson intervals overlap heavily. Candidate explanations that cannot be separated from
+code: a silent provider-side revision behind the `deepseek-v4-flash` label, a prompt change in
+`extract.py` between the dates, or sampling noise.
+
+**OQ-9, decided 2026-08-03: quote both runs as a range, per field, and tune against the lower
+bound.** Neither file supersedes the other — both carry a `_comment` recording this. The spread
+itself is the finding: a model moving up to 9.6 points at temperature 0 across five days has a
+stability problem, and collapsing that to one number would delete the most important thing this
+pair of runs showed. Acting figures (the floor of the two, `agree2`, n=115):
+
+| field | floor | source run |
+|---|---|---|
+| `seniority_level` | 85.2% [77.6–90.6] | 2026-07-28 |
+| `ai_involvement` | 90.4% | 2026-08-02 |
+| `remote_policy` | 81.7% | 2026-07-28 |
+| `tech_stack` | 70.4% | 2026-07-28 |
+
+The newer run is still the only one carrying a `role_track` floor.
 
 **`~85% greenhouse/ashby` has no instrument anywhere in the tree.** It is restated in ten places,
 every one citing `CLAUDE.md`, and nothing computes it. The *rule* it supports — never select an

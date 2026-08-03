@@ -366,6 +366,47 @@ class TestSkipReplay(unittest.TestCase):
                              "WHERE event = 'skip' AND dwell_ms IS NOT NULL"
                              ).fetchone()[0], 0)
 
+    def test_a_second_builders_impression_is_not_deduped_by_the_first(self):
+        # OQ-2, decided 2026-08-03: the 24h impression dedup is keyed
+        # (app_user_id, job_id), not (profile, job_id). Before this, thirty
+        # Builders sharing the `pursuit` profile meant the first Builder to
+        # render a job suppressed every other Builder's impression of it for
+        # the rest of the window -- this is the replay that would have caught
+        # it, deduped=1 for an impression USER_B never had before.
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, users=(USER, USER_B))
+            with redirect_db(conn):
+                self.render(conn, ids, request_id="req_a")
+                result = jobs.record_events(
+                    jobs.EventBatch(
+                        request_id="req_b",
+                        events=[{"job_id": ids[0], "event": "impression",
+                                 "rank": 1}]),
+                    USER_B)
+            self.assertEqual(result["recorded"], 1)
+            self.assertEqual(result["deduped"], 0)
+            rows = conn.execute(
+                "SELECT app_user_id FROM job_events "
+                "WHERE job_id = %s AND event = 'impression'", (ids[0],)).fetchall()
+            self.assertEqual({r[0] for r in rows}, {USER.id, USER_B.id})
+
+    def test_the_same_builders_second_impression_is_still_deduped(self):
+        # The other side of OQ-2's fix: narrowing the key to app_user_id must
+        # not narrow it all the way to nothing. A re-render by the SAME
+        # Builder within the window is still "not new information".
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn)
+            with redirect_db(conn):
+                self.render(conn, ids, request_id="req_a")
+                result = jobs.record_events(
+                    jobs.EventBatch(
+                        request_id="req_b",
+                        events=[{"job_id": ids[0], "event": "impression",
+                                 "rank": 1}]),
+                    USER)
+            self.assertEqual(result["recorded"], 0)
+            self.assertEqual(result["deduped"], 1)
+
 
 def state_of(conn, user, job_id):
     """(dismissed_at, dismiss_reason, saved_at) for one Builder and one job."""

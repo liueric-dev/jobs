@@ -8,7 +8,7 @@ budget: 400
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-20`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-21`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -356,3 +356,47 @@ skipped against the service container on the very first run, so the DB gating an
 both work. And the failure was *reproducible on a laptop* — a throwaway `postgres:16` container
 reproduced it exactly, which is what allowed the fix to be verified before it was pushed instead of
 by pushing it.
+
+---
+
+### T-20 — Apply the Google Jobs id migration, written and dry-run-verified 2026-07-25 and never run
+
+**Found 2026-08-03 while closing `OQ-16`** (the last `kind: record` handoff document, about to be
+deleted). Its Step 3 was left `NOT APPLIED` at write time, pending confirmation nothing was
+concurrently writing scores. Nobody came back to it. Checked today:
+
+```bash
+cd backend
+export $(grep -v '^#' .env | grep DATABASE_URL)
+pgrep -af score.py                       # confirm empty first -- see the migration's own STOP section
+python3 migrations/migrate_google_ids.py # dry run, no --apply
+```
+
+**Still live, 9 days later:** `1344` `google_jobs` rows, `1329` distinct `source_id` — 15 duplicate
+groups today (the original finding was 205 duplicate rows / 32% inflation before Step 2's stable-id
+fix landed in code; Step 2 is live — `lib/ids.py`'s `google_source_id()` exists and is called from
+both `ingest/google-serpapi.py` and `ingest/google-apify.py` — but Step 3, the one-time re-key of
+**existing** rows onto it, was never run). The dry run above currently reports `1180` rows needing
+re-key and `24` merge groups.
+
+**Do not run `--apply` without reading the migration's own "STOP — read before running `--apply`"
+section first** (`migrations/migrate_google_ids.py`, or the deleted handoff doc via
+`git show refactor-freeze-2026-08-02:backend/docs/HANDOFF-multimachine-google-jobs.md` if the
+in-script version has drifted) — `apply_merge()` moves scores off losing rows before deleting them,
+`ON DELETE CASCADE`, and a concurrent `score.py` write between the read and the delete silently
+destroys that score. `pgrep -af score.py` returning empty is the precondition, and a fresh backup
+is the second one:
+
+```bash
+docker exec nyc-events-postgres pg_dump -U jobs_pipeline -d jobs | gzip > ~/backups/pre-googleid-$(date +%Y%m%d).sql.gz
+python3 migrations/migrate_google_ids.py --apply
+```
+
+**Done when:** `SELECT count(*), count(DISTINCT source_id) FROM jobs WHERE platform='google_jobs'`
+returns two equal numbers.
+
+**Separately, and not part of this row:** the handoff doc's Step 5 (Postgres publishing
+`0.0.0.0:5432` to the LAN) is **already fixed** — checked 2026-08-03, `docker ps` shows
+`nyc-events-postgres` bound to `127.0.0.1:5432` only. Steps 4 (`job_sources` provenance table) and
+6 (a second worker) are unbuilt and, per the doc, 6 was confirmed never planned (2026-07-26) — left
+off this list rather than turned into rows nobody asked for, per this file's own ceiling.

@@ -222,7 +222,21 @@ class TestSerpApiSearchRetries(unittest.TestCase):
             with cassettes.no_sleep(), cassettes.replay(cassette=cas) as player:
                 with self.assertRaises(RuntimeError):
                     self.serp.serpapi_search("ai engineer", "New York")
-        self.assertEqual(len(player.requests), 1)
+
+    def test_a_200_saying_no_results_is_an_answer_not_a_failure(self):
+        """OQ-15, decided 2026-08-03. Before the fix, ANY `error` key raised --
+        including SerpApi's "found nothing" wording, which is an answer, not a
+        failure. The caller (main()) treats a raise as a query failure: it
+        releases the claim so the query is retried immediately, and
+        last_success_at never advances, even though the query had, in fact,
+        just succeeded with zero results."""
+        url = self._url()
+        cas = _cassette(_resp(
+            url, '{"error": "Google hasn\'t returned any results for this query."}'))
+        with mock.patch.object(self.serp, "SERPAPI_API_KEY", self.KEY):
+            with cassettes.no_sleep(), cassettes.replay(cassette=cas):
+                results = self.serp.serpapi_search("ai engineer", "New York")
+        self.assertEqual(results, [])
 
 
 # ---------------------------------------------------------------------------

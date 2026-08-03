@@ -90,9 +90,17 @@ COHORT_VISIBLE_EVENTS = ("save",)
 #: still stored whenever it is supplied.
 RANK_REQUIRED_EVENTS = ("impression", "open")
 
-#: How long before the same profile's impression of the same job counts again.
+#: How long before the same Builder's impression of the same job counts again.
 #: A list re-render is not new information; without this the table's most
 #: common row is also its least meaningful one.
+#:
+#: OQ-2, decided 2026-08-03: keyed on (app_user_id, job_id), not (profile,
+#: job_id). Thirty Builders share the `pursuit` profile, so the old key let
+#: the first Builder to load the list suppress every other Builder's
+#: impression of those postings for the window -- and derive_skips reads
+#: impressions, so skips inherited the same suppression. See
+#: docs/STATE-OF-THE-SYSTEM.md § 4 and DEV_TASKS.md's closed OQ-2 for the
+#: full argument the owner weighed before picking this key.
 IMPRESSION_DEDUP_HOURS = 24
 
 #: Columns returned by the list endpoint. description_text is deliberately
@@ -736,13 +744,16 @@ def derive_skips(conn, profile, app_user_id, request_id, rank, now):
     Returns the number of skip rows written.
 
     ONE LIMIT WORTH KNOWING, and it is an interaction rather than a bug. The
-    24-hour impression dedup above is keyed (profile, job_id) and NOT
-    (profile, job_id, request_id), so a second render of the same list within
-    the window writes no impression rows -- and this derivation, which reads
-    impressions, therefore finds nothing to skip in it. Skips are consequently
-    a first-render-per-day signal. Narrowing the dedup key would change an
-    existing documented behaviour ("a list re-render is not new information")
-    for a different task's benefit, so it is recorded here and in
+    24-hour impression dedup above is keyed (app_user_id, job_id) -- OQ-2,
+    decided 2026-08-03, was narrower than that: the axis it settled was WHO,
+    not WHETHER request_id joins the key -- and it is still NOT (app_user_id,
+    job_id, request_id), so a second render of the same list BY THE SAME
+    BUILDER within the window writes no impression rows -- and this
+    derivation, which reads impressions, therefore finds nothing to skip in
+    it. Skips are consequently a first-render-per-day signal, per Builder.
+    Narrowing the dedup key further would change an existing documented
+    behaviour ("a list re-render is not new information") for a different
+    task's benefit, so it is recorded here and in
     docs/ingest/engagement-events.md (deleted 2026-08-02; behind
     refactor-freeze-2026-08-02) rather than changed in passing.
 
@@ -826,8 +837,12 @@ def derive_skips(conn, profile, app_user_id, request_id, rank, now):
         not reference the column at all. It is a constraint on the L2 analysis
         not yet written: GROUP BY request_id alone is not a render, and
         (app_user_id, request_id) is.
-      * The 24-hour dedup above is untouched and remains keyed
-        (profile, job_id), which is the OPEN DECISION recorded there.
+      * The 24-hour dedup above is now keyed (app_user_id, job_id) rather than
+        (profile, job_id) -- OQ-2, decided 2026-08-03. A legacy impression
+        row with a NULL app_user_id (predating the column) does not satisfy
+        `prior.app_user_id = %s` either, for the same reason the bullet above
+        gives, so it no longer suppresses a fresh impression from anyone --
+        one more historical row this fix cannot retroactively attribute.
     """
     rows = conn.execute(
         """
@@ -892,18 +907,21 @@ def record_events(batch: EventBatch, user: User = Depends(require_user)):
     is nullable and unbackfilled (../schema.py), so every row written from here
     onward has it and no earlier row acquires a guess.
 
-    THE 24-HOUR IMPRESSION DEDUP IS STILL KEYED (profile, job_id) AND IS NOT
-    NARROWED TO app_user_id. That is not an oversight left over from the
-    column: it is an OPEN DECISION belonging to the repo owner. It was recorded
-    in tranche_five/27-event-schema.md, API-CONTRACT-v1.md and
+    THE 24-HOUR IMPRESSION DEDUP IS NOW KEYED (app_user_id, job_id), NOT
+    (profile, job_id). That gap was not an oversight left over from adding the
+    column: it was an OPEN DECISION belonging to the repo owner, recorded in
+    tranche_five/27-event-schema.md, API-CONTRACT-v1.md and
     docs/ingest/engagement-events.md, all deleted 2026-08-02 --
     `git show refactor-freeze-2026-08-02:docs/ingest/engagement-events.md` --
-    and it is carried forward in docs/STATE-OF-THE-SYSTEM.md § 4. It has a real
-    consequence: one
-    Builder's render suppresses another Builder's impression of the same job
-    for the rest of the window. Adding the column makes narrowing it POSSIBLE
-    for the first time; it does not make the decision. derive_skips' docstring
-    documents the second half of the same interaction.
+    and carried forward in docs/STATE-OF-THE-SYSTEM.md § 4. Its consequence was
+    real: one Builder's render suppressed another Builder's impression of the
+    same job for the rest of the window, and skips inherited it because
+    derive_skips reads impressions. OQ-2, decided 2026-08-03: narrow to
+    app_user_id. One Builder's render no longer speaks for another's. Existing
+    job_events rows written under the old key are NOT backfilled -- a guessed
+    attribution is worse than a missing one -- so only rows written from here
+    onward observe the new key. derive_skips' docstring documents the second
+    half of the same interaction.
     """
     validate_batch(batch)
 
@@ -942,13 +960,13 @@ def record_events(batch: EventBatch, user: User = Depends(require_user)):
                 WHERE m.profile = %s AND m.job_id = %s
                   AND (%s <> 'impression' OR NOT EXISTS (
                         SELECT 1 FROM job_events prior
-                         WHERE prior.profile = m.profile AND prior.job_id = m.job_id
+                         WHERE prior.app_user_id = %s AND prior.job_id = m.job_id
                            AND prior.event = 'impression' AND prior.occurred_at >= %s))
                 RETURNING id
                 """,
                 (user.id, e.event, batch.request_id, e.rank, e.dwell_ms, e.reason,
                  visibility_for(e.event), now, user.profile, e.job_id, e.event,
-                 cutoff),
+                 user.id, cutoff),
             ).fetchone()
             if row:
                 recorded += 1

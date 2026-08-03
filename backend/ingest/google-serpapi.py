@@ -160,6 +160,7 @@ from lib.timeparse import utc_now_str  # noqa: E402
 from lib.upsert import (UpsertErrorRate, UpsertResult, check_error_rate,  # noqa: E402
                         upsert_checked)
 from serp import datechip  # noqa: E402  (../serp/datechip.py -- see choose_date_chip)
+from serp.providers.serpapi import EMPTY_ERROR_MARKERS  # noqa: E402
 
 SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY")
 GOOGLE_JOBS_QUERIES_FILE = os.environ.get(
@@ -331,9 +332,28 @@ def serpapi_search(query, location, date_chip=None):
     # function's business, below: most of them are permanent (bad key, no
     # searches left) and retrying them would burn wall-clock on a metered
     # account, so they are NOT handed to `body_is_transient`.
+    #
+    # OQ-15, decided 2026-08-03: a blanket raise here treated a query that
+    # genuinely found nothing as a query FAILURE -- the caller released the
+    # claim and retried it immediately, and last_success_at never advanced for
+    # a query that had, in fact, just succeeded with zero results. Everything
+    # else an `error` key can mean (bad key, plan exhausted, anything
+    # unrecognised) is still a real failure and still raises, unchanged.
+    #
+    # EMPTY_ERROR_MARKERS is imported from serp/providers/serpapi.py rather
+    # than redefined here so there is one place that says what SerpApi's
+    # "found nothing" wording is, not two that could drift -- that module
+    # already made this distinction for the (currently unwired) search-query
+    # dispatch path; this ports the classification, not the whole module.
+    # Deliberately does not call serp.providers.serpapi.fetch() itself: that
+    # would be finishing the migration DEC-99 held back on purpose, on the one
+    # path that spends metered credits nightly.
     data = http.get_json(url, headers={"User-Agent": "hermes-jobs-ingest/1.0"})
-    if "error" in data:
-        raise RuntimeError(data["error"])
+    error = data.get("error")
+    if error:
+        if any(m in str(error).lower() for m in EMPTY_ERROR_MARKERS):
+            return []  # a search that found nothing -- an answer, not a failure
+        raise RuntimeError(error)
     return data.get("jobs_results", [])
 
 
