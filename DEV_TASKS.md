@@ -442,7 +442,7 @@ this file is what only you can do. Between the two, that is meant to be the whol
 **51 deviated from its spec and nobody wrote it down.** Its tranche README — `git show
 refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_nine/README.md` — said *"Not delete
 anything. 51 is `git mv` and stubs."* `5046f98` deleted 137 and left none; `c052f23`, `20ee7d0`
-and `47dd212` are the bill. It becomes an ADR under `T-4`.
+and `47dd212` are the bill. Now recorded — `docs/adr/0002-task-51-deleted-instead-of-git-mv.md`.
 
 **`OQ-3` is still the one to do first, and `TASKS.md` does not change that.** The scoring
 redesign completed 2026-07-28 and has never been validated — GATE 1 came in at 16/20 and 10/20

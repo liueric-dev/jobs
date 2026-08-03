@@ -1,6 +1,6 @@
 ---
 kind: contract
-written: 2026-08-02
+written: 2026-08-03
 generator: none
 ---
 
@@ -17,8 +17,9 @@ the state, the landmines and the open questions.
 **What is left to do lives in exactly two files, and between them that is the whole list.**
 `TASKS.md` owns the prefix `T-` and holds everything a session can do unaided. `DEV_TASKS.md`
 owns `OQ-` and holds everything needing a machine, an account, a device, other people, or a
-decision only the owner can take. A decision, once taken, goes to `docs/adr/` — not into prose
-here. Work tracked in neither file is not tracked.
+decision only the owner can take. A decision, once taken, goes to [`docs/adr/`](../docs/adr/) —
+one file per decision, frozen on write, never into prose here. Work tracked in neither file is
+not tracked.
 
 ## What this is
 
@@ -64,12 +65,46 @@ cd backend/api    && .venv/bin/python -m unittest discover -s tests
 Both venvs set `include-system-site-packages = false`, so system `python3` cannot import either
 `app.py` — they need `fastapi`, which the top level does not have and is not getting.
 
-**`ruff` is the linter and formatter, as of 2026-08-03.** It is a *development and CI* tool,
-installed into a dev venv and configured in `backend/pyproject.toml`; it is deliberately absent
-from all three `requirements.txt`. This reverses a recorded decision — the tranche-nine README
-said wiring one in was "wrong for this repo regardless of where it came from" — on the reasoning
-in `TASK-52-harness.md`: a rule with no check is a suggestion, and the standard implementation of
-that is a linter and CI rather than a hand-rolled `audit-*.py` per rule. See `T-1` in `TASKS.md`.
+**Standing a database up from nothing is one command, and only since 2026-08-03.** The DDL lives in
+five functions across four modules and nothing invoked all five, which is why an empty database
+reports 23 objects missing while `manage_app_users.py init-schema` fixes 5 of them.
+
+```bash
+cd backend
+python3 tools/provision-database.py                 # all five, in the one order that works
+python3 tools/provision-database.py --verify-only   # report, change nothing
+```
+
+**Read the banner at the top of that file before running it against anything populated.** Step 3 is
+`schema.ensure_app_view()`, whose fallback DROPs the view and takes every GRANT with it, with no
+re-grant anywhere in this repo (`backend/schema.py:1215-1223`; `T-13`). Unreachable on an empty
+database, real against a deployment. It issues no GRANTs, deliberately —
+[`docs/adr/0004-provision-database-issues-no-grants.md`](../docs/adr/0004-provision-database-issues-no-grants.md).
+
+**`ruff` is the linter as of 2026-08-03 — and it is not yet the formatter.** A *development and CI*
+tool at `backend/.venv-dev/bin/ruff`, configured in `backend/pyproject.toml`, deliberately absent
+from all three `requirements.txt`. Why the tranche-nine ban was reversed:
+[`docs/adr/0001-ruff-as-a-dev-only-linter.md`](../docs/adr/0001-ruff-as-a-dev-only-linter.md).
+
+```bash
+cd backend && .venv-dev/bin/ruff check . --statistics    # run it for the number; do not quote one
+```
+
+**`ruff format` has deliberately never been run** — over 171 files it is one unreviewable diff, the
+move that produced the 42,777 deleted lines. **The baseline comes down one rule per commit**, and
+`--fix` is not run across the tree: `b89c377` is the case where the autofix would have broken the
+program, recorded beside `[tool.ruff.lint.isort]`.
+
+**There is CI as of 2026-08-03, and a green run is the claim — a number in prose is a rumour.**
+`.github/workflows/ci.yml`, on every push to `main` and every PR: **suites** (all three against a
+`postgres:16` service, after provisioning, plus an assertion that **nothing skipped** — twelve
+modules gate on `evals.scratchdb.available()`, which swallows every connection error into
+`return False`, so a job without Postgres reports green on less); **checkers** (citations, both
+frontend); and **lint**. Put the run URL in the commit message.
+
+**A green CI run does not mean `ruff` is clean.** The lint job is `continue-on-error` by design
+until the baseline reaches zero, then flips. It does enforce the grep proving `ruff` is in none of
+the three `requirements.txt`.
 
 **What did not change, and must not:** `psycopg[binary]` is the pipeline's only third-party
 **runtime** dependency and the intent is that it stays that way. These scripts run unattended on
@@ -82,8 +117,16 @@ clean checkout** — treat any figure from it as unreproducible.
 ## Layout
 
 **`backend/` holds three deliberately separate processes** — the nightly pipeline at the top level,
-`api/` (the contributor work queue, expected to be deprecated, and **currently unable to start**)
-and `webapp/` (port 8421). Each has its own `.env`, venv and Postgres role.
+`api/` (the contributor work queue, expected to be deprecated, and which **may not start against
+the deployed database**) and `webapp/` (port 8421). Each has its own `.env`, venv and Postgres role.
+
+**Do not restore the stronger claim that `api/` cannot start.** This file said so until 2026-08-03
+and the code refuted it twice: `qc.ensure_schema` creates `submission_log` *with* `action TEXT` and
+backfills it through `dbconn.add_missing_columns`, so `init-schema` satisfies `verify_schema()` on a
+fresh or an existing database (`backend/api/query_claims.py:233`, `:244`; `backend/api/app.py:82`).
+What is unknown is whether init-schema has ever been run against the *deployed* database — live
+state, which this repo can neither confirm nor refute. `docs/STATE-OF-THE-SYSTEM.md` § 4a has the
+worked correction.
 
 `api/` and `webapp/` import nothing from each other, and no pipeline module imports either. But the
 sharing is wider than `schema.py` and `lib/`: `webapp/` also imports the pipeline's `profiles`,

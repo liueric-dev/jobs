@@ -40,15 +40,30 @@ that reasoning is unchanged and `T-1` has a grep proving it holds.
 
 ## Order
 
-`T-1` and `T-2` first — they are the enforcement layer every other row leans on, and they are what
-makes the next session's claims checkable without hand-transcription. `T-11` and `T-13` are the
-two rows with a live correctness consequence. Everything else is schedulable in any order.
+**`T-1` and `T-2` are closed, and they were the reason for the ordering** — the enforcement layer
+every other row leans on, and what makes a session's claims checkable without hand-transcription.
+`T-4` closed with them. Everything below now runs against CI rather than against a hand-transcribed
+count.
+
+**`T-11` and `T-13` are the two rows with a live correctness consequence** and are next.
+`T-13` gained urgency from `T-19`: `tools/provision-database.py` calls the GRANT-destroying path as
+its step 3, so the fallback is now reachable from a documented command rather than only from the
+nightly. Everything else is schedulable in any order.
+
+**None of these rows is the critical path.** [`DEV_TASKS.md`](DEV_TASKS.md)'s `OQ-3` is — the
+scoring redesign completed 2026-07-28 and has never been validated, and every row here improves a
+system nobody has confirmed works. It needs people, so no session can start it.
 
 ---
 
 ## Toolchain
 
-### T-1 — `ruff`, configured and baselined
+### ~~T-1~~ — `ruff`, configured and baselined
+
+**Closed 2026-08-03** in `56ce823`. `backend/pyproject.toml` carries `[tool.ruff]` and nothing else,
+the baseline is **1076** and recorded in that commit, the grep is empty and CI enforces it, and all
+three suites print `OK`. **Run the tool for the number; do not quote the one in this paragraph.**
+The reasoning is now an ADR: [`docs/adr/0001-ruff-as-a-dev-only-linter.md`](docs/adr/0001-ruff-as-a-dev-only-linter.md).
 
 `.claude/CLAUDE.md` said "There is no linter and no formatter" and
 `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_nine/README.md` said wiring one in
@@ -75,7 +90,21 @@ message, the grep is empty, and all three suites still print `OK`.
 
 ---
 
-### T-2 — CI on `liueric-dev/jobs`
+### ~~T-2~~ — CI on `liueric-dev/jobs`
+
+**Closed 2026-08-03.** Green run: `https://github.com/liueric-dev/jobs/actions/runs/30818425894`.
+Its three `Ran N tests` lines are **1428 / 352 / 117**, matching a local run exactly — which is the
+clause that mattered, because a CI job reporting green on *less* was the specific failure this row
+was built to catch.
+
+**One clause was met across three commits rather than one, and that is worth recording rather than
+rounding off.** The row asked for the green run's URL to be in "the commit that adds the workflow."
+The workflow was added in `56ce823`; its first run was **red** (`720da46`), and the green run
+arrived two commits later in `b89c377`. Nobody could have written a green URL into the adding
+commit, because the workflow's whole value was that it failed first. The URL above is the answer.
+
+**What it bought by being red:** a database entry point that did not exist, a test-isolation
+defect, and the answer to a question nobody had asked — see `T-19`.
 
 There is a live remote and no CI and no git hooks; `.git/hooks` holds only samples. Every result
 this repo relies on is verified by hand and transcribed into a commit message, which is how the
@@ -106,21 +135,30 @@ was taken from, and all three suites plus both frontend checkers pass against th
 
 ---
 
-### T-4 — ADRs at `docs/adr/`, the successor to `DECISIONS.md`
+### ~~T-4~~ — ADRs at `docs/adr/`, the successor to `DECISIONS.md`
+
+**Closed 2026-08-03.** `docs/adr/` holds four seed decisions and a README, each under 60 lines, and
+`.claude/CLAUDE.md` names it as where a decision goes — a clause that had been *written but not
+true* since `56ce823`, because the directory it pointed at did not exist.
 
 `DECISIONS.md` was append-only rationale that the tranche README called *"the single most valuable
 file in the repo"* and forbade rewriting; `5046f98` deleted it anyway, and nothing took its slot.
-Rationale now lives only in commit messages — which in this repo are unusually long and load-bearing
-precisely because they are improvising an ADR.
+Rationale then lived only in commit messages — which in this repo are unusually long and
+load-bearing precisely because they were improvising an ADR each time.
 
-A new `docs/adr/`, one decision per file, named `NNNN-short-title` with a four-digit serial, frozen
-on write, standard format: context · decision · consequences. Seed it with the decisions already
-taken and currently recorded nowhere:
-the linter reversal (`T-1`), `51`'s delete-instead-of-`git mv` deviation, and whatever Layer 3 of
-`TASK-52-harness.md` settles on.
+Seeded with the decisions that were taken and recorded nowhere else: the linter reversal
+(`0001`, from `T-1`), `51`'s delete-instead-of-`git mv` deviation (`0002`), Layer 3 of
+`TASK-52-harness.md` — **which resolves as a recorded deferral, not a build** (`0003`) — and
+`provision-database.py`'s deliberate refusal to issue GRANTs (`0004`, from `T-19`).
 
-**Done when:** `docs/adr/` holds at least those three, each under 60 lines, and `.claude/CLAUDE.md`
-names it as where a decision goes.
+**Two decisions were deliberately left where they are** and `docs/adr/README.md` says why: the
+isort `known-first-party` entry and the non-blocking CI lint step are each argued beside the
+setting they govern, and an ADR that only restates a config comment creates a second copy to keep
+in sync. `_comment` fields in `config/*.json` stay put for the same reason.
+
+**The rule that decides whether this directory survives**, and it is in the README rather than
+here: *an ADR records why, not what the code does today.* Every one of the 137 deleted documents
+described a state of the world that then changed, and not one had been false when written.
 
 ---
 
