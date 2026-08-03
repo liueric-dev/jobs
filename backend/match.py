@@ -53,8 +53,10 @@ import llm
 import profiles
 import relevance
 import schema
-from lib import dbconn
+from lib import dbconn, pipelinelog
 from lib.timeparse import utc_now_str
+
+log = pipelinelog.get_logger("match")
 
 #: D11. The verbose convention every ingest script already uses
 #: (ingest/ats.py, ingest/builtin-nyc.py, ingest/hn-hiring.py, ...), and the
@@ -403,10 +405,10 @@ def load_facts(conn, cfgs):
             corrupt.append(d.get("job_id"))
         out.append(d)
     if corrupt:
-        print(f"match: {len(corrupt)} row(s) have unreadable tech_stack JSON and are "
-              f"being scored as if the field were missing: "
-              f"{', '.join(str(j) for j in corrupt[:5])}"
-              f"{' ...' if len(corrupt) > 5 else ''}", file=sys.stderr)
+        log.warning(f"{len(corrupt)} row(s) have unreadable tech_stack JSON and are "
+                    f"being scored as if the field were missing: "
+                    f"{', '.join(str(j) for j in corrupt[:5])}"
+                    f"{' ...' if len(corrupt) > 5 else ''}")
     return out
 
 
@@ -470,8 +472,8 @@ def log_deleted_ids(profile, kind, job_ids):
     """
     if not (DEBUG_PRINT_KEYS and job_ids):
         return
-    print(f"[debug] match {profile}: {len(job_ids)} {kind} row(s) deleted: "
-          + ", ".join(str(j) for j in job_ids), file=sys.stderr)
+    log.debug(f"match {profile}: {len(job_ids)} {kind} row(s) deleted: "
+              + ", ".join(str(j) for j in job_ids))
 
 
 #: Every top-level section `score_job()` reads. D12: each lookup is a `.get()`
@@ -501,11 +503,10 @@ def check_criteria_sections(profile):
     unknown = sorted(k for k in profile.criteria
                      if not k.startswith("_") and k not in CRITERIA_SECTIONS)
     if unknown:
-        print(f"match: profile '{profile.profile}' criteria_json has "
-              f"{len(unknown)} section(s) that score_job() never reads: "
-              f"{', '.join(unknown)}. Each contributes NOTHING to the score. "
-              f"Known sections: {', '.join(sorted(CRITERIA_SECTIONS))}",
-              file=sys.stderr)
+        log.warning(f"profile '{profile.profile}' criteria_json has "
+                    f"{len(unknown)} section(s) that score_job() never reads: "
+                    f"{', '.join(unknown)}. Each contributes NOTHING to the score. "
+                    f"Known sections: {', '.join(sorted(CRITERIA_SECTIONS))}")
     return unknown
 
 
@@ -559,9 +560,9 @@ def write_matches(conn, rows):
             conn.cursor().executemany(MATCH_UPSERT_SQL, rows)
         return 0
     except Exception as e:
-        print(f"job-match: WARNING -- the {len(rows)}-row batch INSERT was "
-              f"rejected ({type(e).__name__}: {e}); retrying row by row so "
-              f"the good rows still land.", file=sys.stderr)
+        log.warning(f"the {len(rows)}-row batch INSERT was "
+                    f"rejected ({type(e).__name__}: {e}); retrying row by row so "
+                    f"the good rows still land.")
 
     failed = 0
     for row in rows:
@@ -570,8 +571,8 @@ def write_matches(conn, rows):
                 conn.execute(MATCH_UPSERT_SQL, row)
         except Exception as e:
             failed += 1
-            print(f"job-match: WARNING -- job_id={row[0]} profile={row[1]} "
-                  f"rejected ({type(e).__name__}: {e})", file=sys.stderr)
+            log.warning(f"job_id={row[0]} profile={row[1]} "
+                        f"rejected ({type(e).__name__}: {e})")
     return failed
 
 
@@ -611,9 +612,9 @@ def match_profile(conn, profile, facts, *, rebuild=False, dry_run=False,
         except Exception as e:
             stats["score_failed"] += 1
             if stats["score_failed"] <= 3:
-                print(f"job-match: WARNING -- {profile.profile} could not "
-                      f"score job_id={f.get('job_id')} "
-                      f"({type(e).__name__}: {e})", file=sys.stderr)
+                log.warning(f"{profile.profile} could not "
+                            f"score job_id={f.get('job_id')} "
+                            f"({type(e).__name__}: {e})")
             continue
         if score >= schema.MATCH_FLOOR:
             to_write.append((f["job_id"], profile.profile, score,
@@ -693,9 +694,9 @@ def main():
         except Exception as e:
             conn.rollback()
             failed_profiles.append(f"{prof.profile}: {type(e).__name__}: {e}")
-            print(f"job-match: WARNING -- {prof.profile} failed entirely "
-                  f"({type(e).__name__}: {e}); continuing with the other "
-                  f"profiles.", file=sys.stderr)
+            log.warning(f"{prof.profile} failed entirely "
+                        f"({type(e).__name__}: {e}); continuing with the other "
+                        f"profiles.")
             parts.append(f"{prof.profile}: FAILED")
             continue
 

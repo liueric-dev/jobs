@@ -102,8 +102,10 @@ import sys
 import subprocess
 
 import volume_floors
-from lib import envfile
+from lib import envfile, pipelinelog
 from lib.upsert import SUMMARY_PREFIX
+
+log = pipelinelog.get_logger("run-daily")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -298,9 +300,9 @@ def main():
 
     missing = [k for k in REQUIRED_ENV if not os.environ.get(k)]
     if missing:
-        print(f"run-daily FAILED: {', '.join(missing)} not set and not found "
-              f"in {ENV_FILE}. Every step would fail to connect; see "
-              f".env.example.", file=sys.stderr)
+        log.error(f"run-daily FAILED: {', '.join(missing)} not set and not found "
+                  f"in {ENV_FILE}. Every step would fail to connect; see "
+                  f".env.example.")
         sys.exit(1)
 
     failures = []
@@ -327,7 +329,7 @@ def main():
 
         if returncode != 0:
             failures.append(script_name)
-            print(f"[{script_name}] exited with code {returncode}", file=sys.stderr)
+            log.error(f"[{script_name}] exited with code {returncode}")
 
     # Printed on EVERY run, including a clean one. This pipeline's failure
     # mode is silence -- an exhausted key, a revoked key, a blocked scraper
@@ -372,9 +374,9 @@ def main():
         # full disk here must not turn a successful ingest into a failed unit.
         # Say so, though -- a history that silently stops growing looks exactly
         # like a pipeline that is fine.
-        print("run-daily: could not append to "
-              f"{volume_floors.DEFAULT_HISTORY_PATH}; volume-check will see "
-              "this run as missing", file=sys.stderr)
+        log.warning("run-daily: could not append to "
+                    f"{volume_floors.DEFAULT_HISTORY_PATH}; volume-check will see "
+                    "this run as missing")
 
     if failures:
         print(f"run-daily: {len(failures)}/{len(STEPS)} step(s) failed: {failures}")

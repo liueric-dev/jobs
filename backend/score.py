@@ -248,8 +248,10 @@ from datetime import datetime, timedelta, timezone
 import schema  # schema.py
 import profiles  # profiles.py
 import llm  # llm.py
-from lib import dbconn
+from lib import dbconn, pipelinelog
 from lib.timeparse import utc_now_str
+
+log = pipelinelog.get_logger("score")
 
 PERSONA_FILE = os.environ.get(
     "JOB_SCORING_PERSONA_FILE",
@@ -973,8 +975,8 @@ def score_one_job(job, ctx):
     except Exception as e:  # noqa: BLE001 -- deliberate: see above
         # Loud unconditionally, not behind DEBUG_PRINT_KEYS. Silence is this
         # system's failure mode and this is the branch that means a bug.
-        print(f"job-score ERROR on {job.get('id')} ({job.get('title')!r}): "
-              f"{type(e).__name__}: {e}", file=sys.stderr)
+        log.error(f"job-score ERROR on {job.get('id')} ({job.get('title')!r}): "
+                  f"{type(e).__name__}: {e}")
         return ERRORED
 
 
@@ -997,14 +999,12 @@ def _score_one_job(job, ctx):
             raw = llm.call(prompt)
         except llm.TransientError as e:
             if DEBUG_PRINT_KEYS:
-                print(f"[debug] deferring {job['id']} ({job.get('title')!r}): {e}",
-                      file=sys.stderr)
+                log.debug(f"deferring {job['id']} ({job.get('title')!r}): {e}")
             return DEFERRED
         except (RuntimeError, json.JSONDecodeError) as e:
             # A definite answer we can't use (4xx, malformed envelope).
             if DEBUG_PRINT_KEYS:
-                print(f"[debug] scoring call failed for {job['id']} ({job.get('title')!r}): {e}",
-                      file=sys.stderr)
+                log.debug(f"scoring call failed for {job['id']} ({job.get('title')!r}): {e}")
             raw = None
 
         result = llm.parse_json(raw) if raw else None
@@ -1020,8 +1020,7 @@ def _score_one_job(job, ctx):
 
         mark_score_failed(conn, job["id"], ctx, facts_version)
         if DEBUG_PRINT_KEYS:
-            print(f"[debug] unparseable/invalid result for {job['id']} ({job.get('title')!r})",
-                  file=sys.stderr)
+            log.debug(f"unparseable/invalid result for {job['id']} ({job.get('title')!r})")
         return REJECTED
     finally:
         conn.close()

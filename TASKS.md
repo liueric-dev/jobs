@@ -238,20 +238,56 @@ findings.
 
 ---
 
-### T-12 — `logging` on the pipeline stages' failure paths
+### ~~T-12~~ — `logging` on the pipeline stages' failure paths
 
-1065 lines call `print()` across the 105 non-test modules; 5 of all 171 import `logging`.
-**This is not a wholesale conversion and a row proposing one should be rejected.** The printed
-output is load-bearing — `DEBUG_PRINT_KEYS=1`
-is a convention across every ingest script, and `tools/volume-check.py` reads the run history the
-nightly writes. Converting it blind breaks the one alarm this system has.
+**Closed 2026-08-03.** New `backend/lib/pipelinelog.py`, one `get_logger(name)`, called once at
+import time by each of the four scripts. **Filtering stays exactly where it already lived**: the
+logger itself is always at `DEBUG`, so nothing is dropped by `logging`'s own level machinery — every
+call site keeps the same `if DEBUG_PRINT_KEYS:` guard it had as a `print()`, or no guard at all for
+the failures this pipeline already printed unconditionally (`score.py`'s `ERRORED` path, three sites
+in `match.py` — D10's corrupt-`tech_stack` warning, D12's unknown-criteria-section warning, D20's
+batch/row/profile rejection warnings). This is a format change, not a visibility change, which is
+what "not a wholesale conversion" (this row's own words) turned out to mean in practice.
 
-Scope: the failure and deferral paths of `extract.py`, `match.py`, `score.py` and `run-daily.py`
-only. Stdlib `logging`, stderr, format decided once in `lib/`. Summary lines stay on stdout.
+**The handler resolves `sys.stderr` at write time, not at construction — deliberately.**
+`logging.StreamHandler()` captures whatever `sys.stderr` was when the first call configured it, so
+once a handler exists, `contextlib.redirect_stderr` and `mock.patch.object(sys, "stderr", ...)` —
+both load-bearing throughout `tests/test_match.py` and `tests/test_score.py`, predating this row —
+silently stop capturing anything: the handler keeps writing to the object it was built with. A
+`_StderrProxy` that looks `sys.stderr` up fresh on every `write()` is what makes this module
+compatible with every existing test written for the `print()`-based version, with zero test
+rewrites. `tests/test_lib_pipelinelog.py` pins exactly this, including the case where a second
+script's logger reuses the first script's already-installed handler (the shape all four scripts are
+in under `python3 -m unittest discover`, and under `importlib` in `TestRunDailySummaryParser`).
 
-**Done when:** a forced failure in each of the four produces a structured stderr record;
-`python3 tools/volume-check.py` still parses the run history; the nightly summary lines are
-byte-identical to before on a successful run.
+Converted: `extract.py`'s `extract_facts`/`extract_one_job` (rejecting-input, deferring, call-failed,
+unusable-extraction — all four DEBUG-gated, unchanged); `match.py`'s `load_facts` (D10),
+`log_deleted_ids` (D11, DEBUG-gated, unchanged), `check_criteria_sections` (D12), `write_matches` and
+`match_profile` and `main` (D20, three sites); `score.py`'s `score_one_job` (the one unconditional
+site) and `_score_one_job` (three DEBUG-gated sites); `run-daily.py`'s missing-env `FAILED`, a step's
+non-zero exit, and the could-not-append-to-history warning. **Left alone, deliberately**: every
+stdout print (summaries, `FAILED:` early-exit lines, per-step stdout/stderr passthrough in
+`run-daily.py` — passthrough is the child's own output, not this script's diagnostic, and
+re-wrapping it would double-format whatever the child already logs) and the two success-path DEBUG
+prints in `extract.py`/`score.py` (out of scope: not a failure or a deferral).
+
+**Forced failures, one per file, checked directly** (not just via the suite): `extract.extract_facts`
+with a `call` that raises `llm.TransientError` → `... DEBUG extract: deferring forced-1 (...): 429
+simulated`; `score.score_one_job` against a persona that raises `KeyError` mid-build → `... ERROR
+score: job-score ERROR on forced-2 (...): RuntimeError: ...` (unconditional, no `DEBUG_PRINT_KEYS`
+set); `match.match_profile` with a non-numeric criteria weight → `... WARNING match: tech could not
+score job_id=forced-3 (TypeError: ...)`; `run-daily.main` with `REQUIRED_ENV` extended by a bogus key
+→ `... ERROR run-daily: run-daily FAILED: DEFINITELY_NOT_SET_XYZ not set ...`. All four are
+timestamped, leveled, structured records where there used to be a bare `print()`.
+
+`python3 tools/volume-check.py` still parses the run history unchanged (`volume-check ok: 9
+source(s) evaluated` against the existing `.run-volumes.jsonl` — untouched, since `parse_upsert_summaries`
+and `volume_floors.record_run` were never touched). All three suites still print `OK`: pipeline is
++5 over the `1433` at `328a52d` (the new `tests/test_lib_pipelinelog.py`), webapp and api unchanged
+at 354 / 117. `ruff` on the whole tree went 1077 → 1085, entirely from the new test file matching
+`tests/test_lib_envfile.py`'s own pre-existing `sys.path.insert` + `# noqa: E402` convention
+(`E401`×1, `I001`×1, `RUF100`×6 — the same six categories `test_lib_envfile.py` already carries);
+zero new findings in any edited script, and `match.py` — which had none before — still has none.
 
 ---
 

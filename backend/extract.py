@@ -107,8 +107,10 @@ import llm
 import profiles
 import relevance
 import schema
-from lib import dbconn
+from lib import dbconn, pipelinelog
 from lib.timeparse import utc_now_str
+
+log = pipelinelog.get_logger("extract")
 
 EXTRACT_BATCH_SIZE = int(os.environ.get("EXTRACT_BATCH_SIZE", "40"))
 EXTRACT_MAX_WORKERS = int(os.environ.get("EXTRACT_MAX_WORKERS", "3"))
@@ -1082,9 +1084,9 @@ def extract_facts(job, policy=None, call=None):
     # costs zero LLM calls" is structural rather than a claim in a comment.
     if is_unusable_input(job):
         if DEBUG_PRINT_KEYS:
-            print(f"[debug] rejecting {job['id']} ({job.get('title')!r}): "
-                  f"markup_ratio="
-                  f"{markup_ratio(prompt_description(job)):.3f}", file=sys.stderr)
+            log.debug(f"rejecting {job['id']} ({job.get('title')!r}): "
+                      f"markup_ratio="
+                      f"{markup_ratio(prompt_description(job)):.3f}")
         return REJECTED, None, 0, None
 
     call = call or llm.call
@@ -1098,13 +1100,11 @@ def extract_facts(job, policy=None, call=None):
         except llm.TransientError as e:
             transient = True
             if DEBUG_PRINT_KEYS:
-                print(f"[debug] deferring {job['id']} ({job.get('title')!r}): {e}",
-                      file=sys.stderr)
+                log.debug(f"deferring {job['id']} ({job.get('title')!r}): {e}")
             continue
         except (RuntimeError, json.JSONDecodeError) as e:
             if DEBUG_PRINT_KEYS:
-                print(f"[debug] extraction call failed for {job['id']}: {e}",
-                      file=sys.stderr)
+                log.debug(f"extraction call failed for {job['id']}: {e}")
             continue
         facts = normalize(llm.parse_json(raw)) if raw else None
         if facts:
@@ -1144,9 +1144,8 @@ def extract_one_job(job, model_label, policy=None):
                  if is_unusable_input(job) else model_label)
         mark_extract_failed(conn, job["id"], label)
         if DEBUG_PRINT_KEYS:
-            print(f"[debug] unusable extraction for {job['id']} "
-                  f"({job.get('title')!r}) -> {llm.failed_label(label)}",
-                  file=sys.stderr)
+            log.debug(f"unusable extraction for {job['id']} "
+                      f"({job.get('title')!r}) -> {llm.failed_label(label)}")
         return REJECTED
     finally:
         conn.close()
