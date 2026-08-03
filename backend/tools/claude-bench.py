@@ -132,7 +132,7 @@ def fetch_jobs(n, only_scored=False, corpus_path=DEFAULT_CORPUS):
         rows = conn.execute(
             f"""SELECT job_id, fit_score, primary_track
                 FROM {schema.SCORES_TABLE}
-                WHERE profile = %s AND job_id = ANY(%s) AND fit_score IS NOT NULL""",
+                WHERE profile = %s AND job_id = ANY(%s) AND fit_score IS NOT NULL""",  # noqa: S608 -- splices schema.SCORES_TABLE, a module-level constant
             (profile, ids)).fetchall()
         conn.close()
         scored = {jid: (fit, track) for jid, fit, track in rows}

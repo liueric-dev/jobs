@@ -100,7 +100,7 @@ def load_active(conn):
     starved by whatever order Postgres felt like returning.
     """
     rows = conn.execute(
-        f"SELECT {', '.join(_COLUMNS)} FROM {schema.PROFILES_TABLE} "
+        f"SELECT {', '.join(_COLUMNS)} FROM {schema.PROFILES_TABLE} "  # noqa: S608 -- splices _COLUMNS and schema.PROFILES_TABLE -- both module-level constants
         f"WHERE active ORDER BY profile"
     ).fetchall()
     return [_row_to_profile(r) for r in rows]
@@ -114,7 +114,7 @@ def load_one(conn, profile):
     nightly sweep", not "404".
     """
     row = conn.execute(
-        f"SELECT {', '.join(_COLUMNS)} FROM {schema.PROFILES_TABLE} "
+        f"SELECT {', '.join(_COLUMNS)} FROM {schema.PROFILES_TABLE} "  # noqa: S608 -- splices _COLUMNS and schema.PROFILES_TABLE -- both module-level constants
         f"WHERE profile = %s", (profile,)
     ).fetchone()
     return _row_to_profile(row) if row else None
@@ -202,7 +202,7 @@ def upsert(conn, profile, persona, criteria, *, relevance_cfg=None,
             daily_narrative_budget = EXCLUDED.daily_narrative_budget,
             active = EXCLUDED.active,
             updated_at = EXCLUDED.updated_at
-        """,
+        """,  # noqa: S608 -- splices schema.PROFILES_TABLE, a module-level constant
         (profile, display_name or profile, json.dumps(persona),
          json.dumps(relevance_cfg) if relevance_cfg else None,
          json.dumps(criteria), daily_narrative_budget, active, now, now,
@@ -213,7 +213,7 @@ def upsert(conn, profile, persona, criteria, *, relevance_cfg=None,
 
 def set_active(conn, profile, active):
     conn.execute(
-        f"UPDATE {schema.PROFILES_TABLE} SET active = %s, updated_at = %s "
+        f"UPDATE {schema.PROFILES_TABLE} SET active = %s, updated_at = %s "  # noqa: S608 -- splices schema.PROFILES_TABLE, a module-level constant
         f"WHERE profile = %s", (active, utc_now_str(), profile))
     conn.commit()
 

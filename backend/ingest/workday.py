@@ -830,7 +830,7 @@ def _tiers(conn, cfgs, records, *, loose):
         arrays.append(f"%(c_{col})s::boolean[]")
 
     cols = ", ".join((*_GATE_TEXT_COLUMNS, *loc_cols))
-    sql = (f"SELECT {', '.join(exprs)} "
+    sql = (f"SELECT {', '.join(exprs)} "  # noqa: S608 -- splices _GATE_TEXT_COLUMNS (module constant) and loc_cols, validated as plain identifiers by relevance.tier_sql -- see the comment above
            f"FROM unnest({', '.join(arrays)}) "
            f"WITH ORDINALITY AS c({cols}, n) ORDER BY c.n")
     return [tuple(row) for row in conn.execute(sql, params).fetchall()]

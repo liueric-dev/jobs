@@ -384,7 +384,7 @@ def pursuit_tiers(conn, cfg):
     """
     expr, params = relevance.tier_sql(cfg)
     rows = conn.execute(
-        f"SELECT j.id, {expr} FROM {schema.TABLE} j", params).fetchall()
+        f"SELECT j.id, {expr} FROM {schema.TABLE} j", params).fetchall()  # noqa: S608 -- splices schema.TABLE, a module-level constant
     return {r[0]: r[1] for r in rows}, relevance.max_tier(cfg)
 
 
@@ -471,7 +471,7 @@ def read_facts(conn):
     rate. `tombstone` is True when extraction_model carries llm.FAILED_PREFIX.
     """
     rows = conn.execute(
-        f"SELECT {', '.join(_FACT_COLUMNS)} FROM {schema.FACTS_TABLE}"
+        f"SELECT {', '.join(_FACT_COLUMNS)} FROM {schema.FACTS_TABLE}"  # noqa: S608 -- splices _FACT_COLUMNS and schema.FACTS_TABLE -- both module-level constants
     ).fetchall()
     out = {}
     for r in rows:
@@ -485,21 +485,21 @@ def read_facts(conn):
 
 def read_matches(conn, profile):
     rows = conn.execute(
-        f"SELECT job_id, match_score, match_reasons "
+        f"SELECT job_id, match_score, match_reasons "  # noqa: S608 -- splices schema.MATCHES_TABLE, a module-level constant
         f"FROM {schema.MATCHES_TABLE} WHERE profile = %s", (profile,)).fetchall()
     return {r[0]: {"match_score": r[1], "match_reasons": r[2]} for r in rows}
 
 
 def read_scores(conn, profile):
     rows = conn.execute(
-        f"SELECT job_id, fit_score, primary_track "
+        f"SELECT job_id, fit_score, primary_track "  # noqa: S608 -- splices schema.SCORES_TABLE, a module-level constant
         f"FROM {schema.SCORES_TABLE} WHERE profile = %s", (profile,)).fetchall()
     return {r[0]: {"fit_score": r[1], "primary_track": r[2]} for r in rows}
 
 
 def read_jobs(conn):
     rows = conn.execute(
-        f"SELECT id, title, company_name, platform, location_is_nyc, "
+        f"SELECT id, title, company_name, platform, location_is_nyc, "  # noqa: S608 -- splices schema.TABLE, a module-level constant
         f"location_is_remote FROM {schema.TABLE}").fetchall()
     return {r[0]: {"title": r[1], "company_name": r[2], "platform": r[3],
                    "location_is_nyc": r[4], "location_is_remote": r[5]}

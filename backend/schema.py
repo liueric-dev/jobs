@@ -1207,7 +1207,7 @@ WHERE j.status = '{STATUS_OPEN}'
   AND coalesce(j.title, '') <> ''
   AND coalesce(j.job_url, '') <> ''
   AND coalesce(j.description_text, '') <> ''
-"""
+"""  # noqa: S608 -- splices TABLE/MATCHES_TABLE/FACTS_TABLE/SCORES_TABLE and the STATUS_OPEN literal -- all module-level constants; a view definition cannot bind %s parameters
 
 
 def _view_grants(conn, view_name):

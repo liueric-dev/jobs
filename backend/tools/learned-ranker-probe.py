@@ -222,7 +222,7 @@ def load_sample(conn, profile_obj):
         FROM {schema.FACTS_TABLE} f
         JOIN {schema.TABLE} j ON j.id = f.job_id
         WHERE f.job_id = ANY(%s)
-        """, (ids,)).fetchall()
+        """, (ids,)).fetchall()  # noqa: S608 -- splices schema.FACTS_TABLE/schema.TABLE, both module-level constants
     extra = {r[0]: {"employment_type": r[1], "visa_sponsorship": r[2],
                     "comp_min": r[3], "comp_max": r[4],
                     "years_experience_max": r[5], "summary": r[6] or "",

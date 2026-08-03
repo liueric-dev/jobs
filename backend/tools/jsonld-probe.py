@@ -1587,7 +1587,7 @@ def _gate_titles(conn, postings):
             "INSERT INTO jsonld_probe_titles VALUES (%s,%s,%s,%s,%s,%s)",
             (p["title"], None, employer, "jsonld_probe", is_nyc, is_remote))
     counts = dict(conn.execute(
-        f"SELECT {sql} AS tier, count(*) FROM jsonld_probe_titles t "
+        f"SELECT {sql} AS tier, count(*) FROM jsonld_probe_titles t "  # noqa: S608 -- splices `sql`, an expression built by relevance's SQL compiler, not user input
         f"GROUP BY 1", params).fetchall())
     conn.rollback()
     return counts.get(1, 0), counts.get(2, 0), counts.get(3, 0)

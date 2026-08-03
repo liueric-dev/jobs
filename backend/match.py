@@ -347,7 +347,7 @@ _SELECT_FACTS = f"""
     WHERE j.status = %(status)s
       AND f.extraction_model NOT LIKE %(failed)s
       AND {{union}}
-"""
+"""  # noqa: S608 -- splices schema.FACTS_TABLE/schema.TABLE (constants); {{union}} is a literal-brace placeholder filled by .format() below with relevance.union_sql()'s output, the one relevance SQL compiler
 
 
 def load_facts(conn, cfgs):
@@ -415,7 +415,7 @@ def load_facts(conn, cfgs):
 def existing_versions(conn, profile):
     """job_id -> (facts_version, criteria_version) already computed."""
     rows = conn.execute(
-        f"SELECT job_id, facts_version, criteria_version "
+        f"SELECT job_id, facts_version, criteria_version "  # noqa: S608 -- splices schema.MATCHES_TABLE, a module-level constant
         f"FROM {schema.MATCHES_TABLE} WHERE profile = %s", (profile,)).fetchall()
     return {r[0]: (r[1], r[2]) for r in rows}
 
@@ -440,11 +440,11 @@ def prune_orphans(conn, profile, facts, *, dry_run=False):
     keep = [f["job_id"] for f in facts]
     if dry_run:
         return conn.execute(
-            f"SELECT count(*) FROM {schema.MATCHES_TABLE} "
+            f"SELECT count(*) FROM {schema.MATCHES_TABLE} "  # noqa: S608 -- splices schema.MATCHES_TABLE, a module-level constant
             f"WHERE profile = %s AND NOT (job_id = ANY(%s))",
             (profile.profile, keep)).fetchone()[0]
     gone = [r[0] for r in conn.execute(
-        f"DELETE FROM {schema.MATCHES_TABLE} "
+        f"DELETE FROM {schema.MATCHES_TABLE} "  # noqa: S608 -- splices schema.MATCHES_TABLE, a module-level constant
         f"WHERE profile = %s AND NOT (job_id = ANY(%s)) "
         f"RETURNING job_id",
         (profile.profile, keep)).fetchall()]
@@ -524,7 +524,7 @@ MATCH_UPSERT_SQL = f"""
         facts_version=EXCLUDED.facts_version,
         criteria_version=EXCLUDED.criteria_version,
         matched_at=EXCLUDED.matched_at
-"""
+"""  # noqa: S608 -- splices schema.MATCHES_TABLE, a module-level constant
 
 
 def write_matches(conn, rows):
@@ -632,7 +632,7 @@ def match_profile(conn, profile, facts, *, rebuild=False, dry_run=False,
     stats["write_failed"] += write_failed
     if to_delete:
         conn.execute(
-            f"DELETE FROM {schema.MATCHES_TABLE} "
+            f"DELETE FROM {schema.MATCHES_TABLE} "  # noqa: S608 -- splices schema.MATCHES_TABLE, a module-level constant
             f"WHERE profile = %s AND job_id = ANY(%s)",
             (profile.profile, to_delete))
         # D11. `to_delete` is already the exact id list, so no RETURNING is

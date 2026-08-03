@@ -94,7 +94,7 @@ def hydrate(conn, ids, profile):
                ON m.job_id = j.id AND m.profile = %(profile)s
         WHERE j.id = ANY(%(ids)s)
         ORDER BY j.id
-        """,
+        """,  # noqa: S608 -- splices schema.TABLE/schema.FACTS_TABLE/schema.MATCHES_TABLE and fixed column-name lists -- all module-level constants
         {"profile": profile, "ids": ids},
     ).fetchall()
     return [corpus._row_to_record(r, cols) for r in rows]

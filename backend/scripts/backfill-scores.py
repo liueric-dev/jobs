@@ -128,7 +128,7 @@ def remaining(conn, profile, cfg):
               AND coalesce(j.description_text, '') <> ''
               AND NOT EXISTS (SELECT 1 FROM {schema.SCORES_TABLE} s
                               WHERE s.job_id = j.id AND s.profile = %(profile)s)
-              AND {tier_expr} <= %(max_tier)s""",
+              AND {tier_expr} <= %(max_tier)s""",  # noqa: S608 -- splices schema.TABLE/schema.SCORES_TABLE and tier_expr from relevance's SQL compiler -- constants and validated SQL, not user input
         params).fetchone()[0]
 
 
@@ -137,7 +137,7 @@ def score_census(conn, profile):
     return conn.execute(
         f"""SELECT scoring_model, count(*) FROM {schema.SCORES_TABLE}
             WHERE profile = %(profile)s GROUP BY scoring_model
-            ORDER BY count(*) DESC""",
+            ORDER BY count(*) DESC""",  # noqa: S608 -- splices schema.SCORES_TABLE, a module-level constant
         {"profile": profile}).fetchall()
 
 
@@ -145,7 +145,7 @@ def delete_stale(conn, profile, keep_label):
     """Drop scores from any other model so they get redone in this one."""
     n = conn.execute(
         f"""DELETE FROM {schema.SCORES_TABLE}
-            WHERE profile = %(profile)s AND scoring_model IS DISTINCT FROM %(keep)s""",
+            WHERE profile = %(profile)s AND scoring_model IS DISTINCT FROM %(keep)s""",  # noqa: S608 -- splices schema.SCORES_TABLE, a module-level constant
         {"profile": profile, "keep": keep_label}).rowcount
     conn.commit()
     return n

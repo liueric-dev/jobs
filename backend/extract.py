@@ -979,7 +979,7 @@ def update_job_facts(conn, job_id, facts, model_label, passes=1,
             extraction_model=EXCLUDED.extraction_model,
             extraction_passes=EXCLUDED.extraction_passes,
             vote_unanimity=EXCLUDED.vote_unanimity
-        """,
+        """,  # noqa: S608 -- splices schema.FACTS_TABLE and _FACT_COLUMNS -- both module-level constants
         (job_id, schema.FACTS_VERSION,
          *[facts[c] for c in _FACT_COLUMNS],
          utc_now_str(), model_label, passes, unanimity),
@@ -1032,7 +1032,7 @@ def mark_extract_failed(conn, job_id, model_label):
             {nulls},
             extraction_passes=NULL,
             vote_unanimity=NULL
-        """,
+        """,  # noqa: S608 -- splices schema.FACTS_TABLE and _FACT_COLUMNS -- both module-level constants
         (job_id, schema.FACTS_VERSION, utc_now_str(),
          llm.failed_label(model_label)),
     )

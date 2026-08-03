@@ -60,7 +60,7 @@ def ensure_state_schema(conn, watermark_table="ingest_state", with_claims=False)
 
 def get_watermark(conn, dataset, table="ingest_state"):
     row = conn.execute(
-        f"SELECT last_success_at FROM {table} WHERE dataset = %s", (dataset,)
+        f"SELECT last_success_at FROM {table} WHERE dataset = %s", (dataset,)  # noqa: S608 -- splices `table`, defaulted to the module's own constant "ingest_state"
     ).fetchone()
     return row[0] if row else None
 
@@ -79,7 +79,7 @@ def set_watermark(conn, dataset, ts=None, table="ingest_state"):
         INSERT INTO {table} (dataset, last_success_at) VALUES (%s, %s)
         ON CONFLICT (dataset) DO UPDATE
             SET last_success_at = EXCLUDED.last_success_at
-        """,
+        """,  # noqa: S608 -- splices `table`, defaulted to the module's own constant "ingest_state"
         (dataset, ts or utc_now_str()),
     )
     conn.commit()
@@ -115,7 +115,7 @@ def try_claim(conn, dataset, ttl_minutes=DEFAULT_CLAIM_TTL_MINUTES,
         ON CONFLICT (dataset) DO UPDATE SET claimed_at = %(now)s
         WHERE {table}.claimed_at IS NULL OR {table}.claimed_at < %(cutoff)s
         RETURNING dataset
-        """,
+        """,  # noqa: S608 -- splices `table`, defaulted to the module's own constant "ingest_state"
         {"dataset": dataset, "now": now, "cutoff": cutoff},
     )
     won = cur.fetchone() is not None
@@ -124,7 +124,7 @@ def try_claim(conn, dataset, ttl_minutes=DEFAULT_CLAIM_TTL_MINUTES,
 
 
 def release_claim(conn, dataset, table="ingest_state"):
-    conn.execute(f"UPDATE {table} SET claimed_at = NULL WHERE dataset = %s",
+    conn.execute(f"UPDATE {table} SET claimed_at = NULL WHERE dataset = %s",  # noqa: S608 -- splices `table`, defaulted to the module's own constant "ingest_state"
                  (dataset,))
     conn.commit()
 
@@ -142,7 +142,7 @@ def mark_success(conn, dataset, ts=None, table="ingest_state"):
         VALUES (%s, %s, NULL)
         ON CONFLICT (dataset) DO UPDATE
             SET last_success_at = EXCLUDED.last_success_at, claimed_at = NULL
-        """,
+        """,  # noqa: S608 -- splices `table`, defaulted to the module's own constant "ingest_state"
         (dataset, ts or utc_now_str()),
     )
     conn.commit()

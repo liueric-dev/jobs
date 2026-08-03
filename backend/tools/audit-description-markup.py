@@ -87,7 +87,7 @@ def scan(conn):
         SELECT j.id, j.platform, j.company_name, j.title, j.description_text
         FROM {schema.TABLE} j
         WHERE coalesce(j.description_text, '') <> ''
-        """
+        """  # noqa: S608 -- splices schema.TABLE, a module-level constant
     ).fetchall()
 
     out = []
@@ -121,9 +121,9 @@ def remediate(conn, job_ids, commit=False):
     for table in (schema.SCORES_TABLE, schema.MATCHES_TABLE,
                   schema.FACTS_TABLE):
         derived[table] = conn.execute(
-            f"DELETE FROM {table} WHERE job_id = ANY(%s)", (ids,)).rowcount
+            f"DELETE FROM {table} WHERE job_id = ANY(%s)", (ids,)).rowcount  # noqa: S608 -- splices `table`, iterated only over this module's own constant table names
     jobs = conn.execute(
-        f"UPDATE {schema.TABLE} SET description_text = NULL, content_hash = NULL "
+        f"UPDATE {schema.TABLE} SET description_text = NULL, content_hash = NULL "  # noqa: S608 -- splices schema.TABLE, a module-level constant
         f"WHERE id = ANY(%s)", (ids,)).rowcount
     if commit:
         conn.commit()
@@ -160,7 +160,7 @@ def main():
               f"{company} / {title}  ({leaked}/{size} chars)")
         if args.show:
             window = conn.execute(
-                f"SELECT description_text FROM {schema.TABLE} WHERE id = %s",
+                f"SELECT description_text FROM {schema.TABLE} WHERE id = %s",  # noqa: S608 -- splices schema.TABLE, a module-level constant
                 (job_id,)).fetchone()[0]
             tokens = [t for t in extract.prompt_description(
                 {"description_text": window}).split()

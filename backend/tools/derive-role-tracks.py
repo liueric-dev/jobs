@@ -201,7 +201,7 @@ def load_cohort(conn, profile, max_tier):
     rows = conn.execute(
         f"""SELECT j.id, j.title, j.company_name, j.platform, j.description_text
             FROM {schema.TABLE} j
-            WHERE j.status = %(status)s AND ({expr}) <= %(cap)s""",
+            WHERE j.status = %(status)s AND ({expr}) <= %(cap)s""",  # noqa: S608 -- splices schema.TABLE (constant) and expr from relevance's SQL compiler, not user input
         params,
     ).fetchall()
     return [Posting(*r) for r in rows], row

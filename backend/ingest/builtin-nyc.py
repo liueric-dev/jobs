@@ -321,7 +321,7 @@ def fill_descriptions(conn, budget):
               AND coalesce(description_text, '') = ''
               AND coalesce(job_url, '') <> ''
             ORDER BY first_seen ASC
-            LIMIT %(limit)s""",
+            LIMIT %(limit)s""",  # noqa: S608 -- splices schema.SCHEMA, a module-level constant
         {"limit": budget},
     ).fetchall()
 
@@ -341,7 +341,7 @@ def fill_descriptions(conn, budget):
             break
         if desc:
             conn.execute(
-                f"UPDATE {schema.SCHEMA}.jobs SET description_text = %(d)s "
+                f"UPDATE {schema.SCHEMA}.jobs SET description_text = %(d)s "  # noqa: S608 -- splices schema.SCHEMA, a module-level constant
                 f"WHERE id = %(id)s", {"d": desc, "id": job_id})
             conn.commit()
             fetched += 1

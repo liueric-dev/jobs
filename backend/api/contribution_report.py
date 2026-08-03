@@ -206,7 +206,7 @@ def fetch_contributors(conn, since=None):
         SELECT contributor_id, {_BUCKET_SQL}
         FROM submission_log {where}
         GROUP BY contributor_id ORDER BY contributor_id
-        """,
+        """,  # noqa: S608 -- splices _BUCKET_SQL (a fixed CASE-expression constant) and a validated where clause from _since_clause -- not user input
         [list(qc.SUBMISSION_ACTIONS)] + params,
     ).fetchall()
 
@@ -234,7 +234,7 @@ def fetch_datasets(conn, since=None):
                {_BUCKET_SQL}
         FROM submission_log {where}
         GROUP BY dataset ORDER BY dataset
-        """,
+        """,  # noqa: S608 -- splices _BUCKET_SQL (a fixed CASE-expression constant) and a validated where clause from _since_clause -- not user input
         [list(qc.SUBMISSION_ACTIONS)] + params,
     ).fetchall()
     return [summarize(dict(zip(("dataset", "contributors") + _ROW_KEYS, row)))

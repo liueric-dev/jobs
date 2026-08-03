@@ -117,7 +117,7 @@ _SAVERS_SQL = f"""
      GROUP BY job_id
     HAVING COUNT(DISTINCT app_user_id) >= %s
      ORDER BY job_id
-"""
+"""  # noqa: S608 -- splices schema.EVENTS_TABLE, a module-level constant
 
 
 def savers_by_job(conn, profile, min_savers=None):
@@ -159,7 +159,7 @@ _ACTIVE_SAVERS_SQL = f"""
          ORDER BY e.app_user_id, e.job_id, e.occurred_at DESC, e.id DESC
     ) live
     WHERE live.event = %s
-"""
+"""  # noqa: S608 -- splices schema.EVENTS_TABLE, a module-level constant
 
 
 def active_savers(conn, profile):
@@ -198,11 +198,11 @@ def refresh(conn, profile, now=None, dry_run=False):
         return rows, 0
 
     removed = conn.execute(
-        f"DELETE FROM {schema.COHORT_SIGNAL_TABLE} WHERE cohort_profile = %s",
+        f"DELETE FROM {schema.COHORT_SIGNAL_TABLE} WHERE cohort_profile = %s",  # noqa: S608 -- splices schema.COHORT_SIGNAL_TABLE, a module-level constant
         (profile,)).rowcount
     for row in rows:
         conn.execute(
-            f"INSERT INTO {schema.COHORT_SIGNAL_TABLE} "
+            f"INSERT INTO {schema.COHORT_SIGNAL_TABLE} "  # noqa: S608 -- splices schema.COHORT_SIGNAL_TABLE, a module-level constant
             f"(job_id, cohort_profile, save_bucket, computed_at) "
             f"VALUES (%s, %s, %s, %s)", row)
     conn.commit()

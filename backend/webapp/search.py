@@ -137,7 +137,7 @@ def _select_queries(conn, user, where, params, limit):
         WHERE {' AND '.join(where)}
         ORDER BY q.id
         LIMIT %s
-    """
+    """  # noqa: S608 -- where built from fixed literals only, values always bound via params
     # The JOIN's parameters lead, because _SIGNAL_JOIN is spliced in ahead of
     # the WHERE -- the same ordering hazard jobs.py:323-325 annotates for
     # _BUILDER_STATE_JOIN, and the same fix: bind them first, here, once.
@@ -370,7 +370,7 @@ def search_results(
         WHERE {' AND '.join(where)}
         ORDER BY {ORDER_BY}
         LIMIT %s
-    """
+    """  # noqa: S608 -- where built from fixed literals only, values always bound via params
     params.append(limit + 1)   # one extra row: is there a next page?
     with db() as conn:
         rows = conn.execute(sql, params).fetchall()

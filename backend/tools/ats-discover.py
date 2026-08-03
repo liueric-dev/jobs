@@ -317,7 +317,7 @@ def insert_discovered_employers(conn, employers, source, now=None):
                  seed_source, added_at)
             VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (employer_name) DO NOTHING
-            """,
+            """,  # noqa: S608 -- splices SEED_TABLE, a module-level constant
             (e["employer_name"], e.get("careers_url"), e.get("sector"),
              bool(e.get("is_non_tech", True)), source, now))
         added += cur.rowcount
@@ -426,7 +426,7 @@ def existing_counts(conn, ids):
     if not ids:
         return {}
     rows = conn.execute(
-        f"SELECT id, open_jobs_at_validation, open_jobs_changed_at "
+        f"SELECT id, open_jobs_at_validation, open_jobs_changed_at "  # noqa: S608 -- splices ATS_TABLE, a module-level constant
         f"FROM {ATS_TABLE} WHERE id = ANY(%s)", (list(ids),)).fetchall()
     return {r[0]: (r[1], r[2]) for r in rows}
 
@@ -481,7 +481,7 @@ def touch_validated(conn, records, now):
     if not ids:
         return 0
     cur = conn.execute(
-        f"UPDATE {ATS_TABLE} SET last_validated_at = %s WHERE id = ANY(%s)",
+        f"UPDATE {ATS_TABLE} SET last_validated_at = %s WHERE id = ANY(%s)",  # noqa: S608 -- splices ATS_TABLE, a module-level constant
         (now, ids))
     conn.commit()
     return cur.rowcount
@@ -603,13 +603,13 @@ def reconcile_seed_outcomes(conn, records, verbose=False):
     if not ids:
         return []
     landed = {r[0] for r in conn.execute(
-        f"SELECT id FROM {ATS_TABLE} WHERE id = ANY(%s)",
+        f"SELECT id FROM {ATS_TABLE} WHERE id = ANY(%s)",  # noqa: S608 -- splices ATS_TABLE, a module-level constant
         (list(ids),)).fetchall()}
     lost = sorted({name for row_id, name in ids.items() if row_id not in landed})
     if not lost:
         return []
     conn.execute(
-        f"UPDATE {SEED_TABLE} SET last_probed_at = NULL, "
+        f"UPDATE {SEED_TABLE} SET last_probed_at = NULL, "  # noqa: S608 -- splices SEED_TABLE, a module-level constant
         f"last_probe_outcome = NULL, last_probe_detail = %s "
         f"WHERE employer_name = ANY(%s)",
         ("write to company_ats failed; outcome cleared for re-probe", lost))
@@ -649,7 +649,7 @@ def record_probe(conn, employer_name, outcome, detail, careers_url, now):
                last_probe_detail = %s, probe_attempts = probe_attempts + 1,
                careers_url = COALESCE(%s, careers_url)
          WHERE employer_name = %s
-        """,
+        """,  # noqa: S608 -- splices SEED_TABLE, a module-level constant
         (now, outcome, (detail or "")[:300], careers_url, employer_name))
 
 
@@ -662,7 +662,7 @@ def select_seed_not_found(conn):
     """
     return [{"employer_name": r[0], "careers_url": r[1]}
             for r in conn.execute(
-                f"SELECT employer_name, careers_url FROM {SEED_TABLE} "
+                f"SELECT employer_name, careers_url FROM {SEED_TABLE} "  # noqa: S608 -- splices SEED_TABLE, a module-level constant
                 f"WHERE last_probe_outcome = %s ORDER BY employer_name",
                 (ad.NOT_FOUND,)).fetchall()]
 
@@ -777,12 +777,12 @@ def breakdown(conn):
         f"""
         SELECT ats, status, count(*), sum(coalesce(open_jobs_at_validation,0))
           FROM {ATS_TABLE} GROUP BY ats, status ORDER BY ats, status
-        """).fetchall()
+        """).fetchall()  # noqa: S608 -- splices ATS_TABLE, a module-level constant
     outcomes = conn.execute(
         f"""
         SELECT coalesce(last_probe_outcome,'(never probed)'), count(*)
           FROM {SEED_TABLE} GROUP BY 1 ORDER BY 2 DESC
-        """).fetchall()
+        """).fetchall()  # noqa: S608 -- splices SEED_TABLE, a module-level constant
     # The headline the task asks to be stated explicitly: of the NON-TECH
     # employers we conclusively probed, what fraction resolved to a validated
     # public-feed board. Denominator is conclusively-probed, NOT seeded --
@@ -804,7 +804,7 @@ def breakdown(conn):
               FROM {ATS_TABLE} c WHERE c.employer_name = s.employer_name
         ) v ON TRUE
         WHERE s.last_probe_outcome IN ('found','not_found')
-        """).fetchone()
+        """).fetchone()  # noqa: S608 -- splices SEED_TABLE/ATS_TABLE, both module-level constants
     return by_ats, outcomes, coverage
 
 
@@ -825,7 +825,7 @@ def stale_tokens(conn, days=STALE_COUNT_DAYS):
          WHERE status = 'valid' AND open_jobs_changed_at IS NOT NULL
            AND open_jobs_changed_at < %s
          ORDER BY open_jobs_changed_at
-        """, (cutoff,)).fetchall()
+        """, (cutoff,)).fetchall()  # noqa: S608 -- splices ATS_TABLE, a module-level constant
 
 
 def print_report(conn):
@@ -849,7 +849,7 @@ def print_report(conn):
         # got an answer for. Neither number is sufficient alone, so neither is
         # ever printed alone.
         nt_seeded = conn.execute(
-            f"SELECT count(*) FROM {SEED_TABLE} WHERE is_non_tech").fetchone()[0]
+            f"SELECT count(*) FROM {SEED_TABLE} WHERE is_non_tech").fetchone()[0]  # noqa: S608 -- splices SEED_TABLE, a module-level constant
         print("\n-- coverage ---------------------------------------------------")
         print(f"  non-tech employers seeded          : {nt_seeded}")
         print(f"  ...conclusively probed             : {nt_probed} "
@@ -909,7 +909,7 @@ def select_tokens(conn, limit=None, statuses=None):
     task is actually designed against -- a feed still serving postings filled
     six months ago -- since that board's careers page looks fine.
     """
-    sql = (f"SELECT employer_name, careers_url, ats, token, workday_site, "
+    sql = (f"SELECT employer_name, careers_url, ats, token, workday_site, "  # noqa: S608 -- splices ATS_TABLE, a module-level constant
            f"workday_dc, discovered_via FROM {ATS_TABLE} WHERE token <> ''")
     params = {}
     if statuses:
@@ -971,7 +971,7 @@ def select_employers(conn, limit=None, all_rows=False, only=None,
     if only_unresolved:
         where.append("(last_probe_outcome IS NULL "
                      "OR last_probe_outcome NOT IN ('found','not_found'))")
-    sql = (f"SELECT employer_name, careers_url, sector, is_non_tech "
+    sql = (f"SELECT employer_name, careers_url, sector, is_non_tech "  # noqa: S608 -- splices SEED_TABLE, a module-level constant
            f"FROM {SEED_TABLE}")
     if where:
         sql += " WHERE " + " AND ".join(where)

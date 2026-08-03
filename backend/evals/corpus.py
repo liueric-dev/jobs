@@ -146,7 +146,7 @@ def _pool_query(profile):
                match_score, match_reasons
         FROM ranked
         WHERE rn <= %(per_platform)s
-    """
+    """  # noqa: S608 -- splices FACT_COLUMNS/JOB_COLUMNS and TABLE/FACTS_TABLE/MATCHES_TABLE -- all module-level constants
 
 
 def _row_to_record(row, cols):

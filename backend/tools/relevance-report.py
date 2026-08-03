@@ -76,7 +76,7 @@ def distribution(conn, expr, params, profile):
             WHERE j.status = %(status)s
               AND NOT EXISTS (SELECT 1 FROM {schema.SCORES_TABLE} s
                               WHERE s.job_id = j.id AND s.profile = %(profile)s)
-            GROUP BY 1 ORDER BY 1""",
+            GROUP BY 1 ORDER BY 1""",  # noqa: S608 -- splices schema.TABLE/schema.SCORES_TABLE, both module-level constants
         {**params, "status": schema.STATUS_OPEN, "profile": profile},
     ).fetchall()
     return rows
@@ -89,7 +89,7 @@ def samples(conn, expr, params, profile, tier, n):
               AND NOT EXISTS (SELECT 1 FROM {schema.SCORES_TABLE} s
                               WHERE s.job_id = j.id AND s.profile = %(profile)s)
               AND ({expr}) = %(tier)s
-            ORDER BY random() LIMIT %(n)s""",
+            ORDER BY random() LIMIT %(n)s""",  # noqa: S608 -- splices schema.TABLE/schema.SCORES_TABLE, both module-level constants
         {**params, "status": schema.STATUS_OPEN, "profile": profile,
          "tier": tier, "n": n},
     ).fetchall()
@@ -126,7 +126,7 @@ def dead_patterns(conn, cfg):
                         for p in group]
         for pat in patterns:
             n = conn.execute(
-                f"SELECT count(*) FROM {schema.TABLE} "
+                f"SELECT count(*) FROM {schema.TABLE} "  # noqa: S608 -- splices `column`, always one of _DEAD_COLUMNS' fixed values, never user input
                 f"WHERE status = %s AND {column} ~* %s",
                 (schema.STATUS_OPEN, pat),
             ).fetchone()[0]

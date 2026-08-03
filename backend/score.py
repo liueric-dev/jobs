@@ -857,7 +857,7 @@ def update_job_score(conn, job_id, values, ctx, facts_version):
             persona_sha=EXCLUDED.persona_sha,
             prompt_version=EXCLUDED.prompt_version,
             criteria_version=EXCLUDED.criteria_version
-        """,
+        """,  # noqa: S608 -- splices schema.SCORES_TABLE, a module-level constant
         (
             job_id,
             ctx.profile,
@@ -919,7 +919,7 @@ def mark_score_failed(conn, job_id, ctx, facts_version):
             persona_sha=EXCLUDED.persona_sha,
             prompt_version=EXCLUDED.prompt_version,
             criteria_version=EXCLUDED.criteria_version
-        """,
+        """,  # noqa: S608 -- splices schema.SCORES_TABLE, a module-level constant
         (job_id, ctx.profile, utc_now_str(),
          llm.failed_label(ctx.model_label),
          facts_version, ctx.persona_sha, ctx.prompt_version,
@@ -1206,7 +1206,7 @@ def _print_stale_report(profile=None):
             names = [profile]
         else:
             names = [r[0] for r in conn.execute(
-                f"SELECT profile FROM {schema.PROFILES_TABLE} "
+                f"SELECT profile FROM {schema.PROFILES_TABLE} "  # noqa: S608 -- splices schema.PROFILES_TABLE, a module-level constant
                 f"ORDER BY profile").fetchall()]
         print(f"job-score staleness (prompt_version="
               f"{schema.SCORE_PROMPT_VERSION}, no calls made):")
@@ -1237,14 +1237,14 @@ def _recently_active(conn, profile, days):
     be skipped by the very pass meant to prepare their first list.
     """
     row = conn.execute(
-        f"SELECT count(*) FROM {schema.EVENTS_TABLE} WHERE profile = %s",
+        f"SELECT count(*) FROM {schema.EVENTS_TABLE} WHERE profile = %s",  # noqa: S608 -- splices schema.EVENTS_TABLE, a module-level constant
         (profile,)).fetchone()
     if not row[0]:
         return True
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)
               ).strftime("%Y-%m-%dT%H:%M:%S")
     return bool(conn.execute(
-        f"SELECT 1 FROM {schema.EVENTS_TABLE} "
+        f"SELECT 1 FROM {schema.EVENTS_TABLE} "  # noqa: S608 -- splices schema.EVENTS_TABLE, a module-level constant
         f"WHERE profile = %s AND occurred_at >= %s LIMIT 1",
         (profile, cutoff)).fetchone())
 

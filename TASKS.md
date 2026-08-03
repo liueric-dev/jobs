@@ -422,16 +422,52 @@ verified it.
 
 ---
 
-### T-16 — f-string SQL identifiers
+### ~~T-16~~ — f-string SQL identifiers
 
-Roughly 25 non-test sites splice identifiers by f-string — `backend/schema.py`,
-`backend/lib/dbconn.py:171`, `backend/migrations/*`. **These interpolate module-level constants,
-not user input.** Nobody should read this row as an unpatched injection hole, and nobody should
-close it by claiming they fixed one. The reason to touch them is that `T-1`'s linter flags every one
-and a suppression that carries no reason is worse than the splice.
+**Closed 2026-08-03.** The row's own count was wrong, and re-deriving it against the tree (as
+`.claude/CLAUDE.md` says to) is the first finding: `.venv-dev/bin/ruff check . --select S608` found
+**113** sites, not "roughly 25" — every non-excluded file in the tree, not just `schema.py` and
+`migrations/*`. `backend/lib/dbconn.py:171`, the row's other named site, turns out not to be one of
+them: ruff's `S608` only fires on `SELECT`/`INSERT`/`UPDATE`/`DELETE` keywords, and that call is an
+`ALTER TABLE`, so it was never flagged and needed no change.
 
-**Done when:** each site either uses `psycopg.sql.Identifier` or carries a `# noqa` naming the
-constant it splices; `ruff check` is clean on the rule; the suites print `OK`.
+**Every one of the 113 was read, not assumed.** All splice a module-level `ALL_CAPS` table/column
+constant (`schema.MATCHES_TABLE`, `_FACT_COLUMNS`, ...), a `WHERE`/`SET` fragment built only from
+fixed string literals with every value still bound through `%s`/`%(name)s`, or output from
+`relevance.py`'s own SQL compiler (`tier_sql`/`union_sql`) — the one implementation `.claude/CLAUDE.md`
+says matching must route through. Two sites are not SQL at all: `evals/labels.py:946` is a
+human-readable error message that happens to quote a `DELETE` statement for an operator to type by
+hand. One site is validated rather than a bare constant: `ingest/workday.py:833`'s `loc_cols` is
+checked by `relevance.tier_sql` as plain identifiers before this file ever builds its own column
+list from the same source (see the comment already on that line). Not one site builds identifier or
+clause text from a request parameter, a config value, or ATS/employer/labeller data — the row's own
+"not user input" held for all 113, not just the ones it happened to name.
+
+**No site used `psycopg.sql.Identifier`.** Every constant is a Python name, never a runtime string,
+so there is nothing dynamic for `sql.Identifier` to protect against that a `# noqa` naming the
+constant doesn't already make checkable by a reader. The row's other option was written for exactly
+this case. 92 sites across 31 non-test files now carry a per-line `# noqa: S608 -- ...` naming what
+it splices — including `tools/*`, which the row didn't name but which turned out to hold 14 of the
+113 (`tools/ats-discover.py` alone). The other 21, all in `tests/*` (`backend/` and `webapp/`),
+went into `pyproject.toml`'s existing `"**/tests/*"` per-file-ignore alongside `S101`/`ARG`/etc.
+rather than 21 more per-line comments — but only after the same individual read, recorded in the
+comment beside the new entry so nobody mistakes it for an unexamined blanket suppression. Placement
+matters and is not always the diagnostic's reported row: a `noqa` on the opening line of an
+unterminated triple-quoted f-string becomes part of the string, not a comment, and is silently
+inert — confirmed empirically before writing the other 111 by hand, which is why some sites carry
+the comment on the line the string closes rather than the line `ruff` prints in its report.
+
+`backend/migrations/*` keeps its existing per-directory `S608` ignore rather than converting to 91
+more per-line comments — all ten scripts follow the one pattern this row already established, and
+the comment beside that entry now says so instead of leaving it as a stopgap the next reader has to
+re-justify.
+
+`.venv-dev/bin/ruff check . --select S608` now reports zero findings tree-wide. Baseline
+1088 → 975 (`ruff check . --statistics`, run it for the number). `RUF100` (unused-noqa) held at
+320 — none of the 92 new directives is inert. All three suites print `OK` at the same counts as
+`T-10` (1449 / 354 / 117) — this row changed no behavior, only comments and one `pyproject.toml`
+table. Citations still `0 new` at `273` known-drifted (`tools/audit-citations.py`), unmoved because
+nothing here added a `file:line` claim.
 
 ---
 

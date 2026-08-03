@@ -122,7 +122,7 @@ class TableSpec:
                 + [f"%({c})s" for c in self.columns]
                 + [self.computed[c] for c in self.computed]
                 + ["%(content_hash)s", "%(first_seen)s", "%(last_seen)s"])
-        return (f"INSERT INTO {self.table} ({', '.join(cols)}) "
+        return (f"INSERT INTO {self.table} ({', '.join(cols)}) "  # noqa: S608 -- splices self.table/self.id_column, set once from a caller's TableSpec constant, never user input
                 f"VALUES ({', '.join(vals)})")
 
     def update_sql(self):
@@ -132,7 +132,7 @@ class TableSpec:
                        + [f"{c}={expr}" for c, expr in self.computed.items()]
                        + ["content_hash=%(content_hash)s",
                           "last_seen=%(last_seen)s"])
-        return (f"UPDATE {self.table} SET {', '.join(assignments)} "
+        return (f"UPDATE {self.table} SET {', '.join(assignments)} "  # noqa: S608 -- splices self.table/self.id_column, set once from a caller's TableSpec constant, never user input
                 f"WHERE {self.id_column}=%({self.id_column})s")
 
     def select_sql(self):
@@ -142,7 +142,7 @@ class TableSpec:
         if self.revive_column:
             cols.append(self.revive_column)
         cols.extend(self.sticky)
-        return (f"SELECT {', '.join(cols)} FROM {self.table} "
+        return (f"SELECT {', '.join(cols)} FROM {self.table} "  # noqa: S608 -- splices self.table/self.id_column, set once from a caller's TableSpec constant, never user input
                 f"WHERE {self.id_column} = %s")
 
     def sticky_offset(self):
@@ -150,7 +150,7 @@ class TableSpec:
         return 2 if self.revive_column else 1
 
     def touch_sql(self):
-        return (f"UPDATE {self.table} SET last_seen = %s "
+        return (f"UPDATE {self.table} SET last_seen = %s "  # noqa: S608 -- splices self.table/self.id_column, set once from a caller's TableSpec constant, never user input
                 f"WHERE {self.id_column} = %s")
 
 

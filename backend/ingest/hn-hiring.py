@@ -524,7 +524,7 @@ def main():
     retired_count = 0
     if args.reparse and declined:
         retired_count = conn.execute(
-            f"UPDATE {schema.TABLE} SET status = %s, closed_at = %s "
+            f"UPDATE {schema.TABLE} SET status = %s, closed_at = %s "  # noqa: S608 -- splices schema.TABLE, a module-level constant
             f"WHERE platform = 'hn_whoishiring' AND status = %s "
             f"  AND source_id = ANY(%s)",
             (schema.STATUS_CLOSED, now, schema.STATUS_OPEN, declined),

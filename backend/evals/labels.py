@@ -623,7 +623,7 @@ def pool_query(profile, cfg):
                    ON m.job_id = j.id AND m.profile = %(profile)s
         )
         SELECT * FROM ranked WHERE rn <= %(per_platform)s
-    """
+    """  # noqa: S608 -- splices tier_expr from relevance.tier_sql(), the one relevance SQL compiler, and TABLE/FACTS_TABLE/MATCHES_TABLE constants
     return sql, params
 
 
@@ -943,7 +943,7 @@ def redraw_refusal(conn, label_set, rows):
             f"to the set they were answers to.")
     if fresh_sha != stored_sha:
         return (
-            f"{label_set} is already drawn from a different set of job ids "
+            f"{label_set} is already drawn from a different set of job ids "  # noqa: S608 -- not executed SQL -- a human-readable error message quoting the DELETE an operator would type by hand
             f"({facts}). An eval set is pinned by its sorted job_id and is "
             f"never regenerated in place -- the figures measured on the first "
             f"draw would stay in the docs, unchanged and now wrong. Draw under "
@@ -1101,7 +1101,7 @@ def fetch(conn, *, axis=None, label_set=None):
     clause = ("WHERE " + " AND ".join(where)) if where else ""
     cols = ", ".join(f"l.{c}" for c in _LABEL_COLUMNS)
     rows = conn.execute(
-        f"SELECT {cols}, i.platform FROM eval_labels l "
+        f"SELECT {cols}, i.platform FROM eval_labels l "  # noqa: S608 -- splices _LABEL_COLUMNS (module constant) and a where clause built from fixed literals, values always bound via params
         f"LEFT JOIN eval_label_items i "
         f"  ON i.label_set = l.label_set AND i.job_id = l.job_id "
         f"{clause} ORDER BY l.job_id, l.field, l.labeller_id, l.round_no",

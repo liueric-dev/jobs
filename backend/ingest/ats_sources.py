@@ -110,7 +110,7 @@ def load_companies(conn, platforms=HANDLED_PLATFORMS,
           FROM {table}
          WHERE ats = ANY(%s) AND status = ANY(%s) AND token <> ''
          ORDER BY ats, token
-        """,
+        """,  # noqa: S608 -- splices `table`, always one of this module's own constant table names
         (list(platforms), list(statuses)),
     ).fetchall()
 
@@ -193,7 +193,7 @@ def seed_from_companies_json(conn, path, table=ATS_TABLE, debug=False):
     """
     rows = companies_json_rows(path)
     existing = {r[0] for r in conn.execute(
-        f"SELECT id FROM {table}").fetchall()}
+        f"SELECT id FROM {table}").fetchall()}  # noqa: S608 -- splices `table`, always one of this module's own constant table names
     fresh = [r for r in rows
              if ats_discovery.make_row_id(r) not in existing]
     skipped = len(rows) - len(fresh)

@@ -98,13 +98,24 @@ ignore = [
 # Tests assert on internals, build fixtures inline, and legitimately catch broad
 # exceptions to prove a failure path. The three suites are the specification;
 # they are not the place to be economical.
-"**/tests/*" = ["S101", "ARG", "BLE001", "B017", "SIM117", "DTZ"]
+#
+# S608 is here too, as of T-16, closed in ../TASKS.md -- walked individually
+# rather than assumed: all 22 test-file sites splice schema.* table constants
+# or a `sql` fragment built by relevance.py's own compiler, and the one test
+# reading like a raw INSERT builds its column list from a dict the test itself
+# defines two lines above. None takes a table or column name from outside the
+# test. Every non-test site got the same walk and a per-line `# noqa: S608`
+# naming what it splices, which is why this directory-wide entry exists only
+# for tests -- see the commit that closed T-16.
+"**/tests/*" = ["S101", "ARG", "BLE001", "B017", "SIM117", "DTZ", "S608"]
 
-# Migrations and tools splice table and schema identifiers into SQL from
-# module-level constants -- never from user input. See T-16 in ../TASKS.md,
-# which says plainly that this is not an injection hole, so that nobody reads a
-# suppression here as one being tolerated. The suppression is per-directory
-# rather than per-line only until T-16 walks the ~25 sites individually.
+# Migrations splice table and schema identifiers into SQL from module-level
+# constants -- never from user input. T-16 (../TASKS.md, closed) is the walk
+# that established this for every S608 site in the tree; migrations keep the
+# per-directory form rather than per-line noqa because every one of the ten
+# scripts follows the identical pattern the ADR-0004/T-19 provisioning work
+# already describes, and a per-line comment on each would repeat the same
+# sentence ten times over.
 "migrations/*" = ["S608"]
 
 [tool.ruff.lint.isort]

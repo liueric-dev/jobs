@@ -501,7 +501,7 @@ def list_jobs(
         WHERE {' AND '.join(where)}
         ORDER BY {ORDER_BY}
         LIMIT %s
-    """
+    """  # noqa: S608 -- where built from fixed literals only, values always bound via params -- see the comment above on join ordering
     params.append(limit + 1)   # one extra row: is there a next page?
 
     with db() as conn:
@@ -567,7 +567,7 @@ def get_job(job_id: str, user: User = Depends(require_user)):
             {_BUILDER_STATE_JOIN}
             {_COHORT_SIGNAL_JOIN}
             WHERE v.profile = %s AND v.id = %s
-            """,
+            """,  # noqa: S608 -- where built from fixed literals only, values always bound via params
             # user.id leads TWICE: both joins bind before the WHERE, in the
             # order they are spliced. _COHORT_SIGNAL_JOIN adds no third value
             # -- it matches on v.profile, which is already pinned below.
@@ -719,7 +719,7 @@ def write_builder_state(conn, app_user_id, job_id, event, reason, now):
         VALUES (%s, %s, %s, %s, %s, %s)
         ON CONFLICT (app_user_id, job_id) DO UPDATE
            SET {set_clause}, updated_at = %s
-        """,
+        """,  # noqa: S608 -- splices set_clause from _STATE_WRITES, a fixed dict keyed by a known event name
         (app_user_id, job_id,
          now if event == "dismiss" else None,
          reason if event == "dismiss" else None,

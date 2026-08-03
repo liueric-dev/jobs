@@ -124,7 +124,7 @@ def _job(conn, job_id):
     """
     cols = ", ".join(_DETAIL_COLUMNS)
     row = conn.execute(
-        f"SELECT {cols} FROM jobs WHERE id = %s", (job_id,)).fetchone()
+        f"SELECT {cols} FROM jobs WHERE id = %s", (job_id,)).fetchone()  # noqa: S608 -- splices _DETAIL_COLUMNS, a module-level constant
     return dict(zip(_DETAIL_COLUMNS, row)) if row else None
 
 

@@ -111,7 +111,7 @@ def load_pairs(conn, profile_obj):
         WHERE s.profile = %s
           AND s.fit_score IS NOT NULL
           AND s.scoring_model NOT LIKE %s
-        """,
+        """,  # noqa: S608 -- splices schema.SCORES_TABLE/schema.TABLE, both module-level constants
         (profile_obj.profile, f"{llm.FAILED_PREFIX}%"),
     ).fetchall()
     labelled = {r[0]: (r[1], r[2], r[3], r[4]) for r in rows}
@@ -203,7 +203,7 @@ def main():
     profile = args.profile or schema.DEFAULT_PROFILE
     if not args.profile:
         row = conn.execute(
-            f"SELECT profile, count(*) FROM {schema.SCORES_TABLE} "
+            f"SELECT profile, count(*) FROM {schema.SCORES_TABLE} "  # noqa: S608 -- splices schema.SCORES_TABLE, a module-level constant
             f"GROUP BY profile ORDER BY 2 DESC LIMIT 1").fetchone()
         if row:
             profile = row[0]

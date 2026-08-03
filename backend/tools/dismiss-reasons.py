@@ -147,7 +147,7 @@ def load_dismissals(conn, cutoff):
         LEFT JOIN job_facts f ON f.job_id = s.job_id
         WHERE {' AND '.join(where)}
         ORDER BY s.dismissed_at
-        """,
+        """,  # noqa: S608 -- where clauses built from fixed literals only, values always bound via params -- see load_dismissals above
         params).fetchall()
 
 
@@ -165,7 +165,7 @@ def load_undo_count(conn, cutoff):
         where.append("occurred_at >= %s")
         params.append(cutoff)
     return conn.execute(
-        f"SELECT count(*) FROM job_events WHERE {' AND '.join(where)}",
+        f"SELECT count(*) FROM job_events WHERE {' AND '.join(where)}",  # noqa: S608 -- where clauses built from fixed literals only, values always bound via params -- see load_dismissals above
         params).fetchone()[0]
 
 

@@ -158,7 +158,7 @@ _WATCHERS_SQL = f"""
      GROUP BY w.query_id
     HAVING COUNT(DISTINCT w.app_user_id) >= %s
      ORDER BY w.query_id
-"""
+"""  # noqa: S608 -- splices schema.SEARCH_WATCHERS_TABLE, a module-level constant
 
 
 def watchers_by_query(conn, profile, min_watchers=None):
@@ -191,7 +191,7 @@ _ACTIVE_WATCHERS_SQL = f"""
     SELECT COUNT(DISTINCT w.app_user_id)
       FROM {schema.SEARCH_WATCHERS_TABLE} w
      WHERE w.profile = %s AND w.removed_at IS NULL
-"""
+"""  # noqa: S608 -- splices schema.SEARCH_WATCHERS_TABLE, a module-level constant
 
 
 def active_watchers(conn, profile):
@@ -229,11 +229,11 @@ def refresh(conn, profile, now=None, dry_run=False):
         return rows, 0
 
     removed = conn.execute(
-        f"DELETE FROM {schema.SEARCH_SIGNAL_TABLE} WHERE cohort_profile = %s",
+        f"DELETE FROM {schema.SEARCH_SIGNAL_TABLE} WHERE cohort_profile = %s",  # noqa: S608 -- splices schema.SEARCH_SIGNAL_TABLE, a module-level constant
         (profile,)).rowcount
     for row in rows:
         conn.execute(
-            f"INSERT INTO {schema.SEARCH_SIGNAL_TABLE} "
+            f"INSERT INTO {schema.SEARCH_SIGNAL_TABLE} "  # noqa: S608 -- splices schema.SEARCH_SIGNAL_TABLE, a module-level constant
             f"(query_id, cohort_profile, watcher_bucket, computed_at) "
             f"VALUES (%s, %s, %s, %s)", row)
     conn.commit()
