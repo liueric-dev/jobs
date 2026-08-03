@@ -2,8 +2,7 @@
 The application backend: what frontend/ talks to.
 
 WHAT THIS IS FOR: the pipeline in ../ finds and scores jobs but delivers none
-of them -- the gap named at the top of ../docs/DEVELOPER.md. This service is
-the delivery half. A person signs in with Google, gets their profile's ranked
+of them. This service is the delivery half. A person signs in with Google, gets their profile's ranked
 jobs out of the `jobs_app` view, and their interactions land in `job_events`,
 which nothing has ever written and which ../score.py already reads.
 

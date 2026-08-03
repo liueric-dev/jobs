@@ -1,16 +1,28 @@
+---
+kind: rationale
+written: 2026-08-01
+generator: none
+---
+
 # Scoring: how a posting becomes a recommendation
 
 How the jobs pipeline decides which postings a person sees, what each stage
 costs, and why the work is split the way it is.
 
-Companion to `README.md` (operating the pipeline), `DEVELOPER.md`
-(architecture and TODOs) and `OVERVIEW.md` (how it got built).
+**`kind: rationale` — this is the argument, not the state.** It records why the
+work is split this way, what it costs, and what was rejected. It is append-only:
+entries are struck and superseded, never rewritten, so every claim is dated by
+construction and none of it should be read as a description of the tree today.
+For that, read [`../../docs/STATE-OF-THE-SYSTEM.md`](../../docs/STATE-OF-THE-SYSTEM.md),
+which is the only `kind: contract` file below the root. For operating the
+pipeline, see [`../README.md`](../README.md).
 
-**This document is the design argument — why the work is split this way and
-what it costs.** For the contract the split produces — what a score means,
-whether two are comparable, the provenance of every weight, and what happens
-when a stage fails — see [`docs/scoring.md`](../../docs/scoring.md). For
-running an individual stage, see [`docs/ingest/`](../../docs/ingest/).
+The contract this argument used to point at — what a score means, whether two
+are comparable, the provenance of every weight, and what happens when a stage
+fails — was `docs/scoring.md`, deleted 2026-08-02:
+`git show refactor-freeze-2026-08-02:docs/scoring.md`. Per-stage operation was
+`docs/ingest/`, deleted the same day and behind the same tag. `DEVELOPER.md` and
+`OVERVIEW.md`, once named here as companions, were deleted 2026-08-02.
 
 ---
 
@@ -46,6 +58,9 @@ ingest  ->  eligibility  ->  extract  ->  match  ->  narrative
  (free)      (free, SQL)      (LLM)      (free)      (LLM)
                             once/job    per user   top-N/user
                               EVER      per job    active only
+            ^^^^^^^^^^^      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            a predicate,       the three executable stages
+            not a script
 ```
 
 The rule the split follows: **anything true about a posting regardless of who
@@ -53,6 +68,13 @@ is looking is computed once and shared. Anything persona-relative is either
 free, or bounded by what a person actually sees.**
 
 ### Stage 1 — Eligibility (`relevance.py`, free)
+
+**Not an executable stage, and the numbering here is a stage of the *argument*,
+not of the run.** `relevance.py` reads and writes no rows: it is a pure
+SQL-fragment builder with no `main()`, no `__main__` guard and no entry in
+`run-daily.py`'s `STEPS`. The three executable stages are `extract.py` →
+`match.py` → `score.py`; eligibility is the predicate each of them filters
+through. Do not go looking for a script to run here.
 
 `relevance.union_sql()` ORs together every active profile's `title_include`
 regex. A posting earns an LLM look if **any** profile's filter admits it.
@@ -192,7 +214,7 @@ headline is the line under it:
 
 > **The pipeline cannot process 43/day. `EXTRACT_BATCH_SIZE` is 40
 > (`extract.py:70`) and `run-daily.py` invokes `extract.py` exactly once
-> (`run-daily.py:120`), so the ceiling is 40 postings a night regardless of
+> (`run-daily.py:201`), so the ceiling is 40 postings a night regardless of
 > how fast a call is. At 43/day the backlog grows 3/day; at 80/day — what the
 > last seven complete days actually ran — it grows 40/day, forever.**
 
@@ -271,13 +293,15 @@ the temperature-0 non-determinism `deepseek-v4-flash` is already known for
 
 > **SUPERSEDED 2026-08-01 by task 06 — the struck figure is the provisional
 > `n=17` reading and must not be re-quoted.** Task 06 re-ran it with
-> `python3 -m evals selfcheck --repeat 3` at `n=115` and the current pair,
-> with its confidence intervals, is owned by
-> [`docs/tasks/refactor/AUDIT.md`](../../docs/tasks/refactor/AUDIT.md) — cited
-> here rather than restated, per `docs/DOCS-POLICY.md` rule 2, so that this
-> file cannot be the place a fourth copy goes stale.
-> `docs/tasks/refactor/DECISIONS.md` § *06 — Was 76% real?* is why the answer
-> is no. **Check the `n` before reusing either pair**; the direction of the
+> `python3 -m evals selfcheck --repeat 3` at `n=115`. The current pair, with
+> its confidence intervals and its metric name, is owned by
+> [`../../docs/STATE-OF-THE-SYSTEM.md`](../../docs/STATE-OF-THE-SYSTEM.md) § 6
+> and reproduces from `../evals/fixtures/results/selfcheck-n120-2026-07-28.json`
+> — cited here rather than restated, so that this file cannot be the place a
+> fourth copy goes stale. The reasoning for why 76% was not real was
+> `docs/tasks/refactor/DECISIONS.md` § *06 — Was 76% real?*, deleted 2026-08-02:
+> `git show refactor-freeze-2026-08-02:docs/tasks/refactor/DECISIONS.md`.
+> **Check the `n` before reusing either pair**; the direction of the
 > point below is unaffected — the model still does not agree with itself at
 > temperature 0, which is the only property this paragraph relies on.
 
@@ -307,7 +331,9 @@ orders of magnitude.
 ### Does it fit the nightly window?
 
 `jobs-ingest.service` sets `TimeoutStartSec=10800` — systemd kills the unit at
-three hours, mid-run, and the nine steps are sequential.
+three hours, mid-run, and the steps are sequential. (`STEPS` held nine when this
+was written and holds 14 today; the argument turns on their being sequential,
+not on the count.)
 
 | | calls | wall-clock | share of the 3 h window |
 |---|---|---|---|
@@ -338,7 +364,10 @@ is where a person editing the number will actually look. In one line:
 Tier 3 is a 6,183-row, $1.73, 4.8-hour backfill — throughput is not the
 objection and the old note here ("set to 3 once throughput allows") is
 answered. The objections are that tier 3 is 93% employer boilerplate
-(`docs/pursuit-gate-volume.md`, hand-checked n=30 at 6.7% precision), that 34
+(hand-checked n=30 at 6.7% precision — the measurement and its full reasoning
+survive in `config/relevance.json`'s `_max_tier_quality_note`, which is where a
+person editing the number will look; the write-up it came from,
+`docs/pursuit-gate-volume.md`, went 2026-08-02), that 34
 of the 43 on-target titles are *already* at tier 1/2 so widening buys nine
 postings, and — decisively — that `tier_sql` folds `company_exclude` and
 `description_exclude` into the same predicate that assigns the tier
@@ -406,8 +435,9 @@ thousand. Narrative is `active_profiles x budget`.
 
 **The 250/day in that table is an assumption and it was 6x high.** Measured
 2026-07-28 over 2026-06-28…2026-07-27, the current gate admits 66/day
-(`docs/pursuit-gate-volume.md` reports 43/day for the narrower AI-vocabulary
-population), and the widest possible gate — every open, described row —
+(43/day for the narrower AI-vocabulary population;
+`git show refactor-freeze-2026-08-02:docs/pursuit-gate-volume.md` is the
+write-up), and the widest possible gate — every open, described row —
 admits 152/day. So every dollar figure above is a ceiling, not an estimate.
 The relative ordering of the three rows is unaffected, which is the only thing
 the table was ever used for.
@@ -693,7 +723,7 @@ LLM's judgement genuinely is the best signal available. Do not skip step 1.
 ## Operating it
 
 ```bash
-# nightly, all nine steps
+# nightly, every step in STEPS (nine when this was written, 14 today)
 python3 run-daily.py
 
 # individually

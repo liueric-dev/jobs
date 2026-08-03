@@ -8,11 +8,21 @@ It **finds and judges** jobs. It does not apply to them, track applications, or
 do outreach — those stay manual on purpose.
 
 - [`../docs/STATE-OF-THE-SYSTEM.md`](../docs/STATE-OF-THE-SYSTEM.md) — what the pipeline does, what
-  is done, what is open, the landmines, and every figure with its instrument. **The only document
-  in this repo.** The `docs/OVERVIEW.md` / `DEVELOPER.md` / `SCORING.md` / `HANDOFF-*.md` this list
-  used to name were deleted on 2026-08-02 with the rest of `docs/`; read them with
-  `git show refactor-freeze-2026-08-02:backend/docs/SCORING.md` and so on.
+  is done, what is open, the landmines, and every figure with its instrument. **The only
+  `kind: contract` document below the repo root**, and the one to trust when anything here
+  disagrees with it.
+- [`docs/SCORING.md`](docs/SCORING.md) — `kind: rationale`. Why the weights are what they are, what
+  was rejected, and the cost model. Append-only and dated by construction, so read it as argument
+  rather than as a description of the tree today.
+- [`docs/HANDOFF-multimachine-google-jobs.md`](docs/HANDOFF-multimachine-google-jobs.md) —
+  `kind: record`. Frozen 2026-07-25; history, not current state.
 - [`../.claude/CLAUDE.md`](../.claude/CLAUDE.md) — the rules and invariants for changing this tree.
+
+The `docs/OVERVIEW.md` / `DEVELOPER.md` / `HANDOFF-match-quality.md` this list used to name were
+deleted on 2026-08-03 — every structural claim in them had gone false, and `DEVELOPER.md` carried a
+dated "verified item by item" header saying so of a `frontend/` that has been shipping since
+`3c0452f`. Read them with `git show refactor-freeze-2026-08-02:backend/docs/DEVELOPER.md` and so
+on; the 137 files under the repo-root `docs/` went the day before, behind the same tag.
 
 This file is setup and operation. It has not been audited line by line; where it disagrees with
 `STATE-OF-THE-SYSTEM.md`, that file is newer and was written from the code.
@@ -32,6 +42,21 @@ This file is setup and operation. It has not been audited line by line; where it
 | `score.py` | LLM fit-scoring over everything above | 30 jobs |
 
 Everything lands in `jobs`, deduped on `sha256(platform:company_token:source_id)`.
+
+## Layout
+
+Code at the top level is the pipeline — the orchestrator and the three executable stages.
+`ingest/` is one file per source, `config/` is everything meant to be hand-edited without
+touching code, `tools/` is measurement that is never part of a run, `migrations/` and `scripts/`
+are run by hand rather than on a timer.
+
+**Every subdirectory reaches the top level through the same one-line parent `sys.path` insert,
+and nothing is imported by a package path.** That is the invariant behind the 2026-07-26 tidy
+that moved migrations, backfill drivers and documents off the root: nothing was renamed and no
+module's import name changed, because each moved file gained the insert that `ingest/` and
+`tools/` already used. `webapp/` and `api/` reach `schema.py` and `lib/` the same way — see
+`searchnorm.py:28`. Add a directory here and it needs the insert; move a file up and it must
+lose it.
 
 ## Requirements
 

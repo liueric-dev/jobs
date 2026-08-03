@@ -12,8 +12,10 @@ requirements.txt. So these are new arithmetic with no incumbent to disagree
 with, and the hand-computed cases below are the whole of their correctness.
 
 TIES ARE THE INTERESTING CASE, NOT AN EDGE CASE.
-backend/docs/HANDOFF-match-quality.md:155 (4.2) records 59 postings sharing
-one fit_score, so a top-k boundary falls inside a tie block and ~half of any
+Trap 4.2 (`docs/MEASUREMENT-TRAPS.md`, deleted 2026-08-02 -- read it with
+`git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`, which keeps the
+4.1-4.7 numbering precisely so citations like this one still resolve) records 59
+postings sharing one fit_score, so a top-k boundary falls inside a tie block and ~half of any
 top-k is an arbitrary draw. match_score is free arithmetic over a small
 integer weight table and clusters the same way. A tie-blind implementation
 would report whatever `sorted()` happened to do with the input order, so the
@@ -194,8 +196,8 @@ class UnscorableRowTest(unittest.TestCase):
     to be one of the deliberately awkward ones -- so every drop removes a hard
     case and EVERY DROP MAKES THE RANKER LOOK BETTER.
 
-    That is trap 4.1 (backend/docs/HANDOFF-match-quality.md:147, "do not
-    compute metrics over a floor-filtered sample") pointing the other way:
+    That is trap 4.1 ("do not compute metrics over a floor-filtered sample",
+    docs/MEASUREMENT-TRAPS.md at refactor-freeze-2026-08-02) pointing the other way:
     there MATCH_FLOOR hid the easy low end and cost one identical ranking
     function 0.619 -> 0.326.
     """

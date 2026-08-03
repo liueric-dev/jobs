@@ -2150,7 +2150,7 @@ def _scored_strata(strata, caller):
     let a caller ask for a precision figure "over the whole set" and get one
     computed over three quarters of it, labelled as if it were the whole -- a
     stratum measured against the wrong population, which is the defect
-    backend/docs/HANDOFF-match-quality.md:147 (trap 4.1) is about and the one
+    trap 4.1 (docs/MEASUREMENT-TRAPS.md at refactor-freeze-2026-08-02) is about and the one
     that has already cost this project a rewritten conclusion.
 
     The module's own precedent is model_vs_human(), which raises for axis B
@@ -2422,9 +2422,11 @@ def recall_bound(rows, set_rows, *, profile, round_no=1):
 
     Mixing them into a precision denominator would be a fresh instance of the
     defect this project has already paid for -- a stratum measured against the
-    wrong population, trap 4.1 in backend/docs/HANDOFF-match-quality.md:147.
-    Note that CLAUDE.md cites these traps as docs/MEASUREMENT-TRAPS.md, which
-    does not exist; they are still section 4 of that handoff.
+    wrong population, trap 4.1. CLAUDE.md cited these traps as
+    docs/MEASUREMENT-TRAPS.md; that file existed but was deleted 2026-08-02 with
+    the rest of docs/, and it is where the 4.1-4.7 numbering every citation in
+    this package uses comes from. Read it with
+    `git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`.
 
     RETURNED AS A COUNT AND AN INTERVAL, WITH NO `rate` KEY. metrics.wilson()
     over k of n bounds the proportion, so 2 of 50 reads "[0.6%, 8.5%] of what

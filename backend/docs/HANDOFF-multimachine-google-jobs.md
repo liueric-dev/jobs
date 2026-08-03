@@ -1,4 +1,17 @@
+---
+kind: record
+written: 2026-07-25
+generator: none
+---
+
 # Handoff — multi-machine Google Jobs ingest
+
+**`kind: record` — frozen on write, and therefore history rather than state.**
+Nothing below describes the tree as it stands today, and nothing in it should be
+edited to. Test counts, module paths and status lines are all correct as of
+2026-07-25 and stale by design; `pipelib/` in particular was vendored into
+`lib/` after this was written. For current state read
+[`../../docs/STATE-OF-THE-SYSTEM.md`](../../docs/STATE-OF-THE-SYSTEM.md).
 
 **Date:** 2026-07-25 · **Status:** Steps 1–2 done and verified. Step 3 written, **not applied**. Steps 4–7 not started.
 **Full plan:** `~/.claude/plans/read-hermes-scripts-jobs-and-create-ancient-badger.md`

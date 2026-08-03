@@ -2,9 +2,8 @@
 
 The application backend: what `frontend/` talks to.
 
-The pipeline one directory up finds and scores jobs and delivers none of them —
-the gap at the top of `git show refactor-freeze-2026-08-02:backend/docs/DEVELOPER.md`. This is
-the delivery half. A person signs in with Google, reads their profile's ranked
+The pipeline one directory up finds and scores jobs and delivers none of them.
+This is the delivery half. A person signs in with Google, reads their profile's ranked
 jobs out of the `jobs_app` view, and their interactions land in `job_events`,
 which nothing has ever written and which `../score.py` already reads.
 
@@ -215,8 +214,9 @@ No terminal, no checkout, no credential, nothing installed.
 **`FRONTEND_ORIGIN` must point at the origin serving `/v1/label`.** The OAuth
 callback redirects to `FRONTEND_ORIGIN + next_path` (`auth.py:359`), so with
 the default `http://localhost:5173` a labeller completes the Google round trip
-and lands on a frontend that does not exist yet. Set it to this service's own
-origin for a labelling deployment. This is the one configuration step that is
+and lands on an origin nothing is serving — `frontend/serve.py` mounts the
+client on *this* service's origin (8421), not on a second dev server. Set it to
+this service's own origin for a labelling deployment. This is the one configuration step that is
 easy to miss and produces a confusing failure — the sign-in *works*, and the
 browser then shows nothing.
 
@@ -306,9 +306,9 @@ cd backend && python3 -m evals label sample --n 60 --overlap 20
   cross-user leak.
 - **Event scores are derived server-side.** `match_score` and `fit_score` are
   looked up from `job_matches` / `job_scores` at write time and never accepted
-  from the client — `git show refactor-freeze-2026-08-02:backend/docs/SCORING.md` makes recording them *as of the
-  impression* the load-bearing property of the whole table, and a
-  client-supplied score is unverifiable training data.
+  from the client — [`../docs/SCORING.md`](../docs/SCORING.md) makes recording
+  them *as of the impression* the load-bearing property of the whole table, and
+  a client-supplied score is unverifiable training data.
 
 ### The one place a dependency was not added
 

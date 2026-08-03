@@ -282,8 +282,9 @@ def tie_histogram(values):
 #: How average_precision() and precision_at_k() treat equal scores.
 #:
 #: TIES ARE NOT AN EDGE CASE HERE, THEY ARE THE COMMON CASE.
-#: backend/docs/HANDOFF-match-quality.md:155 (4.2) records 59 postings sharing
-#: one fit_score, and match_score is free arithmetic over a small integer
+#: Trap 4.2 (docs/MEASUREMENT-TRAPS.md at refactor-freeze-2026-08-02, which
+#: keeps the 4.1-4.7 numbering so citations still resolve) records 59 postings
+#: sharing one fit_score, and match_score is free arithmetic over a small integer
 #: weight table, so it clusters just as hard. A top-k boundary that falls
 #: inside a tie block makes half of any top-k an arbitrary draw, and a
 #: first-seen tie-break measures the sort's choice rather than the ranker's.
@@ -314,8 +315,8 @@ class Ranked(NamedTuple):
     awkward ones -- so the rows that vanish are correlated with the thing
     being measured, and EVERY DROP MAKES THE RANKER LOOK BETTER.
 
-    That is backend/docs/HANDOFF-match-quality.md:147 (trap 4.1, "do not
-    compute metrics over a floor-filtered sample") in a second costume. There
+    That is trap 4.1 ("do not compute metrics over a floor-filtered sample",
+    docs/MEASUREMENT-TRAPS.md at refactor-freeze-2026-08-02) in a second costume. There
     it was job_matches' MATCH_FLOOR hiding the low end and moving one
     identical ranking function from +0.619 to +0.326; here it is extraction
     failure hiding the hard end and moving it the other way.
@@ -776,8 +777,8 @@ def bootstrap_delta(scores_a, scores_b, labels, metric=None, *,
     interval rests on. When `draws_used` falls below MIN_USABLE_FRACTION of
     `draws`, `value` is None and no interval is reported: past that point the
     surviving draws are a minority subset selected by something correlated with
-    the statistic, which is trap 4.1 in
-    backend/docs/HANDOFF-match-quality.md:147 -- a quality figure computed over
+    the statistic, which is trap 4.1 (docs/MEASUREMENT-TRAPS.md at
+    refactor-freeze-2026-08-02) -- a quality figure computed over
     a sample a filter chose rather than the question -- in a third costume. For
     average precision that floor is unreachable on a corpus with a positive in
     it; see MIN_USABLE_FRACTION for the 1/e bound and for why a tighter floor
