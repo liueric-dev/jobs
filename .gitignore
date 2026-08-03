@@ -61,8 +61,19 @@ backend/serp/.cache/
 # could not be committed, which is how tasks 38 and 40 found themselves editing
 # a file no diff could carry. settings.local.json stays ignored; it is this
 # machine's permission state and means nothing on another.
+#
+# T-5/T-6/T-7 (TASKS.md) added four more directories in the same category as
+# CLAUDE.md: rules/, agents/ and hooks/ are the harness itself -- landmines,
+# read-only reviewers, the citation-audit hook -- not one machine's state, and
+# settings.json is what wires the hook in. Un-ignoring only these four paths,
+# not `.claude/*` wholesale, keeps everything else (scratch, worktrees,
+# per-machine permission state) exactly as machine-local as it already was.
 .claude/*
 !.claude/CLAUDE.md
+!.claude/rules/
+!.claude/agents/
+!.claude/hooks/
+!.claude/settings.json
 
 # Agent-orchestration harness, not project code. 183b4dc untracked
 # scripts/tranche-two-launcher.sh on purpose -- it hard-codes this machine,

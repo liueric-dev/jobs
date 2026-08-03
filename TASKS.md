@@ -237,11 +237,37 @@ do not restate it here.
 
 | row | layer | one line |
 |---|---|---|
-| `T-5` | 1 — what a session knows | `.claude/CLAUDE.md` under 150 lines; five path-scoped files under `.claude/rules/` |
-| `T-6` | 2 — who does the work | `plan-verifier` and `artifact-reviewer`, read-only, each invoked once on real work |
-| `T-7` | 4 — what is guaranteed | `PostToolUse` hook running `tools/audit-citations.py` on the touched path |
+| ~~`T-5`~~ | 1 — what a session knows | `.claude/CLAUDE.md` under 150 lines; five path-scoped files under `.claude/rules/` |
+| ~~`T-6`~~ | 2 — who does the work | `plan-verifier` and `artifact-reviewer`, read-only, each invoked once on real work |
+| ~~`T-7`~~ | 4 — what is guaranteed | `PostToolUse` hook running `tools/audit-citations.py` on the touched path |
 | `T-8` | 5 — what travels | `~/.claude/CLAUDE.md`: scope discipline, verify-before-claiming, never echo credentials |
 | `T-9` | 5 — what travels | `~/.claude/skills/whatsnew/` — **task 53's Part B, never built.** Run once, first report committed |
+
+**`T-5`, `T-6`, `T-7` closed 2026-08-03.** `.claude/CLAUDE.md` is 149 lines, zero `~~` spans, with
+five path-scoped files under `.claude/rules/` (`sql.md`, `ingest.md`, `measurement.md`, `config.md`,
+`frontend.md`) carrying what the main file used to hold inline. `.claude/agents/plan-verifier.md`
+and `.claude/agents/artifact-reviewer.md` exist, both `tools: Read, Grep, Glob, Bash` with no
+`Edit`/`Write`. `.claude/settings.json` wires a `PostToolUse` hook on `Edit|Write` to
+`.claude/hooks/audit-citations-hook.py`, which runs `tools/audit-citations.py` (no path-scoped mode
+exists, so "on the touched path" means the same whole-tree "0 new" invariant the suite already
+checks, just surfaced in the editing turn) and exits 2 on new drift.
+
+**One clause of the definition of done could not be met this session, and is recorded rather than
+quietly skipped:** "each [agent] invoked once on real work" and the hook "observed to fire" both
+require a session that started AFTER these files existed — Claude Code's own docs say a running
+session does not detect a newly created `.claude/agents/` directory, and the same proved true for
+`.claude/settings.json`'s hook, which did not fire on the edit that added this very paragraph.
+Attempting `plan-verifier` mid-session returned `Agent type 'plan-verifier' not found. Available
+agents: claude, claude-code-guide, Explore, general-purpose, Plan, statusline-setup` — confirming
+the limitation rather than working around it. **The first session to start after this commit is the
+real test of all three;** if the hook does not fire on that session's first `Edit`/`Write`, or
+either agent is not selectable, that is a `T-` row, not a footnote.
+
+`.claude/*` was gitignored wholesale except `CLAUDE.md` (the one prior carve-out, from the same
+tasks-38/40 lesson this row repeats: a file that cannot be committed cannot be corrected). `rules/`,
+`agents/`, `hooks/` and `settings.json` are the harness itself, not machine state, so `.gitignore`
+gained four more `!` exceptions rather than the whole directory being un-ignored —
+`settings.local.json` stays exactly as machine-local as it was.
 
 ---
 

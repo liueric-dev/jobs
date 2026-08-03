@@ -14,17 +14,20 @@ commit, after an audit found 168 places they contradicted the code. All of it is
 tag `refactor-freeze-2026-08-02`; nothing was destroyed. This file holds the rules; that one holds
 the state, the landmines and the open questions.
 
+**Path-scoped landmines live in `.claude/rules/`, not here** — SQL/`\y` (`sql.md`), ingest failure
+modes (`ingest.md`), eval discipline (`measurement.md`), config JSON conventions (`config.md`), the
+frontend's no-build-step constraint (`frontend.md`) — loading only when a session touches a
+matching path, so this file stays the part every session pays for.
+
 **What is left to do lives in exactly two files, and between them that is the whole list.**
-`TASKS.md` owns the prefix `T-` and holds everything a session can do unaided. `DEV_TASKS.md`
-owns `OQ-` and holds everything needing a machine, an account, a device, other people, or a
-decision only the owner can take. A decision, once taken, goes to [`docs/adr/`](../docs/adr/) —
-one file per decision, frozen on write, never into prose here. Work tracked in neither file is
-not tracked.
+`TASKS.md` (`T-`) holds everything a session can do unaided; `DEV_TASKS.md` (`OQ-`) holds
+everything needing a machine, an account, a device, other people, or a decision only the owner can
+take. A decision, once taken, goes to [`docs/adr/`](../docs/adr/) — one file per decision, frozen
+on write, never into prose here. Work tracked in neither file is not tracked.
 
-## What this is
-
-A job discovery and tracking pipeline, retargeted from one software engineer's job search to the
-Pursuit AI-Native cohort — ~30 Builders, entry-level, AI-adjacent roles, all industries, NYC.
+**What this is:** a job discovery and tracking pipeline, retargeted from one software engineer's job
+search to the Pursuit AI-Native cohort — ~30 Builders, entry-level, AI-adjacent roles, all
+industries, NYC.
 
 ## Commands
 
@@ -34,243 +37,113 @@ Everything resolves relative to `backend/`, never the repo root. `cd backend` fi
 # Tests. No pytest in any interpreter; unittest is stdlib and works.
 python3 -m unittest discover -s tests            # whole suite
 python3 -m unittest tests.test_match             # one module
-python3 -m unittest tests.test_match.TestName.test_case   # one case
 
 # The nightly run, and any step standalone.
 python3 run-daily.py                             # 14 steps, in order
 python3 ingest/ats.py                            # every ingest script runs alone
 DEBUG_PRINT_KEYS=1 python3 ingest/google-serpapi.py   # verbose, convention everywhere
 
-# After any config/relevance.json edit. Not optional — see the `\y` landmine.
-# Pass --profile: the default resolves to `tech`, which is INACTIVE, so the
-# default invocation reports on a projection rather than on production.
-python3 tools/relevance-report.py --dead --profile pursuit
-
-# Evals. Frozen fixtures, replay cache.
+# Evals. Frozen fixtures, replay cache. --no-cache is `run`-only; `selfcheck`
+# has the inverse, an opt-in --cache, off by default.
 python3 -m evals run --task extract --corpus evals/fixtures/corpus-v1.jsonl --model "$SPEC"
 python3 -m evals selfcheck --model "$SPEC" --n 120 --repeat 3
 ```
 
-`--no-cache` exists only on `evals run`. `evals selfcheck` has the inverse — an opt-in `--cache`,
-off by default.
-
-The webapp and the contributor API are separate processes with their own venvs, and **their tests
-are the second and third suites, not part of the first**:
+**The webapp and the contributor API are separate processes with their own venvs, and their tests
+are the second and third suites, not part of the first** — both set
+`include-system-site-packages = false`, so system `python3` cannot import either `app.py`:
 
 ```bash
 cd backend/webapp && .venv/bin/python -m unittest discover -s tests
 cd backend/api    && .venv/bin/python -m unittest discover -s tests
 ```
 
-Both venvs set `include-system-site-packages = false`, so system `python3` cannot import either
-`app.py` — they need `fastapi`, which the top level does not have and is not getting.
-
-**Standing a database up from nothing is one command, and only since 2026-08-03.** The DDL lives in
-five functions across four modules and nothing invoked all five, which is why an empty database
-reports 23 objects missing while `manage_app_users.py init-schema` fixes 5 of them.
+**Standing a database up from nothing is one command** — the DDL lives in five functions across
+four modules and nothing else invokes all five. **Read the banner at the top of the file before
+running it against anything populated**: step 3's fallback DROPs a view and takes every GRANT with
+it (`backend/schema.py:1253`, fixed by `T-13`, re-grant not re-decision — see
+[`docs/adr/0004`](../docs/adr/0004-provision-database-issues-no-grants.md)).
 
 ```bash
 cd backend
 python3 tools/provision-database.py                 # all five, in the one order that works
 python3 tools/provision-database.py --verify-only   # report, change nothing
+.venv-dev/bin/ruff check . --statistics    # dev-only linter; run it for the number, don't quote one
+.venv-dev/bin/mypy                          # dev-only, config-driven, scoped to lib/, schema.py, score_job()
 ```
 
-**Read the banner at the top of that file before running it against anything populated.** Step 3 is
-`schema.ensure_app_view()`, whose fallback DROPs the view and takes every GRANT with it, with no
-re-grant anywhere in this repo (`backend/schema.py:1215-1223`; `T-13`). Unreachable on an empty
-database, real against a deployment. It issues no GRANTs, deliberately —
-[`docs/adr/0004-provision-database-issues-no-grants.md`](../docs/adr/0004-provision-database-issues-no-grants.md).
+**There is CI, and a green run is the claim — a number in prose is a rumour.**
+`.github/workflows/ci.yml`, on push/PR to `main`: **suites** (all three, against a provisioned
+`postgres:16` service, asserting **nothing skipped**); **checkers** (citations, both frontend);
+**lint** (`ruff`, `continue-on-error` until its baseline hits zero); **types** (`mypy`, blocking).
+Put the run URL in the commit message.
 
-**`ruff` is the linter as of 2026-08-03 — and it is not yet the formatter.** A *development and CI*
-tool at `backend/.venv-dev/bin/ruff`, configured in `backend/pyproject.toml`, deliberately absent
-from all three `requirements.txt`. Why the tranche-nine ban was reversed:
-[`docs/adr/0001-ruff-as-a-dev-only-linter.md`](../docs/adr/0001-ruff-as-a-dev-only-linter.md).
-
-```bash
-cd backend && .venv-dev/bin/ruff check . --statistics    # run it for the number; do not quote one
-```
-
-**`ruff format` has deliberately never been run** — over 171 files it is one unreviewable diff, the
-move that produced the 42,777 deleted lines. **The baseline comes down one rule per commit**, and
-`--fix` is not run across the tree: `b89c377` is the case where the autofix would have broken the
-program, recorded beside `[tool.ruff.lint.isort]`.
-
-**There is CI as of 2026-08-03, and a green run is the claim — a number in prose is a rumour.**
-`.github/workflows/ci.yml`, on every push to `main` and every PR: **suites** (all three against a
-`postgres:16` service, after provisioning, plus an assertion that **nothing skipped** — twelve
-modules gate on `evals.scratchdb.available()`, which swallows every connection error into
-`return False`, so a job without Postgres reports green on less); **checkers** (citations, both
-frontend); and **lint**. Put the run URL in the commit message.
-
-**A green CI run does not mean `ruff` is clean.** The lint job is `continue-on-error` by design
-until the baseline reaches zero, then flips. It does enforce the grep proving `ruff` is in none of
-the three `requirements.txt`.
-
-**What did not change, and must not:** `psycopg[binary]` is the pipeline's only third-party
-**runtime** dependency and the intent is that it stays that way. These scripts run unattended on
-several machines and every added package is another thing that can be missing on one of them. A
-dev tool is not a runtime dependency; a linter finding that would be fixed by importing a library
-is not a reason to import one. The one exception is
-`tools/learned-ranker-probe.py`, which imports numpy and sklearn and therefore **cannot run on a
-clean checkout** — treat any figure from it as unreproducible.
+**What did not change, and must not:** `psycopg[binary]` is the only third-party **runtime**
+dependency — every added package is one more thing missing on one of the several unattended
+machines this runs on. `ruff`/`mypy` are dev tools, in none of the three `requirements.txt`.
+Exception: `tools/learned-ranker-probe.py` (numpy, sklearn) **cannot run on a clean checkout**.
 
 ## Layout
 
 **`backend/` holds three deliberately separate processes** — the nightly pipeline at the top level,
-`api/` (the contributor work queue — **staying, per `OQ-1` decided 2026-08-03**, not deprecated;
-the credential mechanism it will issue is still open and not to be guessed at; and it **may not
-start against the deployed database**) and `webapp/` (port 8421). Each has its own `.env`, venv
-and Postgres role.
+`api/` (the contributor work queue — **staying, per `OQ-1` decided 2026-08-03**; credential
+mechanism still open; **may not start against the deployed database**) and `webapp/` (port 8421).
+Each has its own `.env`, venv and Postgres role. `api/`/`webapp/` import nothing from each other and
+no pipeline module imports either — but `webapp/` imports the pipeline's `profiles`, `searchnorm`
+and `evals.labels`, and `api/` imports `google_jobs`: each a coupling a pipeline change can break
+elsewhere.
 
-**Do not restore the stronger claim that `api/` cannot start.** This file said so until 2026-08-03
-and the code refuted it twice: `qc.ensure_schema` creates `submission_log` *with* `action TEXT` and
-backfills it through `dbconn.add_missing_columns`, so `init-schema` satisfies `verify_schema()` on a
-fresh or an existing database (`backend/api/query_claims.py:233`, `:244`; `backend/api/app.py:82`).
-What is unknown is whether init-schema has ever been run against the *deployed* database — live
-state, which this repo can neither confirm nor refute. `docs/STATE-OF-THE-SYSTEM.md` § 4a has the
-worked correction.
-
-`api/` and `webapp/` import nothing from each other, and no pipeline module imports either. But the
-sharing is wider than `schema.py` and `lib/`: `webapp/` also imports the pipeline's `profiles`,
-`searchnorm` and `evals.labels`; `api/` imports `google_jobs`. Each is a coupling a pipeline change
-can break in another process.
-
-**`frontend/` is a shipping client.** Plain HTML, one stylesheet, ES modules — **no build step, no
-framework, no npm, no `package.json`**, and that is a constraint to keep. Five screens exist and all
-five are routed: Today, Job detail, Saved, Search and Onboarding. Not built: Contribute, and the
-phone test. Run it with `frontend/serve.py`, which mounts the page on the **webapp's own origin**
-(8421) rather than a second dev server, because the client uses `credentials: "same-origin"` with
-`BASE = ""` — served from any other host, every request loses the session cookie and returns 401,
-which renders as the sign-in screen with no error anywhere.
-
-```bash
-cd backend/webapp && .venv/bin/python ../../frontend/serve.py   # then http://localhost:8421/
-python3 frontend/verify_fixtures.py    # fixtures still describe the server
-node frontend/check_client.mjs         # client still agrees with the fixtures
-```
-
-**Read through the `jobs_app` view, not the `jobs` table.** The base table is deliberately
-unfiltered — `ingest/ats.py` pulls entire company boards, so roughly two thirds of it is roles this
-pipeline exists to ignore. The view guarantees the four fields a listing cannot render without, and
-those are deliberately *not* `NOT NULL` constraints: `ingest/builtin-nyc.py` legitimately writes a
-listing row first and fills `description_text` on a later pass. Enforce completeness at the read
-edge, not the column.
+**`frontend/` is a shipping client** — see `.claude/rules/frontend.md` for the no-build-step
+constraint and how to serve it. **Read through the `jobs_app` view, not the `jobs` table**: the base
+table is deliberately unfiltered (`ingest/ats.py` pulls entire company boards, so roughly two
+thirds of it is roles this pipeline exists to ignore), and the view's four required fields are
+deliberately *not* `NOT NULL` constraints — `ingest/builtin-nyc.py` legitimately writes a listing
+row first and fills `description_text` later. Enforce completeness at the read edge, not the
+column.
 
 ## Architecture invariants
 
 **There are three executable stages: `extract.py` → `match.py` → `score.py`.** `relevance.py` is a
 pure SQL-fragment builder — no database access, no `main()`, not in the nightly step list. Extract
-and score cost LLM calls; match is free arithmetic.
-
-**`run-daily.py` runs 14 steps.** Any comment saying nine is stale; runtime output is correct
-because it uses `len(STEPS)`.
+and score cost LLM calls; match is free arithmetic. **`run-daily.py` runs 14 steps** — any comment
+saying nine is stale; runtime output is correct because it uses `len(STEPS)`.
 
 **`job_facts` is shared; scores are per profile.** One extraction per posting, ever. `job_matches`
-and `job_scores` are keyed `(job_id, profile)`. This is the property that makes cost flat in users —
-do not break it.
+and `job_scores` are keyed `(job_id, profile)` — the property that makes cost flat in users. Do not
+break it. `match_reasons` (per-rule attribution on every row) must survive any ranker change, which
+rules out gradient-boosted trees in favour of linear models, deliberately.
 
-**`match_score` orders the list. `fit_score` only annotates it.** Sorting by `fit_score` would put
-an LLM call on the critical path for every posting.
-
-**LLMs explain, never rank.** No LLM call may sit between a user and an ordering.
-
-**`score_job()` is pure.** No I/O. Unit-testable and sweepable. Keep it that way.
-
-**A deferral is not a failure.** The endpoint never answering (429, timeout, 5xx) writes nothing and
-retries next run; only a model that answered unusably gets a tombstone row
-(`scoring_model="FAILED:..."`, NULL `fit_score`). Collapsing the two would permanently discard
+**`match_score` orders the list; `fit_score` only annotates it.** Sorting by `fit_score` would put
+an LLM call on the critical path for every posting — **LLMs explain, never rank**, and no LLM call
+may sit between a user and an ordering. `score_job()` itself is pure: no I/O, unit-testable,
+sweepable. Keep it that way. **A deferral is not a failure**, though: an endpoint that never answers
+(429, timeout, 5xx) writes nothing and retries next run; only a model that answered unusably gets a
+tombstone row (`scoring_model="FAILED:..."`, NULL `fit_score`) — collapsing the two discards
 postings nobody ever evaluated.
 
 **Versions are cache keys, with two exceptions you must not "fix".** `job_scores` records
 `facts_version`, `persona_sha`, `prompt_version` and `criteria_version` — but `_STALE_ANY` has
-exactly **three** arms: `criteria_version` is provenance only, deliberately excluded so a weight
-edit does not re-score narratives it never changed. Each arm is guarded by `IS NOT NULL` and uses
-`<>`, not `IS DISTINCT FROM`, so the pre-existing rows that are NULL on all four are not swept into
-"stale". **Rewriting that predicate with `IS DISTINCT FROM` turns the whole backlog stale, and with
-a rescore flag spends a call per row.** There is no `persona_version`, `features_version` or
-`model_version`.
-
-**`match_reasons` must survive any ranker change.** Per-rule attribution on every row. This rules
-out gradient-boosted trees in favour of linear models, deliberately.
-
-## Landmines
-
-**Postgres word boundary is `\y`, not `\b`.** In Postgres `\b` is BACKSPACE, so a `\b` pattern
-silently matches nothing and quietly demotes everything it was meant to catch.
-
-**Workday `limit` cannot exceed 20.** Ask for 100 and it returns an empty array with no error,
-identical to "no more results."
-
-**A throttled page is not the end of a list.** Reconcile collected counts against the `total` the
-API returned. One published account lost 1,960 of 2,000 jobs to this.
-
-**Silence is this system's failure mode.** Exhausted keys, revoked keys, blocked scrapers and
-changed endpoints all return zero rows rather than raising. Alert on volume, not errors.
-
-**Use `upsert_checked`, and read `.errors`.** `UpsertResult.__iter__` yields three values, so a bare
-three-tuple unpack silently discards errors. Every current call site is correct — this is a rule to
-preserve, not a defect to go fix.
-
-**`deepseek-v4-flash` is the production model and it does not agree with itself at temperature 0.**
-**85.2% [77.6–90.6] on `seniority_level`, 94.8% [89.1–97.6] on `ai_involvement`**, n=115, both
-**`agree2`**. **Name the metric whenever you quote one of these** — the same run yields `agree2`
-94.8%, `pairwise` 90.7% and `unanimous` 87.0% for `ai_involvement`, all correct and all in
-circulation; `--repeat 3` is the *run*, not the metric. A second n=115 run on the same frozen corpus
-five days later disagrees by up to 9.6 points (`remote_policy`). **OQ-9 decided 2026-08-03: quote
-both as a range and act on the lower bound** — neither run supersedes the other, each carries a
-`_comment` saying so, and `docs/STATE-OF-THE-SYSTEM.md` § 6 has the per-field floors.
-
-`docs/STATE-OF-THE-SYSTEM.md` § 5 carries the rest, several of which will bite before these do.
-
-## Measurement discipline
-
-**Never evaluate on the layer you trained on.** L0 is human labels (never train), L1 is `fit_score`,
-L2 is `job_events`.
-
-**Never select an eval corpus with `ORDER BY first_seen DESC`** — it measures the easy sources. Use
-the frozen fixtures in `backend/evals/fixtures/`. (`tools/compare-models.py` and
-`tools/claude-bench.py` still do this against production; figures from either are not reproducible.)
-
-**Report average precision as the measurement, precision@20 as the objective.** A count of twenty
-cannot resolve the differences being decided on.
-
-**Pin eval sets by sorted `job_id`.** Never train on them, never recycle them.
-
-**Read the `Ran N tests` line, not a count written down anywhere** — including here. Counts in prose
-go stale silently, and that is most of why `docs/` was deleted.
+exactly **three** arms: `criteria_version` is provenance only, excluded so a weight edit does not
+re-score narratives it never changed. Each arm uses `<>`, not `IS DISTINCT FROM`, so pre-existing
+NULL rows are not swept into "stale" — **rewriting with `IS DISTINCT FROM` stales the whole
+backlog.** There is no `persona_version`, `features_version` or `model_version`.
 
 ## Conventions
 
-**`_comment` fields in config JSON are load-bearing documentation.** They record where numbers came
-from and — more valuably — what was rejected and why. Every new config gets them, in the existing
-style. Read the ones in `config/relevance.json` before writing new ones. **With `docs/` gone these
-are the primary written rationale in the repo**; treat deleting one as deleting a decision record.
-
 **Cite `file:line` when explaining a claim about the code.** That is what makes a claim checkable.
-`tools/audit-citations.py` now checks it, and `tests/test_citations.py` runs it in the suite, so a
-**new** citation naming a file or a line that does not exist is a red test. It checks two things
-and only two: the path exists, and the line is within the file. It declines to judge a third —
-a **git-ignored** path, whose presence depends on whether the pipeline has been run here rather
-than on the tree. **It cannot tell you whether the line still says what you claim.** That class is
-real; the one known instance was closed 2026-08-03, which is not evidence there are no others.
-**This file is in scope** — it was exempt until 2026-08-03, so a bad `file:line` added here is now
-a red test like anywhere else.
-
-The already-drifted citations are accepted in `config/citation-baseline.json` rather than swept in
-one commit. **Run `python3 tools/audit-citations.py` for the count** — it has been written down as
-309, 308, 306 and 305 in four consecutive commits, which is the same way every count in prose in
-this repo has gone wrong. That file is meant to shrink; do not add to it to silence a finding. If
-what you are citing is one of the 137 documents deleted on 2026-08-02, cite it as
-`git show refactor-freeze-2026-08-02:<path>` — the checker allows that form deliberately, and does
-not validate it, so get the path right.
+`tools/audit-citations.py` checks it in the suite, so a **new** citation naming a file or a line
+that does not exist is a red test — it checks only that the path exists and the line is in range,
+**and cannot tell you whether the line still says what you claim.** Already-drifted citations are
+accepted in `config/citation-baseline.json` rather than swept in one commit — **run the tool for
+the count**, do not quote one written here, and never add to that file to silence a finding. Cite a
+document deleted on 2026-08-02 as `git show refactor-freeze-2026-08-02:<path>` — allowed
+deliberately, not validated, and that tag's tree is rooted at the repo root, not `backend/`.
 
 ## Do not
 
-- Do not add a second definition of the Google Jobs record shape. Deliberately de-duplicated in
-  `0c3ae51`.
-- Do not reimplement relevance matching in Python. One implementation, many callers.
-- Do not scrape LinkedIn.
-- Do not backfill `rank` on existing `job_events` rows. A guessed rank is worse than a missing one.
-- Do not re-tune on a provisional number, or on a 20-row eval.
-- Do not restore `docs/` wholesale. Pull the one file you need out of the tag and put it where the
-  code that needs it lives.
+- Do not add a second definition of the Google Jobs record shape (de-duplicated in `0c3ae51`), or
+  reimplement relevance matching in Python — one implementation, many callers.
+- Do not scrape LinkedIn, or backfill `rank` on existing `job_events` rows — a guessed rank is worse
+  than a missing one.
+- Do not re-tune on a provisional number or a 20-row eval, or restore `docs/` wholesale — pull the
+  one file needed out of the tag and put it where the code that needs it lives.
