@@ -1,22 +1,29 @@
 # jobs-pipeline
 
-Daily job-discovery automation. Pulls tech/AI postings from seven independent
-sources into one Postgres table, dedupes them, and has an LLM score each one
-against a specific candidate profile.
+Daily job-discovery automation. Pulls postings from eight ingest scripts into
+one Postgres table, dedupes them, and has an LLM extract facts and write a fit
+narrative against a candidate profile.
 
 It **finds and judges** jobs. It does not apply to them, track applications, or
 do outreach — those stay manual on purpose.
 
-- `docs/OVERVIEW.md` — plain-language tour, diagrams, and the build story
-- `docs/DEVELOPER.md` — architecture, design decisions, open questions
-- `docs/SCORING.md` — how a posting becomes a recommendation, and what it costs
-- `docs/HANDOFF-*.md` — open-question write-ups: match quality, multi-machine ingest
+- [`../docs/STATE-OF-THE-SYSTEM.md`](../docs/STATE-OF-THE-SYSTEM.md) — what the pipeline does, what
+  is done, what is open, the landmines, and every figure with its instrument. **The only document
+  in this repo.** The `docs/OVERVIEW.md` / `DEVELOPER.md` / `SCORING.md` / `HANDOFF-*.md` this list
+  used to name were deleted on 2026-08-02 with the rest of `docs/`; read them with
+  `git show refactor-freeze-2026-08-02:backend/docs/SCORING.md` and so on.
+- [`../.claude/CLAUDE.md`](../.claude/CLAUDE.md) — the rules and invariants for changing this tree.
+
+This file is setup and operation. It has not been audited line by line; where it disagrees with
+`STATE-OF-THE-SYSTEM.md`, that file is newer and was written from the code.
 
 ## Sources
 
 | Script | Source | Volume/day |
 |---|---|---|
-| `ingest/ats.py` | 68 companies' Greenhouse / Lever / Ashby APIs | full listing per company |
+| `ingest/ats.py` | Greenhouse / Lever / Ashby / Workable / Recruitee / SmartRecruiters, roster read from the `company_ats` table | full listing per company |
+| `ingest/workday.py` | Workday CXS tenants | per tenant |
+| `ingest/nyc-open-data.py` | NYC Open Data jobs dataset | per run |
 | `ingest/builtin-nyc.py` | builtinnyc.com/jobs, pages 1–3 | ~60 |
 | `ingest/weworkremotely.py` | 4 WWR category RSS feeds | ~250 |
 | `ingest/hn-hiring.py` | HN "Who is hiring?" monthly thread | ~250–350 |
@@ -55,7 +62,7 @@ python3 -m pip install --user 'psycopg[binary]'
 > duplicate rows.
 >
 > The repository root above holds only this directory and a sibling
-> `frontend/`, which is empty — see the root `README.md`. Everything here
+> `frontend/`, a shipping client — see the root `README.md`. Everything here
 > resolves relative to `backend/`, never to the repo root, so this whole
 > directory can be moved again as a unit without editing an import.
 >
@@ -102,7 +109,7 @@ That is deliberate. The shared library this code came from carried a single
 default, and it named a *different* application's database. Applications on
 this Postgres instance are told apart only by the database in `DATABASE_URL`,
 and all of them use unqualified table names in `public`, so a jobs process
-that fell back would not error — it would create its 13 tables inside somebody
+that fell back would not error — it would create its 14 tables inside somebody
 else's database. Failing loudly beats connecting to something plausible.
 
 This pipeline reads it from `./.env`, which it loads itself — copy
@@ -140,7 +147,9 @@ database.
 
 ### 4. Upgrading an existing database
 
-One migration exists, for databases that predate `job_scores` (scores used
+Ten migrations exist in `migrations/`. Nothing records which have been applied —
+there is no `schema_migrations` table and no runner. The oldest is for databases
+that predate `job_scores` (scores used
 to be eight columns on `jobs`). It's a no-op on a fresh install and safe to
 run twice:
 
@@ -164,7 +173,7 @@ script path and requires `path.relative_to(HERMES_HOME/scripts)`, naming
 symlink escape as a case it deliberately blocks, so this pipeline became
 unschedulable there the moment it moved to `~/apps/jobs`.
 
-`run-daily.py` runs all nine steps in order in one process and loads `./.env`
+`run-daily.py` runs all 14 steps in order in one process and loads `./.env`
 itself, in addition to the unit's `EnvironmentFile=`. That belt-and-braces is
 deliberate, so a manual run in a bare shell behaves like the scheduled one.
 Anything already exported wins over the file, so a one-off run can override a
@@ -342,7 +351,7 @@ export JOB_SCORING_API_KEY="unused"
 
 `match_score` ranks; `fit_score` only annotates. Neither is comparable across
 profiles — every weight comes from that profile's own `criteria_json`, so the
-attainable range differs. [`docs/scoring.md`](../docs/scoring.md) is the full
+attainable range differs. `git show refactor-freeze-2026-08-02:docs/scoring.md` is the full
 contract: score semantics, the provenance of every weight and threshold, the
 stage-by-stage funnel, and what happens when an LLM call fails.
 

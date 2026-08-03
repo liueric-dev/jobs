@@ -3,7 +3,7 @@
 The application backend: what `frontend/` talks to.
 
 The pipeline one directory up finds and scores jobs and delivers none of them —
-the gap at the top of [`../docs/DEVELOPER.md`](../docs/DEVELOPER.md). This is
+the gap at the top of `git show refactor-freeze-2026-08-02:backend/docs/DEVELOPER.md`. This is
 the delivery half. A person signs in with Google, reads their profile's ranked
 jobs out of the `jobs_app` view, and their interactions land in `job_events`,
 which nothing has ever written and which `../score.py` already reads.
@@ -306,7 +306,7 @@ cd backend && python3 -m evals label sample --n 60 --overlap 20
   cross-user leak.
 - **Event scores are derived server-side.** `match_score` and `fit_score` are
   looked up from `job_matches` / `job_scores` at write time and never accepted
-  from the client — `../docs/SCORING.md` makes recording them *as of the
+  from the client — `git show refactor-freeze-2026-08-02:backend/docs/SCORING.md` makes recording them *as of the
   impression* the load-bearing property of the whole table, and a
   client-supplied score is unverifiable training data.
 
@@ -410,7 +410,7 @@ systemd unit (`deploy/systemd/jobs-webapp.service`), the tunnel ingress rule
 [`deploy/`](../../deploy/README.md). Operations — restarting this service,
 rotating the Google client secret, what a `curl` that works on `localhost` and
 fails through the tunnel means — are in
-[`docs/RUNBOOK.md`](../../docs/RUNBOOK.md).
+`git show refactor-freeze-2026-08-02:docs/RUNBOOK.md`.
 
 **No credential is stored in this repo.** `DATABASE_URL` and the Google client
 secret live in `.env` (mode 600, gitignored) — see `.env.example`. Rotating

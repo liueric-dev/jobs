@@ -1,0 +1,169 @@
+# 28 of 56 task verdicts are a mismatch, not-DONE, or blocked
+
+08  Score validation
+    claimed:  ~~todo.~~ **DONE, `e1cdf7b`.**
+    evidence: PARTIAL   mismatch=True   blocked_on=a-running-database
+    residual: Re-run the two diagnostic queries (`SELECT primary_track, count(*) FROM job_scores GROUP BY 1 ORDER BY 2 DESC;` and `SELECT min(fit_score), max(fit_score) FROM job_scores;`) now that task 12 has landed, and record the comparison in docs/score-validation.md §1 beside the pre-bump baseline. Check `score.TRACKS` against the vocabulary task 11 actually left behind. Separately, docs/ingest/score.md:215 and :421 still describe primary_track as having 'no vocabulary coercion' — that claim was retired by this task's own code and the reason given for not editing the file ('it will regenerate') was itself retracted by task 34, which established that no generator exists.
+    note:     The code half of this task is complete and well tested. The gap is a measurement row the task itself scheduled for after task 12, which then landed without anyone coming back for it — the same 'blocker cleared, nothing rescheduled' failure DEFECTS.md:53-58 built its BLOCKED-BY convention to stop.
+
+12  FACTS_VERSION bump and re-extract
+    claimed:  ~~todo.~~ **DONE, `c4a8ff5` and `2b4dba2`.**
+    evidence: PARTIAL   mismatch=True   blocked_on=more-work
+    residual: Two DoD rows are unmet and one of them is now permanently unmeetable. (a) 'Axis A agreement is reported before and after, per field' — never measured, because task 07's golden set produced zero labels before the bump and the pre-bump corpus state no longer exists. The only Axis A measurement in the tree (docs/labelling-report-2026-08-02.md, golden-v1.jsonl) is post-bump, so there is no fixed point and the improvement claim has never been tested. (b) 'Snapshot retained until the comparison passes' — job_facts_v2_snapshot was dropped; a v3 quality regression is not rollbackable and would need a forward re-extraction. What CAN still be done: run the post-bump Axis A measurement standalone and state it as a level rather than a delta, and close task 08's outstanding post-12 diagnostic SQL.
+    note:     This is an honest partial, not a hidden one — every unmet row is named in the record document. But the register (docs/tasks/refactor/README.md:53) and the Status line both read a flat `done`, so a reader who does not open docs/facts-v3-diff.md will believe the extraction-quality comparison happened. It did not, and after the snapshot was dropped it cannot.
+
+13  Cohort criteria profile
+    claimed:  ~~todo.~~ **DONE, `fa2d7a7`.**
+    evidence: PARTIAL   mismatch=True   blocked_on=more-work
+    residual: DoD lines 170-171 ask for 20 of 20 hand-picked Pursuit target roles above MATCH_FLOOR and 20 of 20 in the top 20; measured 16/20 and 10/20. Nothing was tuned to close it, deliberately and correctly (CLAUDE.md forbids re-tuning on a 20-row eval). The concrete next step is task 29's Builder labels deciding whether the three Harvey/Braze misses — all carrying ai_involvement='none' — are misses or correct rejections; the goldens fixture says so in terms. The golden set that would settle it exists but is thin (2 labellers, 36 postings).
+    note:     The shortfall is self-declared in the task file's own header block AND in the register row (docs/tasks/refactor/README.md:54: 'DoD 122-123 partially unmet and deliberately not tuned into being met'). I mark this PARTIAL because a DoD row is measurably unmet, but the disposition is the correct one — closing it by tuning would be the failure, not the fix.
+
+15  USAJobs and Adzuna ingest
+    claimed:  todo.
+    evidence: NOT-DONE   mismatch=False   blocked_on=an-external-account
+    residual: Register at developer.usajobs.gov for an Authorization-Key (the User-Agent is the other credential half) and at Adzuna for app_id/app_key, then write backend/ingest/usajobs.py and backend/ingest/adzuna.py, add both to run-daily.py STEPS, record cassettes (including a USAJobs header-auth failure), measure Adzuna's real rate limit rather than trusting the 1,000/month vs 250/day disagreement, keep predicted salaries out of comp_min/comp_max, and set USAJobs closed_at from the announcement's own close date rather than from disappearance.
+    note:     Status and evidence agree. This is the cleanest genuinely-unstarted task in the three tranches, and the blocker is external and named in code rather than only in prose.
+
+16  ATS token discovery
+    claimed:  DONE, `49d51bf`.
+    evidence: PARTIAL   mismatch=True   blocked_on=more-work
+    residual: 96 of 376 seeded employers were never probed — the pass was stopped deliberately when the block rate climbed 16→30 (docs/ats-token-discovery.md:135-141). They carry `last_probe_outcome IS NULL` and are first in the nightly `--limit 40` backfill, but that backfill is currently unproductive: on 2026-08-02 it tripped its own circuit breaker ('12/25 probes blocked (48% > 35%)') and the step exited 1. Also outstanding: the positive control failed 4 of 4 (client-side-rendered boards read as `not_found`), so `not_found` counts are not evidence of absence and the roster is a floor; and the Taleo/Oracle/SuccessFactors/Jobvite/BambooHR/ADP/Paylocity rows sit at status='unvalidated' — which backend/ingest/ats_sources.py:18-50 admits into the nightly roster alongside `valid`.
+    note:     The instrument is good and the honesty is high — the record leads with 'the positive control failed 4 out of 4' and refuses to report a coverage fraction over one denominator. What is not true is the flat `done` in the Status line and the register: a third of the roster has never been probed, and the mechanism meant to finish it is failing nightly.
+
+18  Workday CXS ingest, and upstream gating
+    claimed:  DONE, `fabe381`.
+    evidence: PARTIAL   mismatch=True   blocked_on=more-work
+    residual: 'Block rate measured over one week and recorded before any escalation' is explicitly unmet — three runs exist, all on 2026-07-28, 0 of 4 tenants blocked, which docs/ingest/workday.md:565-571 calls 'a single day's observation from one IP and explicitly not a rate'. It needs a week of nightly runs to accumulate, and until it exists no escalation to Scrapfly or any scraping service is authorized. The 10,000-result cap (silent failure 4) has a fixture but no tenant in company_ats is near it, so the appliedFacets slicing path is unexercised against real data.
+    note:     Every silent-failure mechanism the task was written to defeat is implemented and tested, including two the task did not know about (the total-only-on-first-page behaviour, and the wrap guard at workday.py:490-498 against an out-of-range offset returning page 1 forever). The single unmet row is a calendar dependency, not an engineering one.
+
+19  JSON-LD parser
+    claimed:  ~~todo.~~ **DROPPED on the evidence, `2fecec5`.**
+    evidence: DROPPED   mismatch=False   blocked_on=nothing
+    residual: -
+    note:     Judged as a spike whose deliverable is a decision. The decision exists, is measured, names its method and date, and is the fourth Phase 3 yield estimate in a row to come back an order of magnitude high — a pattern docs/jsonld-coverage.md draws explicitly and applies forward to task 20.
+
+20  iCIMS via Firecrawl
+    claimed:  todo.
+    evidence: NOT-DONE   mismatch=False   blocked_on=more-work
+    residual: The file's own instruction is the next step and it is a measurement, not code: 'The next step here is a measurement of what iCIMS pages actually carry, not a redesign' (task file :32-36, echoing docs/jsonld-coverage.md § The recommendation, which names this task specifically). Only after that does the fetching half — Firecrawl's 1,000-credit monthly budget, curl_cffi attempted before every credit, per-employer caps, the quota ledger entry, and a documented mid-month-exhaustion degradation — become sizeable. The implementation itself additionally needs a Firecrawl account, and curl_cffi is a third-party dependency the top level does not have (backend/requirements.txt is psycopg[binary] only).
+    note:     IMPORTANT — this task is NOT dropped, contrary to the brief. Its Status line reads `todo`, the register says 'Re-scope or measure first', and commit 0d8c7ee (which the brief cites as the drop) is a docs-only flag commit whose message drops nothing. See contradictions.
+
+21  Nonprofit and civic boards
+    claimed:  todo.
+    evidence: NOT-DONE   mismatch=False   blocked_on=more-work
+    residual: Re-scope the task before implementing: its stated cost basis ('cheap because task 19's parser does most of the work') is void, and its closure fallback cited task 19's decaying re-crawl, which was never built — 0d8c7ee's message says to reuse nyc-open-data.py's post_until pattern or state that closure is unsolved, but not to cite a second mechanism that does not exist. Then: Idealist ingest with closure from the listing expiration date, JSON-LD checked for before any bespoke selector, employers fed back into company_ats as candidate seeds, cassettes, and a yield measurement after two weeks deciding on the remaining four boards. The yield estimate (10–25/day) is marked unverified and, on the record of tasks 14/18/19/05, should be measured before it is trusted.
+    note:     NOT dropped, contrary to the brief — Status is `todo` and the register (README.md:68) says 're-scope or measure first'. What survives the broken premise, per the file, is board selection, the employer-discovery side effect and the mission-alignment argument; what is gone is the assumption that extraction is free.
+
+23  SERP abstraction
+    claimed:  ~~todo.~~ DONE 2026-08-02, sharply descoped, with two Definition-of-done lines reported UN
+    evidence: PARTIAL   mismatch=True   blocked_on=more-work
+    residual: (a) Route ingest/google-serpapi.py and ingest/google-apify.py through serp/ — the task file's own § 'Deliberately NOT done' and the register's row 23 both name it, held back by DEC-99 because that path carries try_claim_query / CLAIM_TTL_MINUTES semantics the interface does not model. Until then two implementations of the SerpApi fetch coexist and DISAGREE: ingest/google-serpapi.py:335-337 raises RuntimeError on any `error` key, serp/providers/serpapi.py:78-94 splits it three ways. (b) Either implement fallthrough in dispatch or restate the DoD line. (c) A third provider and vendor-verified allowances both need new vendor accounts.
+    note:     The file is unusually candid — it flags two DoD lines UNMET itself and two more as met-in-a-different-shape. But it flags TWO and I count THREE unmet: 'Router falls through on exhaustion' is not implemented and is not flagged. backend/serp/dispatch.py:97-100 resolves ONE provider at construction and every serp.call() passes that same name; serp/__init__.py:230-231 lets ProviderRefused propagate ra
+
+24  Revive the contributor API
+    claimed:  the pre-deploy half landed 2026-08-02; the deploy half is still todo. Depends on: 23, 33 (
+    evidence: PARTIAL   mismatch=False   blocked_on=an-external-account
+    residual: Run `manage_users.py init-schema` with JOBS_ADMIN_DATABASE_URL (absent from backend/api/.env; jobs_api has no CREATE on public and does not own submission_log, so it cannot self-repair) to add submission_log.action via qc.ensure_schema → backend/api/query_claims.py:244. Then: install a cloudflared binary (/usr/local/bin/cloudflared does not exist), fill deploy/cloudflared/config.yml's placeholder tunnel UUID and hostnames, install and enable deploy/systemd/jobs-api.service (`systemctl --user cat jobs-api.service` → 'No files found'). Then the credential-issuing page, which is DEC-84's three-way ownership question. Then three real contributors.
+    note:     The status line is accurate in direction but the file understates the live state in one place and is factually stale in another. (1) Its first DoD bullet says 'Not verified against a live database; no database this service can reach has been initialised' — the database IS reachable as jobs_api (149 rows in job_ingest_state) and verify_schema() FAILS on it: `public.submission_log: missing column(s)
+
+25  Search queries
+    claimed:  todo. Depends on: ~~23, 24,~~ 11; 23 for two bullets only. Blocks: 28, 32.
+    evidence: PARTIAL   mismatch=True   blocked_on=a-running-database
+    residual: Measure the cache hit rate after ~two weeks of nightly searchqueries.py runs. Nothing to build — serp/cache.py:29-42 keys the 24h TTL cache and searchqueries.record_run stores run_count / result_count_last_run / last_result_at (backend/searchqueries.py:348-373), so both measurements are a query when the clock has run.
+    note:     The Status LINE says 'todo' and the same file's own item-by-item table at :299-309 marks six of seven Done; the register reads 'in progress'. Three live claims for one task. Every 'Done' row in that table checks out against the tree; the only outstanding item genuinely needs elapsed time.
+
+26  Profile creation
+    claimed:  ~~todo~~ ~~backend half DONE 2026-08-02; the screen half is task 32's and is not started.~
+    evidence: PARTIAL   mismatch=True   blocked_on=more-work
+    residual: Wire onboarding.resolved_for() into GET /v1/jobs so location_pref / remote_pref / comp_floor / tracks actually filter (deliberately deferred at :275-278). derive_tracks() returns empty for `pursuit` because daily_narrative_budget = 0 means job_scores holds zero pursuit rows (:246-256) — it will keep returning empty until that changes. PRIOR_DOMAINS still fails on the real user and widening it moves a generated CHECK (:270-273).
+    note:     The file states 'All seven are met'. Five are; two are met in a different shape than written and the file itself says so elsewhere in its own body, which is the contradiction. (a) 'The app_users → profiles mapping is explicit in the schema' — the file's § at :237-245 says 'app_users.profile → profiles.profile therefore still has NO FK', enforced instead at write time, deploy time and request time.
+
+29  Two-axis labelling session
+    claimed:  ~~todo~~ in progress — the report printed 2026-08-02 and no DoD line is met; see § Finding
+    evidence: PARTIAL   mismatch=True   blocked_on=the-owner
+    residual: Round 2 (~2026-08-09), more overlap postings, and ≥100 distinct postings from ≥5 labellers — `evals label status` prints that threshold at backend/evals/__main__.py:455-456 against today's 2 labellers / 36 postings. Then the gate branch (§ Gates) can actually be taken rather than drafted; today there is evidence (three non-surfaced postings the labeller would apply to) but no decision.
+    note:     A measurement task, and its central deliverable exists: docs/labelling-report-2026-08-02.md. The Status line's 'no DoD line is met' is too harsh and is contradicted by the file's own tables — three lines ARE met (strata, blindness, pinned/never-train) and a fourth (overlap + inter-annotator agreement, amended from 20 to 10 by correction 5) is now met since the second labeller arrived. The two that
+
+30  Within-track ordering and display
+    claimed:  todo. Depends on: 11, 13, 29. Blocks: 32.
+    evidence: PARTIAL   mismatch=True   blocked_on=the-owner
+    residual: Run the within-band experiment against task 29's labels and record the result; then decide buckets-vs-score and derive thresholds from labels; then within-bucket ordering by freshness and per-track precision@20 with a paired bootstrap (backend/evals/metrics.py:500-545 bootstrap_delta is the instrument, already built). Separately and independently blocking the display: naming the tracks — backend/config/pursuit-persona.json's _no_buckets_comment records that score.TRACKS' five names 'do not describe this population' and assigns the naming to this task, which is an owner decision.
+    note:     Register and Status both read 'todo', but two DoD items are fully met in the tree and a third partially — the mismatch is in the honest direction (understated). Task 30 contains an experiment whose result decides the design, and that experiment HAS NOT BEEN RUN: no within-band analysis exists anywhere in backend/tools/ or backend/evals/, and nothing in docs/ reports one. Everything downstream of i
+
+32  Frontend
+    claimed:  Five of six surfaces are built (2026-08-02): Today, Job detail, Saved, Onboarding and Sear
+    evidence: PARTIAL   mismatch=False   blocked_on=a-device
+    residual: (1) Load the page on a real phone over the LAN — serve.py --host landed (default still 127.0.0.1, pinned by backend/tests/test_frontend_fixtures.py:205-262) so the layout half is exercisable, but signing in from the phone additionally needs Google's authorised redirect URI to name the LAN origin while FRONTEND_ORIGIN holds one value. (2) The live Google login round trip, by hand, in a browser. (3) Contribute, after DEC-84. Two client-side hazards worth folding in when someone next touches it: renders.forgetAll() is exported and called by nothing, so a sign-out/sign-in in one tab attaches the previous Builder's (request_id, rank) to the new Builder's events (frontend/js/renders.mjs:60-62 vs app.mjs:195-205); and POST /v1/events is spelled twice, once in api.mjs:304-310 and once as a literal in the unload flush at events.mjs:165-180.
+    note:     Six of eight DoD items verified in the tree; the two that are not need a physical device and an interactive browser, exactly as the Status line says. The client is genuinely shipping, not scaffolding: 13 ES modules, 553-line hand-written stylesheet, no npm/package.json/bundler anywhere under frontend/ or at the repo root, and both checkers green (verify_fixtures.py exit 0; check_client.mjs '54 che
+
+33  Deployment
+    claimed:  todo. Depends on: ~~24, 32~~ nothing hard — see below. Blocks: nothing.
+    evidence: PARTIAL   mismatch=True   blocked_on=an-external-account
+    residual: Machine half, all of it owner-side: a Cloudflare account + a domain + `cloudflared tunnel create` to fill deploy/cloudflared/config.yml's placeholder tunnel UUID and two hostnames; install the cloudflared binary (/usr/local/bin/cloudflared does not exist; `which cloudflared` finds nothing; ~/.cloudflared/ does not exist); install and enable the twelve absent units, ideally as symlinks the way every neighbouring garmin/mediaserver unit is; create ~/.config/jobs-backup.env with an off-machine rclone/rsync destination (absent, tolerated by the `-` prefix, so backups would run local-disk-only); and perform one verified restore. Also re-derive the two self-declared-unmeasured floors (searchqueries, workday).
+    note:     The Status line reads 'todo'; the register reads 'in progress'; the file's own body says 'the file half landed 2026-08-02; the machine half is the owner's'. That last one is the accurate description and it is what the tree shows: fifteen tracked files under deploy/ from one commit (c4cff65, 2026-08-02 07:22) of which THREE are installed on this machine, and those three are regular-file COPIES date
+
+34  Cleanup, bugfixes and documentation (the live task 34)
+    claimed:  NEXT. Depends on: nothing. Blocks: the product/API phase (24–28, 31, 32) only by conventio
+    evidence: DONE   mismatch=True   blocked_on=nothing
+    residual: Update the Status line. One substantive item is explicitly left undone and recorded: § D dispositioned backend/docs/SCORING.md and the remainder of backend/docs/HANDOFF-match-quality.md for the archive and neither moved, because both are live citations and relocating them is its own change with its own link sweep (:269-273). Recorded in docs/archive/README.md § Still to archive.
+    note:     The Status line still reads 'NEXT' while the file's own Definition-of-done table (:254-265) is checked item by item and dated 2026-07-31, and the register reads done. Every item verifies. Two items are marked ⚠️ rather than ✅ by the file itself because they were met differently than written — which is the correct treatment and worth preserving: 'a Definition of done that gets edited to match what 
+
+40  Roll the handoff forward, promote what is durable, clear the archive backlog
+    claimed:  DONE, 2026-08-01
+    evidence: DONE   mismatch=False   blocked_on=more-work
+    residual: Add the citation of docs/WORKING-METHOD.md to .claude/CLAUDE.md — the one DoD row explicitly left as 'proposed, not applied'. It is a one-line edit to a file that task 41b made trackable, so the original reason for deferring it (the file was the orchestrator's and gitignored) no longer holds.
+    note:     Done in substance. Two DoD rows are no longer checkable in the working tree because tranche_eight/47 rewrote HANDOFF.md; the content they protected survives in STANDING-GUIDANCE.md. One row was never completed and says so in the task file itself.
+
+42  Close the six UNBLOCKED defects
+    claimed:  DONE 2026-08-01
+    evidence: DONE   mismatch=False   blocked_on=more-work
+    residual: Add the outcome section the DoD asks for to the task file itself, or strike that DoD row and point at docs/ingest/DEFECTS.md:187-196, which is where the re-derived counts actually live. Purely a bookkeeping gap; no code or register work is left.
+    note:     The brief's ground-truth line for task 42 ('three fixed here, six re-marked open, UNBLOCKED') is wrong — see contradictions. All six were fixed by 2a94f3d and all six read '— fixed' in the register today.
+
+47-seven  C4's match is still line-scoped, and it has two known false negatives
+    claimed:  todo
+    evidence: NOT-DONE   mismatch=False   blocked_on=more-work
+    residual: Measure what a wider match unit does to all nine rows of backend/config/doc-figures.json tree-wide (the paragraph-scoped pilot during task 46 measured +2 invented / -10 cleared), decide the unit for the match body (which need not be DEC-78's sentence — a per-row _licence_tokens list or simply unwrapping the two documents are named as defensible outcomes), confirm every added finding individually, re-record _pattern_note as a third column, and give the task a row in docs/tasks/refactor/README.md so the index stops implying 47 is done.
+    note:     THIS IS THE FIRST OF THE TWO TASKS NUMBERED 47 and it is a genuinely different task from tranche_eight/47-split-the-entry-point.md. It was created by 2586bb2 (task 45/46's commit) and has never been touched since: `git log --oneline -- docs/tasks/refactor/tranche_seven/47-widen-the-c4-match-body.md` returns exactly one commit. It also has NO ROW IN THE TASK REGISTER — docs/tasks/refactor/README.md
+
+48  Stop the refactor at a known-green state
+    claimed:  **Status:** TODO. **Depends on:** nothing. **Blocks:** 49, and everything after it.
+    evidence: DONE   mismatch=True   blocked_on=nothing
+    residual: Bookkeeping only: the Status line in the task file still reads TODO, and the register flip to `**done**` (docs/tasks/refactor/README.md:170) is an uncommitted working-tree edit made after the freeze tag — i.e. the freeze it created is already dirty for the task (49) that is supposed to read the tree as ground truth.
+    note:     Landed as HEAD, commit 5cca001 (2026-08-02 19:11:23 -0400), doc-only: 3 files, +117/-1 (`git show --stat 5cca001`). The task FILE's own Status line was never updated and still reads TODO; the register row was flipped to `**done**` only in the working tree at 22:29 today (uncommitted). Every DoD item verified independently. One deviation worth naming: the freeze record records VERDICTS (`OK`, `0 fi
+
+49  Rebuild the understanding of this system from the code, not from the documents
+    claimed:  **Status:** TODO. **Depends on:** 48. **Blocks:** 50, 51, 52, 53, 54.
+    evidence: NOT-DONE   mismatch=False   blocked_on=more-work
+    residual: The entire deliverable: `docs/STATE-OF-THE-SYSTEM.md` (kind: contract, budget: 400) with its six sections, every claim carrying file:line or a command; plus a session record with the agent briefs attached. Because .gitignore:64 ignores `.claude/*`, the workflow files that constitute the method are not reachable by a future reader unless they are copied into the session record or the ignore is amended — DoD item 6 cannot be met by leaving them where they are.
+    note:     State as of before this run: nothing existed. IN FLIGHT RIGHT NOW — `.claude/workflows/orientation-from-code.js` (59 KB, mtime 20:06) and `.claude/workflows/orientation-phase2.js` (442 KB, mtime 22:31) are this run's own scaffolding; `orientation-from-code.js:1-12` declares `name: 'orientation-from-code'`, `description: 'Task 49 — rebuild understanding of the jobs pipeline…'` and seven phases (Cod
+
+50  Extract the knowledge that cannot be regenerated, before anything is archived
+    claimed:  **Status:** TODO. **Depends on:** 49. **Blocks:** 51 — and 51 must not start until this is
+    evidence: NOT-DONE   mismatch=False   blocked_on=more-work
+    residual: All of it, and it is hard-gated on 49: extract landmines to `.claude/rules/` (which task 52 creates), extend MEASUREMENT-TRAPS.md, carry the architecture invariants into `.claude/CLAUDE.md` and the method into `~/.claude/CLAUDE.md` (neither of which exists yet), all by line range rather than retyping, under a 400-line total, plus a kind: record session file listing what was left behind and why.
+    note:     Not started. Every destination in the task's own output table is either absent (`.claude/rules/`, `docs/STATE-OF-THE-SYSTEM.md`) or unmodified since before the tranche (`docs/MEASUREMENT-TRAPS.md`, `.claude/CLAUDE.md`). Its two negative DoD items ('DECISIONS.md/DEFECTS.md/_comment unmodified') are satisfied only vacuously, because nothing was done.
+
+51  Archive the narrative surface; keep the registers
+    claimed:  **Status:** TODO. **Depends on:** 50, complete and reviewed. **Blocks:** 52.
+    evidence: NOT-DONE   mismatch=False   blocked_on=more-work
+    residual: The whole sweep: git mv CLAUDE_UPDATES.md (2,993), STANDING-GUIDANCE.md (1,697, after splitting live rules to .claude/rules/ and owner rows to OWNER-QUEUE.md), tranche_seven/ + tranche_eight/ (16 files), MASTER-PLAN-pursuit.md + SOURCING-STRATEGY.md + ADDENDUM-google-jobs-providers.md (931 lines, not the ~1,190 the task file estimates), AUDIT.md (300, only after its figures are re-owned or C4 fires), LABELLING-NIGHT.md (556), docs/ingestion_tests/ (1,501 lines, not the ~700 the task file estimates) — each with a provenance header and a stub, zero rm, then both checkers green from the repo root.
+    note:     Not started, and correctly gated: 50 has not run. Every single file on the archive table is still at its original path. Live Markdown stands at 46,811 lines against a target of under 8,000 — the measurement command in the task file reproduces it exactly.
+
+52  Build the harness: move each answer to the row it belongs in
+    claimed:  **Status:** TODO. **Depends on:** 50 (extraction) and 51 (archive). **Blocks:** 53.
+    evidence: NOT-DONE   mismatch=False   blocked_on=more-work
+    residual: All five layers: rewrite .claude/CLAUDE.md to <150 lines with zero `~~`; create the five path-scoped files under .claude/rules/; create two read-only agents under .claude/agents/ and invoke each once; add .claude/settings.json with the PostToolUse *.md hook (only settings.local.json exists, and it is a five-entry permission allowlist dated Jul 24 with no hooks block); create ~/.claude/CLAUDE.md plus ~/.claude/skills/{resume,wrap} and ~/.claude/agents/artifact-reviewer; record the Layer 3 decision in DECISIONS.md; run /doctor and /context and record the readings.
+    note:     Nothing of the five layers exists. `.claude/` holds four files and two of them are this run's gitignored workflow scaffolding; `~/.claude/` has no CLAUDE.md, no skills/ and no agents/ at all. The task's own premise about the current file checks out exactly: `.claude/CLAUDE.md` is 255 lines (`wc -l`) and carries exactly six strikethrough spans (regex count) — `~~\`frontend/\` is empty.~~`, `~~76% /
+
+53  One file for what is on the owner, and a standing check on the ecosystem
+    claimed:  **Status:** TODO. **Depends on:** 49 § 4 (the *needs the owner* list), 51, 52. **Blocks:**
+    evidence: NOT-DONE   mismatch=False   blocked_on=more-work
+    residual: Part A: git mv OPEN-QUESTIONS.md → docs/OWNER-QUEUE.md keeping the OQ- prefix, re-declare budget: 250, widen the row format to six columns (the 'How to do it' column is the point and today's four-column table has no equivalent), absorb owner-blocked rows from STANDING-GUIDANCE.md before 51 archives it, add 49's needs-the-owner list, point HANDOFF.md at it in one line, and have the resume skill (which does not exist) report the open count. Part B: write ~/.claude/skills/whatsnew/SKILL.md, run it once by hand, commit the first report as kind: record.
+    note:     Neither part started. Part A's source file is exactly as the task describes it — docs/tasks/refactor/OPEN-QUESTIONS.md:1-6 declares `kind: rolling`, `budget: 120`; :11 declares it owns `OQ-`; the table at :33-42 has eight rows (1,2,3,7,8,4,5,6) of which two are struck, so six read open — but one of those six is stale (see contradictions). Part B is entirely absent: no ~/.claude/skills/ directory e
+
+54  Re-plan the remaining product work, and close the run
+    claimed:  **Status:** TODO. **Depends on:** 49, 51, 52, 53. **Blocks:** nothing. This is the last ta
+    evidence: NOT-DONE   mismatch=False   blocked_on=more-work
+    residual: Everything, and it is gated on 49/51/52/53: write a new tranche of session-doable tasks only (<150 lines each, machine-checkable acceptance criteria), move every non-session-doable item to OWNER-QUEUE.md rows, retire or explicitly justify HANDOFF.md, record the final measurements with their commands (Markdown line count against 46,811, /context against 23.4k, three suites, both checkers), and add the tranche-level DECISIONS.md entry.
+    note:     Not started; correctly last. No tranche after nine exists, HANDOFF.md is still live, and DECISIONS.md carries no entry for the tranche. Its one item that is currently satisfiable — 'No task 55 exists' — is satisfied, but only because the tranche has not run and therefore has not yet had the chance to discover work.

@@ -1,0 +1,313 @@
+# 78 suspect/dead/landmine findings
+
+[schema] schema.py's own docstring and lib/dbconn.py both say ensure_schema creates '13 tables'. It now creates 14.
+    why: Counting the CREATE TABLE statements reached by ensure_schema: jobs, job_scores, profiles, job_facts, job_matches, job_events, cohort_signal, job_ingest_state (via state.ensure_state_schema), hn_seen_comments, google_jobs_query_stats, search_queries, search_query_watchers, search_query_signal, search_query_results = 14, plus the jobs_app view. '13' was correct before the four search tables landed (tranche_four/25) — three of the four are new, so the figure went stale by one. Harmless, but it is the number a reader uses to check they have found everything.
+    cite: backend/schema.py:21-22, 457-458; backend/lib/dbconn.py:29, 62
+
+[schema] Several cross-file line citations in comments have drifted and now point at unrelated lines.
+    why: CLAUDE.md's convention is that a file:line citation is what makes a claim checkable. Four of them silently do not resolve any more, which erodes exactly the property the convention buys. Nothing executes differently.
+    cite: backend/extract.py:553 cites 'schema.py:386' for job_facts' PK (actually 545); backend/lib/state.py:40 cites 'schema.py:448' for its own caller (actually 920); backend/migrations/migrate_score_versions.py:8 cites 'schema.py:585' for the four-column add (actually 783); migrate_score_versions.py:38 cites 'score.py:262-263' for select_shortlist (actually 418)
+
+[schema] ensure_app_view's DROP fallback is a one-way door that destroys GRANTs, with no re-grant anywhere in the repo.
+    why: A column reorder in _APP_VIEW_SQL raises InvalidTableDefinition, the handler DROPs the view, and DROP VIEW takes every GRANT with it. The re-grant statement is hand-typed in webapp/README.md and is not automated. The failure surfaces on the NEXT nightly run as the webapp refusing to start with 'no SELECT', pointing nowhere near the commit that caused it. This is a live landmine, not dead code.
+    cite: backend/schema.py:1215-1223 with the warning at 1187-1194
+
+[schema] google_jobs_query_stats is written on every run by both Google scripts and read by nothing.
+    why: The comment says it is append-only history for a not-yet-built adaptive-cadence feature. lib/ids.py:88-94 additionally records that new_count was measuring SerpApi cache expiry rather than job novelty before the google_source_id fix, so the pre-migration history in it is not interpretable.
+    cite: backend/schema.py:929-933, 940-949
+
+[schema] job_events is written only by webapp/ and read by only one pipeline consumer.
+    why: That comment is now half-stale: cohort.py folds job_events into cohort_signal (schema.py:604-620, run-daily.py:240). Nothing else in the pipeline reads it, and the learned-ranker use it was collected for does not exist.
+    cite: backend/schema.py:585-589 ('Nothing in the pipeline reads this yet')
+
+[schema] lib/upsert.py's module docstring still describes an events pipeline that no longer shares this code (nyc-events, nyc-library, ticketmaster-seatgeek, PostGIS GEOG_EXPR, prune_expired()).
+    why: GEOG_EXPR and prune_expired() are referenced in the docstring and the TableSpec docstring but do not exist in the module — grep finds no definition. The prose is historical narrative from the pre-split shared library; a reader looking for those symbols will not find them.
+    cite: backend/lib/upsert.py:1-33, 57-58
+
+[schema] lib/dbconn.connect(autocommit=True) is documented as unused.
+    why: An unexercised code path; harmless, but it means the autocommit + search_path interaction at dbconn.py:127-130 (which skips the commit) has no caller proving it.
+    cite: backend/lib/dbconn.py:118-122 ('Nothing in this pipeline currently passes it.')
+
+[schema] lib/state.py's resumable-pager half was deliberately deleted, and lib/timeparse.py's docstring is entirely about the OTHER application's events table.
+    why: Both are honest about it, but timeparse's whole rationale block describes public.events.start_datetime, a table this database cannot reach (schema.py:461-466). A reader debugging jobs timestamps gets a page of irrelevant DST reasoning before reaching utc_now_str, which is the function schema.py:97-98 says is the only thing that should produce this pipeline's TEXT timestamps.
+    cite: backend/lib/state.py:14-24; backend/lib/timeparse.py:1-38
+
+[stages] `import relevance` in score.py is unused
+    why: The comment says 'kept for the cost tools', but grep for `relevance.` in score.py matches only that import line. score.py's own select_shortlist docstring states 'No relevance tier here any more' (score.py:448). The import is dead weight that makes the module look relevance-aware.
+    cite: backend/score.py:250
+
+[stages] searchqueries.run_due()'s docstring is contradicted by its own callers
+    why: It says "None -- which is every caller today -- means tranche_four/23 has not landed and nothing is dispatched", but build_provider() (searchqueries.py:433-462) constructs a real serp.dispatch.SearchQueryProvider and main() (searchqueries.py:503-504) passes it. The module docstring at searchqueries.py:19-24 already strikes this out. A reader who trusts run_due's docstring will conclude the nightly run spends no SerpApi credit; it does.
+    cite: backend/searchqueries.py:405-412
+
+[stages] run-daily.py's docstring says 'nine steps' / 'all nine' / 'the nine scripts listed in STEPS' against a 14-entry list
+    why: A count that drifted five entries out of date. Nothing asserts it. The 'two of the nine steps make LLM calls' line is still true in substance (extract, score) but the denominator is wrong.
+    cite: backend/run-daily.py:15, 20, 34, 77, 292-294
+
+[stages] Stale file:line citations inside config/pursuit-criteria.json
+    why: It cites 'match.py:73-273' for score_job (actual: match.py:134-334), 'HARD_EXCLUDE_AT, match.py:60' (actual: match.py:70), and 'MATCH_FLOOR = 40 (schema.py:206)' (actual: schema.py:365, and schema.py:206 is an unrelated privacy comment). The numbers are right; the pointers land in the wrong place.
+    cite: backend/config/pursuit-criteria.json (_scale)
+
+[stages] Stale file:line citations inside source comments
+    why: extract.py:405 is inside a comment about strip_html, not the eligibility SQL (actual: extract.py:574). extract.py:424-425 is _MARKUP_RESIDUE, not REMOTE_POLICY (actual: extract.py:312-313). schema.py:628 is not the primary_track select (actual: schema.py:1183). llm.py:366 is one line past has_fields (actual: 365). These are the citations the repo's trustworthiness rests on, and there is no checker for them.
+    cite: backend/schema.py:731 ('extract.py:405'), backend/match.py:180 ('extract.py:424-425'), backend/score.py:277 ('schema.py:628'), backend/extract.py:210 ('llm.py:366')
+
+[stages] extract.mark_extract_failed()'s ON CONFLICT does not clear the fact columns
+    why: It updates only facts_version, extracted_at and extraction_model. A posting that extracted successfully at v2 and then tombstones at v3 keeps its v2 seniority_level/role_archetype/etc. under a FAILED: label. match.load_facts() filters on `extraction_model NOT LIKE 'FAILED:%'` so the ranking is safe, but any reader that does not check extraction_model sees stale facts stamped with the current facts_version. score.mark_score_failed() explicitly fixed the analogous hole on job_scores (score.py:874-890); this one was not.
+    cite: backend/extract.py:990-993
+
+[stages] match.score_job()'s `tech:missing` branch is unreachable from the pipeline
+    why: load_facts() coerces a NULL tech_stack to [] at match.py:396-402, so facts['tech_stack'] is never None from the production caller. The code comment says so explicitly and keeps the branch for direct callers. Not a bug, but a rule that can never fire nightly.
+    cite: backend/match.py:283-285
+
+[stages] vote_facts()'s 3-pass path is unexercised in production
+    why: The only platform below the agreement threshold is hn_whoishiring (0.778), and the comment records that every such posting is currently rejected by the relevance union under the `pursuit`-only active profile set. FACTS_VERSION=3 therefore means 'extracted under the per-platform policy' on paper while the vote mechanism has never run against real data. Do not read 3 as a passing grade for vote_facts().
+    cite: backend/schema.py:320-327 (the FACTS_VERSION comment)
+
+[stages] score.run_for_profile() is importable for a login path nothing calls
+    why: The docstring says the login trigger is 'documented and unbuilt -- nothing under webapp/ imports this module'. Confirmed: no webapp file imports score. So the cost model described ('spend tracks engagement rather than registration') is aspirational; today all narrative spend happens in the nightly warm pass.
+    cite: backend/score.py:1016-1030
+
+[stages] criteria_version is written to job_scores but is not a cache key there
+    why: A landmine for anyone reasoning about staleness: three of the four version columns are in the predicate and the fourth is provenance only. Adding it would make a weight edit re-score narratives it never changed. The exclusion is enforced by tests/test_score_versions.py, not by any comment in the SQL itself.
+    cite: backend/score.py:40-47; backend/schema.py:764-770
+
+[stages] job_scores version columns are nullable with no DEFAULT and nothing backfills them
+    why: Pre-existing rows are NULL on all four. `<>` behind an IS NOT NULL guard is used instead of IS DISTINCT FROM precisely so those rows are not swept into 'stale'. Anyone who rewrites the predicate with IS DISTINCT FROM silently turns the whole backlog stale and, with a rescore flag, spends a call per row.
+    cite: backend/schema.py:774-787
+
+[stages] config/extraction-policy.json changes extraction semantics without bumping FACTS_VERSION
+    why: Self-declared: 'Changing anything in this file changes extraction semantics and therefore ought to move schema.FACTS_VERSION. It deliberately does NOT, yet.' A job_facts row records extraction_passes but not which policy produced it.
+    cite: backend/config/extraction-policy.json (_not_a_version_note)
+
+[stages] An extraction-policy file that fails to load degrades silently to one pass everywhere
+    why: load_policy() catches FileNotFoundError and returns POLICY_DISABLED. The only signal is `multi_pass=none` on main()'s summary line (extract.py:1220-1230). A JSON syntax error is not caught at all and would raise instead — an inconsistent failure mode between 'missing' and 'malformed'.
+    cite: backend/extract.py:157-174
+
+[frontend] `let user = null;` is assigned from GET /v1/me and on sign-out, and never read anywhere.
+    why: Dead state. The /v1/me response body is fetched and discarded — nothing in the client renders the signed-in Builder's email, name or profile. If a screen ever needs it, it is already in hand; today it is a no-op.
+    cite: frontend/js/app.mjs:31, frontend/js/app.mjs:39, frontend/js/app.mjs:202
+
+[frontend] `renders.forgetAll()` is exported and called by nothing.
+    why: Landmine, not merely dead. signOut() (app.mjs:195-205) clears `user` and the hash but does NOT clear renders.mjs's `seen` Map or events.mjs's `impressed` Set. Sign out and sign in as a different Builder in the same tab and the detail page will attach the previous Builder's (request_id, rank) pair to the new Builder's events. Nothing in the suite covers a sign-out/sign-in cycle.
+    cite: frontend/js/renders.mjs:60-62 (grep -rn forgetAll frontend/js/ frontend/check_client.mjs returns only the definition)
+
+[frontend] `events.pending()` is exported and called by nothing in the client.
+    why: Documented as a console/by-hand diagnostic. Harmless, but it is an exported surface with no caller and no test.
+    cite: frontend/js/events.mjs:236-240
+
+[frontend] POST /v1/events is spelled twice: once through api.postEvents and once as a hardcoded literal in the unload flush, with its own copy of credentials, keepalive and Content-Type.
+    why: A second definition of an endpoint's path and options. Changing BASE, the path, or the credentials mode in api.mjs silently leaves the unload path behind — and the unload path is the one nobody watches in a browser, because the page is going away. The comment explains why fetch+keepalive rather than sendBeacon but not why the call bypasses api.mjs.
+    cite: frontend/js/events.mjs:165-180 (literal "/v1/events" at line 169) vs frontend/js/api.mjs:304-310
+
+[frontend] Saved is a client-side filter over a full crawl, and a cold detail deep link triggers the same crawl purely to obtain a request_id.
+    why: Both are recorded as backend gaps rather than client preferences, and both are bounded at 8×100. Today jobs_app holds ~166 rows for `pursuit` (crawl.mjs:28-31, measured 2026-08-02, unverifiable here without the DB), so it is two requests. At ten times the corpus, opening a pasted job link costs eight sequential 100-row requests before a single event can be sent, and Saved silently stops at 800.
+    cite: frontend/js/saved.mjs:53-58, frontend/js/renders.mjs:48-58, frontend/js/crawl.mjs:42-54
+
+[frontend] `credentials: "same-origin"` plus `BASE = ""` hard-couples the client to being served from the API's own origin.
+    why: The failure mode is exactly the one this repo alerts on: served from any other host, every request goes out without the session cookie and comes back 401, which the client renders as the sign-in screen. It is indistinguishable from being logged out, and there is no error text anywhere. serve.py's warn_about_origins covers the CORS and FRONTEND_ORIGIN cases but not this one, because this one is not a CORS failure.
+    cite: frontend/js/api.mjs:27, frontend/js/api.mjs:74, frontend/serve.py:15-22
+
+[frontend] `ui.cssEscape` reaches for `window.CSS` while every other module uses bare globals.
+    why: `window` is undefined under node. check_client.mjs stubs `globalThis.CSS` (check_client.mjs:50) but never `window`, so this path would throw a ReferenceError if any check called paintSaved. None does — the function is exercised only in a browser, so the fallback branch is untested.
+    cite: frontend/js/ui.mjs:87-90
+
+[frontend] The onboarding preferences are stored and filter nothing.
+    why: Not a client defect — the file says so explicitly and its copy deliberately promises only that the answers are saved. Flagged because a reader could reasonably assume the Profile tab changes the Today list. It does not: jobs.list_jobs() does not filter on location_pref, remote_pref, comp_floor or tracks.
+    cite: frontend/js/onboarding.mjs:36-42
+
+[frontend] `comp.is_estimated` is in the contract and in no response body; format.compLabel reads it under two speculative names.
+    why: Correct today — the flag is absent, so the figure is shown plainly — and wrong the moment a salary-predicting source lands without the column, at which point estimates render as though the employer stated them. The client cannot close this; it is a schema gap.
+    cite: frontend/js/format.mjs:81-101 (line 97 reads job.comp_is_estimated ?? job.is_estimated)
+
+[frontend] `frontend/__pycache__/serve.cpython-314.pyc` is present in the working tree.
+    why: Build residue from running serve.py. The mutation test in test_frontend_fixtures.py explicitly ignores it when copying the tree (backend/tests/test_frontend_fixtures.py:146-147), so it is known about, but it is an artifact sitting in a directory that is otherwise entirely source.
+    cite: find /home/eric/apps/jobs/frontend -type f | grep __pycache__
+
+[webapp] `import schema` in search.py is unused
+    why: `schema.` appears nowhere in that module's executable code — only in the docstring at line 24 ('schema.SEARCH_MIN_WATCHERS'). Harmless but it means the module pulls the whole pipeline schema module in for a comment. grep: `grep -n "schema\." backend/webapp/search.py` returns only docstring lines.
+    cite: backend/webapp/search.py:54
+
+[webapp] onboarding.resolved_for() / resolve() / load_builder() are built, tested, and called by nothing on the request path
+    why: Its own docstring says so ('NOTHING CALLS THIS ON THE LIST PATH YET'), and grep confirms the only callers are tests (backend/webapp/tests/test_builder_profiles.py:435,451,454). So the four preferences a Builder submits — location_pref, remote_pref, comp_floor, tracks — are stored and never applied to any list. GET /v1/jobs filters on `remote`/`nyc` query params only.
+    cite: backend/webapp/onboarding.py:240-255
+
+[webapp] derive_tracks() is expected to return an empty list for the live cohort
+    why: It reads job_scores.primary_track for the caller's profile, and the docstring records that `pursuit` has daily_narrative_budget = 0 so score.py writes no rows for it. Every onboarding therefore leaves builder_profiles.tracks NULL. Not verifiable without a database — see open questions.
+    cite: backend/webapp/onboarding.py:386-394
+
+[webapp] label.py's module docstring is stale about frontend/
+    why: It says 'frontend/ in this repo contains one file and it is .gitkeep', which stopped being true on 2026-08-02; app.py:110-113 explicitly records the correction and says the decision is unchanged. The code is right, the rationale text is out of date.
+    cite: backend/webapp/label.py:16-19
+
+[webapp] config.PORT is annotated 'Documentation only' but is in fact load-bearing for the supported launcher
+    why: frontend/serve.py reads config.PORT and passes it to uvicorn.run(). A reader trusting the comment would think PORT has no effect anywhere.
+    cite: backend/webapp/config.py:123-124 vs frontend/serve.py:162,177
+
+[webapp] request_id is unverified: a batch may echo another Builder's render id
+    why: Documented landmine rather than a live bug — the two owner conjuncts in derive_skips make it harmless to that derivation, but a borrowed request_id still writes the sender's own events under it, so one request_id can span two Builders' rows. GROUP BY request_id alone is not a render; (app_user_id, request_id) is.
+    cite: backend/webapp/jobs.py:812-822
+
+[webapp] The 24h impression dedup is keyed (profile, job_id), not (app_user_id, job_id)
+    why: Thirty Builders share the `pursuit` profile, so one Builder's render suppresses another Builder's impression of the same job for the rest of the window — and, per derive_skips' docstring, suppresses the skips that would have been derived from it. Recorded as an open owner decision, not fixed.
+    cite: backend/webapp/jobs.py:934-937 and the note at 889-897
+
+[webapp] SQL fragments are spliced ahead of the WHERE clause and their parameters must lead the params list
+    why: Getting the order wrong does not raise: it compares a user id against a profile name, matches nothing, and silently reports every Builder as having no state. Three call sites hand-maintain the ordering; tests/test_event_replay.py TestListState and TestSignalJoinBindsInOrder are the only guards.
+    cite: backend/webapp/jobs.py:303-324,432-436; backend/webapp/search.py:94-102,135-138,331-336
+
+[webapp] Postgres `\b` vs `\y` does not apply here, but the CORS method list does: any future DELETE route is unreachable from the browser
+    why: allow_methods is the literal list ['GET','POST','OPTIONS']. A DELETE added later fails at preflight with no error message anyone sees — the silent-failure mode this repo alerts on. search.py already routed around it once.
+    cite: backend/webapp/app.py:84; backend/webapp/search.py:279-282
+
+[api] The service cannot start against the live database: verify_schema() raises because `submission_log.action` is missing. This is not a latent risk, it is the current state.
+    why: Task 24 (commit cd033af) added the column to qc.ensure_schema and to REQUIRED_COLUMNS, but `manage_users.py init-schema` was never re-run. This is precisely the failure REQUIRED_COLUMNS was written to convert into a startup refusal — the mechanism works and is currently tripping. Recovery needs JOBS_ADMIN_DATABASE_URL, which is absent from backend/api/.env; jobs_api has no CREATE on public and does not own submission_log (owner: jobs_pipeline), so it cannot self-repair.
+    cite: backend/api/app.py:143-168; live information_schema query shows submission_log columns id, contributor_id, dataset, submitted_at, fetched_count, accepted_count, rejected_count, reason — no `action`
+
+[api] deploy/systemd/jobs-api.service is tracked but not installed anywhere.
+    why: The unit is a file half of a deployment (commit c4cff65, '33 — the file half of deployment') that was never enabled. Its own header already marks it EXPECTED TO BE DEPRECATED. Combined with the cloudflared ingress rule for the same hostname, enabling the tunnel without enabling this unit yields a 502 that reads as an outage — the unit says so at :6-9.
+    cite: deploy/systemd/jobs-api.service:1-36; `systemctl --user cat jobs-api.service` → 'No files found'; ~/.config/systemd/user contains only jobs-failure@.service, jobs-ingest.service, jobs-ingest.timer
+
+[api] contributor-worker/google-serpapi-worker.py has no deployment path at all.
+    why: By design the worker runs on volunteers' machines, so absence from deploy/ is expected — but combined with zero rows in `contributors` and `api_keys`, it means no copy of this script has ever been handed to anyone.
+    cite: grep -rn 'google-serpapi-worker' across the tree returns no .service/.timer/.sh hit; backend/api/contributor-worker/google-serpapi-worker.py:29-31 is a suggested crontab line in a docstring
+
+[api] `daily_budget` in config/google-queries.json is enforced PER REQUEST, not per day.
+    why: The only thing that actually limits a slug to one fetch per day is MIN_HOURS_BETWEEN_RUNS=20 (query_claims.py:447). The pipeline has the same semantics (backend/ingest/google-serpapi.py:76-80 calls it 'a plain constant'), so this is consistent rather than divergent — but the name promises a daily cap the code does not implement, and the config _comment at google-queries.json:2 reads it as a daily budget.
+    cite: backend/api/query_claims.py:441-452 — `claimed_in_bucket = 0` is reset on every invocation of pick_stale_queries_by_bucket
+
+[api] The 50/day claim cap is loose relative to the bank it protects: the bank holds 32 slugs total.
+    why: A single contributor issuing seven max=5 requests could lock every slug in the bank in one day and still be under the cap. The MIN_HOURS_BETWEEN_RUNS guard and the CLAIM_TTL are what actually bound the damage; the cap only binds once released claims start recycling. Worth knowing before treating 50 as a meaningful ceiling.
+    cite: backend/api/app.py:52-54; backend/config/google-queries.json (32 queries across 4 buckets)
+
+[api] `/openapi.json` is exposed unauthenticated while docs_url/redoc_url are explicitly disabled.
+    why: Disabling the docs pages but leaving the schema route reads as an oversight rather than a decision — nothing in the file argues for it either way. Low severity (the routes are documented in the repo anyway), but it is the one public surface the security docstring at app.py:10-27 does not account for.
+    cite: backend/api/app.py:171; confirmed by enumerating app.app.routes
+
+[api] backend/api/.venv/pyvenv.cfg records `command = /usr/bin/python3 -m venv /home/eric/apps/jobs/api/.venv` — a path that has not existed since the backend/ split.
+    why: Harmless (the cfg's `command` line is informational), but it means the venv predates the split and has not been rebuilt. Anyone recreating it from that line would put it in the wrong place.
+    cite: backend/api/.venv/pyvenv.cfg:5; commit e565760 'Split the tree into backend/ and frontend/'
+
+[api] contribution_report.py has never had a row to report on.
+    why: Its findings logic, thresholds and NULL-handling are exercised only by tests. It is correct-by-test and unexercised-by-use; its own docstring at :71-79 acknowledges there is no observed distribution of worker behaviour to derive thresholds from.
+    cite: backend/api/contribution_report.py (entire file); live `SELECT COUNT(*) FROM submission_log` → 0
+
+[api] If uvicorn is ever started by hand rather than by systemd, DATABASE_URL is unset and the process silently falls back to a password-less `postgresql://jobs_api@localhost:5432/jobs`.
+    why: Not a defect — the fallback carries no password so it fails to authenticate — but it means the documented `uvicorn app:app --port 8420` in app.py's own RUN LOCALLY block (app.py:29-31) does not work without `set -a; . .env` first, and the failure surfaces as a Postgres auth error rather than as 'you forgot the env file'.
+    cite: backend/api/query_claims.py:78-80; no .env loader exists in api/ (grep for envfile/dotenv returns nothing)
+
+[ingest] run-daily.py's docstring says 'nine steps' / 'all nine' / 'the nine scripts listed in STEPS' in six places, but STEPS holds 14 entries.
+    why: Stale prose. The runtime output is correct because it uses len(STEPS) (run-daily.py:347, 380), so nothing breaks — but anyone budgeting the nightly window or reading the summary from the docstring gets the wrong count. The list grew by workday, nyc-open-data, searchqueries, ats-discover and cohort without the prose being updated.
+    cite: backend/run-daily.py:15, 18, 34, 77, 115, 260, 294 vs STEPS at backend/run-daily.py:120-254
+
+[ingest] Two implementations of the SerpApi fetch and two of the Apify fetch coexist, and the SerpApi pair disagree on what a 200-with-`error` means.
+    why: A landmine, not dead code. ingest/google-serpapi.py raises RuntimeError on ANY error string, so 'Google hasn't returned any results' — a successful search that found nothing — is recorded as a query failure and lands in query_errors; the serp/ copy treats it as an empty answer. The credit is spent either way, so the nightly bank and the search runner report the same event differently. Any fix applied to one copy will not reach the other.
+    cite: backend/ingest/google-serpapi.py:305-337 vs backend/serp/providers/serpapi.py:126-147; backend/ingest/google-apify.py:165-199 vs backend/serp/providers/apify.py:253-297
+
+[ingest] `import urllib.request` in ingest/hn-hiring.py:78 and ingest/google-apify.py:77 with no call site.
+    why: Residue of the D31 migration to lib.http. Harmless, but it makes a grep for 'which ingest scripts still do raw HTTP' return two false positives — which is exactly the question the D31 register entry was answering.
+    cite: backend/ingest/hn-hiring.py:78; backend/ingest/google-apify.py:77
+
+[ingest] serp.ORDER is documented as 'the router's fallthrough order' but nothing ever falls through.
+    why: SearchQueryProvider resolves one provider at construction and every serp.call() passes that same name. A ProviderRefused on serpapi stops the run rather than trying apify. The comment describes a router that was descoped; today ORDER only supplies the default when provider is None.
+    cite: backend/serp/__init__.py:73-85 vs backend/serp/dispatch.py:97-100 and backend/serp/__init__.py:219
+
+[ingest] ingest/workday.py's `Fetched`-equivalent tolerance means a deficit of up to 19 postings is never fatal.
+    why: Deliberate and documented (churn vs a lost page), but it is a real blind spot: on a 20-per-page walk, losing exactly one page's worth minus one posting reads as drift. The drift is reported as an ALERT (workday.py:1178-1182) rather than silently, which is what makes it acceptable — but the alert is a printed line, not an exit code.
+    cite: backend/ingest/workday.py:521-533
+
+[ingest] config/volume-floors.json's `searchqueries` and `workday` floors are self-declared as unmeasured.
+    why: Both floors will fire or fail to fire for reasons nobody has measured. The file says so honestly, but a downstream task that treats these nine floors as uniformly evidenced will be wrong about two of them.
+    cite: backend/config/volume-floors.json sources.searchqueries._comment ('NO HISTORY EXISTS FOR THIS SOURCE'); sources.workday._comment ('Only two runs of history')
+
+[ingest] api/query_claims.py:494 defines a function literally named `upsert` that returns an UpsertResult.
+    why: Not a defect today — it wraps _lib_upsert_checked and app.py reads .errors — but the name is the exact shape of the landmine the repo has a rule against, and a `grep -rn 'upsert('` audit hits it first. Its docstring says 'It still unpacks to (new, updated, unchanged)', which is an invitation to the three-tuple bug.
+    cite: backend/api/query_claims.py:494-531; backend/api/app.py:428-435
+
+[deploy] cloudflared.service cannot start on this machine
+    why: ExecStart names /usr/local/bin/cloudflared, which does not exist; `which cloudflared` finds nothing and /usr/local/bin holds only `ollama`. %h/.cloudflared/ — both the config symlink target and the credentials-file directory — is also absent.
+    cite: deploy/systemd/cloudflared.service:19
+
+[deploy] deploy/cloudflared/config.yml is an unfilled template
+    why: tunnel, credentials-file and both hostnames are `<...>` placeholders. `cloudflared tunnel ingress validate` would fail. Nothing in this repo can fill them — they come from a Cloudflare account, a domain and one `cloudflared tunnel create`, which the file says outright.
+    cite: deploy/cloudflared/config.yml:30,36,64,82
+
+[deploy] Twelve of fifteen units are not installed; the three that are, are stale copies not symlinks
+    why: jobs-webapp, jobs-api, cloudflared, jobs-backup{,.timer}, jobs-backup-verify{,.timer}, jobs-volume-check{,.timer} and jobs-volume-digest{,.timer} are absent from ~/.config/systemd/user/ entirely. The three present are regular files dated 2026-07-26; every neighbouring garmin/mediaserver unit IS a symlink into its repo. Editing deploy/systemd/ today changes nothing that runs.
+    cite: ls -la /home/eric/.config/systemd/user/ vs deploy/systemd/
+
+[deploy] The volume alarm has no data and no timer
+    why: backend/.run-volumes.jsonl does not exist because volume_floors.record_run landed in c4cff65 (2026-08-02 07:22), after that morning's run. If jobs-volume-check.timer were installed it would have alerted at 09:00 with no_history; it is not installed, so the alarm the whole task-33 monitoring section is about is currently inert in both directions.
+    cite: cd backend && python3 tools/volume-check.py -> exit 1, 'no_history'
+
+[deploy] 'nine steps' is wrong in three places
+    why: STEPS holds fourteen entries today (ats-discover, 8 ingest scripts, searchqueries.py, extract.py, match.py, score.py, cohort.py). The unit comment says nine, the docstring says nine, and the 2026-08-02 journal line says twelve. A reader sizing TimeoutStartSec or the LLM budget off these numbers is reading a figure that has drifted twice.
+    cite: deploy/systemd/jobs-ingest.service:41; backend/run-daily.py:77
+
+[deploy] backend/webapp/.env.example understates the live file
+    why: JOBS_ADMIN_DATABASE_URL and SESSION_COOKIE_SECURE are set in the live .env and absent from the example. Since the .env is gitignored, the example is the only description of the service's env that ships — a fresh clone would omit the admin URL used for DDL and would silently take the SESSION_COOKIE_SECURE default.
+    cite: grep -o '^[A-Z_0-9]*=' backend/webapp/.env vs backend/webapp/.env.example
+
+[deploy] GEMINI_API_KEY is a dead runtime key
+    why: No os.environ read anywhere in the pipeline. Its only uses are a shell example in tools/compare-models.py:17 and a comment in tests/test_lib_envfile.py:33, i.e. it exists for manual `--model` specs, not for any scheduled run.
+    cite: backend/.env.example:67; grep -rn GEMINI backend --include=*.py
+
+[deploy] jobs-api.service is documented as deprecated but the ingress rule is coupled to it
+    why: The unit's own comment says delete this unit and the second ingress rule TOGETHER, because 'an ingress hostname with nothing listening behind it is a 502 that looks like an outage'. There is no test or check enforcing that pairing, so retiring one and forgetting the other is a live hazard.
+    cite: deploy/systemd/jobs-api.service:4-9; deploy/cloudflared/config.yml:82-83
+
+[deploy] backend/config/companies.json is retired as a runtime input but is still 13KB of tracked config
+    why: ingest/ats.py no longer reads it nightly (task 17, 2026-07-28); the roster is the company_ats table. Its is_nyc_hq / is_ai_focused fields are documented as NO LONGER READ, with the jobs.company_is_nyc_hq / company_is_ai_focused columns written by six ingest scripts and consumed by nothing.
+    cite: backend/config/companies.json _comment, _comment_retired_fields
+
+[deploy] criteria.json's whole unknown_penalty block is inert
+    why: The file is a template imported once by migrate_profiles.py; jobs.profiles.criteria_json is authoritative. Until someone runs `migrate_profiles.py --apply --bump`, match.py's .get(...,0) lookups all return 0 and score_job() returns byte-identical results — so editing the numbers here has no effect anyone can observe.
+    cite: backend/config/criteria.json _unknown_penalty_inert
+
+[deploy] scripts/tranche-two-launcher.sh is untracked, ignored, and drives completed work
+    why: It hard-codes /home/eric/apps/jobs and a tmux session, and runs tranche_two tasks 07-13 which are done. Mode 0711 means it is executable-but-unreadable to others. Its embedded prompt tells the agent to run `python3 -m unittest discover -s backend/tests` from the repo root, which is not how this repo's tests are invoked (they need cwd=backend and `-s tests`).
+    cite: .gitignore:66-87; scripts/tranche-two-launcher.sh:132-138
+
+[deploy] jobs-backup and jobs-backup-verify have no [Install] section
+    why: Correct for timer-activated oneshots, but it means `systemctl --user enable jobs-backup.service` fails; only the .timer can be enabled. Worth knowing before someone reads the failure as a broken unit file.
+    cite: deploy/systemd/jobs-backup.service (ends at line 32); deploy/systemd/jobs-backup-verify.service (ends at line 24)
+
+[evals] audit-docs.py's module docstring says 'Check the SIX mechanically-checkable rules' and its 'THE SIX CHECKS' section lists only C1–C6, while CHECKS at line 860 has seven and the CLI epilog at line 958 says 'the checks, all seven by name' and documents C7.
+    why: The file's own header contradicts its behaviour. Anyone reading the top of the file — which is the documented convention in this repo — will believe C7 does not exist. C7 is the only check that measures VOLUME rather than consistency, and it is the one that exists because HANDOFF.md regrew four fifths of an archival with all six others green.
+    cite: backend/tools/audit-docs.py:2, 32-46 vs :860, :958-983
+
+[evals] A systematic ~+280-line drift in labels.py's internal `file:line` self-citations. `_item_key()` is cited as labels.py:1329 but is at 1595 (1329 is next_item()); consensus() is cited as labels.py:1466-1471 but is at 1731 (1466 is inside next_item()); model_vs_human()'s no_consensus is cited as labels.py:1608 but model_vs_human is at 1788 (1608 is `return grouped`).
+    why: The repo's trustworthiness convention is 'cite file:line'. These citations resolve to unrelated code, so a reader following them lands on the wrong function and may conclude the argument is wrong. Cross-module citations to metrics.py are mostly correct, which makes the broken intra-file ones harder to spot.
+    cite: backend/evals/labels.py:2483, 2510-2511 versus the actual definitions at :1595, :1731, :1788
+
+[evals] labels.py cites `metrics.py:419-429` and `metrics.py:419-421` as the location of selfcheck()'s per-platform / by_platform block. Line 419-421 in metrics.py is the PESSIMISTIC tie branch of average_precision. The block actually referenced is at metrics.py:1035-1045.
+    why: Same class as above but crossing a module boundary, where it is harder to notice. It sits in the docstring of `Interpretable.floor_by_platform`, which is the field that carries the floor's clean/messy breakout — i.e. the reader most likely to follow it is the one checking whether the refusal is weakened.
+    cite: backend/evals/labels.py:2000, 2063 versus backend/evals/metrics.py:419-421 and :1035-1045
+
+[evals] tools/learned-ranker-probe.py imports numpy and seven sklearn modules; neither is in the dependency set (`psycopg[binary]` is the pipeline's only third-party dependency, and the top level uses system python3 with no venv).
+    why: This 657-line probe cannot run on a clean checkout. metrics.py explicitly reimplemented average_precision and bootstrap_delta in stdlib for exactly this reason and says so. Any figure quoted from this probe was produced in an environment nobody can reproduce from the repo — and worse, it fits against job_scores.fit_score, which is CLAUDE.md's L1 layer.
+    cite: backend/tools/learned-ranker-probe.py:128-136; noted independently at backend/evals/metrics.py:275-279 and :484-490
+
+[evals] tools/claude-ceiling-test.py extracts every metric by regex-scraping claude-bench.py's human-readable stdout (json_ok, latency/batch, fit_score, cost, tokens per job, track_agree).
+    why: Six regexes coupled to another script's print formatting. A whitespace or wording change in claude-bench.py's summary block makes `parse_summary()` silently return a dict missing those keys — no error, no exception, just an absent metric in the combined table. That is this system's documented failure mode (silence) in a measuring instrument.
+    cite: backend/tools/claude-ceiling-test.py:46-82
+
+[evals] Two committed n=115 selfcheck runs on the same frozen corpus and the same model disagree substantially: ai_involvement agree2 0.9478 (2026-07-28) versus 0.9043 (2026-08-02); seniority_level 0.8522 versus 0.8957; remote_policy 0.8174 versus 0.9130; tech_stack 0.7043 versus 0.7739.
+    why: Not a defect — the .md record beside the newer file explicitly names the discrepancy and observes the Wilson intervals overlap heavily — but it is a landmine for anything downstream. `.claude/CLAUDE.md` quotes the 07-28 pair (85.2% seniority / 94.8% ai_involvement) as THE production floor. Anyone re-running the instrument today gets different numbers, and only the metric name plus the run date distinguishes them. The newer run is also the only one carrying a role_track floor.
+    cite: docs/ingestion_tests/selfcheck-n120-2026-07-28.json versus docs/ingestion_tests/selfcheck-n120-2026-08-02.json, .fields.<field>.overall.agree2
+
+[evals] tools/compare-models.py:84 and tools/claude-bench.py:113 still select their corpus with `ORDER BY j.first_seen DESC LIMIT %s` against production.
+    why: These are the last two live instances of the pattern the whole evals package exists to replace (evals/__init__.py:7-11, corpus.py:3-12). Any model comparison made with either tool is not reproducible: a regression and a corpus shift are indistinguishable. Neither tool has a --corpus flag pointing at a frozen fixture, unlike cost-test.py which does.
+    cite: backend/tools/compare-models.py:84; backend/tools/claude-bench.py:113
+
+[evals] tools/compare-models.py's spec parser splits on every '@' and rejoins the middle, treating the LAST field as the key — a latent truncation bug for any API key containing '@'.
+    why: `m@https://x/v1@sk-a@b` yields base_url='https://x/v1@sk-a' and key='b'. Keys containing '@' are ordinary; base URLs containing a bare '@' are not. models.py exists to supersede this and uses split('@', 2), but compare-models.py was never migrated.
+    cite: backend/evals/models.py:19-31 (which names compare-models.py:213 as the wrong one) 
+
+[evals] `evals label status` reports 2 labellers and 36 distinct postings against a printed threshold of '>=100 distinct from >=5 labellers'.
+    why: Every model-vs-human figure in this repo is denominated by an inter-annotator ceiling computed from 10 overlap postings labelled by 2 people. inter_annotator()'s `single_labeller_items` and is_thin() exist to make that visible, but the ceiling itself is thin enough that the refusal machinery (Uninterpretable) is doing most of the load-bearing work, not the number.
+    cite: backend/evals/fixtures/golden-v1.jsonl (271 labels, 2 labeller ids, 36 distinct job_ids); threshold text at backend/evals/__main__.py:455-456
+
+[evals] `corpus.snapshot()`'s `--profile` default resolves through `score.load_persona()`, and relevance-report.py's default profile does the same — which today resolves to `tech`, a profile the tool itself reports as INACTIVE ('extract.py and match.py do not see it ... these tiers are a projection, not production behaviour').
+    why: The default invocation of the mandatory post-edit relevance check reports on a profile the pipeline does not run. The NOTE line is printed, so it is not silent, but a reader skimming for the tier percentages gets numbers about a projection. Getting `pursuit` requires passing --profile explicitly.
+    cite: backend/tools/relevance-report.py:146, 163-166; output of `python3 tools/relevance-report.py --dead`

@@ -1,0 +1,137 @@
+# 27 of 168 disagreements are against files that SURVIVE deleting docs/
+# (.claude/CLAUDE.md and the root READMEs). UNVERIFIED - no skeptic checked these.
+
+[high] .claude/CLAUDE.md:90-91  (stale)
+    doc:  Today, Job detail and Saved are built; search, onboarding and the phone test are not — `docs/tasks/refactor/tranche_six/32-frontend.md` has the table.
+    code: Five screens exist and all five are routed. `frontend/js/search.mjs` (a full catalogue + results screen, 600+ lines) and `frontend/js/onboarding.mjs` (two sub-screens, `export const SCREENS = ["form", "seed"]`) are both real modules wired into the router. ROUTES has five rows: job, saved, search, on
+    cite: frontend/js/app.mjs:120-137; frontend/js/search.mjs:71-77; frontend/js/onboarding.mjs:51; frontend/index.html:45-48; `ls frontend/js/` → 13 modules including search.mjs and onboarding.mjs
+
+[high] README.md:14  (stale)
+    doc:  | `frontend/` | the surfacing layer itself | not started |
+    code: frontend/ is a complete shipping client: one HTML shell, a 553-line stylesheet, 13 .mjs modules, five routed screens, 30 shipped fixtures, two checkers wired into the backend suite. `python3 frontend/verify_fixtures.py` exits 0 and `node frontend/check_client.mjs` reports 54 checks, 0 failed. This R
+    cite: frontend/index.html; frontend/app.css; `ls frontend/js/` → 13 modules; backend/tests/test_frontend_fixtures.py:118-262
+
+[high] README.md:56-58  (stale)
+    doc:  ## frontend/ — Still empty — nothing renders a job to a human yet. What changed on 2026-07-26 is that the half below the UI now exists, so a frontend has something to call rather than a database to reinvent access to.
+    code: Same as above. frontend/js/detail.mjs renders title, meta, gap_bridging_angle, cohort_signal, risk_factors, key_technologies and description_text; frontend/js/today.mjs renders the grouped daily list.
+    cite: frontend/js/detail.mjs:24-80; frontend/js/today.mjs:53-98
+
+[high] backend/README.md:15-27  (stale)
+    doc:  ## Sources — table listing ingest/ats.py, builtin-nyc.py, weworkremotely.py, hn-hiring.py, google-serpapi.py, google-apify.py and score.py
+    code: The table omits two of the eight nightly ingest scripts entirely: `ingest/workday.py` (task 18, 1,204 lines, in STEPS) and `ingest/nyc-open-data.py` (task 14, 759 lines, in STEPS). This is the file the repo's own README points a new operator at for setup and operation.
+    cite: backend/ingest/workday.py; backend/ingest/nyc-open-data.py; backend/run-daily.py STEPS entries 3 and 5
+
+[high] backend/README.md:59-61  (stale)
+    doc:  The repository root above holds only this directory and a sibling `frontend/`, which is empty — see the root `README.md`.
+    code: frontend/ holds index.html, app.css, 13 .mjs modules, serve.py, verify_fixtures.py, check_client.mjs and 47 fixture files. The repo root also holds deploy/, docs/, scripts/ and README.md. And it forwards the reader to the root README.md, which repeats the same false claim — two documents corroborati
+    cite: `ls frontend/` and `ls /home/eric/apps/jobs`
+
+[medium] docs/ingestion_tests/README.md:20-25  (stale)
+    doc:  | 03 | Metrics and golden set | … | tooling built — **see task 07 below** |  and  | 04 | [Score validation](04-score-validation.md) | a `score` task, `score.normalize()`, closing audit item 8 | **todo** |
+    code: Row 04 is wrong. Task 08 landed in e1cdf7b ('Score validation, score.normalize(), D15/D16/D43/D44 (tranche_two/08)'), score.normalize() is live, and docs/score-validation.md (420 lines, kind: record) reports its DoD item by item as met. Row 03 is also understated: the golden set now exists (backend/
+    cite: backend/score.py (def normalize; the four version columns at score.py:823-862); backend/evals/fixtures/golden-v1.jsonl; git: `git log --oneline --all | grep -i 'score validation'` -> e1cdf7b
+
+[medium] .claude/CLAUDE.md:192-193  (never-true)
+    doc:  Read `docs/DOCS-POLICY.md` before creating or retiring any document. Seven rules, and every one of them has a script or is marked unenforced.
+    code: Rule 5 has no check and is NOT marked unenforced in DOCS-POLICY.md. audit-docs.py's own docstring says so in terms: "Rule 5 -- 'promote durable content out of bound contexts' -- is NOT checked and cannot be." Grepping DOCS-POLICY.md for 'unenforced' returns only lines 169, 203, 210 and 261 — the 'at
+    cite: backend/tools/audit-docs.py:48-51 (the 'Rule 5 ... is NOT checked' paragraph); docs/DOCS-POLICY.md:136-146; backend/tools/audit-docs.py:860 (`CHECKS = ("C1"…"C7")`)
+
+[medium] .claude/CLAUDE.md:29  (stale)
+    doc:  python3 run-daily.py                             # all nine steps, in order
+    code: STEPS holds 14 entries: tools/ats-discover.py, 8 ingest scripts, searchqueries.py, extract.py, match.py, score.py --active-within-days 7, cohort.py. Reproduced with `cd backend && python3 -c "import ast;t=ast.parse(open('run-daily.py').read());[print(len(ast.literal_eval(n.value))) for n in ast.walk
+    cite: backend/run-daily.py STEPS (14 items, verified by ast.literal_eval)
+
+[medium] .claude/CLAUDE.md:72-73  (never-true)
+    doc:  Each has its own `.env`, its own venv and its own Postgres role, and **none imports another**; they share only `schema.py` and `lib/`, reached by a one-level-up `sys.path` insert.
+    code: webapp/ additionally imports the pipeline's `profiles`, `searchnorm` and `evals.labels`; api/ additionally imports `google_jobs.py`. 'only schema.py and lib/' understates the shared surface by four modules — which matters because each is a coupling a change to the pipeline can break in another proce
+    cite: backend/webapp/onboarding.py (imports profiles), backend/webapp/search.py:55 (import searchnorm), backend/webapp/label.py:156 (`from evals import labels as _labels`), backend/webapp/schema_web.py:715; backend/api/query_claims.py:61 (re-exports google_jobs.normalize_job)
+
+[medium] .claude/CLAUDE.md:142-144  (stale)
+    doc:  **Never unpack `upsert()` as a bare three-tuple.** `UpsertResult.__iter__` yields three values and `.errors` is never read — the defect in at least four ingest scripts. Use `upsert_checked`.
+    code: Two things are wrong. (a) `.errors` IS read, in seven of the nine ingest scripts and in api/. (b) Zero bare-tuple unpacks remain anywhere in backend/ingest/ — `grep -rn '= upsert(' backend/ingest/` returns nothing, and two tests assert the absence by reading source text. The historical count was eig
+    cite: backend/lib/upsert.py:250 ('what eight call sites wrote'); backend/ingest/ats.py:1203, builtin-nyc.py:523, weworkremotely.py:301, google-apify.py:294, hn-hiring.py:553, nyc-open-data.py:734, workday.py:1152 (all read `.errors`); backend/tests/test_ats_new_platforms.py:657-664
+
+[medium] .claude/CLAUDE.md:252  (stale)
+    doc:  Do not reimplement relevance matching in Python. One implementation, two callers.
+    code: There is one implementation (relevance.py) but far more than two callers: `grep -rln 'import relevance'` finds 23 files, of which the non-test production callers are extract.py:108, match.py:54, profiles.py:43, score.py:250, ingest/workday.py:192, ingest/hn-hiring.py:89, scripts/backfill-scores.py:7
+    cite: backend/ingest/hn-hiring.py:180 (`re.compile("|".join(p.replace("\\y", "\\b") for p in patterns), re.IGNORECASE)`); backend/extract.py:108, backend/match.py:54, backend/profiles.py:43, backend/ingest/workday.py:192
+
+[medium] .claude/CLAUDE.md:123-129  (internally-inconsistent)
+    doc:  **Versions are cache keys.** Every derived row records the version of everything upstream; a row is stale iff any recorded version differs from current. On `job_scores` these are `facts_version`, `persona_sha`, `prompt_version` and `criteria_version`
+    code: The rule as stated is false in two ways and is contradicted three lines later by the same paragraph. (a) `criteria_version` is excluded from the staleness predicate — score.py's `_STALE_ANY` has exactly three arms. (b) Each arm is guarded by `IS NOT NULL` and uses `<>` rather than `IS DISTINCT FROM`
+    cite: backend/score.py:384-387 (three arms, IS NOT NULL + `<>`); backend/schema.py:764-769 ('criteria_version -- RECORDED FOR PROVENANCE, DELIBERATELY NOT A CACHE KEY'); backend/tests/test_score_versions.py:277-296
+
+[medium] .claude/CLAUDE.md:156-165  (unverifiable-claim)
+    doc:  **85.2% [77.6–90.6] on `seniority_level`, 94.8% [89.1–97.6] on `ai_involvement`**, n=115, both **`agree2`** (task 06). Any measurement without that floor beside it is uninterpretable.
+    code: The figures reproduce exactly from docs/ingestion_tests/selfcheck-n120-2026-07-28.json (seniority_level agree2 0.85217 [0.77597, 0.90561]; ai_involvement 0.94783 [0.89083, 0.97587]; unanimous 0.86957 → 87.0%; pairwise 0.90725 → 90.7%; n_comparable 115, repeat 3). BUT a second committed run on the sa
+    cite: docs/ingestion_tests/selfcheck-n120-2026-07-28.json .fields.{seniority_level,ai_involvement}.overall.agree2 vs docs/ingestion_tests/selfcheck-n120-2026-08-02.json same paths
+
+[medium] .claude/CLAUDE.md:176-178  (figure-without-instrument)
+    doc:  **Never select an eval corpus with `ORDER BY first_seen DESC`.** It is ~85% greenhouse/ashby — clean ATS postings — so it measures the easy sources.
+    code: The ~85% figure has no instrument anywhere in the tree. It is restated in ten places (backend/extract.py:587, backend/evals/labels.py:644, backend/tools/hydrate-labelled-corpus.py:36, docs/MEASUREMENT-TRAPS.md:28, docs/tasks/refactor/README.md:201, and five more), every one of them citing CLAUDE.md 
+    cite: backend/evals/corpus.py:112-149 and its docstring; `grep -rn '85%' backend/ docs/` → 10 restatements, 0 instruments
+
+[medium] README.md:18  (stale)
+    doc:  Pulls tech/AI postings from seven independent sources into one Postgres table
+    code: Eight ingest scripts run nightly: ats.py, workday.py, builtin-nyc.py, nyc-open-data.py, weworkremotely.py, hn-hiring.py, google-serpapi.py, google-apify.py (ats_sources.py is a library, not a script). ats.py alone reaches six ATS platforms. workday.py and nyc-open-data.py landed as tasks 18 and 14 a
+    cite: `ls backend/ingest/*.py | grep -v ats_sources | wc -l` → 8; backend/run-daily.py STEPS entries 2–9
+
+[medium] README.md:44-45  (names-a-nonexistent-file)
+    doc:  See `backend/README.md` for why, and `~/.hermes/scripts/jobs-ingest-status.sh` for the last run's outcome.
+    code: That file does not exist. `ls ~/.hermes/scripts/` returns autobrr-health-check.py, __pycache__, README.md, slice-e-check.sh, slice-e-wrap.sh. The working command is `journalctl --user -u jobs-ingest.service`, which backend/README.md gives.
+    cite: `ls /home/eric/.hermes/scripts/` → no jobs-ingest-status.sh
+
+[medium] backend/README.md:19  (stale)
+    doc:  | `ingest/ats.py` | 68 companies' Greenhouse / Lever / Ashby APIs | full listing per company |
+    code: Six platforms, not three — Greenhouse, Lever, Ashby, Workable, Recruitee, SmartRecruiters (task 17). And the roster is not 68 companies from a file: it is read from the `company_ats` table via ingest/ats_sources.py, admitting tokens with status `valid` and `unvalidated`.
+    cite: backend/ingest/ats.py:345-533 (six fetchers); backend/ingest/ats_sources.py:18-50, 76-80, 96-160
+
+[medium] backend/README.md:154-157  (stale)
+    doc:  ### 4. Upgrading an existing database — One migration exists, for databases that predate `job_scores` (scores used to be eight columns on `jobs`).
+    code: Ten migrations exist: migrate_ats_descriptions, migrate_company_ats, migrate_description_rehash, migrate_extraction_passes, migrate_google_ids, migrate_posted_at_ts, migrate_profiles, migrate_pursuit_profile, migrate_scores, migrate_score_versions. Two of them (migrate_company_ats) create tables tha
+    cite: `ls backend/migrations/*.py | wc -l` → 10; backend/migrations/migrate_company_ats.py:94-116
+
+[medium] backend/README.md:185-186  (stale)
+    doc:  `run-daily.py` runs all nine steps in order in one process and loads `./.env` itself
+    code: 14 steps. Same drift as CLAUDE.md:29 and run-daily.py's own docstring; run-daily.py's runtime output is correct because it prints len(STEPS).
+    cite: backend/run-daily.py STEPS (14 items)
+
+[low] docs/README.md:48  (stale)
+    doc:  | [`ingest/ats.md`](ingest/ats.md) | How does the Greenhouse/Lever/Ashby board pull work, and what does it do when a board changes? |
+    code: ats.py has pulled SIX ATS vendors since task 17 (597662b, 2026-07-28): greenhouse, lever, ashby, workable, recruitee, smartrecruiters. docs/ingest/ats.md itself opens 'across **six** ATS vendors'. The index line understates the document it indexes by half.
+    cite: backend/ingest/ats.py:536-545 (FETCHERS dict, six entries); docs/ingest/ats.md:26-28
+
+[low] docs/ingestion_tests/README.md:52-55  (stale)
+    doc:  **Inter-annotator, not just intra-.** … With ten labellers the stronger measurement is free: **overlap ~20 postings** across all of them and compare *between* people.
+    code: The shipped default is 10, not ~20: `ls.add_argument("--overlap", type=int, default=10, ...)`, and the drawn set used it — golden-v1.jsonl has exactly 10 overlap postings across 2 labellers, which docs/labelling-report-2026-08-02.md:169 confirms ('**10 postings carry both**, which is the `overlap` b
+    cite: backend/evals/__main__.py (label sample: `--overlap`, default=10, with the coverage-arithmetic help text); docs/labelling-report-2026-08-02.md:169
+
+[low] .claude/CLAUDE.md:61-62  (never-true)
+    doc:  `psycopg[binary]` is the pipeline's only third-party dependency and the intent is that it stays that way
+    code: True of backend/requirements.txt (one line) and of every module under backend/*.py, ingest/, lib/, evals/, serp/ — but backend/tools/learned-ranker-probe.py imports numpy and eight sklearn modules. That script therefore cannot run on a clean checkout, and any figure quoted from it was produced in an
+    cite: backend/tools/learned-ranker-probe.py:128-136; backend/requirements.txt:7
+
+[low] .claude/CLAUDE.md:161-162, 227  (names-a-nonexistent-file)
+    doc:  `AUDIT.md` § *The three self-consistency metrics* owns all three ... on 2026-08-01 this file, `AUDIT.md` and `HANDOFF.md` held three different values
+    code: Neither `AUDIT.md` nor `HANDOFF.md` exists at the repo root or under docs/. Both live at docs/tasks/refactor/. The named section does exist (docs/tasks/refactor/AUDIT.md:83) and does carry a reproducing command, so the substance is right — but the file that opens with 'There is no `tools/` at the re
+    cite: `find . -name AUDIT.md -o -name 'HANDOFF*.md'` → ./docs/tasks/refactor/AUDIT.md, ./docs/tasks/refactor/HANDOFF.md, ./backend/docs/HANDOFF-match-quality.md, ./backend/docs/HANDOFF-multimachine-google-jobs.md
+
+[low] .claude/CLAUDE.md:79-81  (internally-inconsistent)
+    doc:  Run it with `frontend/serve.py`, which mounts the page on the **API's own origin** (`config.PORT`, 8421) rather than a second dev server
+    code: 8421 is the webapp, which this same file's Layout section defines as a separate process from `api/` (the contributor work queue, port 8420). serve.py imports backend/webapp/app.py. Calling 8421 'the API's own origin' collides with the file's own two-page-earlier definition of `api/`.
+    cite: frontend/serve.py:61-78, 162; backend/webapp/config.py:123-124; .claude/CLAUDE.md:69-71 vs :79
+
+[low] .claude/CLAUDE.md:169-171  (stale)
+    doc:  ~~Three of its seven entries~~ **Several of its entries — the file owns the count** were found only after the conclusions they invalidated had been written down as fact.
+    code: The deferral points at a file whose own count is now stale. docs/MEASUREMENT-TRAPS.md:8 still says 'These seven are not', :12 says 'Three of the seven', and :20 says 'Section numbering is kept as `4.1`–`4.7`' — but the file carries 4.1 through 4.8 (4.8 added by task 46) plus eight later promoted bul
+    cite: docs/MEASUREMENT-TRAPS.md:8, 12, 20 vs its own §§ 4.1–4.8 (heading 4.8 at :164)
+
+[low] README.md:37-38  (never-true)
+    doc:  python3 -m unittest discover -s tests -t .   # the guard on row identity
+    code: That command runs the entire suite — 'Ran 1469 tests in 20.026s / OK' — not the row-identity guard. The row-identity guard is `python3 -m unittest tests.test_row_identity` (or with test_lib_contract, 48 tests). The comment mislabels a 20-second full-suite run as a targeted check.
+    cite: `cd backend && python3 -m unittest discover -s tests -t .` → Ran 1469 tests, OK; backend/tests/test_row_identity.py
+
+[low] backend/README.md:110-111  (stale)
+    doc:  a jobs process that fell back would not error — it would create its 13 tables inside somebody else's database
+    code: ensure_schema now creates 14 tables plus the jobs_app view: jobs, job_scores, profiles, job_facts, job_matches, job_events, cohort_signal, job_ingest_state, hn_seen_comments, google_jobs_query_stats, search_queries, search_query_watchers, search_query_signal, search_query_results. Three of the four 
+    cite: backend/schema.py:469-1110 (the fourteen CREATE TABLE statements reached by ensure_schema); backend/schema.py:1010-1110

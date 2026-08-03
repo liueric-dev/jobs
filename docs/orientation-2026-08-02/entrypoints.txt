@@ -1,0 +1,355 @@
+[schema] schema.ensure_schema(conn)  [backend/schema.py:451]
+    invoked_by: Every ingest script (ats.py:1040, workday.py:1099, builtin-nyc.py:449, nyc-open-data.py:643, weworkremotely.py:236, hn-hiring.py:450, google-serpapi.py:347, google-apify.py:209), extract.py:1174, match.py:658, score.py:1106 & 1190, cohort.py:245, searchqueries.py:477, api/query_claims.py:187, webapp/schema_web.py:456, migrations/migrate_posted_at_ts.py:76, migrations/migrate_scores.py:139
+    Creates/refreshes all 14 pipeline tables + jobs_app; idempotent; refuses to run against the events database.
+
+[schema] schema.ensure_app_view(conn)  [backend/schema.py:1208]
+    invoked_by: ensure_schema (schema.py:954) and webapp/schema_web.py:457
+    CREATE OR REPLACE VIEW jobs_app, with a DROP+CREATE fallback on InvalidTableDefinition that silently drops all GRANTs.
+
+[schema] schema.ensure_search_query_schema(conn)  [backend/schema.py:969]
+    invoked_by: ensure_schema (schema.py:952)
+    The four search tables (queries, watchers, signal, results) plus two partial indexes.
+
+[schema] schema.make_job_id(rec)  [backend/schema.py:439]
+    invoked_by: every normalize_*/upsert call site in ingest/
+    The jobs primary key: sha256('platform:token:source_id')[:24], via lib.ids.make_id.
+
+[schema] schema.spec() / schema.google_spec()  [backend/schema.py:394, 422]
+    invoked_by: ingest scripts and api/
+    Builds the lib.upsert.TableSpec for a source; google_spec is the one place the three Google writers agree, and the only sticky one.
+
+[schema] lib.upsert.upsert_checked(...)  [backend/lib/upsert.py:303]
+    invoked_by: ingest scripts; run-daily.parse_upsert_summaries scrapes its output
+    The correct upsert entry point: logs the machine-readable summary line always and raises UpsertErrorRate above 5%.
+
+[schema] lib.dbconn.connect_or_exit(label, schema=...)  [backend/lib/dbconn.py:178]
+    invoked_by: most scripts
+    Standard connection + failure line for cron/alerting.
+
+[schema] lib.state.try_claim / mark_success / get_watermark / set_watermark  [backend/lib/state.py:93, 132, 61, 68]
+    invoked_by: ingest scripts, api/query_claims.py
+    TTL leases on metered datasets and per-dataset watermarks in job_ingest_state.
+
+[schema] score.select_shortlist / score.stale_census  [backend/score.py:418, 494]
+    invoked_by: score.py CLI (--stale-report, --rescore-stale, --rescore-unversioned)
+    The staleness query and its free, no-LLM census report over the same population.
+
+[schema] backend/migrations/*.py main()  [backend/migrations/migrate_scores.py:130 (representative)]
+    invoked_by: a human, by hand
+    Ten manual one-shots, dry-run by default, --apply to write. No runner invokes them.
+
+[stages] run-daily.py main()  [backend/run-daily.py:291-381]
+    invoked_by: systemd user timer jobs-ingest.timer -> jobs-ingest.service, wrapped in `flock -n -E 0`
+    Loads backend/.env via lib.envfile, hard-fails if DATABASE_URL is unset, then subprocess-runs all 14 STEPS in order with os.environ.copy(), parsing each step's `upsert-summary:` lines for written/drop
+
+[stages] extract.py main()  [backend/extract.py:1162-1250]
+    invoked_by: run-daily.py STEPS[10]; also standalone
+    Checks llm.api_key() and llm.model_mismatch(), loads active profiles, builds the relevance union, then runs drain_loop(fetch_batch, run_batch, 3600s). Prints extracted/unusable/deferred/remaining/stop
+
+[stages] match.py main()  [backend/match.py:648-726]
+    invoked_by: run-daily.py STEPS[11]; also standalone
+    argparse (--profile/--rebuild/--dry-run). Loads facts once, loops profiles, calls match_profile() then prune_orphans() per profile inside a try/except so one broken profile does not abort the rest. Ex
+
+[stages] score.py main()  [backend/score.py:1054-1173]
+    invoked_by: run-daily.py STEPS[12] with --active-within-days 7; also standalone
+    argparse (--profile/--limit/--active-within-days/--stale-report/--rescore-stale/--rescore-unversioned). --stale-report short-circuits before the credential check. Filters targets by _recently_active()
+
+[stages] score.run_for_profile()  [backend/score.py:1016-1051]
+    invoked_by: score.main() only (verified: no webapp import)
+    Importable narrative entry point for a future login-triggered path. Its docstring states explicitly that nothing under webapp/ imports this module and main() is the only caller today.
+
+[stages] cohort.py main()  [backend/cohort.py:231-273]
+    invoked_by: run-daily.py STEPS[13]
+    Rebuilds cohort_signal per active profile from the latest save/unsave per (app_user_id, job_id).
+
+[stages] searchqueries.py main()  [backend/searchqueries.py:463-541]
+    invoked_by: run-daily.py STEPS[9]
+    Seed -> fold -> decay -> dispatch. build_provider() returns (provider, why_not) and the reason is printed on stderr every run.
+
+[stages] llm.call() / llm.call_detailed()  [backend/llm.py:187-243]
+    invoked_by: extract.py:1058 and score.py:983 (the only two pipeline call sites)
+    The single LLM transport. Dispatches to _call_http (OpenAI-compatible POST /chat/completions) or _call_claude (`claude -p` subprocess) based on LLM_BACKEND. Calls ratelimit.acquire() BEFORE the reques
+
+[frontend] index.html (the shell)  [frontend/index.html:74]
+    invoked_by: a browser navigating to http://localhost:8421/
+    The only HTML page. Loads ./js/app.mjs as type="module" — that tag is the entire build step. Holds the topbar with four data-tab links, the <main id="view"> render target, the dismiss reason bottom sh
+
+[frontend] app.mjs boot()  [frontend/js/app.mjs:33-50, called at frontend/js/app.mjs:232]
+    invoked_by: module evaluation on page load
+    Registers the event error handler, the sign-out click and the hashchange listener; calls GET /v1/me; on error paints the sign-in screen and stops; otherwise unhides the topbar, nudges a never-onboarde
+
+[frontend] app.mjs route()  [frontend/js/app.mjs:148-163]
+    invoked_by: boot() and the hashchange listener (app.mjs:36)
+    The dispatcher. Hides the toast, tears down the previous screen, stops the IntersectionObserver, resolves the route, marks the tab, awaits show(). A 401/403 escapes to showSignIn; anything else paints
+
+[frontend] serve.py main()  [frontend/serve.py:150-174]
+    invoked_by: cd backend/webapp && .venv/bin/python ../../frontend/serve.py
+    Development launcher. Parses --host (default DEFAULT_HOST=127.0.0.1), computes the origin, prints the CORS/OAuth/TLS warnings, and runs uvicorn on config.PORT.
+
+[frontend] verify_fixtures.py main()  [frontend/verify_fixtures.py:757]
+    invoked_by: python3 frontend/verify_fixtures.py, and backend/tests/test_frontend_fixtures.py:127-136
+    Server-half contract checker. Exits 0 if every fixture under fixtures/shipped/ still matches the shapes parsed out of seven backend modules, 1 otherwise, listing everything wrong.
+
+[frontend] check_client.mjs (top-level await, then the case loop)  [frontend/check_client.mjs:1215-1226]
+    invoked_by: node frontend/check_client.mjs, and backend/tests/test_frontend_fixtures.py:195-202 (skipped where node is absent)
+    Client-half contract checker. Runs 54 cases against the frozen fixtures and against vocabularies re-derived from Python source; exits non-zero on any failure.
+
+[webapp] GET /v1/health  [backend/webapp/app.py:116-121]
+    invoked_by: monitoring / operator
+    No auth. Liveness only, deliberately no database call. Returns {"ok": true}.
+
+[webapp] GET /v1/auth/login  [backend/webapp/auth.py:232-277]
+    invoked_by: browser / a signed-out visit to /v1/label
+    No auth. 503 if GOOGLE_CLIENT_ID/SECRET unset. Mints state+nonce+PKCE verifier, INSERTs oauth_logins (with safe_next_path(next)), 302s to accounts.google.com with scope 'openid email profile' and prom
+
+[webapp] GET /v1/auth/callback  [backend/webapp/auth.py:280-362]
+    invoked_by: Google's redirect
+    No auth (this is what creates it). Redeems oauth_logins single-use with DELETE..RETURNING, prunes expired logins, POSTs Google's token endpoint over httpx, validates id_token claims incl. nonce, resol
+
+[webapp] POST /v1/auth/logout  [backend/webapp/auth.py:430-447]
+    invoked_by: client
+    Cookie optional. UPDATEs app_sessions.revoked_at where token_hash matches and revoked_at IS NULL, deletes the cookie repeating path/httponly/secure/samesite, returns {"ok": true} with 200 even when th
+
+[webapp] GET /v1/me  [backend/webapp/auth.py:450-459]
+    invoked_by: client on load
+    require_user. Touches no jobs table — returns {email, display_name, profile, is_admin} straight off the session join.
+
+[webapp] GET /v1/jobs  [backend/webapp/jobs.py:398-524]
+    invoked_by: frontend client
+    require_user. Params: limit (1..100, default 25), cursor, q (ILIKE title/company), remote, nyc, min_score, since, include_dismissed (default false). Reads jobs_app LEFT JOIN LATERAL job_events (by app
+
+[webapp] GET /v1/jobs/{job_id}  [backend/webapp/jobs.py:531-573]
+    invoked_by: frontend client
+    require_user. Same joins plus description_text; does NOT filter dismissals so undo stays reachable. 404 'no such job for this profile' when the row is absent or belongs to another profile (deliberatel
+
+[webapp] POST /v1/events  [backend/webapp/jobs.py:856-973]
+    invoked_by: frontend client; also called in-process by onboarding.record_seed_judgements
+    require_user. Body {events: [{job_id, event, rank?, dwell_ms?, reason?}] (max 200), request_id}. validate_batch fails the WHOLE batch on unknown/server-derived event, missing request_id, missing rank 
+
+[webapp] POST /v1/searches  [backend/webapp/search.py:152-209]
+    invoked_by: frontend client
+    require_user. Body {text, location?, chips?}. Normalises via searchnorm.validate (400 in the contract envelope on InvalidQuery), enforces the 20-watch cap, find-or-creates search_queries in one statem
+
+[webapp] GET /v1/searches  [backend/webapp/search.py:212-236]
+    invoked_by: frontend client
+    require_user. scope=mine|suggested (regex-pinned), limit 1..100. 'mine' = rows the caller watches; 'suggested' = source IN ('seeded','track') AND retired_at IS NULL. There is deliberately no third 'ev
+
+[webapp] GET /v1/searches/{query_id}  [backend/webapp/search.py:239-249]
+    invoked_by: frontend client
+    require_user. One query row + bucket + own watch state; 404 'no such search' rather than 403.
+
+[webapp] POST /v1/searches/{query_id}/watch  [backend/webapp/search.py:252-274]
+    invoked_by: frontend client
+    require_user. 404 if the query does not exist; cap-checked; INSERTs/reactivates the watcher row; returns the query row.
+
+[webapp] POST /v1/searches/{query_id}/unwatch  [backend/webapp/search.py:277-298]
+    invoked_by: frontend client
+    require_user. POST not DELETE because CORS allows only GET/POST/OPTIONS. UPDATEs removed_at; returns the query row.
+
+[webapp] GET /v1/searches/{query_id}/results  [backend/webapp/search.py:301-390]
+    invoked_by: frontend client
+    require_user. jobs_app JOIN search_query_results plus the same three state joins and the same ORDER_BY and cursor as /v1/jobs. Returns {request_id, query_id, jobs[...], next_cursor, profile}. Never re
+
+[webapp] GET /v1/onboarding  [backend/webapp/onboarding.py:517-531]
+    invoked_by: first-run client
+    require_user. Reads app_users LEFT JOIN builder_profiles; returns {onboarding:{completed, completed_at, prior_domain, prior_years}, profile}.
+
+[webapp] POST /v1/onboarding  [backend/webapp/onboarding.py:534-607]
+    invoked_by: onboarding screen (not yet built client-side)
+    require_user. Body has prior_domain, prior_years, situation, location_pref, remote_pref, comp_floor, schedule_constraints, seed_judgements (max 40); every field optional, all validated in the handler 
+
+[webapp] GET /v1/label  [backend/webapp/label.py:266-351]
+    invoked_by: a Builder volunteer pasting a link
+    Server-rendered HTML. Signed-out → 302 to /v1/auth/login?next=/v1/label instead of 401. ?round=1|2 (allowlist of two), ?blank=1. Reads the active eval label set, next unlabelled item, progress, and th
+
+[webapp] POST /v1/label  [backend/webapp/label.py:354-463]
+    invoked_by: the label form
+    require_user (401 JSON, no redirect). Manual urlencoded parse, 413 over 64 KiB, 415 on wrong content type, 404 if the posting is not in the label set, 400 on round-2 violations. Writes eval_labels via
+
+[webapp] GET /v1/label/progress  [backend/webapp/label.py:466-474]
+    invoked_by: operator / curious client
+    require_user. JSON {label_set, done, total} for the caller only.
+
+[webapp] GET / and static assets (only under frontend/serve.py)  [frontend/serve.py:70-78]
+    invoked_by: browser, when the process is launched via frontend/serve.py
+    StaticFiles(directory=frontend/, html=True) mounted at "/" on this same app AFTER every router, so /v1/* still resolves and "/" serves index.html. Not present when the service is started with `uvicorn
+
+[api] GET /v1/health  [backend/api/app.py:255-257]
+    invoked_by: cloudflared ingress validation / any caller
+    No auth, no DB. Returns {"ok": true}. Not a readiness check.
+
+[api] POST /v1/queries/claim  [backend/api/app.py:260-329]
+    invoked_by: contributor-worker/google-serpapi-worker.py:112
+    Bearer auth. Enforces the 50/day claim cap (429 when hit), loads the query bank (500 if unreadable), atomically claims up to min(req.max<=5, 50-used) stalest queries across buckets, writes one submiss
+
+[api] POST /v1/queries/{dataset:path}/submit  [backend/api/app.py:332-456]
+    invoked_by: contributor-worker/google-serpapi-worker.py:148
+    Bearer auth. 413 over 2 MiB before parsing; 400 on malformed body with an input-free detail; 409 unless holds_claim(); 400 over 50 jobs (logged). Empty array releases the claim and does NOT advance th
+
+[api] POST /v1/queries/{dataset:path}/release  [backend/api/app.py:459-475]
+    invoked_by: contributor-worker/google-serpapi-worker.py:138
+    Bearer auth. 409 unless holds_claim(). NULLs claimed_at/claimed_by/claim_granted_at without touching last_success_at, and logs a 'release' row with the caller-supplied reason truncated to 500 chars.
+
+[api] GET /openapi.json  [backend/api/app.py:171 (implicit; confirmed by enumerating app.app.routes)]
+    invoked_by: any caller
+    FastAPI's auto-generated schema. Unauthenticated. docs_url and redoc_url are disabled but this is not.
+
+[api] manage_users.py (CLI: init-schema | create | list | revoke)  [backend/api/manage_users.py:151-173]
+    invoked_by: operator, by hand on the box
+    Local-only admin CLI. init-schema is the only DDL path and uses JOBS_ADMIN_DATABASE_URL; the rest run on the restricted role.
+
+[api] contribution_report.py (CLI)  [backend/api/contribution_report.py:397-422]
+    invoked_by: operator, by hand on the box
+    Read-only report over submission_log with --since/--by-dataset/--empty-workers/--min-submits/--empty-rate/--json.
+
+[api] contributor-worker/google-serpapi-worker.py (CLI)  [backend/api/contributor-worker/google-serpapi-worker.py:101-166]
+    invoked_by: nothing in this tree — a suggested crontab line in its own docstring is the only scheduling
+    The volunteer-side script. Stdlib only. claim → SerpApi → submit, with release on failure.
+
+[api] uvicorn app:app (systemd)  [deploy/systemd/jobs-api.service:26-27]
+    invoked_by: systemd — if the unit were installed, which it is not
+    127.0.0.1:8420, Restart=always. Unit is tracked in the repo but NOT installed on this machine.
+
+[ingest] run-daily.py  [backend/run-daily.py:120-254]
+    invoked_by: systemd user timer jobs-ingest.timer, wrapped in `flock -n -E 0` in the unit
+    Single nightly entry point. Runs 14 subprocess steps in order, always all of them regardless of earlier failure; parses each step's `upsert-summary:` line into written/dropped counts and appends them 
+
+[ingest] ingest/ats.py  [backend/ingest/ats.py:1058-1213]
+    invoked_by: run-daily.py STEPS[1]; also standalone
+    Six ATS platforms from the company_ats roster; upserts to `jobs` with HASH_FIELDS_ATS, closes absent postings via close_missing when the fetch reconciled.
+
+[ingest] ingest/workday.py  [backend/ingest/workday.py:1097-1210]
+    invoked_by: run-daily.py STEPS[2]; also standalone
+    Workday CXS tenants from company_ats (tenant/dc/site); list walk reconciled against `total`, upstream relevance gate decides who gets a detail fetch, close_missing fed the FULL seen set.
+
+[ingest] ingest/builtin-nyc.py  [backend/ingest/builtin-nyc.py:450-509]
+    invoked_by: run-daily.py STEPS[3]; also standalone
+    HTML scrape of builtinnyc.com/jobs (MAX_PAGES=3 per robots.txt), then a budgeted detail-page pass (BUILTIN_DETAIL_LIMIT=60) that fills description_text with a direct UPDATE.
+
+[ingest] ingest/nyc-open-data.py  [backend/ingest/nyc-open-data.py:641-724]
+    invoked_by: run-daily.py STEPS[4]; also standalone
+    Socrata SODA dataset kpav-sd4t; paged with $limit/$offset and a fixed $order=job_id, reconciled against count(*) taken before and after. Closes on post_until (close_expired) and on disappearance (clos
+
+[ingest] ingest/weworkremotely.py  [backend/ingest/weworkremotely.py:233-304]
+    invoked_by: run-daily.py STEPS[5]; also standalone
+    Four WWR category RSS feeds parsed with stdlib ElementTree; location_is_remote hardcoded True; staleness close at 21 days.
+
+[ingest] ingest/hn-hiring.py  [backend/ingest/hn-hiring.py:451-545]
+    invoked_by: run-daily.py STEPS[6]; also standalone
+    HN Firebase API: finds the current 'Ask HN: Who is hiring?' story, fetches only comment ids not already in hn_seen_comments, pipe-parses headers into records.
+
+[ingest] ingest/google-serpapi.py  [backend/ingest/google-serpapi.py:340-447]
+    invoked_by: run-daily.py STEPS[7]; also standalone
+    SerpApi google_jobs engine over a bucketed rotating query bank (8/day), date-chip narrowed per query, claim-protected per slug. Exits 1 if SERPAPI_API_KEY is unset.
+
+[ingest] ingest/google-apify.py  [backend/ingest/google-apify.py:202-302]
+    invoked_by: run-daily.py STEPS[8]; also standalone
+    Apify actor johnvc~google-jobs-scraper---pay-per-result, 1 query/day, 10 results, no date filter available. Exits 1 if APIFY_API_TOKEN is unset.
+
+[ingest] searchqueries.py  [backend/searchqueries.py:433-460, 463-520]
+    invoked_by: run-daily.py STEPS[9]; also standalone
+    Ingest-shaped step for Builder search queries: seeds/refreshes/retires queries, then dispatches the due ones through serp.dispatch.SearchQueryProvider, writing `jobs` rows and search_query_results lin
+
+[ingest] tools/ats-discover.py  [backend/tools/ats-discover.py:195-250, 521-537]
+    invoked_by: run-daily.py STEPS[0]
+    ATS token discovery/re-validation (--apply --nightly --limit 40). Writes company_ats via upsert_checked; deliberately unfloored because quiet is success.
+
+[ingest] ingest/ats_sources.py  [backend/ingest/ats_sources.py:96-203]
+    invoked_by: imported by ingest/ats.py
+    Not a script — the roster library. load_companies() reads and dedupes company_ats; seed_from_companies_json() is the retired one-time seed path.
+
+[ingest] serp.call()  [backend/serp/__init__.py:206-244]
+    invoked_by: serp/dispatch.SearchQueryProvider.__call__ only
+    The provider interface: resolve -> cache lookup -> ledger check -> fetch -> cache put -> ledger spend -> normalize. Returns a SerpResult carrying credits, unit, from_cache and latency.
+
+[deploy] jobs-ingest.timer -> jobs-ingest.service  [deploy/systemd/jobs-ingest.timer:9; deploy/systemd/jobs-ingest.service:39-40]
+    invoked_by: systemd user timer, OnCalendar=*-*-* 00:00:00, Persistent=true, no jitter
+    flock -n -E 0 backend/.run.lock, then /usr/bin/python3 backend/run-daily.py. Type=oneshot, 3h timeout, Nice=10, IO idle. The only jobs unit actually installed and enabled on this machine.
+
+[deploy] jobs-backup.timer -> jobs-backup.service  [deploy/systemd/jobs-backup.timer:20; deploy/systemd/jobs-backup.service:18]
+    invoked_by: systemd user timer, 04:30 daily, Persistent=true, 300s jitter — NOT installed on this machine
+    backend/scripts/backup-jobs.sh, 10min timeout, optional ~/.config/jobs-backup.env for JOBS_BACKUP_REMOTE / JOBS_BACKUP_KEEP_DAYS / JOBS_BACKUP_DIR.
+
+[deploy] jobs-backup-verify.timer -> jobs-backup-verify.service  [deploy/systemd/jobs-backup-verify.timer:14; deploy/systemd/jobs-backup-verify.service:17]
+    invoked_by: systemd user timer, Sun 05:30, Persistent=true, 300s jitter — NOT installed
+    backend/scripts/verify-jobs-backup.sh — restores the newest dump into a throwaway DB and compares against a live count. 30min timeout.
+
+[deploy] jobs-volume-check.timer -> jobs-volume-check.service  [deploy/systemd/jobs-volume-check.timer:24; deploy/systemd/jobs-volume-check.service:29]
+    invoked_by: systemd user timer, 09:00 daily, Persistent=FALSE, 600s jitter — NOT installed
+    system python3 running backend/tools/volume-check.py; exits 1 on findings so jobs-failure@ delivers the alert. The soft-failure counterpart to the exit-code alarm.
+
+[deploy] jobs-volume-digest.timer -> jobs-volume-digest.service  [deploy/systemd/jobs-volume-digest.timer:13; deploy/systemd/jobs-volume-digest.service:29]
+    invoked_by: systemd user timer, Mon 09:30, Persistent=true, 600s jitter — NOT installed
+    volume-check.py --digest piped into `hermes send --to telegram -f -`, with `|| true` so a failed report never alerts.
+
+[deploy] jobs-webapp.service  [deploy/systemd/jobs-webapp.service:23-24]
+    invoked_by: WantedBy=default.target (login) — NOT installed or enabled
+    webapp/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8421. Restart=always. Deliberately does not Want= or Require= cloudflared.
+
+[deploy] jobs-api.service  [deploy/systemd/jobs-api.service:26-27]
+    invoked_by: WantedBy=default.target — NOT installed or enabled
+    api/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8420, on the restricted jobs_api Postgres role. Marked EXPECTED TO BE DEPRECATED.
+
+[deploy] cloudflared.service  [deploy/systemd/cloudflared.service:19]
+    invoked_by: WantedBy=default.target — NOT installed, and the binary is absent from this machine
+    /usr/local/bin/cloudflared --no-autoupdate --config %h/.cloudflared/config.yml tunnel run. Type=notify, Restart=always, StartLimitIntervalSec=0.
+
+[deploy] jobs-failure@.service (template)  [deploy/systemd/jobs-failure@.service:30-32]
+    invoked_by: OnFailure= from 8 of the 9 services (jobs-volume-digest is the sole exception). Installed and demonstrably fired on 2026-08-02.
+    Pipes a header plus `journalctl --user -u %i -n 40` into `hermes send --to telegram -f -`. One instance serves every other unit via OnFailure=jobs-failure@%n.service.
+
+[deploy] frontend/serve.py  [frontend/serve.py:162,174]
+    invoked_by: manual: cd backend/webapp && .venv/bin/python ../../frontend/serve.py
+    Mounts the static client on the WEBAPP's own origin using config.PORT (8421) via uvicorn.run(app, ...), so the session cookie is never cross-origin. There is NO systemd unit for it.
+
+[evals] python3 -m evals corpus snapshot|info  [backend/evals/__main__.py:47-78, 552-565]
+    invoked_by: a person, by hand
+    The ONLY thing in the package that opens a DB connection for corpus purposes; SELECT-only, writes a JSONL fixture. `info` summarises a fixture (platforms, pathology, with_facts).
+
+[evals] python3 -m evals run --task --model --corpus [--no-cache|--refresh] [--out] [--golden --selfcheck]  [backend/evals/__main__.py:81-161, 567-586]
+    invoked_by: a person, by hand
+    One pass of one task over one fixture with one model. Prints report.render(run); optionally writes results JSONL and the guarded three-quantity model-vs-human report. Refuses --golden without --selfch
+
+[evals] python3 -m evals selfcheck --model --n --repeat N [--cache] [--out]  [backend/evals/__main__.py:164-228, 588-603]
+    invoked_by: a person, by hand; its --out JSON is the 'floor' every label report requires
+    The self-consistency instrument. N sequential passes over the same corpus, then metrics.selfcheck() and report.render_selfcheck(). Refuses --repeat < 2 with exit 2. Default corpus evals/fixtures/corpu
+
+[evals] python3 -m evals label {init-schema,sample,export,status,report}  [backend/evals/__main__.py:241-538, 605-663]
+    invoked_by: an operator
+    The golden-set lifecycle. Nothing here ever WRITES a label — people do that in a browser at /v1/label (webapp/label.py). `report` refuses to print without both --run and --selfcheck.
+
+[evals] python3 -m evals cache stats  [backend/evals/__main__.py:541-543, 665-668]
+    invoked_by: a person
+    Prints cache dir, entry count and MB.
+
+[evals] python3 evals/record_cassettes.py <name>|--list|--all-free  [backend/evals/record_cassettes.py:1-10]
+    invoked_by: a person, deliberately, when a cassette must be re-recorded
+    The ONLY thing in the repo that makes a live third-party call from a test path. Drives the REAL fetch function of the REAL ingest script and records scrubbed bytes.
+
+[evals] backend/tools/audit-docs.py [--check C5] [--emit-baseline]  [backend/tools/audit-docs.py:991-1040]
+    invoked_by: backend/tests/test_docs_policy.py, and a person
+    Seven checks C1–C7 over docs/ plus README.md and .claude/CLAUDE.md. Exits 1 if anything fires. Currently 0 findings, exit 0.
+
+[evals] backend/tools/audit-doc-links.py [subtree]  [backend/tools/audit-doc-links.py:102-119]
+    invoked_by: backend/tests/test_docs_policy.py, and a person
+    Resolves every relative Markdown link under docs/. Currently 0 broken, exit 0.
+
+[evals] backend/tools/relevance-report.py [--dead] [--profile] [--samples N]  [backend/tools/relevance-report.py:138-194]
+    invoked_by: a person, by hand
+    Read-only; loads backend/.env itself. Prints the tier distribution, the dead-pattern list, and a random sample per tier. Mandatory after any relevance.json edit (the \y landmine).
+
+[evals] backend/tools/label-findings.py [--timing|--recall|--vocabulary|--side-list] [--label-set] [--break-secs]  [backend/tools/label-findings.py:358-398]
+    invoked_by: a person, during/after a labelling night
+    Read-only re-derivation of a labelling sitting's findings from eval_labels. Deliberately omits model-vs-human.
+
+[evals] backend/tools/calibrate-match.py [--profile --good --within --disagreements]  [backend/tools/calibrate-match.py:188-310]
+    invoked_by: a person
+    Read-only, zero LLM calls. Spearman + recall@within against the incumbent fit_score labels already in job_scores, with recency and random baselines.
+
+[evals] backend/tools/compare-models.py --model SPEC [--model SPEC] --n N  [backend/tools/compare-models.py:63-106]
+    invoked_by: a person, before swapping JOB_SCORING_MODEL
+    Live multi-model comparison over jobs pulled with ORDER BY j.first_seen DESC LIMIT n. Read-only to the jobs table but NOT corpus-frozen.
+
+[evals] backend/tools/claude-ceiling-test.py --n N --batch B1 B2 ...  [backend/tools/claude-ceiling-test.py:83-110]
+    invoked_by: a person
+    Wraps claude-bench.py at increasing batch sizes, regex-scrapes its stdout, reports quality + cost-per-percentage-point.

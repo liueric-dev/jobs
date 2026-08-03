@@ -79,9 +79,12 @@ from lib import text
 #: tests/test_mock_corpus.py.
 PLATFORM = "mock"
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))))
-_MOCK_DIR = os.path.join(_REPO_ROOT, "docs", "tasks", "refactor", "mock")
+#: Moved out of `docs/tasks/refactor/mock/` on 2026-08-02 when `docs/` was
+#: deleted. These three files are fixtures, not documentation -- the corpus, its
+#: independently-written answer key and the addendum this module parses -- so
+#: they now live beside the code that reads them. History: `git log --follow`.
+_MOCK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "fixtures", "mock")
 
 POSTINGS_PATH = os.path.join(_MOCK_DIR, "mock-postings-v3.json")
 KEY_PATH = os.path.join(_MOCK_DIR, "mock-postings-v3-answer-key.json")

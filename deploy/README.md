@@ -6,7 +6,7 @@ credential, and nothing here can be run without an account this repository does 
 have.
 
 Day-to-day operations — restarting a service, rotating a key, what to do when a
-source goes quiet, where the backups are — are in [`docs/RUNBOOK.md`](../docs/RUNBOOK.md).
+source goes quiet, where the backups are — are in `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md`.
 This file covers the one-time install only.
 
 ## Why these files are tracked at all
@@ -54,7 +54,7 @@ genuinely separate units rather than separately-described halves of one thing.
 | webapp + contributor API | yes | yes | thirty people locked out |
 
 **They still share one machine and one Postgres instance, and that coupling is
-documented rather than removed.** `docs/RUNBOOK.md` § *Failure domains* says exactly
+documented rather than removed.** the deleted `docs/RUNBOOK.md` § *Failure domains* said exactly
 what is shared, what a failure in each half does to the other, and what the two
 tightest couplings are. Moving the app off this box is a real option and is written
 up there as a decision the owner has not yet had to make.
@@ -62,7 +62,7 @@ up there as a decision the owner has not yet had to make.
 ## One-time install
 
 Everything below needs an account, a domain or a device this repository cannot
-provide. **Read `docs/RUNBOOK.md` first**; this is the sequence, not the explanation.
+provide. **Read `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md` first**; this is the sequence, not the explanation.
 
 ```bash
 # 1. cloudflared, once, interactively. `login` opens a browser and writes

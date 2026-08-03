@@ -1,0 +1,144 @@
+# 141 disagreements against files under docs/ (being deleted). UNVERIFIED.
+# One line each, as a record that they were found.
+
+[high] docs/ingest/workday.md:44 :: **Not scheduled yet.** This script is deliberately not in `run-daily.py`'s `STEPS`; several agents were editin
+[high] docs/ingest/nyc-open-data.md:43 :: **Not yet scheduled.** The intended `run-daily.py` `STEPS` entry is `"ingest/nyc-open-data.py"`, placed after 
+[high] docs/ingest/score.md:39 :: **Called in-process by the login path.** `run_for_profile` is importable "because the login path calls it dire
+[high] docs/ingest/google-apify.md:411 :: **`run` can be referenced before assignment.** At `:179-190`, `run` is bound only inside the `while` body. A s
+[high] docs/ingest/google-apify.md:242 :: That makes it one of three ingest scripts with retries, and notably **the SerpApi script it supplements has no
+[high] docs/ingest/google-serpapi.md:493 :: **`CLAIM_TTL_MINUTES` is documented but not read by this script.** `backend/README.md` lists it as a configura
+[high] docs/RUNBOOK.md:228 :: ```bash\ncd backend\npython3 tools/ats-discover.py --seed "Employer Name" --apply   # find and store the token
+[high] docs/ingest/DEFECTS.md:221-224 :: | [D18](#d18) | loud failure | fix opportunistically | ... | [D19](#d19) | loud failure | fix opportunisticall
+[high] docs/ingest/extract.md (whole file) :: The file describes three extraction outcomes only — EXTRACTED / REJECTED / DEFERRED (`:340`) — and one LLM cal
+[high] docs/ingest/score.md:56-60 :: ### CLI arguments\n| Flag | Type | Default | Effect |\n| `--profile` | ... | `--limit` | ... | `--active-withi
+[high] docs/ingest/extract.md:73 and docs/ingest/score.md:70 :: | `JOB_SCORING_MODEL` | `glm-4.5-flash` | `backend/llm.py:30` |  (identical row in both files)
+[high] docs/ingest/builtin-nyc.md:36 :: This is the only ingest script that writes to `jobs` outside `lib.upsert`.
+[high] docs/ingest/DEFECTS.md:1494 :: ### D35\n\n**`CLAIM_TTL_MINUTES` is documented in `backend/README.md` as a configuration variable but `google-
+[medium] docs/ingest/google-serpapi.md:43, google-apify.md:39, extract.md:48, match.md:40, builtin-nyc.md:42, weworkremotely.md:37, hn-hiring.md:37, score.md:41 :: "**Scheduled.** Fifth / Sixth / Seventh / Eighth / Second / Third / Fourth of the nine steps in `run-daily.py`
+[medium] docs/ingest/weworkremotely.md:98, builtin-nyc.md:112, google-serpapi.md:147 :: Mermaid Data Flow nodes: `FETCH["fetch_feed · raw urllib.urlopen<br/>wwr.py:121-125<br/>NO RETRY · 30s timeout
+[medium] docs/ingest/engagement-events.md:184 :: | `CLIENT_EVENT_NAMES` | `("impression", "open", "save", "unsave", "dismiss", "applied")` — what a client may 
+[medium] docs/ingest/extract.md:197 :: | — | `facts_version` | `schema.FACTS_VERSION` = 2 (`backend/schema.py:158`) | never NULL |
+[medium] docs/ingest/match.md:29, extract.md:197, score.md:76, hn-hiring.md:255, google-serpapi.md:245 :: match.md: jobs_app view at `backend/schema.py:512-560`; extract.md: FACTS_VERSION at `schema.py:158`; score.md
+[medium] docs/RUNBOOK.md:21 :: Machine configuration in [`deploy/`](../deploy/README.md), symlinked into `~/.config/systemd/user/`.
+[medium] docs/RUNBOOK.md:412-413 :: ```bash\ncd backend && python3 -m unittest discover -s tests\ncd backend/webapp && .venv/bin/python -m unittes
+[medium] docs/ingest/hn-hiring.md:45 :: This is the **only** ingest script with an argument parser (`:344-350`).
+[medium] docs/ingest/DEFECTS.md:5 :: code_at: dd49a27 (audit base) + 28f1d0e (current HEAD, webapp-service)
+[medium] docs/ingest/extract.md:346 :: | **REJECTED** | `RuntimeError`, `JSONDecodeError`, or `normalize()` returning `None` | tombstone: `extraction
+[medium] docs/ingest/DEFECTS.md:1393-1407 :: ### D31\n\n**Retry/backoff usage is inconsistent across the six ingest scripts...** `ats.py`, `hn-hiring.py`, 
+[medium] docs/ingest/google-serpapi.md:375 :: ### Does a single bad record fail the batch?\n\n**No.** Normalization happens in a list comprehension at `:324
+[medium] docs/ingest/workday.md:118 :: The full gate is the *current* `config/relevance.json`, which is SWE-shaped: two active profiles named `fronte
+[low] docs/ingest/DEFECTS.md:33 :: **Total: 45 entries** (`D01`–`D45`, verified unique and gapless)
+[low] docs/ingest/google-apify.md:404 :: No unused imports were found: `datetime`/`timedelta`/`timezone` are used at `:142-143`, `time` at `:182`, and 
+[low] docs/ingest/DEFECTS.md:1535 :: ### D40\n\n**A login-triggered `score.py` run and the nightly run can double-spend.** Both use the same unlock
+[low] docs/ingest/contributor-api.md:60-66 :: **Startup is gated.** A `lifespan` context manager runs `verify_schema()` before serving (`:165-168`), which r
+[high] docs/scoring.md:343 :: | `FACTS_VERSION` | 2 | `schema.py:158` | **[derived]** — bumped when `migrate_ats_descriptions.py` changed `d
+[high] docs/scoring.md:64,67,68,74,75,109,281,283,288,342,344,505,552,561,570,643,731,744,746,761,786 :: The whole citation apparatus, e.g. `schema.py:372-384` (match_score type), `schema.py:301-320` (fit_score type
+[high] docs/scoring.md:141-146,187,215 :: `job_facts — 17 extracted fields` … `10 the ranker reads` / `5 the ranker ignores` / `2 for stage 4 / display`
+[high] docs/scoring.md:246-249 :: subgraph S4["stage 4 — narrative · LLM · score.py"] … SEL["top daily_narrative_budget = 20 per profile, ORDER 
+[high] docs/facts-v3-diff.md:217-236 :: CLAUDE.md states the floor: `deepseek-v4-flash` does not agree with itself at temperature 0 — 76% on `seniorit
+[high] docs/mock-acceptance.md:86-87 :: Read it against task 06's self-consistency floor of 92.2% on clean sources and 77.8% on `hn_whoishiring`: on c
+[medium] docs/MEASUREMENT-TRAPS.md:10,15,20,90-92 :: "These seven are not…" / "Three of the seven were found only after…" / "Section numbering is kept as `4.1`–`4.
+[medium] docs/scoring.md:131-133 :: **`fit_score` is not densely distributed.** 59 postings share the value 85, so any "top N" boundary drawn thro
+[medium] docs/scoring.md:515 :: | `MIN_RECALL` | 0.8 | **[guessed]** — same sentence; "turned out to be aspirational rather than informative".
+[medium] docs/scoring.md:766-769 :: 4. **`job_events` has no rows.** The writer landed 2026-07-26 and nothing has driven traffic through it. … so 
+[medium] docs/ingestion_tests/04-score-validation.md:9 and docs/ingestion_tests/03-metrics-and-golden-set.md:9 :: 04: "**Status:** todo. **Depends on:** 03. **Blocks:** nothing."  /  03: "**Status:** next. **Depends on:** 02
+[medium] docs/score-validation.md:407 :: | audit item 8 marked closed in `docs/ingest/score.md` | **adapted** — closed in `docs/ingest/DEFECTS.md` (D15
+[medium] docs/labelling-report-2026-08-02.md:72-78 and :188 :: **2. A fresh selfcheck had to be run, and an n=120 replacement is still owed.** … a n=120 selfcheck covering `
+[medium] docs/facts-v3-diff.md:9,131,140,143,161,164 :: `schema.FACTS_VERSION` 2 → 3 (`backend/schema.py:199`) … `_eligible_sql` requires `j.status = 'open'` (`extrac
+[medium] docs/scoring.md:12-20 (the split banner) vs docs/scoring-measured-2026-07-27.md:23-25 :: scoring.md keeps the contract half and asserts current-state facts (`FACTS_VERSION` 2, 17 fact fields, `job_ev
+[medium] docs/scoring.md:235 :: E["one call per posting, EVER<br/>$0.000385 · 9.3s · 94% cached prefix"]
+[low] docs/scoring.md:265-273, 277, 281 :: read by `relevance.max_tier()` (`relevance.py:195`) and applied by `union_sql` (`relevance.py:223`) … a **unio
+[low] docs/score-validation.md:32, :199 :: The honest source of ranking ground truth is engagement: `job_events` (`backend/schema.py:391-400`). It has **
+[low] docs/scoring-measured-2026-07-27.md:110-111 :: The column is nominally 0–100 and **unvalidated on write** (`score.py:361`; `has_fields` checks presence only,
+[low] docs/ingestion_tests/selfcheck-n120-2026-08-02.md:201-203 :: **n:** 120 records, of which 5 have no `description_text` and are skipped before any call is placed, because `
+[low] docs/pursuit-gate-volume.md:66-68 :: Tier is **not** a column. There is no `relevance_tier` on `jobs` (`backend/schema.py:270-293`). It is computed
+[low] docs/google-jobs-query-experiment.md:462-464 :: One judge, one sitting; no second rater, so there is no inter-rater floor beside this number — the same object
+[low] docs/google-jobs-query-experiment.md:446-449 :: Multiplexing every free tier in `SOURCING-STRATEGY.md:26-47` reaches perhaps 950. … Task 23 lists `contributor
+[high] docs/tasks/refactor/STANDING-GUIDANCE.md:128-130 :: Current anchors: `next_item()` **`:1064`**, `tail_offset()` **`:938`**, `WEB_PRIVILEGES` **`:296`**, `verify_s
+[high] docs/tasks/refactor/STANDING-GUIDANCE.md:1216-1220 :: **CLAUDE.md's `lib/` parity rule is stale.** It states `lib/` is vendored byte-identical with drift reported b
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:1279-1280 :: **`docs/ingest/*.md` claim `generated:` frontmatter but no generator exists.** Task 34 must decide: write gene
+[high] docs/tasks/refactor/MASTER-PLAN-pursuit.md:370-375 :: **Generated reference** (`docs/ingest/*.md`, 11 files, ~4,600 lines) carries YAML frontmatter with `script:`, 
+[high] docs/tasks/refactor/AUDIT.md:171-172 :: What remains on the track is **24, 25, 33, and two screens** (26's onboarding, 32's search — and the search on
+[high] docs/tasks/refactor/STANDING-GUIDANCE.md:742, 771, 810, 1117-1120 :: "The set is drawn. Can I start measuring against it?" No. `eval_labels` is **empty**. ... and **`eval_labels` 
+[high] docs/tasks/refactor/STANDING-GUIDANCE.md:1680-1685 :: **Nothing task 11 touched is live.** No `criteria_version` bump, so the 26 archetype weights and the `unknown_
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:1675-1677 :: **Task 11's `role_track` column is NULL on all 5,328 rows** and stays that way until task 12 re-extracts.
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:1265-1272 :: Under it, `backend/webapp/` reports **55 tests, OK**.
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:812 :: the corpus was built to contain the failure modes it then found — `HANDOFF.md:805-808`.
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:1327 :: `MASTER-PLAN-pursuit.md:251` sets **GATE 2 — ≥200 new Pursuit-relevant postings/day across sources** as the ex
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:602-617 :: **DDL: `backend/webapp/schema_web.py:107-117`** — nine columns, and this module owns them ... `profile` has de
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:622-627, 652 :: **`id` is generated**: `f"u_{secrets.token_hex(6)}"` (`manage_app_users.py:88`) ... The CLI prints this when i
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:930, 1273-1274 :: the route exists at `backend/webapp/label.py:241/:296/:364` (was `:218/:256/:311` before the round-2 path), wi
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:274 :: **Only Axis B carries a profile, and the split is enforced with a raise rather than by convention** (`labels.r
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:245-247 :: `_three_quantity_report()` passes `ceiling=inter["fields"]` into `interpretable()` (`evals/__main__.py:485-487
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:254-256 :: `intra_annotator()` (`labels.py:1584`) groups by `(job_id, field)` then by round
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:258-259 :: `round_one_answers()`' docstring already says this at `labels.py:1194-1199`
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:1128-1131 :: Recorded with both numbers in `tail_offset()`'s docstring (`evals/labels.py:874-883`), and the constant `_PHI6
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:1112-1113 :: Fixed by largest-remainder proportional allocation (`evals/labels.py:665-679`, rationale `:648-664`).
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:707-708 :: `extract._eligible_sql` (`extract.py:397`) gates the extraction queue on `relevance.union_sql(ACTIVE profiles)
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:679-680 :: The golden set was picked on **title, company and location** — the three fields `score_job()` cannot see (`mat
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:674-676 :: 13's Definition of done at lines 122-123 is unmet ... Line 124 is met in full at 10 of 10.
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:1287-1290 :: it is in neither `extract.SENIORITY` (`extract.py:205-206`) nor `match.SENIORITY_ORDER` (`match.py:65-66`)
+[high] docs/tasks/refactor/STANDING-GUIDANCE.md:1320-1323 :: `job_scores`' DDL is at `schema.py:342-361` ... the re-scoring anti-join is `score.py:262-263`. ... **Cite `fi
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:1174-1176 :: **`--force-placeholders` is not a flag on `migrate_profiles.py`.** It is on `migrate_pursuit_profile.py:462-46
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:1190 :: Only `relevance_json`, `daily_narrative_budget` and `active` are preserve-on-absent (`resolve_preserved`, `:11
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:1230-1232 :: **`google_jobs.py:98-99` discards `detected_extensions.work_from_home`** — verified, the field is read into a 
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:1640-1646 :: `lib/http.py:76-77` (*"raise # permanent -- surface immediately"*) re-raises before ... the replayer raises at
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:1654-1664 :: **NEW 2026-07-31, small and unowned: `record_workday_cxs()`'s own docstring is now stale against the cassette 
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:1149-1153 :: Today that line is a `role_archetype` fixture row inside `test_the_two_ceilings_are_different_quantities` (`:4
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:1569-1571 :: It also needs a weight in **both** `config/criteria.json` and `config/pursuit-criteria.json` (`tests/test_matc
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:1206-1209 :: Stdlib `average_precision` / `precision_at_k` now live in `evals/metrics.py:260+`
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:1224-1229 :: `relevance.py:189` sends everything failing `row_ok` to tier 3 and `:223` admits on `tier <= max_tier`.
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:658-660, 970-973 :: only one of those two failures produces an error message from this service (`backend/webapp/README.md:143-151`
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:877-879 :: `docs/ingestion_tests/03-metrics-and-golden-set.md:25` requires the human self-agreement ceiling ("5-10 jobs l
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:997-998 :: **A real cycle:** 24 depends on 33 for the tunnel; 33 depends on 24 and 32. 33 has to split — tunnel before 24
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:993-995 :: **Credentials needing an account:** **15** (USAJobs key, Adzuna `app_id`/`app_key`), **20** (Firecrawl), **24*
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:1233-1235 :: **The SerpApi ledger undercounts real spend 3.3x.** `google_jobs_query_stats` read 41 searches this month; the
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:696-699 :: **The cohort's addressable set is 55 postings.** Over the 859 at `facts_version = 3` ... the intersection ... 
+[medium] docs/tasks/refactor/AUDIT.md:69 :: cohort corpus | 940 rows at `facts_version = 3`; `role_archetype = other` on 31.3%
+[medium] docs/tasks/refactor/AUDIT.md:63 :: defect register | ... **`D01`–`D45` and `D66`–`D74`** ... Next free `D75`
+[high] docs/tasks/refactor/AUDIT.md:64 :: decision register | `DEC-46`–~~`DEC-93`~~ **`DEC-94`**. Next free `DEC-95`
+[medium] docs/tasks/refactor/AUDIT.md:35 :: | [`README.md`](README.md) | *what are the 35 tasks and which are done?* | the ordered index; one row per task
+[medium] docs/tasks/refactor/AUDIT.md:206-207 :: three defects in `DEFECTS.md` (D31 needs a decision rather than a fix, D33's consumer is task 25, D34 is a liv
+[high] docs/tasks/refactor/AUDIT.md:285-286 :: **n=1 on human labels.** Every Axis B figure is one person's preference
+[low] docs/tasks/refactor/AUDIT.md:245-247 :: **CLOSED 2026-08-02 by `2586bb2`. All six checks are 0 on the widened set and the suite is green.**
+[medium] docs/tasks/refactor/HANDOFF.md:55-56 :: **Read [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) first.** Six of its eight rows are open and every one is the o
+[low] docs/tasks/refactor/MASTER-PLAN-pursuit.md:52 :: Six ingest sources; `run-daily.py` orchestrates nine steps under systemd
+[medium] docs/tasks/refactor/MASTER-PLAN-pursuit.md:51 :: 11,517 job rows, 2 active profiles, `FACTS_VERSION = 2`
+[medium] docs/tasks/refactor/MASTER-PLAN-pursuit.md:66 :: **Not built:** `frontend/` — a single `.gitkeep`
+[medium] docs/tasks/refactor/MASTER-PLAN-pursuit.md:236-238 :: The current table prices `deepseek-v4-flash` while production runs `glm-4.5-flash`, described in `score.py:63`
+[low] docs/tasks/refactor/MASTER-PLAN-pursuit.md:95 :: | 7 | `job_scores` gains **`persona_version`, `prompt_version`** |
+[low] docs/tasks/refactor/MASTER-PLAN-pursuit.md:156 :: job_events ( ... match_score, fit_score, model_version, occurred_at )
+[medium] docs/tasks/refactor/MASTER-PLAN-pursuit.md:229-230, 407 :: These map 1:1 onto `docs/tasks/pursuit/NN-*.md` following the existing convention. ... **Create** - `docs/task
+[medium] docs/tasks/refactor/MASTER-PLAN-pursuit.md:403, 10 :: **Supersedes** `PLAN-scoring-and-ranking.md` ... | `PLAN-scoring-and-ranking.md` | Superseded by this document
+[low] docs/tasks/refactor/MASTER-PLAN-pursuit.md:402 :: | `README.md`, `backend/README.md`, `DEVELOPER.md` | **Regenerate at the end.** |
+[low] docs/tasks/refactor/MASTER-PLAN-pursuit.md:331-332 :: Inherit all **seven** traps from `HANDOFF-match-quality.md` §4 — that section is domain-independent and is the
+[medium] docs/tasks/refactor/MASTER-PLAN-pursuit.md:202 :: | 1 | **NYC Open Data `kpav-sd4t`** ... ~20–60 new external postings/day, City agencies |
+[medium] docs/tasks/refactor/MASTER-PLAN-pursuit.md:60-63, 401 :: **`backend/api/`** — the contributor service ... Built, tested, **never deployed** ... | `backend/api/README.m
+[low] docs/tasks/refactor/MASTER-PLAN-pursuit.md:68 :: **Not built:** ... Any reader of `job_events` beyond `score.py:_recently_active`
+[high] docs/tasks/refactor/STANDING-GUIDANCE.md:49-56, 58-63 :: **186 rows, 31 postings, one labeller, and the ten `overlap` rows are DONE** (2026-07-31) ... **THE SINGLE HIG
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:914 :: with `jobs_web` granted per `labels.WEB_PRIVILEGES` (`:240`) and `verify_schema()` (`:353`) passing
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:919 :: `python3 -m evals label init-schema` reaches the same function deliberately, so the two cannot drift (`schema_
+[low] docs/tasks/refactor/AUDIT.md:13-15 :: > **This file must not become an eighth "READ THIS FIRST".** `HANDOFF.md` grew to 3,481 lines by answering tha
+[low] docs/tasks/refactor/STANDING-GUIDANCE.md:1049 :: The best new term matches **18 rows anywhere** in 13,447 open live postings.
+[medium] docs/tasks/refactor/STANDING-GUIDANCE.md:1690 :: - **The SerpApi ledger reconciliation** (above).  [listed under 'Pending follow-ups with no task of their own'
+[low] docs/DOCS-POLICY.md:141 :: `docs/MEASUREMENT-TRAPS.md` is the model: seven traps that apply to any measurement anywhere
+[medium] docs/DOCS-POLICY.md:186 :: **Seven checks as of 2026-08-02.** ... `backend/tools/audit-docs.py` (task 36) is the checker.
+[low] docs/DOCS-POLICY.md:36-38 :: ## Rule 1 — Every document declares its kind. In frontmatter, first thing in the file.
+[high] docs/tasks/refactor/OPEN-QUESTIONS.md:42 :: | 6 | **`D31`** needs a decision, not a fix | [`DEFECTS.md`] | stays open, correctly |
+[low] docs/tasks/refactor/OPEN-QUESTIONS.md:38 :: `verify_schema()` returns clean and the service boots ... **Now serving: `/v1/health` answers and the page ren
+[high] docs/tasks/refactor/API-CONTRACT-v1.md:52-54 :: **Three of six endpoints exist, by path only.** `GET /v1/searches`, `POST /v1/searches` and `POST /v1/onboardi
+[high] docs/tasks/refactor/API-CONTRACT-v1.md:83-89 :: **Everything the contract adds is absent, and all of it is task 27's:** `request_id`, `rank`, `bucket`, the `t
+[medium] docs/tasks/refactor/API-CONTRACT-v1.md:38-39 :: **AND A CLIENT WAS BUILT AGAINST THEM THE SAME DAY (task 32).** Today, Job detail and Saved, in plain HTML/CSS
+[medium] docs/tasks/refactor/API-CONTRACT-v1.md:91-96 :: **Implemented and undocumented here:** eight query parameters ..., the `profile` echo, `GET /v1/me`, `POST /v1
+[medium] backend/README.md (Hand-edited config files list) :: - `config/companies.json` — 68 companies with verified ATS board tokens
+[medium] backend/README.md (What gets scored, tier table) :: | 1 | title matches and location is acceptable | 26% | 2 | title matches, location unknown/elsewhere | 21% | 3
+[medium] backend/README.md (Scores are per profile) :: The profile name comes from `config/persona.json`'s `profile` key (`tech`), overridable per-run with `JOBS_PRO
+[medium] backend/README.md (Scores are per profile) :: `select_unscored_jobs` anti-joins on `(job_id, profile)`, so "unscored" always means "unscored *for this profi
+[low] backend/README.md (On other devices) :: The other six sources are free HTTP fetches with no per-machine quota
+[medium] docs/tasks/refactor/SOURCING-STRATEGY.md:105-113 (§10 Task file mapping) :: Phase 2 of the master plan becomes: `07-ingest-nyc-open-data.md`, `08-ingest-usajobs-adzuna.md`, `09-ats-token
+[medium] docs/tasks/refactor/SOURCING-STRATEGY.md:78-104 (§3 assignment table) :: Greenhouse, Lever, Ashby, Workable, Recruitee, SmartRecruiters → **plain `requests`** (extend `ingest/ats.py`)
+[low] docs/tasks/refactor/SOURCING-STRATEGY.md:70 (§2 target difficulty) :: **Greenhouse** `boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true`
+[medium] docs/tasks/refactor/CLAUDE_UPDATES.md:8-16 :: Progress updates from the agent run through tasks 03–34, appended as work lands. ... **Session handed off 2026
+[low] docs/archive/README.md (handoff-state-2026-07-31 row) :: `HANDOFF.md` is the only `kind: rolling` document in the tree and rule 1 forbids it to be stale
+[low] docs/tasks/refactor/DECISIONS.md:2204-2240 (DEC-68) :: **Decided:** `backend/tools/audit-docs.py` exits non-zero on the tree as it stands ... `backend/tests/test_doc
+[medium] deploy/README.md (Why these files are tracked at all) :: `jobs-ingest.service`, `jobs-ingest.timer` and `jobs-failure@.service` **ran** for a week as **regular files**

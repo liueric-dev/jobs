@@ -6,78 +6,71 @@ generator: none
 
 # jobs
 
-Daily job-discovery automation, split into two halves.
+Daily job-discovery automation for the Pursuit AI-Native cohort: ~30 Builders, entry-level,
+AI-adjacent roles, all industries, NYC.
 
 | | what | state |
 |---|---|---|
 | [`backend/`](backend/) | the pipeline that finds, dedupes and scores postings | live |
-| [`backend/webapp/`](backend/webapp/) | the API the frontend will call: Google SSO, ranked jobs, engagement | built, unrendered |
-| `frontend/` | the surfacing layer itself | not started |
-| [`docs/tasks/`](docs/tasks/) | the work breakdown for closing that gap | — |
+| [`backend/webapp/`](backend/webapp/) | Google SSO, ranked jobs, engagement events | live, port 8421 |
+| [`backend/api/`](backend/api/) | the contributor work queue | expected to be deprecated; **currently cannot start** |
+| [`frontend/`](frontend/) | the client | shipping — five screens, no build step |
+| [`deploy/`](deploy/) | systemd units and cloudflared ingress | files tracked; not installed on any machine |
+
+**Start with [`docs/STATE-OF-THE-SYSTEM.md`](docs/STATE-OF-THE-SYSTEM.md)** — what the pipeline
+actually does, what is genuinely done, what is open, the landmines, and every figure with the
+instrument that produced it. It is the only document in this repo. On 2026-08-02 the other 137
+files under `docs/` were deleted after an audit found 168 places they contradicted the code; they
+are all still in git behind the tag `refactor-freeze-2026-08-02`.
+
+[`.claude/CLAUDE.md`](.claude/CLAUDE.md) holds the rules and invariants for working in this tree.
 
 ## backend/
 
-Pulls tech/AI postings from seven independent sources into one Postgres table,
-dedupes them, and has an LLM score each one against a candidate profile. It
-**finds and judges** jobs; it does not apply to them, track applications, or do
-outreach — those stay manual on purpose.
+Pulls postings from **eight** ingest scripts into one Postgres table, dedupes them, and has an LLM
+extract facts and write a fit narrative. It **finds and judges** jobs; it does not apply to them,
+track applications, or do outreach — those stay manual on purpose.
 
-Start at [`backend/README.md`](backend/README.md) for setup and operation, or
-[`backend/docs/`](backend/docs/) for architecture and design history.
-[`docs/scoring.md`](docs/scoring.md) is the scoring contract — what a score
-means and where every weight came from; [`docs/ingest/`](docs/ingest/) is the
-per-script reference for the ingestion and scoring entry points.
-
-**[`docs/README.md`](docs/README.md) indexes every document in the tree**, grouped
-by what it is for, with one line each saying the question it answers. It replaces
-the count that used to sit in the sentence above — it said *"all eleven entry
-points"* and there were fourteen files, which is `docs/DOCS-POLICY.md` rule 3's
-case in one line: a number a command can produce should never be typed into prose.
+`ingest/ats.py` alone reaches six ATS vendors (Greenhouse, Lever, Ashby, Workable, Recruitee,
+SmartRecruiters), reading its roster from the `company_ats` table rather than from a file.
 
 ```bash
 cd backend
-python3 -m unittest discover -s tests -t .   # the guard on row identity
-python3 run-daily.py                         # what the nightly timer runs
+python3 -m unittest discover -s tests        # the whole suite
+python3 -m unittest tests.test_row_identity  # the guard on row identity
+python3 run-daily.py                         # the 14 steps the nightly timer runs
 ```
 
-Scheduled by a **systemd user timer**, not cron — `jobs-ingest.timer`, midnight
-local. See `backend/README.md` for why, and `~/.hermes/scripts/jobs-ingest-status.sh`
-for the last run's outcome.
+Scheduled by a **systemd user timer**, not cron — `jobs-ingest.timer`, midnight local. The last
+run's outcome: `journalctl --user -u jobs-ingest.service`.
 
 ## frontend/
 
-Still empty — nothing renders a job to a human yet. What changed on 2026-07-26
-is that the half below the UI now exists, so a frontend has something to call
-rather than a database to reinvent access to.
+A shipping client: one HTML shell, one hand-written stylesheet, 13 ES modules, five routed screens
+(Today, Job detail, Saved, Search, Onboarding). **No build step, no framework, no npm, no
+`package.json`** — a constraint to keep, not an accident.
 
-**[`backend/webapp/`](backend/webapp/)** serves it. Google SSO against an email
-allowlist, an opaque session cookie, `GET /v1/jobs` reading the `jobs_app`
-view, and `POST /v1/events` writing `job_events` — the engagement table
-`backend/docs/SCORING.md` has always attributed to "the surfacing layer" and
-which nothing had ever written.
+It must be served from the webapp's own origin, because it authenticates with
+`credentials: "same-origin"` and a relative `BASE`. Served from anywhere else every request silently
+loses the session cookie and renders as the sign-in screen.
 
 ```bash
-cd backend/webapp
-.venv/bin/python -m unittest discover -s tests -t .
-.venv/bin/uvicorn app:app --port 8421
+cd backend/webapp && .venv/bin/python ../../frontend/serve.py   # then http://localhost:8421/
+python3 frontend/verify_fixtures.py    # fixtures still describe the server
+node frontend/check_client.mjs         # client still agrees with the fixtures
 ```
 
-It runs as its own restricted Postgres role that can read the corpus and append
-engagement and rewrite nothing. See its README for setup, the Google Cloud
-Console steps, and the grant table; [`docs/tasks/`](docs/tasks/) has the work
-breakdown and the reasoning behind each decision.
+Not built: the Contribute surface, and the phone test.
 
 ## Layout note
 
-Everything the backend needs resolves relative to `backend/`, never to this
-directory or to the process's working directory — the `sys.path` inserts in
-`ingest/`, `tools/`, `migrations/`, `scripts/`, `api/` and `webapp/` each reach
-exactly one level up, and the shell scripts `cd` to their own parent. That is
-what made this split a pure move: no import changed, and the tree can be
-relocated again as a unit.
+Everything the backend needs resolves relative to `backend/`, never to this directory or to the
+process's working directory — the `sys.path` inserts in `ingest/`, `tools/`, `migrations/`,
+`scripts/`, `api/` and `webapp/` each reach exactly one level up, and the shell scripts `cd` to
+their own parent. That is what made the original split a pure move, and the tree can be relocated
+again as a unit.
 
-`backend/` holds three things that are deliberately separate processes: the
-nightly pipeline, `api/` (the contributor work queue, expected to be
-deprecated) and `webapp/` (the frontend's backend). Each has its own `.env`,
-its own venv and its own Postgres role, and none imports another — they share
-only `schema.py` and `lib/`.
+`backend/` holds three deliberately separate processes, each with its own `.env`, venv and Postgres
+role. `api/` and `webapp/` import nothing from each other, and no pipeline module imports either —
+but `webapp/` does import the pipeline's `profiles`, `searchnorm` and `evals.labels`, and `api/`
+imports `google_jobs`, so the shared surface is wider than `schema.py` and `lib/`.

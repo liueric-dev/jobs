@@ -1,0 +1,76 @@
+# 15 sites that cost a model call
+
+[schema] None in this area
+    cite: backend/schema.py, backend/lib/*.py, backend/migrations/*.py
+    model: n/a — schema.py and lib/ contain no LLM call at all. The two paid stages are extract.py (facts) and score.py (narrative), which are another agent's area; schema.py only holds their version constants (FACTS_VERSION=3 at schema.py:336, SCORE_PROMPT_VERSION=1 at schema.py:358) and the columns they write.
+    on_failure: n/a
+
+[stages] extract.extract_facts() — structured fact extraction, 1 call per pass, 1 or 3 passes per posting
+    cite: backend/extract.py:1051, 1058
+    model: llm.model() -> JOB_SCORING_MODEL or LLM_MODEL or DEFAULT_MODEL ('deepseek-v4-flash', backend/llm.py:45,101-110). Refuses to start if JOBS_EXPECTED_MODEL is set and differs (extract.py:1168-1171). `call` is injectable for tests but defaults to llm.call.
+    on_failure: llm.TransientError (429/408/409/425/5xx, socket timeout, connection reset, quota exhausted) -> transient flag set, pass skipped; if no pass produced usable facts the job is DEFERRED and NOTHING is written, so it stays eligible. RuntimeError / json.JSONDecodeError (4xx, no `choices`, bad envelope) -> pass skipped without setting transient; if all passes fail this way the job is REJECTED and gets a tombstone at the current FACTS_VERSION. A parsed-but-unusable response (normalize returns None) also counts as an unusable pass.
+
+[stages] score._score_one_job() — narrative + fit_score, 1 call per shortlisted (job, profile)
+    cite: backend/score.py:983
+    model: Same llm.model() chain; the model label recorded on the row is f'{llm.model()}@{urlparse(llm.base_url()).hostname}' (score.py:1126-1127, 359-360). Same JOBS_EXPECTED_MODEL guard (score.py:1100-1103).
+    on_failure: llm.TransientError -> return DEFERRED, nothing written, retried next run. RuntimeError / json.JSONDecodeError -> raw=None, falls through to mark_score_failed() which writes a tombstone row. Any other exception -> ERRORED: printed loudly on stderr, nothing written, one job only, batch continues.
+
+[deploy] extract.py, invoked as step 11 of run-daily.py under jobs-ingest.service
+    cite: backend/run-daily.py STEPS (extract.py); deploy/systemd/jobs-ingest.service:41-45
+    model: JOB_SCORING_MODEL, else LLM_MODEL, else DEFAULT_MODEL (backend/llm.py:107-110); base URL from JOB_SCORING_BASE_URL / LLM_BASE_URL (llm.py:97-98); key from JOB_SCORING_API_KEY, else GLM_API_KEY, else LLM_API_KEY (llm.py:140-142). JOBS_EXPECTED_MODEL (llm.py:124) is an assertion, not a selector. The 2026-08-02 journal shows model=deepseek-v4-flash@api.deepseek.com.
+    on_failure: Deferral is not failure: the last run logged '0 unusable, 0 deferred (will retry)'. The unit's TimeoutStartSec=10800 exists because 'Two of the nine steps make LLM calls and dominate the wall clock'.
+
+[deploy] score.py, invoked as step 13 of run-daily.py under jobs-ingest.service
+    cite: backend/run-daily.py STEPS (score.py); deploy/systemd/jobs-ingest.service:41-42
+    model: Same llm.py resolution chain as extract.py. Persona text comes from config/persona.json or config/pursuit-persona.json depending on profile (JOBS_PROFILE, schema.py:389).
+    on_failure: Per the architecture invariant, a non-answering endpoint writes nothing and retries next run; only an unusable answer gets a tombstone row. The unit exit code does not distinguish them — jobs-failure@ only sees a non-zero exit.
+
+[deploy] Extraction pass budget is configuration, not code: extraction-policy.json decides 1 vs 3 passes per platform
+    cite: backend/config/extraction-policy.json (agreement_threshold 0.90, passes_below_threshold 3, default_passes 1)
+    model: Keyed on jobs.platform, matched exactly ('builtin', not 'builtin-nyc' — a mismatch silently falls through to default_passes). Only hn_whoishiring qualifies today.
+    on_failure: A platform absent from measured_agreement gets one pass deliberately: 'An unmeasured source is not a bad source; tripling its cost would be paying for a number nobody has.'
+
+[deploy] No unit in deploy/ makes an LLM call directly. jobs-volume-check.service explicitly runs system python3 with no venv because it needs neither psycopg nor any model.
+    cite: deploy/systemd/jobs-volume-check.service:25-29
+    model: n/a
+    on_failure: Exits 1 on findings so jobs-failure@ delivers the journal tail; exits 2 on bad usage or unreadable config so 'a broken checker must not look like a clean one'.
+
+[evals] evals/runner.py `_one()` — the single LLM call site for the whole evals package. Every `evals run` and every pass of `evals selfcheck` funnels through here.
+    cite: backend/evals/runner.py:84-130 (call at :101-102)
+    model: `models.parse(args.model)` → a ModelSpec from `MODEL@BASE_URL@KEY`, bare `MODEL` (env fallback), or `claude:MODEL`. Key may be `env:VARNAME`, resolved once per run by `spec.call_kwargs()` BEFORE any record is dispatched. Only `spec.cache_identity()` = {backend, model, base_url} reaches the cache key or any report — never the API key.
+    on_failure: THREE-WAY, and the split is load-bearing. `llm.TransientError` (429/timeout/5xx/QuotaExhausted) → status DEFERRED, NEVER cached, not counted against the model. `RuntimeError` → status TOMBSTONE with reason `call_failed:`. A response that parses to None → status TOMBSTONE. Nothing raises out of _one() for a per-record failure.
+
+[evals] evals/runner.py `run()` ThreadPoolExecutor — concurrency, not a separate call site
+    cite: backend/evals/runner.py:133-173; DEFAULT_WORKERS at :40
+    model: DEFAULT_WORKERS=3, mirroring extract.py's EXTRACT_MAX_WORKERS but deliberately NOT imported from it, so a sweep varying workers cannot silently change the pipeline default.
+    on_failure: Results are placed back in corpus order regardless of completion order, so two runs over the same fixture produce byte-identical reports.
+
+[evals] evals/runner.py `run_repeated()` — N sequential passes, the self-consistency instrument
+    cite: backend/evals/runner.py:176-210
+    model: Same spec for all passes. Caching OFF by default whenever repeat > 1; each pass carries repeat_index into cache.key_for so passes can never collide even with caching forced on.
+    on_failure: Passes run SEQUENTIALLY, never interleaved — running three at once would triple offered load and a provider degrading under load would be reported as model instability, which is precisely the confusion the measurement exists to avoid.
+
+[evals] tools/cost-test.py — live cost/latency measurement
+    cite: backend/tools/cost-test.py:352 (`llm.call_detailed(prompt, timeout=..., **call_kwargs)`)
+    model: Its own --model spec parsing; corpus is the FROZEN fixture evals/fixtures/corpus-v1.jsonl (DEFAULT_CORPUS at :105-109), explicitly never a live first_seen DESC selection.
+    on_failure: Routed through llm.call_detailed specifically so it keeps ratelimit.acquire() — four earlier tools rebuilt the HTTP call by hand and dropped it, letting a sweep spend the nightly run's quota.
+
+[evals] tools/compare-models.py — N candidate models, same jobs
+    cite: backend/tools/compare-models.py:84 (job selection), and its own urllib call path
+    model: Repeated --model MODEL@BASE_URL@API_KEY; the FIRST one listed is the reference for track_agree. Prompt comes from score.build_prompt() (importing the real one, after a drifted paraphrase caused track_agree to compare against a different question).
+    on_failure: json_ok is the reported hard gate; a model that cannot return parseable JSON is unusable regardless of quality.
+
+[evals] tools/claude-bench.py / tools/claude-ceiling-test.py — the `claude -p` CLI as a scoring backend
+    cite: backend/tools/claude-ceiling-test.py:31-43 (subprocess to claude-bench.py); backend/llm.py:257-270 (_call_claude)
+    model: --model haiku by default in ceiling-test; llm.py's claude backend shells `claude -p <prompt> --output-format json --max-turns 1`, billed against the Pro/Max OAuth store, no API key.
+    on_failure: _CLAUDE_TRANSIENT regex (rate.?limit|overloaded|usage limit|quota|too many requests|429/500/502/503/504|timed out) maps CLI output to TransientError; without it every rate limit would tombstone a job that was never evaluated. `json_object` cannot be honoured on this backend at all — callers rely on parse_json()'s fence-stripping.
+
+[evals] tools/compare-extract.py — does disabling reasoning change the FACTS or only the bill
+    cite: backend/tools/compare-extract.py:63 (its own `call()`)
+    model: Its own MODEL@URL@KEY parse using split('@', 2) (which models.py records as the CORRECT one, versus compare-models.py's rejoin-the-middle which is a latent truncation bug on keys containing '@').
+    on_failure: Not routed through llm.py — this is one of the tools evals/models.py exists to supersede.
+
+[evals] NOT an LLM call, worth stating: metrics.py, corpus.py, cache.py, cassettes.py, scratchdb.py, labels.py, relevance-report.py, calibrate-match.py, label-findings.py, dismiss-reasons.py, hydrate-labelled-corpus.py, derive-role-tracks.py make ZERO model calls.
+    cite: backend/tools/calibrate-match.py:43-46; backend/tools/label-findings.py:5; backend/tools/hydrate-labelled-corpus.py:3-4
+    model: n/a
+    on_failure: n/a
