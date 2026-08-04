@@ -543,19 +543,39 @@ at `T-16`: 1449 / 354 / 117. Both frontend checkers still pass (`verify_fixtures
 
 ---
 
-### T-18 — Shrink the citation baseline
+### ~~T-18~~ — Shrink the citation baseline
 
-`backend/config/citation-baseline.json` accepts **305 pre-existing unresolvable citations, 0 new**
-as of 2026-08-03 (`cd backend && python3 tools/audit-citations.py`). **Run the tool for the number;
-do not quote this line** — it has already been written four different ways in four commits, which
-is the failure this row is a small piece of undoing. The file is meant to shrink and must never be
-added to in order to silence a finding.
+**Closed 2026-08-03.** 305 → 3 across six commits, the last four in one session. **Run the tool for
+the number; do not quote this line** — it has already been written four different ways in four
+commits, which is the failure this row was a small piece of undoing.
 
-The drift is not uniform — `evals/labels.py` self-citations run +266 in one place and +338 in
-another — so no single offset fixes them. Work them by owning file, a few per commit.
+**The last 3 are not further drift — they are false positives the checker's own design cannot
+avoid**, confirmed individually rather than left as an unexplained floor: `backend/evals/
+__main__.py:620` and `backend/tools/mock-acceptance.py:81` are CLI `--out` defaults naming a file to
+be *created*, not a citation to existing content (neither path has ever existed in git history);
+`backend/tests/test_mock_corpus.py:947` asserts that a specific file-and-line-range substring is
+present in another module's docstring, so the literal string under test must stay bare —
+wrapping it here would fail the assertion it exists to make. Each was checked, not assumed; "3 left"
+is the honest floor for this tool's design, not an abandoned target.
 
-**Done when:** the count is lower than when the commit started and the tool still reports `0 new`.
-There is no target; there is a direction.
+**One correctness bug found and fixed along the way, in citations this same row had already
+"fixed" earlier in its own run.** The checker's tag-span check (`_spans()` in
+`tools/audit-citations.py`) short-circuits on any citation recognized as `git show <ref>:<path>`
+*before* the line-count check that runs for untagged citations — so a tag-wrapped citation to a
+line past the end of the target file resolves exactly as cleanly as a correct one. Several
+citations to the rolling handoff document, wrapped in `refactor-freeze-2026-08-02` (where that file
+is 144 lines) at line numbers as high as 1047, passed the checker silently across two different
+sessions before being caught by manually reading content, not by the tool. Fixed by finding the
+specific commit each citation's line number actually resolves against, via `git log -S '<citing
+string>' -- <citing file>` to date the comment and `git log` across the target file's full history
+to find where the matching prose sits at that exact line — HANDOFF.md was a rolling document,
+periodically trimmed by dedicated roll/archive tasks (40, 44), 3481 lines at its largest. Two other
+citation-splitting bugs recurred independently: a `git show <ref>:` broken across adjacent string
+literals with a quote between them, and the same broken across a `#:`-prefixed comment line — both
+invisible to a human reader, both silently unresolved. **The lesson for any future citation work:
+re-run `--all` after every batch rather than trusting the PostToolUse hook's silence** — the hook
+fires on the file being edited, not on a citation fixed in an earlier commit that happens to share a
+key with one being touched now.
 
 ---
 
