@@ -240,8 +240,8 @@ do not restate it here.
 | ~~`T-5`~~ | 1 — what a session knows | `.claude/CLAUDE.md` under 150 lines; five path-scoped files under `.claude/rules/` |
 | ~~`T-6`~~ | 2 — who does the work | `plan-verifier` and `artifact-reviewer`, read-only, each invoked once on real work |
 | ~~`T-7`~~ | 4 — what is guaranteed | `PostToolUse` hook running `tools/audit-citations.py` on the touched path |
-| `T-8` | 5 — what travels | `~/.claude/CLAUDE.md`: scope discipline, verify-before-claiming, never echo credentials |
-| `T-9` | 5 — what travels | `~/.claude/skills/whatsnew/` — **task 53's Part B, never built.** Run once, first report committed |
+| ~~`T-8`~~ | 5 — what travels | `~/.claude/CLAUDE.md`: scope discipline, verify-before-claiming, never echo credentials |
+| ~~`T-9`~~ | 5 — what travels | `~/.claude/skills/whatsnew/` — **task 53's Part B, never built.** Run once, first report committed |
 
 **`T-5`, `T-6`, `T-7` closed 2026-08-03.** `.claude/CLAUDE.md` is 149 lines, zero `~~` spans, with
 five path-scoped files under `.claude/rules/` (`sql.md`, `ingest.md`, `measurement.md`, `config.md`,
@@ -268,6 +268,33 @@ tasks-38/40 lesson this row repeats: a file that cannot be committed cannot be c
 `agents/`, `hooks/` and `settings.json` are the harness itself, not machine state, so `.gitignore`
 gained four more `!` exceptions rather than the whole directory being un-ignored —
 `settings.local.json` stays exactly as machine-local as it was.
+
+**The deferred clause from `T-5`/`T-6`/`T-7` resolved itself the next session, as predicted.** This
+session's own agent listing carried `plan-verifier` and `artifact-reviewer` from the start, and the
+`PostToolUse` hook fired live and correctly during `T-18` work — twice as a genuine block (a `git
+show <ref>^:` citation whose `^` fell outside the hook's own ref regex; a `git show <ref>:` split
+across a `#:`-prefixed comment line break) and repeatedly as silent passes on correct edits. All
+three primitives are confirmed working, closing the one open question `T-5`/`T-6`/`T-7` left behind.
+
+**`T-8` and `T-9` closed 2026-08-03.** `~/.claude/CLAUDE.md` (35 lines) carries the four points named
+in the table row verbatim as prose rules, not restated here. `~/.claude/skills/whatsnew/SKILL.md`
+implements the six-step manual check `TASK-52-harness.md` specifies — read the record, fetch
+`code.claude.com/docs/llms.txt`, inventory `~/.claude/` and the current project's `.claude/` fresh
+each run, bucket into *replaces something hand-built* / *worth trying* / *ignore*, report, update the
+record — and is explicit in its own body that automating it is the failure it exists to prevent.
+
+Run once, this session, against a genuinely empty prior record (`~/.claude/skills/whatsnew/last-
+checked.json` did not exist). First report at `~/.claude/skills/whatsnew/reports/2026-08-04.md`
+(outside this repo, so summarized rather than linked): **bucket one flagged two things** — this
+repo's `.claude/CLAUDE.md` "Commands" section is six-plus bash invocations a session re-types by
+hand every time, and `.claude/commands/` (a documented primitive, unused here) could turn the
+highest-traffic ones into `/test`, `/citations`, `/lint`; `/goal` was flagged as a weaker-fit
+candidate for what a `T-`/`OQ-` row's own "Done when:" clause already does by hand, one condition at
+a time. Bucket two named the Advisor Tool (a second opinion at the moment of a weight/threshold
+decision, for `OQ-3`'s eventual close) and Channels (turning `tools/volume-check.py`'s alert into
+something a session picks up on its own next run, rather than a line in output nobody read yet).
+Neither bucket's findings are built here — by the skill's own design, a first run reports, it does
+not act, and no `.claude/commands/` exist in this repo as of this row.
 
 ---
 
