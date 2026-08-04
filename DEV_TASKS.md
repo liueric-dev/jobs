@@ -43,11 +43,14 @@ cannot compress, so start them first even though they finish last.
 | if you have | do this |
 |---|---|
 | **5 minutes** | `OQ-9` — pick the floor of record. Every model figure you or anyone quotes is provisional until you do |
-| **a week of lead time** | `OQ-3` — line up labellers for round 2. This is the gate the whole scoring redesign is waiting on |
+| **a week of lead time, once the MVP has shipped** | `OQ-3` — line up labellers for round 2. This is the gate the scoring redesign's *validation* is waiting on, not the MVP itself |
 
-**If you do only one thing: `OQ-3`.** The scoring redesign completed 2026-07-28 and has never
-been validated, because GATE 4 of the master plan needs labels that do not exist yet. Everything
-else on this list improves a system nobody has confirmed works.
+**`OQ-3` validates whether the scoring redesign worked; it does not gate shipping.** The redesign
+completed 2026-07-28 and has never been validated — GATE 4 of the master plan needs labels that
+do not exist yet — but `score_job()` already runs and the frontend already displays its output
+independent of any label. Owner decision 2026-08-04: `OQ-3` is deliberately sequenced after the
+MVP ships (see the row itself). Everything else on this list improves or validates a system that
+already works for users, it does not unblock it.
 
 ---
 
@@ -56,23 +59,34 @@ else on this list improves a system nobody has confirmed works.
 ### OQ-3 — More labellers on the same ten overlap rows, and round 2
 
 **Why it is yours:** people. Longest lead time on the list; start it today even though it
-finishes last.
+finishes last. **Deliberately deferred past the MVP, 2026-08-04** — see below.
 
 **What:** Round 2 is due around 2026-08-09 and needs ≥100 distinct postings from ≥5 labellers.
 Today there are 2 labellers, 36 postings, and **10 rows of overlap**.
 
-**How to do it.** More *postings* do nothing — 25 of the 36 carry a single labeller and add
-exactly zero to the ceiling. What is needed is **more people labelling the same ten rows**.
-Recruit from the cohort, point each at the labelling flow, and check progress with:
+**This does not block the MVP or anything a user sees.** `match_score`/`fit_score` are computed
+by `score_job()`, which is pure and reads no label table — the frontend already displays scores
+today with zero dependency on this row. Owner decision 2026-08-04: recruiting more labellers is
+easier once people can see the app working, so this is sequenced **after** the MVP ships, not
+before. Recruiting can still widen past the cohort when it resumes — the access gate
+(`backend/webapp/manage_app_users.py add`) is an allowlist by email, not a cohort-membership
+check.
+
+**How to do it, once resumed.** More *postings* do nothing — 25 of the 36 carry a single
+labeller and add exactly zero to the ceiling. What is needed is **more people labelling the same
+ten rows**. Point each at the labelling flow, and check progress with:
 
 ```bash
 cd backend && python3 -m evals label status
 ```
 
-**What it unblocks:** task 30, task 13's weights, task 12's next `FACTS_VERSION` bump, and
-GATE 4 of the master plan — which is the gate that says whether the scoring redesign worked.
-It also un-denominates every model-vs-human figure in the repo, all of which are currently
-computed against a ceiling derived from those 10 rows.
+**What it unblocks:** task 13's weights, task 12's next `FACTS_VERSION` bump, `OQ-5`'s staged
+`revenue_commercial` archetype, and GATE 4 of the master plan — which is the gate that says
+whether the 2026-07-28 scoring redesign worked. (Previously this line also named task 30; that
+was closed independently via `OQ-8` on 2026-08-03 using `extract.ROLE_TRACK`, without needing
+these labels — struck here since it no longer depends on this row.) It also un-denominates every
+model-vs-human figure in the repo, all of which are currently computed against a ceiling derived
+from those 10 rows.
 
 **Done when:** `evals label status` shows ≥5 labellers on the overlap set, and the recomputed
 human ceiling sits **above** the model floor on at least the fields it currently sits below.
@@ -198,22 +212,30 @@ run and reviewed, or this row is struck with the reason it is still premature.
 ### OQ-15 — Is the `ingest/google-*.py` ↔ `serp/providers/*` duplication temporary or permanent?
 
 **Why it is yours:** decision. The code supports both readings and they imply opposite fixes.
+**The error-disposition bug this row originally described is already fixed** — re-verified
+2026-08-04, see below. What remains is the structural question only.
 
-**What:** Two SerpApi implementations coexist and **disagree**:
-`backend/ingest/google-serpapi.py` raises on any `error` key, so "no results" is recorded as a
-query failure; `backend/serp/providers/serpapi.py` treats it as empty. Held back on purpose by
-`DEC-99`. Router fallthrough is unimplemented and unflagged.
+**What:** Two SerpApi implementations still coexist. They used to **disagree** on what an `error`
+key in a 200 response means: `backend/ingest/google-serpapi.py` raised on any `error` key, so
+"no results" was recorded as a query failure, while `backend/serp/providers/serpapi.py` treated
+it as empty. **That disagreement was fixed in `a80f254` (2026-08-03)** — the live script now
+imports `EMPTY_ERROR_MARKERS` from `serp/providers/serpapi.py` and only raises for the
+non-empty-result error cases (`ingest/google-serpapi.py:335-356`); one new test covers it. The
+commit's own message explains why the two implementations were **not** merged at the same time:
+they serve different, currently-unrelated call sites (the live nightly batch script vs. an
+on-demand search path that is dead code in production), and merging now would repeat the exact
+risk `DEC-99` held back on. Router fallthrough is still unimplemented and unflagged.
 
 **How to do it.** If **temporary**, the fix is to finish the seam: make `serp/providers/` the
 one implementation, delete the duplicate, implement router fallthrough. If **permanent**, the fix
-is the opposite — document the split, and reconcile the two error dispositions so they at least
-agree on what "no results" means, because today one of them is silently recording failures that
-are not failures.
+is to document the split — the two now already agree on what "no results" means, so this half of
+the original "How to do it" is done regardless of which way the temporary/permanent question
+lands.
 
 **What it unblocks:** task 23's remaining half.
 
-**Done when:** one disposition for an `error` key exists in the tree, or two exist with a
-`_comment` at each saying why.
+**Done when:** one implementation exists in the tree, or two exist with a `_comment` at each
+saying why the split is permanent.
 
 ---
 
@@ -222,16 +244,20 @@ are not failures.
 ### OQ-4a — One clock left, nothing to do but wait
 
 **Why it is yours:** machine. No account needed — this one is just a terminal, and as of
-2026-08-04 there is nothing left to type. All 13 tracked units (14 minus `jobs-volume-digest`,
-deleted below) are installed and enabled — `jobs-backup.timer` and `jobs-backup-verify.timer`
-joined the rest today, once `OQ-4b`'s off-machine destination existed to make them meaningful.
+2026-08-04 there is nothing left to type. All 13 tracked units are installed and enabled, and
+`systemctl --user list-unit-files 'jobs-*'` shows a clean list — no `bad` entries. `jobs-backup.
+timer` and `jobs-backup-verify.timer` joined the rest today, once `OQ-4b`'s off-machine
+destination existed to make them meaningful.
 
-**`jobs-volume-digest.timer`/`.service` were deleted, not installed.** Decided 2026-08-04: a
-weekly Telegram report nobody reads is exactly the kind of alert that trains a channel to be
-ignored — same failure mode `jobs-volume-digest.service`'s own comment warned about for its
-sibling alarm ("an alert about a failed report is how a channel stops being read"), just applied
-one level up. `backend/tools/volume-check.py --digest` still exists for a manual check-in; only
-the automation is gone.
+**`jobs-volume-digest.timer`/`.service` were deleted from the repo, and are now fully
+un-installed.** Decided 2026-08-04: a weekly Telegram report nobody reads is exactly the kind of
+alert that trains a channel to be ignored — same failure mode `jobs-volume-digest.service`'s own
+comment warned about for its sibling alarm ("an alert about a failed report is how a channel
+stops being read"), just applied one level up. `backend/tools/volume-check.py --digest` still
+exists for a manual check-in; only the automation is gone. The initial deletion left two dangling
+symlinks behind at `~/.config/systemd/user/jobs-volume-digest.{service,timer}` (`systemctl --user
+list-unit-files` reported both `bad`) — found and removed 2026-08-04, `daemon-reload` run, list
+is clean.
 
 **Not closeable today, and it is not yours to fix:** `python3 tools/volume-check.py` needs a few
 days of nightly history before it reports a real comparison instead of `insufficient history` on
@@ -251,17 +277,24 @@ runs.
 
 ### OQ-13 — Registrations that block work: Adzuna, USAJobs, Firecrawl
 
-**Why it is yours:** account. Each is a signup you have to do.
+**Why it is yours:** account. Each is a signup you have to do. **Re-checked 2026-08-04: Firecrawl
+is already registered**, so only Adzuna and USAJobs remain open.
 
 **What:** Task 15 has **no commit and no code at all** — it is blocked on an Adzuna
 `app_id`/`app_key`. `backend/tools/ats-discover.py:55-60` documents the seam and says so:
 `adzuna_top_companies()` is stubbed, and filling it in flows employers into `ats_seed` with no
-other change. Firecrawl blocks task 20.
+other change. Firecrawl blocks task 20 — but **`FIRECRAWL_API_KEY` is already set in
+`backend/webapp/.env`** (populated, `fc-…` prefix, present since 2026-08-04's deploy). Nothing in
+the tree reads it yet (`grep -rn FIRECRAWL_API_KEY **/*.py` is empty — task 20 has no code
+either), and it is filed in `webapp/.env`, not `backend/.env`, so whoever picks up task 20 should
+confirm that's the right process for it to live in before writing code against it.
 
-**How to do it.** Register for each, put the credentials in `backend/.env`, and hand tasks 15
-and 20 to a session. Adzuna is free for low volume; check USAJobs' terms before relying on it.
+**How to do it.** Register for Adzuna and USAJobs, put the credentials in `backend/.env`, and
+hand tasks 15 and 20 to a session. Adzuna is free for low volume; check USAJobs' terms before
+relying on it.
 
-**Done when:** the keys are in `backend/.env` and the stub is no longer a stub.
+**Done when:** the Adzuna and USAJobs keys are in `backend/.env` and the stubs are no longer
+stubs.
 
 ---
 
@@ -320,7 +353,9 @@ refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_nine/README.md` — said 
 anything. 51 is `git mv` and stubs."* `5046f98` deleted 137 and left none; `c052f23`, `20ee7d0`
 and `47dd212` are the bill. Now recorded — `docs/adr/0002-task-51-deleted-instead-of-git-mv.md`.
 
-**`OQ-3` is still the one to do first, and `TASKS.md` does not change that.** The scoring
-redesign completed 2026-07-28 and has never been validated — GATE 1 came in at 16/20 and 10/20
-against a definition of done asking 20/20, and GATE 4 has never been attempted. `OQ-3` is that
-gate. Every row in `TASKS.md` improves a system nobody has confirmed works.
+**`OQ-3` is still the one to line up recruiting for, once the MVP ships — see the row itself for
+the 2026-08-04 sequencing decision.** The scoring redesign completed 2026-07-28 and has never
+been validated — GATE 1 came in at 16/20 and 10/20 against a definition of done asking 20/20, and
+GATE 4 has never been attempted. `OQ-3` is that gate, but the system it would validate is already
+running and displaying scores to users regardless. Every row in `TASKS.md` improves or validates
+a system that already works, not one still waiting to be unblocked.

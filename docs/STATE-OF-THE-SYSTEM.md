@@ -194,7 +194,7 @@ status column was never trustworthy on its own.
 | 13 Cohort criteria | 16/20 and 10/20 against a DoD asking 20/20. Correctly not tuned into being met |
 | 16 ATS token discovery | 96 of 376 employers never probed; the nightly backfill trips its own circuit breaker (48% > 35%) and exits 1. The positive control failed 4 of 4, so `not_found` is not evidence of absence |
 | 18 Workday CXS | Block rate needs a week of runs; three exist, all one day |
-| 23 SERP abstraction | Two SerpApi implementations coexist and **disagree**: `ingest/google-serpapi.py:335-337` raises on any `error` key, so "no results" is recorded as a query failure; `serp/providers/serpapi.py:78-94` treats it as empty. Held back on purpose by `DEC-99`. Router fallthrough is unimplemented and unflagged |
+| 23 SERP abstraction | Two SerpApi implementations still coexist. The disagreement described here — `ingest/google-serpapi.py` raising on any `error` key vs. `serp/providers/serpapi.py` treating "no results" as empty — was **fixed in `a80f254` (2026-08-03)**; both now agree via the shared `EMPTY_ERROR_MARKERS` (`ingest/google-serpapi.py:335-356`). What is still unmet: router fallthrough is unimplemented and unflagged, and whether the duplication itself is temporary or permanent is still open (`OQ-15`) |
 | 26 Profile creation | The four onboarding preferences are stored and filter nothing |
 | 34 Cleanup | Genuinely done; the Status line still says `NEXT` |
 
@@ -294,45 +294,57 @@ forward commit, so a mechanical revert scan under-reports what was undone.
 
 ### (b) Needs the owner — a decision, an account, a device, or a person
 
-1. **Is `api/` being retired or kept warm?** `jobs-api.service:6-9` says deprecated and says to
-   delete the unit and its cloudflared ingress rule *together* — an ingress hostname with nothing
-   behind it is a 502 that reads as an outage. Meanwhile tranche work landed in it on 2026-08-02.
-   Opposite signals; only you can settle it. **This also decides task 24 and the Contribute surface.**
-2. **Deployment is entirely owner-side.** A Cloudflare account, a domain, and one
-   `cloudflared tunnel create` to fill `deploy/cloudflared/config.yml`'s placeholders; a
-   `cloudflared` binary (`/usr/local/bin/cloudflared` does not exist); install the **eleven absent
-   units** — `deploy/systemd/` holds 14 and 3 are installed, so the "twelve" here was off by one.
-   Re-verified 2026-08-03: the three live at `~/.config/systemd/user/` (**user** units, not
-   `/etc/systemd/system/`, where none of them appear), are dated 2026-07-26, are regular-file
-   copies rather than symlinks — unlike the `garmin-*` units beside them, which *are* symlinked —
-   and **differ from the repo copies today**, so editing `deploy/systemd/` changes nothing that
-   runs.
-3. **`~/.config/jobs-backup.env` does not exist**, so backups would run local-disk-only, tolerated
-   silently by the `-` prefix. No verified restore has been performed.
-4. **The volume alarm is half wired, and the missing half is the half that fires.** Re-checked
-   2026-08-03: history is now accruing — `backend/.run-volumes.jsonl` exists and
-   `tools/volume-check.py` **exits 0**, reporting `9 source(s) evaluated, 1 run(s) in history` with
-   every source `skip … (insufficient history)`. It no longer exits 1 with `no_history`. What is
-   still missing is the reader: `jobs-volume-check.timer` is not installed, so nothing runs the
-   check. `systemctl --user list-unit-files` shows only `jobs-failure@.service`,
-   `jobs-ingest.service` and `jobs-ingest.timer`. One run is also not enough history to compare
-   against — that accrues on its own; the timer will not.
-5. **Which of the two committed n=115 selfchecks is the floor of record?** See § 6. Neither JSON
-   carries a supersession marker.
-6. **Name the tracks.** `config/pursuit-persona.json`'s `_no_buckets_comment` records that
-   `score.TRACKS`' five names "do not describe this population" and assigns naming to task 30. It
-   blocks the display half independently of the experiment.
+**This subsection is a live mirror of `../DEV_TASKS.md`'s `OQ-` queue, not a frozen list — of the
+original twelve items below, eight are now closed.** `DEV_TASKS.md` is the one to work from; the
+numbers here are kept only so a citation to e.g. item 4 still resolves to something true.
+
+1. ~~Is `api/` being retired or kept warm?~~ **Answered 2026-08-03 (`OQ-1`).** The parent
+   question is settled: the crowdsourcing service stays, and `jobs-api.service`'s deprecation
+   marking is stale and should not be acted on. Left open: who issues a contributor credential —
+   deliberately, per the owner ("I don't know what the current plan for implementation is").
+2. ~~Deployment is entirely owner-side.~~ **Closed 2026-08-04 (`OQ-4a`/`OQ-4b`).** Cloudflare
+   account, domain, `cloudflared` binary and tunnel are all live. All 13 tracked units are
+   installed at `~/.config/systemd/user/` as symlinks (not the regular-file copies this line used
+   to describe) and enabled. Two dangling symlinks left behind by `jobs-volume-digest`'s deletion
+   (`bad` in `systemctl --user list-unit-files`) were found and removed 2026-08-04.
+3. ~~`~/.config/jobs-backup.env` does not exist.~~ **Closed 2026-08-04 (`OQ-4b`).** It exists and
+   points `JOBS_BACKUP_REMOTE` at a Backblaze B2 bucket via a new `rclone` remote (`b2jobs:`). A
+   real dump was restored into a scratch database and matched all 29 tables' row counts against
+   production; `--self-test` (a deliberately broken comparison) correctly failed.
+4. **The volume alarm is now fully wired, and is still waiting on history to accrue — a clock,
+   not a task.** Re-checked 2026-08-04: `jobs-volume-check.timer` is installed and enabled
+   (closed the missing half, `OQ-4a`), and has now run twice —
+   `python3 tools/volume-check.py` reports `9 source(s) evaluated, 2 run(s) in history`, still
+   `skip … (insufficient history)` on every source. Re-run this command directly rather than
+   trusting a count quoted here; it changes every night `jobs-ingest.timer` fires.
+5. ~~Which of the two committed n=115 selfchecks is the floor of record?~~ **Closed 2026-08-03
+   (`OQ-9`).** Both kept as a range, act on the lower bound per field — recorded in both result
+   JSONs, § 6 below, and `.claude/CLAUDE.md`.
+6. ~~Name the tracks.~~ **Closed 2026-08-03 (`OQ-8`).** `score.TRACKS` stays as-is — dead code for
+   the `pursuit` profile (`daily_narrative_budget` is 0), and renaming it would invent the
+   narrowness the persona `_comment` warns against. Task 30's display half ships with
+   `extract.ROLE_TRACK`'s nine-slug vocabulary instead.
 7. **Task 29 round 2** (~2026-08-09) and ≥100 distinct postings from ≥5 labellers. Today: 2
-   labellers, 36 postings, 10 overlap. Every model-vs-human figure is denominated by a ceiling
-   computed from those 10.
-8. **The phone test** — a device, plus a Google redirect-URI registration that is not in this repo.
+   labellers, 36 postings, 10 overlap, unchanged. **Deliberately deferred past the MVP, owner
+   decision 2026-08-04** — recruiting is easier once people can see the app working, and nothing
+   about the MVP depends on these labels (`score_job()` reads no label table). See `OQ-3`.
+8. **The phone test** — still open, but its blocker is gone: the tunnel (`OQ-4b`) is live, so only
+   a physical phone and a Google Cloud Console redirect-URI registration remain.
 9. **Is the duplication between `ingest/google-*.py` and `serp/providers/*` temporary or
-   permanent?** The code supports both readings and they imply different fixes.
-10. **Registrations that block work:** Adzuna and USAJobs (task 15), Firecrawl (task 20).
-11. **Is `SESSION_COOKIE_SECURE` true in the deployed `.env`?** If false anywhere but local plain
-    HTTP, the session cookie — the client's only credential — travels in the clear.
-12. **Has any contributor API key ever been minted and handed to a person?** `api_keys` is empty
-    here; a key minted elsewhere would not show up.
+   permanent?** Still open, but narrower than this line states: the two implementations used to
+   **disagree** on what a "no results" `error` key means, and that was fixed in `a80f254`
+   (2026-08-03) by porting `serp/providers/serpapi.py`'s `EMPTY_ERROR_MARKERS` classification into
+   the live script. What remains is only whether the duplication itself should be merged or
+   formally documented as permanent (`OQ-15`).
+10. **Registrations that block work:** Adzuna and USAJobs (task 15) are still open. Firecrawl
+    (task 20) is not — re-checked 2026-08-04, a populated `FIRECRAWL_API_KEY` already sits in
+    `backend/webapp/.env` (nothing in the tree reads it yet, since task 20 has no code either).
+11. ~~Is `SESSION_COOKIE_SECURE` true in the deployed `.env`?~~ **Closed 2026-08-04 (`OQ-11`).**
+    Yes — `backend/webapp/.env` has `SESSION_COOKIE_SECURE=true`, and the deployment is no longer
+    localhost-only; a real Google sign-in has completed through the public URL.
+12. ~~Has any contributor API key ever been minted and handed to a person?~~ **Closed 2026-08-03
+    (`OQ-12`).** No — re-verified 2026-08-04, `manage_users.py list` still returns
+    `no contributors yet`.
 
 ## 5. Landmines
 
