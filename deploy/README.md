@@ -54,7 +54,7 @@ genuinely separate units rather than separately-described halves of one thing.
 | webapp + contributor API | yes | yes | thirty people locked out |
 
 **They still share one machine and one Postgres instance, and that coupling is
-documented rather than removed.** the deleted `docs/RUNBOOK.md` § *Failure domains* said exactly
+documented rather than removed.** the deleted `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md` § *Failure domains* said exactly
 what is shared, what a failure in each half does to the other, and what the two
 tightest couplings are. Moving the app off this box is a real option and is written
 up there as a decision the owner has not yet had to make.

@@ -22,7 +22,7 @@ envfile.load() at the top of every run and every step is a fresh subprocess
 inheriting that environment (run-daily.py:191). The next nightly run picks up a
 new key on its own. webapp/ and api/ are long-lived uvicorn processes that read
 config at import, so they need a restart -- which is still not a redeploy, and
-docs/RUNBOOK.md says which is which.
+`git show refactor-freeze-2026-08-02:docs/RUNBOOK.md` says which is which.
 
 WHAT THIS DOES NOT CHECK. Whether the key in `.env` is valid, whether it has
 quota left, or whether the provider has revoked it. Those are silent failures
@@ -223,7 +223,8 @@ class TestTheContributorApiNeverLogsAPayload(unittest.TestCase):
     column -- because a worker that accidentally put its key in a payload would
     then have leaked it to the operator permanently.
 
-    The audit behind this test, and its result, are in docs/RUNBOOK.md."""
+    The audit behind this test, and its result, are in
+    `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md`."""
 
     def test_nothing_under_api_writes_to_stdout_or_a_logger_at_request_time(self):
         api_dir = os.path.join(BACKEND_DIR, "api")

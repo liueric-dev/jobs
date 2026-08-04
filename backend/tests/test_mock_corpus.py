@@ -804,7 +804,8 @@ class TestTheShippedAnswerKey(unittest.TestCase):
         production row whose location names a neighbourhood instead of a
         borough is priced by config/criteria.json's `location` block as though
         it were out of area. Frozen rather than fixed -- lib/ is vendored
-        byte-identical (tools/lib-parity.sh) and widening the pattern is a
+        byte-identical (`git show 87bbff5:tools/lib-parity.sh`, deleted when
+        the other repo link was cut) and widening the pattern is a
         corpus-wide re-ranking, not a test fix."""
         known = {("mock_022", "location_is_nyc"),
                  ("mock_028", "location_is_nyc"),
@@ -937,7 +938,7 @@ class TestNothingCanPullThisIntoProduction(unittest.TestCase):
         self.assertNotIn("mock-postings", source)
 
     def test_the_module_says_plainly_that_it_is_not_a_label(self):
-        """HANDOFF.md:805-808 -- fixtures written from a specification test
+        """`git show 11f0fd0:docs/tasks/refactor/HANDOFF.md:805-808` -- fixtures written from a specification test
         the specification. The caveat has to travel with the module, because
         the number it produces will outlive the conversation that made it."""
         doc = mc.__doc__

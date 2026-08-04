@@ -297,8 +297,8 @@ restricted `jobs_api` role described above.
 **~~Not automated by this repo~~ — automated as of task 33.** The systemd unit,
 the tunnel config and the install sequence are tracked in
 [`deploy/`](../../deploy/README.md), and day-to-day operations were in
-`docs/RUNBOOK.md`, deleted 2026-08-02 —
-`git show refactor-freeze-2026-08-02:docs/RUNBOOK.md`. What remains manual is the part no
+`git show refactor-freeze-2026-08-02:docs/RUNBOOK.md`, deleted 2026-08-02.
+What remains manual is the part no
 repository can hold: a Cloudflare account, a domain, and one `cloudflared
 tunnel create`.
 
@@ -365,7 +365,7 @@ Two of these are still open, and both are real once strangers can call it:
   many a contributor may hold *at once*. Fifty outstanding claims is inside the
   daily cap and is most of a 32-slug bank, each locked for `CLAIM_TTL_MINUTES`.
   `job_ingest_state.claimed_by` makes the check one query; it is not built. See
-  `docs/tasks/refactor/tranche_four/24-revive-contributor-api.md`.
+  `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_four/24-revive-contributor-api.md`.
 - **No provenance.** Rows submitted through this API are indistinguishable
   from locally-ingested ones, and `submission_log` records counts, not job
   ids. There is no way to trace or purge one contributor's rows if they turn

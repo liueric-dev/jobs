@@ -299,8 +299,8 @@ the temperature-0 non-determinism `deepseek-v4-flash` is already known for
 > and reproduces from `../evals/fixtures/results/selfcheck-n120-2026-07-28.json`
 > — cited here rather than restated, so that this file cannot be the place a
 > fourth copy goes stale. The reasoning for why 76% was not real was
-> `docs/tasks/refactor/DECISIONS.md` § *06 — Was 76% real?*, deleted 2026-08-02:
-> `git show refactor-freeze-2026-08-02:docs/tasks/refactor/DECISIONS.md`.
+> `git show refactor-freeze-2026-08-02:docs/tasks/refactor/DECISIONS.md` §
+> *06 — Was 76% real?*, deleted 2026-08-02.
 > **Check the `n` before reusing either pair**; the direction of the
 > point below is unaffected — the model still does not agree with itself at
 > temperature 0, which is the only property this paragraph relies on.
@@ -367,7 +367,7 @@ answered. The objections are that tier 3 is 93% employer boilerplate
 (hand-checked n=30 at 6.7% precision — the measurement and its full reasoning
 survive in `config/relevance.json`'s `_max_tier_quality_note`, which is where a
 person editing the number will look; the write-up it came from,
-`docs/pursuit-gate-volume.md`, went 2026-08-02), that 34
+`git show refactor-freeze-2026-08-02:docs/pursuit-gate-volume.md`, went 2026-08-02), that 34
 of the 43 on-target titles are *already* at tier 1/2 so widening buys nine
 postings, and — decisively — that `tier_sql` folds `company_exclude` and
 `description_exclude` into the same predicate that assigns the tier

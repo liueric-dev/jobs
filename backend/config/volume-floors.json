@@ -25,7 +25,7 @@
     "workday": {
       "floor": 10,
       "window_days": 7,
-      "_comment": "ingest/workday.py. Only two runs of history -- 73 and 29 -- because the step is newer than the journal window, so this floor is the least-evidenced number in the file and should be re-derived first. Seven days rather than three for the same reason. docs/ingest/workday.md calls this the fragile gate, and the Workday `limit`>20 trap returns an empty array with no error, indistinguishable from 'no more results', so a silent zero here is the specific outcome most worth catching."
+      "_comment": "ingest/workday.py. Only two runs of history -- 73 and 29 -- because the step is newer than the journal window, so this floor is the least-evidenced number in the file and should be re-derived first. Seven days rather than three for the same reason. git show refactor-freeze-2026-08-02:docs/ingest/workday.md calls this the fragile gate, and the Workday `limit`>20 trap returns an empty array with no error, indistinguishable from 'no more results', so a silent zero here is the specific outcome most worth catching."
     },
     "builtin-nyc": {
       "floor": 60,
@@ -35,7 +35,7 @@
     "nyc-open-data": {
       "floor": 1,
       "window_days": 30,
-      "_comment": "ingest/nyc-open-data.py. Measured 354, 0, 0, 0, 0 -- and the zeros are correct. The feed is a full slice re-read every night, so a night where no posting changed produces only `unchanged` rows, which parse_upsert_summaries deliberately excludes (run-daily.py:210-214). Thirty days and a floor of one therefore says the only thing that can honestly be said about this source: over a month it must write SOMETHING, or the endpoint has moved. docs/ingest/nyc-open-data.md puts its yield near two relevant postings a day, which is consistent."
+      "_comment": "ingest/nyc-open-data.py. Measured 354, 0, 0, 0, 0 -- and the zeros are correct. The feed is a full slice re-read every night, so a night where no posting changed produces only `unchanged` rows, which parse_upsert_summaries deliberately excludes (run-daily.py:210-214). Thirty days and a floor of one therefore says the only thing that can honestly be said about this source: over a month it must write SOMETHING, or the endpoint has moved. git show refactor-freeze-2026-08-02:docs/ingest/nyc-open-data.md puts its yield near two relevant postings a day, which is consistent."
     },
     "weworkremotely": {
       "floor": 1,

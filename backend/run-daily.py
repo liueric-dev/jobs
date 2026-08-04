@@ -161,14 +161,14 @@ STEPS = [
     # same night, and beside ats.py because the two are the same shape of
     # source. ~8 minutes of nightly window at four tenants -- and that is WITH
     # the upstream gate: without it the same run is 1,366 detail requests and
-    # 34 minutes. See docs/ingest/workday.md.
+    # 34 minutes. See `git show refactor-freeze-2026-08-02:docs/ingest/workday.md`.
     "ingest/workday.py",
     "ingest/builtin-nyc.py",
     # With the other NYC-scoped source, and before extract.py -- which is the
     # only ordering constraint that matters. Yields ~1.8 relevant postings/day
     # against the task file's 20-60 estimate; kept because it is one documented
     # JSON API with an explicit close date per posting, not because of volume.
-    # See docs/ingest/nyc-open-data.md.
+    # See `git show refactor-freeze-2026-08-02:docs/ingest/nyc-open-data.md`.
     "ingest/nyc-open-data.py",
     "ingest/weworkremotely.py",
     "ingest/hn-hiring.py",

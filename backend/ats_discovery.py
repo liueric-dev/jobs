@@ -249,7 +249,7 @@ def find_signatures(page_text):
 # forever -- which, again, is indistinguishable from a quiet employer.
 #
 # The Greenhouse URL is deliberately the one ingest/ats.py:152 already calls,
-# not the boards-api host 17-retarget-ats-ingest.md:38 names. Validating
+# not the boards-api host `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:38` names. Validating
 # against a different host than the ingest will use means validating something
 # other than the thing that has to work.
 
@@ -505,6 +505,7 @@ def never_found_row(employer_name, careers_url, now, discovered_via="probe"):
         # served", and tasks 17/18/20 must not read it as "no ATS".
         "validation_note": ("no ATS URL in the served HTML -- NOT evidence "
                             "the employer has no ATS; see the false-negative "
-                            "rate in docs/ats-token-discovery.md"),
+                            "rate in git show refactor-freeze-2026-08-02:"
+                            "docs/ats-token-discovery.md"),
         "discovered_via": discovered_via,
     }

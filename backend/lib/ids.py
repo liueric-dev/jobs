@@ -21,7 +21,7 @@ f-strings, so a None became the literal "None" and never an empty string:
 `make_id` therefore does a plain str() on every part rather than normalising
 None away. The `or title` / `or ''` fallbacks are caller-side and stay at
 the call site, so events calls make_id(source, source_id or title, start or "").
-tests/test_ids.py pins this against the original expressions.
+tests/test_row_identity.py pins this against the original expressions.
 """
 
 import base64
