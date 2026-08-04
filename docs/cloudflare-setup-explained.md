@@ -128,8 +128,8 @@ week as plain copied files, silently invisible to git, before this project's `de
 existed at all (the full story is in
 [`deploy/README.md`](../deploy/README.md#why-these-files-are-tracked-at-all)).
 
-Installing a unit and **enabling** it are different things, though — `systemctl` shows all 14 as
-known now, but most as `disabled`:
+Installing a unit and **enabling** it are different things, though — right after this step,
+`systemctl` showed all 14 as known, but most as `disabled`:
 
 ```
 cloudflared.service     linked   disabled
@@ -140,26 +140,30 @@ jobs-volume-check.timer enabled  disabled   ← was already running, untouched
 ```
 
 `cloudflared.service`, `jobs-webapp.service` and `jobs-api.service` were deliberately **not**
-started. Starting `cloudflared.service` would make the tunnel live — and the moment it's live,
-`jobs.etotheric.com` is a real, internet-reachable URL. That's not safe to do yet: the webapp's
-`.env` still has `GOOGLE_REDIRECT_URI`, `FRONTEND_ORIGIN` and `SESSION_COOKIE_SECURE` pointed at
-`localhost`, and Google's OAuth console has to be told the new redirect URI in the exact same
-string, byte for byte, or every sign-in attempt fails with a Google error page instead of an error
-from this app. That's documented at
-[`deploy/cloudflared/config.yml:55-63`](../deploy/cloudflared/config.yml) and is the next step,
-tracked as `DEV_TASKS.md`'s `OQ-11`.
+started at that point, because the webapp's `.env` still had `GOOGLE_REDIRECT_URI`,
+`FRONTEND_ORIGIN` and `SESSION_COOKIE_SECURE` pointed at `localhost`, and Google's OAuth console
+had to be told the new redirect URI in the exact same string, byte for byte, or every sign-in
+attempt would fail with a Google error page instead of an error from this app — see
+[`deploy/cloudflared/config.yml:55-63`](../deploy/cloudflared/config.yml).
+
+**That step happened later the same day.** As of 2026-08-04, all three settings are flipped in
+`backend/webapp/.env`, the Google Console redirect URI matches, and all three units are `enabled`
+and `active (running)` — `cloudflared.service` has held a tunnel connection since 01:49 EDT,
+`curl https://jobs.etotheric.com/v1/health` returns `{"ok":true}` from off-network, and a real
+Google sign-in was completed through the public URL the same day. `DEV_TASKS.md`'s `OQ-11` is
+closed as a result.
 
 ## What's still open after this
 
-- **Flip the three `.env` settings and the Google Console redirect URI together**, then start
-  `cloudflared.service`, `jobs-webapp.service`, `jobs-api.service`.
+- **Three of the fourteen `deploy/systemd/` units remain uninstalled**: `jobs-backup.timer`,
+  `jobs-backup-verify.timer`, `jobs-volume-digest.timer`. Tracked as `DEV_TASKS.md`'s `OQ-4a`.
 - **The off-machine backup destination** (`~/.config/jobs-backup.env`) doesn't exist yet, so
-  `jobs-backup.timer`/`jobs-backup-verify.timer` would currently only ever produce a local-disk
-  copy — tolerated (the unit's `EnvironmentFile=` has a `-` prefix so a missing file isn't a
+  those two backup timers would currently only ever produce a local-disk copy even once
+  installed — tolerated (the unit's `EnvironmentFile=` has a `-` prefix so a missing file isn't a
   startup error), but not what you want for a real backup.
 - **No restore has ever been verified.** A backup nobody has restored from is a belief, not a
   backup — `deploy/README.md`'s own "Prove it before believing it" section has the self-test
-  commands for this, the tunnel, and the failure notifier.
+  commands for this, the tunnel, and the failure notifier. Tracked as `DEV_TASKS.md`'s `OQ-4b`.
 
 ## How to check on any of this later
 

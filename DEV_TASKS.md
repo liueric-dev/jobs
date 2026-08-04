@@ -43,8 +43,8 @@ cannot compress, so start them first even though they finish last.
 | if you have | do this |
 |---|---|
 | **5 minutes** | `OQ-9` — pick the floor of record. Every model figure you or anyone quotes is provisional until you do |
-| **30 minutes** | `OQ-4a` — install the systemd units. The volume alarm is the only thing watching for silent ingest failure and it is not running |
-| **an evening** | `OQ-4b` — Cloudflare account, tunnel, one verified restore. Unblocks everything a Builder can reach |
+| **30 minutes** | `OQ-4a` — three systemd timers left (`jobs-backup`, `jobs-backup-verify`, `jobs-volume-digest`); the tunnel and webapp/API units are live |
+| **an evening** | `OQ-4b` — the tunnel is live; what's left is an off-machine backup destination and one verified restore |
 | **a week of lead time** | `OQ-3` — line up labellers for round 2. This is the gate the whole scoring redesign is waiting on |
 
 **If you do only one thing: `OQ-3`.** The scoring redesign completed 2026-07-28 and has never
@@ -223,31 +223,31 @@ are not failures.
 
 ### OQ-4a — Install the eleven absent systemd units
 
-**Why it is yours:** machine. No account needed — this one is just a terminal. **The one live
-consequence is fixed as of 2026-08-03** — the rest of the eleven are not installed and stay open
-below.
+**Why it is yours:** machine. No account needed — this one is just a terminal. **Ten of the
+fourteen units are now live as of 2026-08-04** — three remain, below.
 
-**`jobs-volume-check.timer` is now installed and enabled.** `systemctl --user list-timers` shows
-it scheduled for `Tue 2026-08-04 09:00:11 EDT` (`RandomizedDelaySec=600` on top of the unit's
-09:00 `OnCalendar`); `python3 tools/volume-check.py` still runs clean at exit 0. **Still open, and
+**`jobs-volume-check.timer` is installed and enabled** (since 2026-08-03), and **`cloudflared.service`,
+`jobs-api.service` and `jobs-webapp.service` are now installed, enabled, and `active (running)`**
+(confirmed 2026-08-04 — `systemctl --user status` on all three, tunnel accepting real traffic
+since 01:49 EDT). `python3 tools/volume-check.py` still runs clean at exit 0. **Still open, and
 not closeable today:** the "Done when" below needs a few days of nightly history to accrue before
 the check reports a real comparison instead of `insufficient history` on every source — that part
 is a clock, not a task.
 
-**The other ten of the fourteen `deploy/systemd/` units remain uninstalled**, including the three
-already-live units that have drifted from their repo copies (comment-only drift, checked
-2026-08-03 — `jobs-ingest.service`'s repo copy dropped a stale "nine steps" comment the live copy
-still carries, no functional difference found). Diff each against its repo copy before overwriting
-if this row is picked up again:
+**Three of the fourteen `deploy/systemd/` units remain uninstalled**: `jobs-backup.timer`,
+`jobs-backup-verify.timer`, `jobs-volume-digest.timer` (confirmed absent from
+`systemctl --user list-timers --all` 2026-08-04). `jobs-backup.service` also has no off-machine
+destination yet (see `OQ-4b`), so installing its timer now would only ever produce a local-disk
+copy. Diff each against its repo copy before installing if this row is picked up again:
 
 ```bash
-systemctl --user list-unit-files | grep jobs     # what is live now: 3 + jobs-volume-check.timer
+systemctl --user list-unit-files | grep jobs     # what is live now: 10 of 14
 ls deploy/systemd/                               # what exists: 14
 diff ~/.config/systemd/user/jobs-ingest.service deploy/systemd/jobs-ingest.service
 ```
 
 **Done when:** after a few nightly runs, `python3 tools/volume-check.py` reports a comparison
-rather than `insufficient history` on every source.
+rather than `insufficient history` on every source, and the three remaining timers are installed.
 
 ---
 
@@ -255,50 +255,33 @@ rather than `insufficient history` on every source.
 
 **Why it is yours:** account. `DEC-91` already took the Cloudflare-vs-Tailscale call and `DEC-92`
 took the stays-on-the-home-box call, so nothing here is a decision any more — it is purely
-account access and a person at a terminal.
+account access and a person at a terminal. **The tunnel half is done; the backup half is not.**
 
-**What:** A Cloudflare account, a domain, one `cloudflared tunnel create` to fill
-`deploy/cloudflared/config.yml`'s placeholders, and the `cloudflared` binary
-(`/usr/local/bin/cloudflared` does not exist). Plus `~/.config/jobs-backup.env`, which does not
-exist — so backups would run local-disk-only, tolerated silently by the `-` prefix in the unit.
+**Done, confirmed 2026-08-04:** the Cloudflare account, domain, tunnel (`726fa841-8945-4e06-bb06-
+f241cbbe30dc`), and `cloudflared` binary (`/usr/local/bin/cloudflared` now a symlink to
+`/usr/bin/cloudflared`) all exist. `deploy/cloudflared/config.yml`'s placeholders are filled in.
+`curl https://jobs.etotheric.com/v1/health` returns `{"ok":true}` from off-network, and a real
+Google sign-in was completed through the public URL the same day (see `OQ-11`, closed).
 
-**No verified restore has ever been performed.** The backup script and its verify timer are
-written and have never run.
+**Still open:** `~/.config/jobs-backup.env` still does not exist, so `jobs-backup.timer` /
+`jobs-backup-verify.timer` are not installed (`OQ-4a`) and backups, if run manually, would be
+local-disk-only, tolerated silently by the `-` prefix in the unit. **No verified restore has ever
+been performed** — the backup script and its verify timer are written and have never run.
 
-**How to do it.** In order:
+**How to do it.** What's left, in order:
 
 ```bash
-# 1. binary, account, tunnel
-cloudflared tunnel login
-cloudflared tunnel create jobs
-#    then fill the placeholders in deploy/cloudflared/config.yml
-
-# 2. backups: create ~/.config/jobs-backup.env with an OFF-MACHINE destination
+# 1. backups: create ~/.config/jobs-backup.env with an OFF-MACHINE destination
+# 2. install jobs-backup.timer and jobs-backup-verify.timer (OQ-4a)
 # 3. the part everyone skips -- restore into a scratch database and diff row counts
 ```
 
 **Do the restore.** A backup that has never been restored is a belief, not a backup.
 
-**What it unblocks:** everything a Builder can reach, `OQ-14`, and `OQ-11`.
+**What it unblocks:** `OQ-14` (the tunnel half it needed is already done).
 
-**Done when:** the tunnel resolves from off-network, and you have restored a dump into a scratch
-database and compared row counts against production.
-
----
-
-### OQ-11 — Is `SESSION_COOKIE_SECURE` true in the deployed `.env`?
-
-**Why it is yours:** machine. Nobody but you can read that file.
-
-**What:** The session cookie is the client's **only** credential (`backend/webapp/auth.py:420`).
-If `SESSION_COOKIE_SECURE` is false anywhere but local plain HTTP, it travels in the clear.
-
-**How to do it.** Read `backend/webapp/.env` on the deployed box. If it is false and the box is
-reachable over anything but localhost, set it true and restart the webapp. Check it again after
-`OQ-4b`, because that is the moment it starts mattering.
-
-**Done when:** confirmed true in the deployed environment, or confirmed the deployment is
-localhost-only and written down as such.
+**Done when:** you have restored a dump into a scratch database and compared row counts against
+production.
 
 ---
 
@@ -347,6 +330,7 @@ hostname as an authorised redirect URI in Google Cloud Console, then load it on 
 | ~~OQ-8~~ | `score.TRACKS`'s five-value enum "does not describe this population" (persona `_comment`); task 30's display half needed a browsable vocabulary | **Closed 2026-08-03.** These are two different "track" concepts, not one. `score.TRACKS` is the narrative LLM call's per-profile vocabulary, two of whose five values ("Re-Entry & Growth", "Poor Fit") are fit judgments rather than job families — renaming it for Pursuit would be exactly the invented narrowness the persona `_comment` warns against, and it's dead code for this profile anyway (`daily_narrative_budget` is 0). `extract.ROLE_TRACK` is the separate, per-job, already-live nine-slug vocabulary task 11 built for this purpose, with hand-written plain-language copy already in `config/search-queries.json`. Decision: task 30's display half ships with `ROLE_TRACK`; `score.TRACKS` is left as-is. Recorded in `score.py`'s `TRACKS` comment and the persona's `_no_buckets_comment` |
 | ~~OQ-16~~ | Whether the `kind: record` carve-out (one document allowed to claim frozen history rather than current state) stays | **Closed 2026-08-03 — carve-out removed, option 2.** The last `kind: record` handoff document is deleted, recoverable at `git show refactor-freeze-2026-08-02:backend/docs/HANDOFF-multimachine-google-jobs.md`. Its still-live facts moved before deletion rather than being lost with it: the multi-machine shared-budget bug it found moved to `backend/README.md`'s locking section, and its Step 3 (a dry-run-verified id migration for `google_jobs` rows, checked today and confirmed **still unapplied 9 days later**) became `TASKS.md`'s `T-20` — a genuinely live finding this closure surfaced, not mere history. The rest was already duplicated in code comments (`lib/ids.py`). Rule is now unqualified: only the three `kind: contract` files may claim current state, no exceptions |
 | ~~OQ-12~~ | Whether any contributor API key has ever been minted and handed to a person | **Closed 2026-08-03. No.** Owner confirmed none were generated; `cd backend/api && .venv/bin/python manage_users.py list` (with `api/.env` exported into the shell) returns `no contributors yet` — `api_keys` is empty. Written into `OQ-1`: retiring `api/` would be a deletion, not a migration, if that is the direction chosen |
+| ~~OQ-11~~ | Is `SESSION_COOKIE_SECURE` true in the deployed `.env`? | **Closed 2026-08-04. Yes.** `backend/webapp/.env` has `SESSION_COOKIE_SECURE=true`, and the deployment is no longer localhost-only — the Cloudflare tunnel (`OQ-4b`) went live the same day, with a real Google sign-in completed through the public URL |
 
 ---
 
