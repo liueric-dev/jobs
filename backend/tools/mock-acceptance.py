@@ -652,13 +652,14 @@ def ranking_quality(scored, k=metrics.TOP_K):
         one of the deliberately awkward ones this corpus was built out of, so
         every drop removes a hard case and makes the ranker look better.
 
-        That is trap 4.1 (docs/MEASUREMENT-TRAPS.md at
-        refactor-freeze-2026-08-02) pointing
+        That is trap 4.1
+        (`git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`) pointing
         the other way -- there MATCH_FLOOR hid the easy low end and cost a
         ranking 0.619 -> 0.326; here extraction failure hides the hard end and
         pays it back with interest.
 
-        So `coverage` carries n/total in the shape docs/score-validation.md:270
+        So `coverage` carries n/total in the shape
+        `git show refactor-freeze-2026-08-02:docs/score-validation.md:270`
         already prints ("55 usable of 120"), and `unscored_good` lists the
         intended-GOOD postings that were dropped BY ID. That last one is not a
         caveat on the ranking figure, it is a finding of its own: an extraction

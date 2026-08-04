@@ -76,7 +76,7 @@ RECONCILING AGAINST THE API'S OWN TOTAL -- per platform, measured 2026-07-28
     LEVER_SKIP_CEILING.
 
 DELTA SYNC -- what the platforms actually support, measured 2026-07-28
-    `17-retarget-ats-ingest.md:46` says "Both Greenhouse and Lever expose
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:46` says "Both Greenhouse and Lever expose
     update timestamps. Poll with `updated_at` filtering rather than full
     re-pulls." Probed against the live APIs, that is not true of either:
 
@@ -355,7 +355,7 @@ def fetch_greenhouse(token):
 #: (limit=3/skip=3 returns a disjoint set of ids).
 LEVER_PAGE_LIMIT = 100
 
-#: 17-retarget-ats-ingest.md:41-42: "pagination truncates at 250, so a company
+#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:41-42`: "pagination truncates at 250, so a company
 #: with more roles needs slicing by team or location". This script does not
 #: slice -- it records that it could not see the whole board and declines to
 #: close anything for that company. Past 250 a short page is indistinguishable
@@ -395,7 +395,7 @@ def fetch_lever(token):
 def fetch_ashby(token):
     """One call. `includeCompensation=true` is what fills salary_text.
 
-    17-retarget-ats-ingest.md:31 -- "cleanest salary support of any public
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:31` -- "cleanest salary support of any public
     feed", and it is: the field is a rendered range string the employer chose
     to publish, not a number this pipeline has to infer from prose. It costs
     nothing extra, and boards that do not publish compensation return the key
@@ -410,7 +410,7 @@ def fetch_ashby(token):
 
 #: Workable is TWO endpoints, and the reason is worth stating.
 #:
-#: `17-retarget-ats-ingest.md:33` names `/api/v3/accounts/{slug}/jobs`. That
+#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:33` names `/api/v3/accounts/{slug}/jobs`. That
 #: endpoint is authoritative about the SET -- it reports `total` and pages by
 #: an opaque `nextPage` token -- and it carries no descriptions at all. It
 #: also pages ten at a time, so reading a whole board through it costs

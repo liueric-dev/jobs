@@ -282,7 +282,7 @@ def tie_histogram(values):
 #: How average_precision() and precision_at_k() treat equal scores.
 #:
 #: TIES ARE NOT AN EDGE CASE HERE, THEY ARE THE COMMON CASE.
-#: Trap 4.2 (docs/MEASUREMENT-TRAPS.md at refactor-freeze-2026-08-02, which
+#: Trap 4.2 (`git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`, which
 #: keeps the 4.1-4.7 numbering so citations still resolve) records 59 postings
 #: sharing one fit_score, and match_score is free arithmetic over a small integer
 #: weight table, so it clusters just as hard. A top-k boundary that falls
@@ -316,7 +316,7 @@ class Ranked(NamedTuple):
     being measured, and EVERY DROP MAKES THE RANKER LOOK BETTER.
 
     That is trap 4.1 ("do not compute metrics over a floor-filtered sample",
-    docs/MEASUREMENT-TRAPS.md at refactor-freeze-2026-08-02) in a second costume. There
+    `git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`) in a second costume. There
     it was job_matches' MATCH_FLOOR hiding the low end and moving one
     identical ranking function from +0.619 to +0.326; here it is extraction
     failure hiding the hard end and moving it the other way.
@@ -348,7 +348,7 @@ class Ranked(NamedTuple):
         return self.n_dropped == 0
 
     def coverage(self):
-        """"55/120", the shape docs/score-validation.md:270 already uses.
+        """"55/120", the shape `git show refactor-freeze-2026-08-02:docs/score-validation.md:270` already uses.
 
         One string so that no caller has to decide how to render it, and so
         that a report cannot print the statistic having forgotten it.
@@ -478,7 +478,7 @@ def precision_at_k(scores, labels, k=TOP_K):
 # average_precision and precision_at_k above answer "how good is this
 # ordering". The question task 30 actually has to answer is "is this ordering
 # better than the one it replaces"
-# (docs/tasks/refactor/tranche_six/30-within-track-ordering.md:98 -- "a paired
+# (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_six/30-within-track-ordering.md:98` -- "a paired
 # bootstrap against the pre-refactor baseline"), and two of the numbers above,
 # each with its own interval, cannot answer it: see bootstrap_delta.
 #
@@ -721,7 +721,7 @@ def bootstrap_delta(scores_a, scores_b, labels, metric=None, *,
 
     On this data the pairing does most of the work. The corpus is task 29's
     `pursuit-v1` label set -- n=200 drawn, >=100 labelled by its definition of
-    done (docs/tasks/refactor/tranche_five/29-labelling-session.md:51, :163) --
+    done (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_five/29-labelling-session.md:51`, :163) --
     and at that size the sampling variance of average precision is far larger
     than the differences task 30 is deciding between. Worse, the two orderings
     it compares differ only in bucketing and within-bucket sort, not in the
@@ -777,8 +777,8 @@ def bootstrap_delta(scores_a, scores_b, labels, metric=None, *,
     interval rests on. When `draws_used` falls below MIN_USABLE_FRACTION of
     `draws`, `value` is None and no interval is reported: past that point the
     surviving draws are a minority subset selected by something correlated with
-    the statistic, which is trap 4.1 (docs/MEASUREMENT-TRAPS.md at
-    refactor-freeze-2026-08-02) -- a quality figure computed over
+    the statistic, which is trap 4.1
+    (`git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`) -- a quality figure computed over
     a sample a filter chose rather than the question -- in a third costume. For
     average precision that floor is unreachable on a corpus with a positive in
     it; see MIN_USABLE_FRACTION for the 1/e bound and for why a tighter floor

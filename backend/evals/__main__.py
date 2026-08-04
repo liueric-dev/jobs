@@ -375,7 +375,7 @@ def cmd_label_export(args):
     """Write golden-vN.jsonl from whatever people have labelled so far.
 
     Separate from the corpus file so the two version independently, which is
-    what 03-metrics-and-golden-set.md:107 asks for: a corpus is re-snapshotted
+    what `git show refactor-freeze-2026-08-02:docs/ingestion_tests/03-metrics-and-golden-set.md:107` asks for: a corpus is re-snapshotted
     when the sources change and a golden set is never regenerated at all.
     """
     from evals import labels
@@ -467,7 +467,7 @@ def cmd_label_status(args):
 
     # WHICH EXTRACTION EACH LABEL WAS FORMED AGAINST. Printed HERE and not in
     # `label report`, whose figures are owned by
-    # docs/labelling-report-2026-08-02.md -- this command owns nothing and is
+    # `git show refactor-freeze-2026-08-02:docs/labelling-report-2026-08-02.md` -- this command owns nothing and is
     # already the "who has labelled what" surface.
     #
     # The three states are not interchangeable and the middle one is the one a

@@ -158,7 +158,7 @@ class TestATS(NormalizerContract):
 
     @require("ats-greenhouse-no-content")
     def test_a_payload_with_no_content_field_loses_descriptions_silently(self):
-        """The third awkward response from 05-fetcher-harness.md:73-76.
+        """The third awkward response from `git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:73-76`.
 
         Recorded from the same board with `?content=true` dropped, which is
         the real shape ats.py:152 would receive if that parameter were ever
@@ -446,7 +446,7 @@ class TestWeWorkRemotely(NormalizerContract):
 
         The summary used to print `len(all_records)` and nothing else, so an
         exclude-pattern edit that started eating real engineering titles
-        "would produce no signal at all" (weworkremotely.md:309-312). The
+        "would produce no signal at all" (`git show refactor-freeze-2026-08-02:docs/ingest/weworkremotely.md:309-312`). The
         counters make the difference between items offered and rows produced
         add up -- which is the only thing that can turn that edit into a
         number somebody sees.
@@ -752,7 +752,7 @@ def _immediate_success(cassette):
     recording it came from the first time either is re-recorded.
 
     This is `apify-immediate-success.json` from
-    `05-fetcher-harness.md:68`, built rather than stored.
+    `git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:68`, built rather than stored.
     """
     from evals.cassettes import Cassette, Interaction
     run = next(i for i in cassette.interactions if "/actor-runs/" in i.url)

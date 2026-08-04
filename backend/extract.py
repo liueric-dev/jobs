@@ -121,7 +121,7 @@ EXTRACT_MAX_WORKERS = int(os.environ.get("EXTRACT_MAX_WORKERS", "3"))
 #:
 #: 3600s is chosen against task 04's measurement, not guessed: 7.7s p50 /
 #: 13.1s p95 per call, and 2.85s/call EFFECTIVE at EXTRACT_MAX_WORKERS=3
-#: (DECISIONS.md:331 -- the concurrent figure is the only one this script
+#: (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/DECISIONS.md:331` -- the concurrent figure is the only one this script
 #: ever experiences, since it always runs its batches through the pool). One
 #: hour is therefore ~1,260 calls, against 43 eligible postings/day measured
 #: by task 05 and ~80/day recently. That is roughly 15x headroom on a normal
@@ -228,7 +228,7 @@ SENIORITY = ("intern", "new_grad", "junior", "mid", "senior", "staff",
 #: DERIVED, NOT INVENTED. The original twelve were all software-engineering
 #: values, which made every non-software role `other` -- priced at 0 by
 #: config/criteria.json, i.e. indistinguishable from a missing value. The
-#: fourteen added below come from docs/role-track-derivation.md (a), measured
+#: fourteen added below come from `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md` (a), measured
 #: against 863 cohort-eligible postings and the 427 rows already sitting at
 #: `other`. That document reports employer SPREAD beside every count, because
 #: a candidate whose mass sits at one employer is that employer's hiring spree
@@ -259,7 +259,7 @@ SENIORITY = ("intern", "new_grad", "junior", "mid", "senior", "staff",
 #: theirs. Two verticals does not justify SOC's complexity; four would. This
 #: change takes the hand-maintained list from 12 to 26, which is most of the
 #: way to where that trade flips, so the next person to want another eight
-#: values should read docs/role-track-derivation.md, "The O*NET/SOC escape
+#: values should read `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md`, "The O*NET/SOC escape
 #: hatch", before adding them.
 ARCHETYPE = (
     # The original twelve. All software engineering.
@@ -279,11 +279,11 @@ ARCHETYPE = (
 #: ARCHETYPE, and a separate axis rather than a rollup of it.
 #:
 #: PROVISIONAL, AND THE REASON MATTERS. These nine are cluster names from
-#: docs/role-track-derivation.md (b): agglomerative clustering over posting
+#: `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md` (b): agglomerative clustering over posting
 #: TITLES (descriptions rebuild the employer list, not a role taxonomy -- 94%
 #: of title-only clusters span 4+ employers against 30% for title+description).
 #: The corpus they came from is pre-Phase-3 and tech-heavy, and the task file
-#: (tranche_two/11-archetype-superset-role-track.md:56-64) is explicit that a
+#: (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_two/11-archetype-superset-role-track.md:56-64`) is explicit that a
 #: taxonomy derived from it "will not describe the population's opportunity
 #: space" and expects revision. backend/tools/derive-role-tracks.py exists to
 #: re-run the derivation; this is not a settled vocabulary.
@@ -472,7 +472,7 @@ _MARKUP_RESIDUE = re.compile(
 #:
 #: CONSIDERED AND REJECTED ON MEASUREMENT, recorded so it is not proposed again:
 #:   a marker blocklist (`data-testid=`, `pointer-events-auto`) -- the query
-#:     HANDOFF.md:410-413 used. It finds 3 of the 8 contaminated rows. It misses
+#:     `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:410-413` used. It finds 3 of the 8 contaminated rows. It misses
 #:     both google_jobs rows and both of the Tailwind-only greenhouse rows,
 #:     because those leaked class names and no data- attribute.
 #:   repeated-content density (duplicate 60-char shingles in the window) -- aimed

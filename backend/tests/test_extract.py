@@ -266,7 +266,7 @@ class InputSanityCassetteTests(unittest.TestCase):
     include: the ">" inside the class attribute ended lib/text.strip_html()'s
     old `<[^>]+>` early, so the remainder of the tag was emitted as prose. A
     hand-written "some markup" fixture tests the sentence "some markup", which
-    is the trap HANDOFF.md:571-574 names -- all three failure modes task 18
+    is the trap `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:571-574` names -- all three failure modes task 18
     found live were invisible to its four constructed fixtures.
 
     It also runs the REAL ingest function (ats.greenhouse_description) rather
@@ -589,7 +589,8 @@ class MarkupRatioTests(unittest.TestCase):
 
     def test_tailwind_class_residue_with_no_data_attribute_is_counted(self):
         # e93ddca38b45bb929e6e46cd (Databricks). A marker blocklist built from
-        # `data-testid=` / `pointer-events-auto` -- the query HANDOFF.md:410
+        # `data-testid=` / `pointer-events-auto` -- the query
+        # `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:410`
         # used -- scores this at zero and lets it through.
         self.assertGreater(extract.markup_ratio('p]:pt-0 [&>p]:mb-2 [&>p]:my-0">'),
                            0.5)
@@ -687,7 +688,7 @@ class InputRejectionTombstoneTests(unittest.TestCase):
         self.assertEqual(stopped, extract.DRAINED)
 
 
-#: The fourteen values docs/role-track-derivation.md added to the original
+#: The fourteen values `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md` added to the original
 #: twelve. Listed here rather than sliced out of extract.ARCHETYPE so the test
 #: fails if somebody removes one, which slicing would not catch.
 NEW_ARCHETYPES = (
@@ -725,7 +726,7 @@ class VocabularyTests(unittest.TestCase):
         # reclaim ONE row of 427 (automation_specialist has 5 cohort postings
         # and 1 `other` row; 8 of data_coordination's 9 hits are a single
         # employer's "Data Annotation Specialist"). See
-        # docs/role-track-derivation.md, "Dropped". Adding them back needs new
+        # `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md`, "Dropped". Adding them back needs new
         # evidence, not a re-reading of the task file.
         self.assertNotIn("automation_specialist", extract.ARCHETYPE)
         self.assertNotIn("data_coordination", extract.ARCHETYPE)
@@ -795,7 +796,7 @@ class VocabularyTests(unittest.TestCase):
         # out of date -- but the GUIDANCE is hand-written, and a vocabulary
         # that doubled in size without explaining its overlapping values just
         # moves the ambiguity from `other` into a wrong confident answer.
-        # These four pairs are the ones docs/role-track-derivation.md flags.
+        # These four pairs are the ones `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md` flags.
         archetype = [line for line in extract._INSTRUCTIONS.splitlines()
                      if line.startswith("  role_archetype ")][0]
         for value in ("support_ops", "it_internal", "engineering_management",

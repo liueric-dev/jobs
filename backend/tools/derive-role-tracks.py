@@ -7,7 +7,7 @@ imagination: the archetype superset must be "grounded in what the corpus actuall
 contains", and the tracks must be clustered out of the postings rather than
 decided in a workshop. This script is how that grounding is produced, and it is
 built to be RE-RUN after Phase 3 adds sources -- the first vocabulary is
-explicitly provisional (11-archetype-superset-role-track.md:56-64), so the tool
+explicitly provisional (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_two/11-archetype-superset-role-track.md:56-64`), so the tool
 that produced it has to outlive it.
 
     python3 tools/derive-role-tracks.py                  # everything
@@ -402,9 +402,9 @@ def discriminating_terms(cluster, docs, vocab, global_df, n_docs, limit=10):
 #: output of this tool rather than a claim in a document that has drifted from
 #: it. "drop" is not a deletion -- the candidate is still probed and still
 #: printed, because the evidence AGAINST a value is the part a reader cannot
-#: reconstruct later. Rationale for each: docs/role-track-derivation.md.
+#: reconstruct later. Rationale for each: `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md`.
 CANDIDATES = {
-    # -- the seven named in 11-archetype-superset-role-track.md:28-30 --
+    # -- the seven named in `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_two/11-archetype-superset-role-track.md:28-30` --
     "ai_operations": (
         "ops", "recommend",
         r"\b(ai|genai|generative ai|llm|agentic|automation)\b.{0,24}"
@@ -473,7 +473,7 @@ CANDIDATES = {
         r"technical evangelist|community engineer|technical writer|"
         r"documentation)\b"),
     # -- COMMERCIAL. Added 2026-07-31, probed and NOT adopted; the evidence is
-    #    in docs/role-track-derivation.md, "What the first labels showed".
+    #    in `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md`, "What the first labels showed".
     #
     #    These exist because ARCHETYPE has no commercial value at all -- its own
     #    first line admits it, "The original twelve. All software engineering."
@@ -664,7 +664,7 @@ def _names(family=None, status=None):
 
 
 def report_total_effect(cohort, other, args):
-    """The figures docs/role-track-derivation.md quotes as its headline.
+    """The figures `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md` quotes as its headline.
 
     Printed here because a number that lives only in a document cannot be
     checked after the corpus moves, and this tool exists to be re-run after

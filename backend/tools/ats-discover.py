@@ -53,7 +53,7 @@ POLITENESS
       * --max-requests as a hard ceiling on the whole run.
 
 WHAT IS NOT WIRED UP
-    Adzuna `top_companies` (16-ats-token-discovery.md:32) is a named discovery
+    Adzuna `top_companies` (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/16-ats-token-discovery.md:32`) is a named discovery
     source and is STUBBED -- see adzuna_top_companies() below. Task 15 is
     blocked on an Adzuna app_id/app_key that requires registering an account.
     The function is the seam: fill it in, and its employers flow into ats_seed
@@ -131,7 +131,7 @@ MAX_BYTES = 2_000_000
 #: "200 but the response was not a recognisable job feed" -- so the BIGGEST
 #: and healthiest boards, the ones most worth ingesting, are exactly the ones
 #: that read as unverifiable. Measured, not hypothesised; see the note in
-#: docs/ats-token-discovery.md.
+#: `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md`.
 VALIDATION_MAX_BYTES = 40_000_000
 
 #: Bodies that mean "refused" behind a 200. lib/http.py documents the same
@@ -269,7 +269,7 @@ def adzuna_top_companies(query="artificial intelligence", where="new york",
                          app_id=None, app_key=None):
     """STUB -- Adzuna `top_companies`, task 15's discovery source.
 
-    16-ats-token-discovery.md:32 lists this as a seed source. It is not wired
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/16-ats-token-discovery.md:32` lists this as a seed source. It is not wired
     up because task 15 is BLOCKED: the endpoint
 
         GET https://api.adzuna.com/v1/api/jobs/us/top_companies
@@ -869,7 +869,8 @@ def print_report(conn):
                   f"subset alone overstates roster coverage by "
                   f"{nt_seeded / nt_probed:.1f}x.")
         if nt_public / nt_probed < 0.20:
-            print("\n  SIGNAL (16-ats-token-discovery.md:98-100): public-feed "
+            print("\n  SIGNAL (git show refactor-freeze-2026-08-02:"
+                  "docs/tasks/refactor/tranche_three/16-ats-token-discovery.md:98-100): public-feed "
                   "coverage of the non-tech seed list is under 20%. Task 18 "
                   "(Workday) carries most of the plan's weight and should be "
                   "resourced accordingly.")
