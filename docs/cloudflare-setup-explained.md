@@ -155,8 +155,10 @@ closed as a result.
 
 ## What's still open after this
 
-- **Three of the fourteen `deploy/systemd/` units remain uninstalled**: `jobs-backup.timer`,
-  `jobs-backup-verify.timer`, `jobs-volume-digest.timer`. Tracked as `DEV_TASKS.md`'s `OQ-4a`.
+- **Two of the fourteen `deploy/systemd/` units remain uninstalled**: `jobs-backup.timer`,
+  `jobs-backup-verify.timer`. (A third, `jobs-volume-digest.timer`, was deleted 2026-08-04 rather
+  than installed — a weekly report nobody reads trains the channel to be ignored.) Tracked as
+  `DEV_TASKS.md`'s `OQ-4a`.
 - **The off-machine backup destination** (`~/.config/jobs-backup.env`) doesn't exist yet, so
   those two backup timers would currently only ever produce a local-disk copy even once
   installed — tolerated (the unit's `EnvironmentFile=` has a `-` prefix so a missing file isn't a

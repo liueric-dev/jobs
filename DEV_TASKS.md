@@ -43,7 +43,7 @@ cannot compress, so start them first even though they finish last.
 | if you have | do this |
 |---|---|
 | **5 minutes** | `OQ-9` — pick the floor of record. Every model figure you or anyone quotes is provisional until you do |
-| **30 minutes** | `OQ-4a` — three systemd timers left (`jobs-backup`, `jobs-backup-verify`, `jobs-volume-digest`); the tunnel and webapp/API units are live |
+| **30 minutes** | `OQ-4a` — two systemd timers left (`jobs-backup`, `jobs-backup-verify`); the tunnel and webapp/API units are live |
 | **an evening** | `OQ-4b` — the tunnel is live; what's left is an off-machine backup destination and one verified restore |
 | **a week of lead time** | `OQ-3` — line up labellers for round 2. This is the gate the whole scoring redesign is waiting on |
 
@@ -221,10 +221,12 @@ are not failures.
 
 ---
 
-### OQ-4a — Install the eleven absent systemd units
+### OQ-4a — Install the last two systemd units
 
-**Why it is yours:** machine. No account needed — this one is just a terminal. **Ten of the
-fourteen units are now live as of 2026-08-04** — three remain, below.
+**Why it is yours:** machine. No account needed — this one is just a terminal. This row started
+at "eleven absent"; ten of the now-thirteen tracked units are live as of 2026-08-04 — two remain,
+below. (`jobs-volume-digest`, the fourteenth unit this row originally counted, was deleted
+2026-08-04, decision below — it no longer needs installing.)
 
 **`jobs-volume-check.timer` is installed and enabled** (since 2026-08-03), and **`cloudflared.service`,
 `jobs-api.service` and `jobs-webapp.service` are now installed, enabled, and `active (running)`**
@@ -234,20 +236,27 @@ not closeable today:** the "Done when" below needs a few days of nightly history
 the check reports a real comparison instead of `insufficient history` on every source — that part
 is a clock, not a task.
 
-**Three of the fourteen `deploy/systemd/` units remain uninstalled**: `jobs-backup.timer`,
-`jobs-backup-verify.timer`, `jobs-volume-digest.timer` (confirmed absent from
-`systemctl --user list-timers --all` 2026-08-04). `jobs-backup.service` also has no off-machine
-destination yet (see `OQ-4b`), so installing its timer now would only ever produce a local-disk
-copy. Diff each against its repo copy before installing if this row is picked up again:
+**`jobs-volume-digest.timer`/`.service` were deleted, not installed.** Decided 2026-08-04: a
+weekly Telegram report nobody reads is exactly the kind of alert that trains a channel to be
+ignored — same failure mode `jobs-volume-digest.service`'s own comment warned about for its
+sibling alarm ("an alert about a failed report is how a channel stops being read"), just applied
+one level up. `backend/tools/volume-check.py --digest` still exists for a manual check-in; only
+the automation is gone.
+
+**Two of the fourteen `deploy/systemd/` units remain uninstalled**: `jobs-backup.timer`,
+`jobs-backup-verify.timer` (confirmed absent from `systemctl --user list-timers --all`
+2026-08-04). `jobs-backup.service` also has no off-machine destination yet (see `OQ-4b`), so
+installing its timer now would only ever produce a local-disk copy. Diff each against its repo
+copy before installing if this row is picked up again:
 
 ```bash
-systemctl --user list-unit-files | grep jobs     # what is live now: 10 of 14
-ls deploy/systemd/                               # what exists: 14
+systemctl --user list-unit-files | grep jobs     # what is live now: 10 of 13
+ls deploy/systemd/                               # what exists: 13
 diff ~/.config/systemd/user/jobs-ingest.service deploy/systemd/jobs-ingest.service
 ```
 
 **Done when:** after a few nightly runs, `python3 tools/volume-check.py` reports a comparison
-rather than `insufficient history` on every source, and the three remaining timers are installed.
+rather than `insufficient history` on every source, and the two remaining timers are installed.
 
 ---
 

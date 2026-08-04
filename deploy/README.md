@@ -37,7 +37,6 @@ the failure this whole directory exists to end.
 | `jobs-backup.{service,timer}` | `pg_dump`, checksum, off-machine copy | daily 04:30 |
 | `jobs-backup-verify.{service,timer}` | restore into a scratch db and compare | Sunday 05:30 |
 | `jobs-volume-check.{service,timer}` | the soft-failure alarm | daily 09:00 |
-| `jobs-volume-digest.{service,timer}` | the weekly report | Monday 09:30 |
 | `jobs-failure@.service` | the notifier every unit above points at | on failure |
 
 Ports are not arbitrary and are not duplicated here as a decision: `8421` is
@@ -92,7 +91,7 @@ printf 'JOBS_BACKUP_REMOTE=%s\n' "<rclone-remote:path or /mnt/other-disk/jobs>" 
 #    different reasons and starting them together hides which.
 systemctl --user enable --now cloudflared.service jobs-webapp.service jobs-api.service
 systemctl --user enable --now jobs-ingest.timer jobs-backup.timer \
-    jobs-backup-verify.timer jobs-volume-check.timer jobs-volume-digest.timer
+    jobs-backup-verify.timer jobs-volume-check.timer
 systemctl --user list-timers 'jobs-*'
 ```
 

@@ -14,11 +14,12 @@ Persistent=true
 # and jitter would make "did it fire at midnight?" fuzzy during the soak. Add
 # it if anything else ever lands at 00:00.
 #
-# Task 33 added four timers and none of them lands at 00:00 -- jobs-backup at
-# 04:30, jobs-backup-verify Sunday 05:30, jobs-volume-check at 09:00,
-# jobs-volume-digest Monday 09:30 -- so the reasoning above still holds. The
-# volume check in particular is scheduled against this unit's WORST CASE, not
-# its start time; see jobs-volume-check.timer.
+# Task 33 added three timers and none of them lands at 00:00 -- jobs-backup at
+# 04:30, jobs-backup-verify Sunday 05:30, jobs-volume-check at 09:00 -- so the
+# reasoning above still holds. The volume check in particular is scheduled
+# against this unit's WORST CASE, not its start time; see
+# jobs-volume-check.timer. A fourth, jobs-volume-digest (Monday 09:30), existed
+# briefly and was removed 2026-08-04 -- see DEV_TASKS.md's OQ-4a note.
 Unit=jobs-ingest.service
 
 [Install]
