@@ -153,19 +153,22 @@ and `active (running)` — `cloudflared.service` has held a tunnel connection si
 Google sign-in was completed through the public URL the same day. `DEV_TASKS.md`'s `OQ-11` is
 closed as a result.
 
+## What happened after that, the same day
+
+All thirteen tracked `deploy/systemd/` units (fourteen minus `jobs-volume-digest`, deleted rather
+than installed — a weekly report nobody reads trains the channel to be ignored) are now installed
+and enabled. `~/.config/jobs-backup.env` points `JOBS_BACKUP_REMOTE` at a Backblaze B2 bucket via
+a new `rclone` remote (`b2jobs:`); `backup-jobs.sh` run by hand landed a real dump, checksum, and
+roles-only dump in the bucket. `verify-jobs-backup.sh` then restored that dump into a scratch
+database and matched all 29 tables against production, and `--self-test` (truncating `job_facts`
+in the restored copy) correctly failed the comparison — proof the check can fail, so a pass means
+something. `DEV_TASKS.md`'s `OQ-4a` and `OQ-4b` are both closed as a result.
+
 ## What's still open after this
 
-- **Two of the fourteen `deploy/systemd/` units remain uninstalled**: `jobs-backup.timer`,
-  `jobs-backup-verify.timer`. (A third, `jobs-volume-digest.timer`, was deleted 2026-08-04 rather
-  than installed — a weekly report nobody reads trains the channel to be ignored.) Tracked as
-  `DEV_TASKS.md`'s `OQ-4a`.
-- **The off-machine backup destination** (`~/.config/jobs-backup.env`) doesn't exist yet, so
-  those two backup timers would currently only ever produce a local-disk copy even once
-  installed — tolerated (the unit's `EnvironmentFile=` has a `-` prefix so a missing file isn't a
-  startup error), but not what you want for a real backup.
-- **No restore has ever been verified.** A backup nobody has restored from is a belief, not a
-  backup — `deploy/README.md`'s own "Prove it before believing it" section has the self-test
-  commands for this, the tunnel, and the failure notifier. Tracked as `DEV_TASKS.md`'s `OQ-4b`.
+- **`jobs-volume-check.timer`'s "Done when" is a clock, not a task**: it needs a few more days of
+  nightly `jobs-ingest.timer` history before it reports a real comparison instead of
+  `insufficient history` on every source.
 
 ## How to check on any of this later
 

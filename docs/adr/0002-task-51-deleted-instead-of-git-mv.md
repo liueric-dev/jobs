@@ -18,7 +18,7 @@ Tranche nine's task 51 was *archive the rest*. Its README was explicit about the
 `5046f98` deleted 137 files and 42,777 lines under `docs/` and left no stubs at all, replacing the
 whole tree with one file written from the code. The deviation was not argued in the commit and no
 register recorded it; it surfaced only when [`../../DEV_TASKS.md`](../../DEV_TASKS.md) was written
-and the tranche's state had to be reconciled row by row (`../../DEV_TASKS.md:351-353`).
+and the tranche's state had to be reconciled row by row (`../../DEV_TASKS.md:307-309`).
 
 The reasoning that justified it is sound and worth preserving. An audit found 168 places where those
 documents contradicted the code. A stub that points at a document which was wrong is a slower path

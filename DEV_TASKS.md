@@ -43,8 +43,6 @@ cannot compress, so start them first even though they finish last.
 | if you have | do this |
 |---|---|
 | **5 minutes** | `OQ-9` — pick the floor of record. Every model figure you or anyone quotes is provisional until you do |
-| **30 minutes** | `OQ-4a` — two systemd timers left (`jobs-backup`, `jobs-backup-verify`); the tunnel and webapp/API units are live |
-| **an evening** | `OQ-4b` — the tunnel is live; what's left is an off-machine backup destination and one verified restore |
 | **a week of lead time** | `OQ-3` — line up labellers for round 2. This is the gate the whole scoring redesign is waiting on |
 
 **If you do only one thing: `OQ-3`.** The scoring redesign completed 2026-07-28 and has never
@@ -221,20 +219,12 @@ are not failures.
 
 ---
 
-### OQ-4a — Install the last two systemd units
+### OQ-4a — One clock left, nothing to do but wait
 
-**Why it is yours:** machine. No account needed — this one is just a terminal. This row started
-at "eleven absent"; ten of the now-thirteen tracked units are live as of 2026-08-04 — two remain,
-below. (`jobs-volume-digest`, the fourteenth unit this row originally counted, was deleted
-2026-08-04, decision below — it no longer needs installing.)
-
-**`jobs-volume-check.timer` is installed and enabled** (since 2026-08-03), and **`cloudflared.service`,
-`jobs-api.service` and `jobs-webapp.service` are now installed, enabled, and `active (running)`**
-(confirmed 2026-08-04 — `systemctl --user status` on all three, tunnel accepting real traffic
-since 01:49 EDT). `python3 tools/volume-check.py` still runs clean at exit 0. **Still open, and
-not closeable today:** the "Done when" below needs a few days of nightly history to accrue before
-the check reports a real comparison instead of `insufficient history` on every source — that part
-is a clock, not a task.
+**Why it is yours:** machine. No account needed — this one is just a terminal, and as of
+2026-08-04 there is nothing left to type. All 13 tracked units (14 minus `jobs-volume-digest`,
+deleted below) are installed and enabled — `jobs-backup.timer` and `jobs-backup-verify.timer`
+joined the rest today, once `OQ-4b`'s off-machine destination existed to make them meaningful.
 
 **`jobs-volume-digest.timer`/`.service` were deleted, not installed.** Decided 2026-08-04: a
 weekly Telegram report nobody reads is exactly the kind of alert that trains a channel to be
@@ -243,54 +233,17 @@ sibling alarm ("an alert about a failed report is how a channel stops being read
 one level up. `backend/tools/volume-check.py --digest` still exists for a manual check-in; only
 the automation is gone.
 
-**Two of the fourteen `deploy/systemd/` units remain uninstalled**: `jobs-backup.timer`,
-`jobs-backup-verify.timer` (confirmed absent from `systemctl --user list-timers --all`
-2026-08-04). `jobs-backup.service` also has no off-machine destination yet (see `OQ-4b`), so
-installing its timer now would only ever produce a local-disk copy. Diff each against its repo
-copy before installing if this row is picked up again:
+**Not closeable today, and it is not yours to fix:** `python3 tools/volume-check.py` needs a few
+days of nightly history before it reports a real comparison instead of `insufficient history` on
+every source. That part is a clock, not a task — check back after a few more `jobs-ingest.timer`
+runs.
 
-```bash
-systemctl --user list-unit-files | grep jobs     # what is live now: 10 of 13
-ls deploy/systemd/                               # what exists: 13
-diff ~/.config/systemd/user/jobs-ingest.service deploy/systemd/jobs-ingest.service
-```
-
-**Done when:** after a few nightly runs, `python3 tools/volume-check.py` reports a comparison
-rather than `insufficient history` on every source, and the two remaining timers are installed.
+**Done when:** `python3 tools/volume-check.py` reports a comparison rather than
+`insufficient history` on every source.
 
 ---
 
-### OQ-4b — The account half of deployment, and one verified restore
-
-**Why it is yours:** account. `DEC-91` already took the Cloudflare-vs-Tailscale call and `DEC-92`
-took the stays-on-the-home-box call, so nothing here is a decision any more — it is purely
-account access and a person at a terminal. **The tunnel half is done; the backup half is not.**
-
-**Done, confirmed 2026-08-04:** the Cloudflare account, domain, tunnel (`726fa841-8945-4e06-bb06-
-f241cbbe30dc`), and `cloudflared` binary (`/usr/local/bin/cloudflared` now a symlink to
-`/usr/bin/cloudflared`) all exist. `deploy/cloudflared/config.yml`'s placeholders are filled in.
-`curl https://jobs.etotheric.com/v1/health` returns `{"ok":true}` from off-network, and a real
-Google sign-in was completed through the public URL the same day (see `OQ-11`, closed).
-
-**Still open:** `~/.config/jobs-backup.env` still does not exist, so `jobs-backup.timer` /
-`jobs-backup-verify.timer` are not installed (`OQ-4a`) and backups, if run manually, would be
-local-disk-only, tolerated silently by the `-` prefix in the unit. **No verified restore has ever
-been performed** — the backup script and its verify timer are written and have never run.
-
-**How to do it.** What's left, in order:
-
-```bash
-# 1. backups: create ~/.config/jobs-backup.env with an OFF-MACHINE destination
-# 2. install jobs-backup.timer and jobs-backup-verify.timer (OQ-4a)
-# 3. the part everyone skips -- restore into a scratch database and diff row counts
-```
-
-**Do the restore.** A backup that has never been restored is a belief, not a backup.
-
-**What it unblocks:** `OQ-14` (the tunnel half it needed is already done).
-
-**Done when:** you have restored a dump into a scratch database and compared row counts against
-production.
+---
 
 ---
 
@@ -340,6 +293,7 @@ hostname as an authorised redirect URI in Google Cloud Console, then load it on 
 | ~~OQ-16~~ | Whether the `kind: record` carve-out (one document allowed to claim frozen history rather than current state) stays | **Closed 2026-08-03 — carve-out removed, option 2.** The last `kind: record` handoff document is deleted, recoverable at `git show refactor-freeze-2026-08-02:backend/docs/HANDOFF-multimachine-google-jobs.md`. Its still-live facts moved before deletion rather than being lost with it: the multi-machine shared-budget bug it found moved to `backend/README.md`'s locking section, and its Step 3 (a dry-run-verified id migration for `google_jobs` rows, checked today and confirmed **still unapplied 9 days later**) became `TASKS.md`'s `T-20` — a genuinely live finding this closure surfaced, not mere history. The rest was already duplicated in code comments (`lib/ids.py`). Rule is now unqualified: only the three `kind: contract` files may claim current state, no exceptions |
 | ~~OQ-12~~ | Whether any contributor API key has ever been minted and handed to a person | **Closed 2026-08-03. No.** Owner confirmed none were generated; `cd backend/api && .venv/bin/python manage_users.py list` (with `api/.env` exported into the shell) returns `no contributors yet` — `api_keys` is empty. Written into `OQ-1`: retiring `api/` would be a deletion, not a migration, if that is the direction chosen |
 | ~~OQ-11~~ | Is `SESSION_COOKIE_SECURE` true in the deployed `.env`? | **Closed 2026-08-04. Yes.** `backend/webapp/.env` has `SESSION_COOKIE_SECURE=true`, and the deployment is no longer localhost-only — the Cloudflare tunnel (`OQ-4b`) went live the same day, with a real Google sign-in completed through the public URL |
+| ~~OQ-4b~~ | The account half of deployment, and one verified restore | **Closed 2026-08-04.** Cloudflare account, domain, tunnel, and `cloudflared` binary all confirmed live (`OQ-11`). Off-machine backup: `~/.config/jobs-backup.env` points `JOBS_BACKUP_REMOTE` at a Backblaze B2 bucket via a new `rclone` remote (`b2jobs:`); `backup-jobs.sh` run by hand landed a real dump, checksum, and roles-only dump in the bucket. `verify-jobs-backup.sh` then restored that dump into a scratch database and matched all 29 tables' row counts against production, and `--self-test` (truncating `job_facts` in the restored copy) correctly failed the comparison — the check can fail, so passing means something. Both timers installed via `OQ-4a` |
 
 ---
 
