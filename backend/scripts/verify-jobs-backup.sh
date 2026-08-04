@@ -13,7 +13,7 @@
 set -euo pipefail
 
 DB=${JOBS_BACKUP_DB:-jobs}
-CONTAINER=${JOBS_BACKUP_CONTAINER:-nyc-events-postgres}
+CONTAINER=${JOBS_BACKUP_CONTAINER:-pg-main}
 DEST=${JOBS_BACKUP_DIR:-$HOME/backups/jobs}
 PGUSER=${JOBS_BACKUP_USER:-nyc_events}
 SCRATCH=${JOBS_BACKUP_SCRATCH_DB:-jobs_restore_check}

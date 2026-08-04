@@ -18,12 +18,13 @@
 # need psycopg, a venv, or DATABASE_URL to be parseable.
 #
 # There is no pg_dump on this host; everything goes through the container, which
-# is `nyc-events-postgres` and holds several unrelated databases. See
+# is `pg-main` and holds several unrelated databases (renamed from
+# `nyc-events-postgres` 2026-08-04 -- see ~/apps/infra/DATABASE.md). See
 # ~/apps/infra/DATABASE.md.
 set -euo pipefail
 
 DB=${JOBS_BACKUP_DB:-jobs}
-CONTAINER=${JOBS_BACKUP_CONTAINER:-nyc-events-postgres}
+CONTAINER=${JOBS_BACKUP_CONTAINER:-pg-main}
 DEST=${JOBS_BACKUP_DIR:-$HOME/backups/jobs}
 KEEP_DAYS=${JOBS_BACKUP_KEEP_DAYS:-14}
 

@@ -37,7 +37,7 @@ USAGE
     Since slice E of the reorg the jobs tables live in their own database; a
     dump of nyc_events would back up the events data and none of what this
     script rewrites:
-      docker exec nyc-events-postgres pg_dump -U jobs_pipeline -d jobs \\
+      docker exec pg-main pg_dump -U jobs_pipeline -d jobs \\
         | gzip > ~/backups/pre-googleid-$(date +%Y%m%d).sql.gz
 
 MERGE RULES (per group of rows collapsing to one new id)
@@ -230,7 +230,7 @@ def main():
 
     if not args.apply:
         print("\ndry run -- nothing changed. Re-run with --apply.")
-        print("Back up first: docker exec nyc-events-postgres pg_dump -U jobs_pipeline "
+        print("Back up first: docker exec pg-main pg_dump -U jobs_pipeline "
               "-d jobs | gzip > ~/backups/pre-googleid-$(date +%Y%m%d).sql.gz")
         conn.close()
         return
