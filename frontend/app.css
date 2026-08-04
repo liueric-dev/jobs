@@ -174,7 +174,7 @@ button {
 }
 
 /* The one sentence that keeps a track from reading as a fact about a posting.
-   docs/ingestion_tests/selfcheck-n120-2026-08-02.md owns the figures. */
+   `git show refactor-freeze-2026-08-02:docs/ingestion_tests/selfcheck-n120-2026-08-02.md` owns the figures. */
 .group-caveat {
   margin: 0.35rem 0 0;
   color: var(--ink-faint);

@@ -204,7 +204,8 @@ class TestSuppression(unittest.TestCase):
     """The first thing the task file asks a test here to pin."""
 
     def test_two_builders_produce_no_badge_rather_than_a_small_one(self):
-        # THE TEST THE TASK FILE NAMES. docs/labelling-report-2026-08-02.md
+        # THE TEST THE TASK FILE NAMES.
+        # `git show refactor-freeze-2026-08-02:docs/labelling-report-2026-08-02.md`
         # records two labellers on `pursuit`, so at a floor of three this table
         # is empty by construction today -- and an empty badge is the CORRECT
         # rendering of a two-person cohort. Anyone reaching for a lower

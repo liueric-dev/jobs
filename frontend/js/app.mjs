@@ -96,7 +96,7 @@ async function sendFirstRunToOnboarding() {
  * The routing table. ONE ENTRY PER SCREEN, and adding a screen is adding a row.
  *
  * WHY A TABLE AND NOT THE IF-CHAIN IT REPLACED. Three screens fit in an
- * if-chain; the surfaces table in tranche_six/32-frontend.md lists six, and
+ * if-chain; the surfaces table in `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_six/32-frontend.md` lists six, and
  * the chain had the route match in one function and the dispatch in another,
  * so a fourth screen meant editing two places that could disagree. A row here
  * carries `name` (which is also the `data-tab` value markTab looks for),

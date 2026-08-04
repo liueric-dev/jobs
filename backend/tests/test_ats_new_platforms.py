@@ -464,7 +464,7 @@ class TestLeverPagination(unittest.TestCase):
         self.assertEqual(jobs.requests, 2)
 
     def test_past_the_documented_ceiling_the_board_is_not_closeable(self):
-        """17-retarget-ats-ingest.md:41-42 -- Lever truncates at 250.
+        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:41-42` -- Lever truncates at 250.
 
         Past that point "the next page was empty" and "the API stopped
         answering" are the same bytes, so absence stops being evidence and
@@ -596,7 +596,7 @@ class TestRoster(unittest.TestCase):
             self.assertIn(row["ats"], ats_sources.HANDLED_PLATFORMS)
             self.assertEqual(row["status"], ats_sources.STATUS_VALID)
             self.assertTrue(row["first_validated_at"])
-            # Not NULL: docs/ats-token-discovery.md:344-350 -- a NULL here
+            # Not NULL: `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md:344-350` -- a NULL here
             # disarms the 60-day stale-feed check for exactly these rows.
             self.assertTrue(row["open_jobs_changed_at"])
 

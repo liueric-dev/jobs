@@ -72,7 +72,7 @@ class SignatureTests(unittest.TestCase):
         self.assertEqual(hits, [("greenhouse", {"token": "cityhall"})])
 
     def test_workday_captures_tenant_dc_and_site(self):
-        """All three, separately. 18-ingest-workday-cxs.md:54 forbids guessing
+        """All three, separately. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:54` forbids guessing
         the data centre, because wd1 vs wd5 is a 404 and a 404 there is
         indistinguishable from a tenant with no open roles."""
         hits = self.find(

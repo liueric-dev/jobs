@@ -26,13 +26,14 @@ WHY THIS EXISTS AT ALL
             --repeat 3 --out evals/fixtures/selfcheck-labelled36-<date>.json
         python3 -m evals label report --golden ... --run ... --selfcheck ...
 
-    docs/labelling-report-2026-08-02.md is what that chain produced, with
+    `git show refactor-freeze-2026-08-02:docs/labelling-report-2026-08-02.md` is what that chain produced, with
     the caveats that belong beside the numbers.
 
 WHAT IT SELECTS, AND WHY THAT IS THE POINT
     Every id comes from the golden file -- the postings that actually have
     labels, which is a subset of the pinned set. There is no sampling here
-    and no `ORDER BY first_seen DESC`, the trap docs/MEASUREMENT-TRAPS.md
+    and no `ORDER BY first_seen DESC`, the trap
+    `git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`
     names: that ordering is ~85% greenhouse/ashby and so measures the easy
     sources. The set was stratified when it was drawn and this script must
     not re-select it.
@@ -67,7 +68,7 @@ DEFAULT_GOLDEN = os.path.join(_BACKEND, "evals", "fixtures", "golden-v1.jsonl")
 def labelled_ids(golden_path):
     """The distinct job_ids that carry at least one label, sorted.
 
-    Sorted because docs/MEASUREMENT-TRAPS.md asks for eval sets pinned by
+    Sorted because `git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md` asks for eval sets pinned by
     sorted job_id: a set whose ORDER depends on the order rows came back is
     a set that cannot be shown to be the same set twice.
     """

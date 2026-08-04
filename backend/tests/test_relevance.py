@@ -104,7 +104,7 @@ class TestDescriptionIncludeIsInert(unittest.TestCase):
     the same params for a config without the key. That is a property of the
     generated string, so it is checked as one -- byte equality, not
     "semantically similar". A tier count diff against the live table is the
-    other half of the check and lives in docs/pursuit-description-gate.md;
+    other half of the check and lives in `git show refactor-freeze-2026-08-02:docs/pursuit-description-gate.md`;
     this is the half that runs in CI.
 
     THE GOLDEN STRING IS THE POINT

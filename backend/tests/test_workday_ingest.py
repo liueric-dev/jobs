@@ -468,7 +468,7 @@ class TestTenantSelection(unittest.TestCase):
             "nordstrom_careers/jobs")
 
     def test_never_found_does_not_mean_no_ats(self):
-        """docs/ats-token-discovery.md's headline result: the positive control
+        """`git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md`'s headline result: the positive control
         found 0 of 4 known-good tokens, so `not_found`/`never_found` means "no
         ATS URL in the bytes we were served" and nothing stronger. This ingest
         must therefore filter on status='valid' PLUS the triple, never on the

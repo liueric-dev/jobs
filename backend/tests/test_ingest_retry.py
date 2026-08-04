@@ -195,7 +195,7 @@ class TestSerpApiSearchRetries(unittest.TestCase):
     def test_the_retry_log_cannot_leak_the_api_key(self):
         """The key travels in the query string, and going through `lib.http`
         is what put a logger anywhere near it. `lib/http.py:59` tags each
-        retry with `url.split("?")[0]`; `docs/ingest/google-serpapi.md` raised
+        retry with `url.split("?")[0]`; `git show refactor-freeze-2026-08-02:docs/ingest/google-serpapi.md` raised
         this as an open question while the script still used raw urlopen.
         """
         url = self._url()

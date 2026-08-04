@@ -312,10 +312,10 @@ def _subset_check(column, vocabulary):
 #:
 #: DERIVED, NOT INVENTED, and the derivation is thinner than PRIOR_DOMAINS'.
 #: `employed_seeking` is verbatim from the frozen contract fixture
-#: (frontend/fixtures/contract/ASPIRATIONAL_POST_v1_onboarding.request.json,
+#: (frontend/fixtures/shipped/POST_v1_onboarding.request.json, formerly
+#: `git show cd033af:frontend/fixtures/contract/ASPIRATIONAL_POST_v1_onboarding.request.json`,
 #: itself verbatim from API-CONTRACT-v1.md § POST /v1/onboarding, deleted
-#: 2026-08-02 -- `git show
-#: refactor-freeze-2026-08-02:docs/tasks/refactor/API-CONTRACT-v1.md`)
+#: 2026-08-02 -- `git show refactor-freeze-2026-08-02:docs/tasks/refactor/API-CONTRACT-v1.md`)
 #: and is the only value attested anywhere in the repo.
 #: `in_program` is config/pursuit-persona.json's background_summary in its own
 #: words -- the cohort is "completing an intensive, hands-off program".

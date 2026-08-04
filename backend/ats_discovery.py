@@ -505,7 +505,6 @@ def never_found_row(employer_name, careers_url, now, discovered_via="probe"):
         # served", and tasks 17/18/20 must not read it as "no ATS".
         "validation_note": ("no ATS URL in the served HTML -- NOT evidence "
                             "the employer has no ATS; see the false-negative "
-                            "rate in git show refactor-freeze-2026-08-02:"
-                            "docs/ats-token-discovery.md"),
+                            "rate in `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md`"),
         "discovered_via": discovered_via,
     }

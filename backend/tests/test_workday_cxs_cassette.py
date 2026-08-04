@@ -8,7 +8,7 @@ WHY THIS FILE EXISTS SEPARATELY FROM test_workday_fixtures.py
     is not in the task file at all. It was found live on 2026-07-28 and until
     now the only fixture for it was one the pipeline wrote itself.
 
-    `docs/ingest/workday.md:553-557` asked for a recording that closes that
+    `git show refactor-freeze-2026-08-02:docs/ingest/workday.md:553-557` asked for a recording that closes that
     gap. `evals/record_cassettes.py record_workday_cxs()` makes it; this
     replays it.
 
@@ -88,7 +88,7 @@ class WorkdayCxsCassette(unittest.TestCase):
         each offset the walk would use, and require the recording to hold
         exactly those digests.
 
-        Same technique docs/ingest/workday.md:542-547 used to establish that
+        Same technique `git show refactor-freeze-2026-08-02:docs/ingest/workday.md:542-547` used to establish that
         `recorded_list_page()` is the request ats.py actually makes.
         """
         import hashlib

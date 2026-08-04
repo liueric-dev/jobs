@@ -9,7 +9,7 @@ WHY THIS EXISTS SEPARATELY FROM tests/test_ats_discovery.py
     classifier was written to expect.
 
     The validator's whole job is to stop the pipeline trusting a regex match
-    found in a stale footer link (`16-ats-token-discovery.md:51-54`). A
+    found in a stale footer link (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/16-ats-token-discovery.md:51-54`). A
     validator exercised only against boards that resolve would pass every test
     while being unable to tell a live board from a dead one -- so the
     non-resolving probes in this cassette are the ones that make the rest of
@@ -156,7 +156,7 @@ class AtsValidationCassetteTests(unittest.TestCase):
         self.assertIn("empty", note)
 
     def test_wrong_workday_data_centre_is_unvalidated_not_dead(self):
-        """18-ingest-workday-cxs.md:54 forbids guessing the data centre. The
+        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:54` forbids guessing the data centre. The
         recorded refusal is 422, not the 404 one would assume -- and 422 lands
         as `unvalidated`, which is the safe side: a guessed dc must never be
         able to mark a real tenant `dead` and retire it."""

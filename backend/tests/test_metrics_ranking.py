@@ -12,7 +12,7 @@ requirements.txt. So these are new arithmetic with no incumbent to disagree
 with, and the hand-computed cases below are the whole of their correctness.
 
 TIES ARE THE INTERESTING CASE, NOT AN EDGE CASE.
-Trap 4.2 (`docs/MEASUREMENT-TRAPS.md`, deleted 2026-08-02 -- read it with
+Trap 4.2 (deleted 2026-08-02 -- read it with
 `git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`, which keeps the
 4.1-4.7 numbering precisely so citations like this one still resolve) records 59
 postings sharing one fit_score, so a top-k boundary falls inside a tie block and ~half of any
@@ -197,7 +197,7 @@ class UnscorableRowTest(unittest.TestCase):
     case and EVERY DROP MAKES THE RANKER LOOK BETTER.
 
     That is trap 4.1 ("do not compute metrics over a floor-filtered sample",
-    docs/MEASUREMENT-TRAPS.md at refactor-freeze-2026-08-02) pointing the other way:
+    `git show refactor-freeze-2026-08-02:docs/MEASUREMENT-TRAPS.md`) pointing the other way:
     there MATCH_FLOOR hid the easy low end and cost one identical ranking
     function 0.619 -> 0.326.
     """
@@ -238,7 +238,7 @@ class UnscorableRowTest(unittest.TestCase):
             _p, _k = metrics.precision_at_k([5, 1], [1, 0], k=2)
 
     def test_coverage_prints_n_over_total(self):
-        """docs/score-validation.md:270's shape ("55 usable in every repeat"
+        """`git show refactor-freeze-2026-08-02:docs/score-validation.md:270`'s shape ("55 usable in every repeat"
         of 120), so the report follows a precedent rather than inventing a
         format."""
         r = metrics.average_precision([5, None, None, 1], [1, 1, 0, 0])

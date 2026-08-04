@@ -1,6 +1,6 @@
 // Search: the seeded catalogue, the Builder's own queries, and what one found.
 //
-// NEVER AN EMPTY SEARCH BOX. tranche_six/32-frontend.md § "Design constraints
+// NEVER AN EMPTY SEARCH BOX. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_six/32-frontend.md` § "Design constraints
 // from the population" states it as a constraint and tranche_four/25 says why
 // the backend exists in that shape: "task 25 seeds search_queries from
 // role_track precisely because someone who does not know what role they want

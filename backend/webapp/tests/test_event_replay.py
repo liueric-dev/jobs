@@ -15,7 +15,7 @@ WHY THIS FILE IS NOT PART OF test_events.py
     passing vacuously.
 
 WHY IT REPLAYS RATHER THAN ASSERTS ON SQL
-    tranche_five/27-event-schema.md asks for exactly this: "a script that posts
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_five/27-event-schema.md` asks for exactly this: "a script that posts
     a synthetic impression batch for a 20-row list, then an `open` at rank 7,
     and asserts six `skip` rows appear with correct ranks and a shared
     `request_id`." The reason it is a replay and not a unit test is in the same

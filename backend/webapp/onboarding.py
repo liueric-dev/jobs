@@ -501,7 +501,8 @@ def record_seed_judgements(user, judgements):
 
 def _state(conn, user):
     """The onboarding block, for either route. Shape per
-    frontend/fixtures/contract/ASPIRATIONAL_POST_v1_onboarding.response.json."""
+    frontend/fixtures/shipped/POST_v1_onboarding.response.json, formerly
+    `git show cd033af:frontend/fixtures/contract/ASPIRATIONAL_POST_v1_onboarding.response.json`."""
     row = conn.execute(
         "SELECT b.onboarded_at, u.prior_domain, b.prior_years "
         "FROM app_users u LEFT JOIN builder_profiles b ON b.app_user_id = u.id "

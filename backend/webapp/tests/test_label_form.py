@@ -93,7 +93,7 @@ class TestFormRendering(unittest.TestCase):
         self.assertNotIn("checked", body)
 
     def test_the_full_description_is_shown_not_a_summary(self):
-        # 03-metrics-and-golden-set.md:127 -- the point is a human judgement on
+        # `git show refactor-freeze-2026-08-02:docs/ingestion_tests/03-metrics-and-golden-set.md:127` -- the point is a human judgement on
         # the same input the model got. A `summary` would be showing them the
         # model's reading of the posting instead.
         self.assertNotIn("summary", label._DETAIL_COLUMNS)

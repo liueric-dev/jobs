@@ -660,7 +660,7 @@ class TestPursuitGoldens(unittest.TestCase):
                 and by_id[j]["ai_involvement"] == "uses_ai_tools"), 19)
 
         # The shared floor as a population: entry-level AND the cohort's
-        # targeting mechanism. 13-cohort-criteria-profile.md:25-33.
+        # targeting mechanism. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_two/13-cohort-criteria-profile.md:25-33`.
         shared_floor = [f["job_id"] for f in self.corpus
                         if f["seniority_level"] in entry
                         and f["ai_involvement"] == "uses_ai_tools"]
