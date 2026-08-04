@@ -10,6 +10,7 @@ Documentation=file:///home/eric/apps/jobs/backend/api/README.md
 After=network-online.target
 Wants=network-online.target
 OnFailure=jobs-failure@%n.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=exec
@@ -27,7 +28,6 @@ ExecStart=/home/eric/apps/jobs/backend/api/.venv/bin/uvicorn app:app \
           --host 127.0.0.1 --port 8420
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=0
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=jobs-api

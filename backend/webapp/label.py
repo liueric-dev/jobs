@@ -153,7 +153,17 @@ button { font-size: 1rem; padding: .7rem 1.4rem; border-radius: 8px;
          border: 1px solid #8886; cursor: pointer; margin-top: 1.5rem; }
 .progress { color: #767676; font-size: .9rem; margin-bottom: 1rem; }
 .hint { color: #767676; font-size: .87rem; margin: .1rem 0 .5rem; }
+.logout { text-align: right; margin-bottom: .8rem; }
+.logout button { font-size: .82rem; padding: .3rem .7rem; margin-top: 0; }
 """
+
+#: Plain <form>, not a link, because logout is a POST (auth.py:430) -- and
+#: no JavaScript, same reason the rest of this module has none (module
+#: docstring, "NO JAVASCRIPT MEANS..."). Every _page() call happens after
+#: require_user() already succeeded (label_form()), so it is always safe to
+#: show this.
+_LOGOUT = ("<form class=logout method=post action='/v1/auth/logout'>"
+          "<button type=submit>Log out</button></form>")
 
 
 def _page(title, body):
@@ -161,7 +171,7 @@ def _page(title, body):
         "<!doctype html><html lang=en><head><meta charset=utf-8>"
         "<meta name=viewport content='width=device-width,initial-scale=1'>"
         f"<title>{html.escape(title)}</title><style>{_CSS}</style></head>"
-        f"<body>{body}</body></html>")
+        f"<body>{_LOGOUT}{body}</body></html>")
 
 
 #: How one value renders, because "no track fits" as a bare slug sits next to

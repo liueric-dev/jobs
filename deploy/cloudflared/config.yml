@@ -25,15 +25,15 @@
 #
 #     ln -s ~/apps/jobs/deploy/cloudflared/config.yml ~/.cloudflared/config.yml
 #     cloudflared tunnel ingress validate    # parses this file, no traffic
-#     cloudflared tunnel ingress rule https://<webapp-hostname>/v1/health
+#     cloudflared tunnel ingress rule https://jobs.etotheric.com/v1/health
 
-tunnel: <TUNNEL-UUID>
+tunnel: 726fa841-8945-4e06-bb06-f241cbbe30dc
 
 # Written by `cloudflared tunnel create`, NOT by this repo, and never copied
 # into it: it is a bearer credential for the tunnel -- whoever holds it can
 # receive traffic for the hostnames below. .gitignore covers deploy/**/*.json
 # so that a copy made "just to test" cannot be committed.
-credentials-file: /home/eric/.cloudflared/<TUNNEL-UUID>.json
+credentials-file: /home/eric/.cloudflared/726fa841-8945-4e06-bb06-f241cbbe30dc.json
 
 # Cloudflare's edge already has the request for a while before the origin
 # answers; a slow LLM-backed page is not a reason to give up on the origin.
@@ -55,13 +55,13 @@ ingress:
   # Three settings have to move together the moment this hostname is live, and
   # each fails in a different, confusing place if it does not:
   #   SESSION_COOKIE_SECURE=true      -- default is already true
-  #   GOOGLE_REDIRECT_URI=https://<webapp-hostname>/v1/auth/callback
+  #   GOOGLE_REDIRECT_URI=https://jobs.etotheric.com/v1/auth/callback
   #                                   -- and the SAME string in the Google
   #                                      console, byte for byte, or the user
   #                                      gets a Google error page rather than
   #                                      an error from this service
-  #   FRONTEND_ORIGIN=https://<webapp-hostname>
-  - hostname: <webapp-hostname>
+  #   FRONTEND_ORIGIN=https://jobs.etotheric.com
+  - hostname: jobs.etotheric.com
     service: http://localhost:8421
 
   # ---- the contributor API ------------------------------------------------
@@ -79,7 +79,7 @@ ingress:
   # this -- unmetered claiming, and no per-contributor provenance. Neither is
   # closed. Until they are, mint keys only for people you know, which is what
   # the runbook's onboarding section says.
-  - hostname: <contributor-api-hostname>
+  - hostname: jobs-api.etotheric.com
     service: http://localhost:8420
 
   # Required terminator. cloudflared refuses to start without a catch-all, and

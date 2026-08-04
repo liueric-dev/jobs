@@ -8,6 +8,7 @@ Documentation=file:///home/eric/apps/jobs/backend/webapp/README.md
 After=network-online.target
 Wants=network-online.target
 OnFailure=jobs-failure@%n.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=exec
@@ -27,7 +28,6 @@ ExecStart=/home/eric/apps/jobs/backend/webapp/.venv/bin/uvicorn app:app \
 # moment someone opens a firewall for an unrelated reason.
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=0
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=jobs-webapp

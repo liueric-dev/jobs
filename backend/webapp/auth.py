@@ -429,7 +429,17 @@ def _set_session_cookie(response, token):
 
 @router.post("/v1/auth/logout")
 def logout(request: Request, response: Response):
-    """Revoke this session and clear the cookie. Idempotent."""
+    """Revoke this session and clear the cookie. Idempotent.
+
+    Answers two different callers. The frontend's fetch() sends
+    `Accept: application/json` and reads the body (js/api.mjs's `request()`
+    sets that header on every call), so it gets the JSON below. label.py's
+    logout button is a plain <form> POST -- that page has no JavaScript at
+    all, deliberately (label.py's module docstring) -- and a browser's form
+    submission asks for `text/html`, so it gets a redirect back to /v1/label
+    instead, which then bounces to sign-in once the cookie is gone. That
+    bounce is the only "you're logged out" confirmation a no-JS page can give.
+    """
     token = request.cookies.get(config.SESSION_COOKIE_NAME)
     if token:
         with db() as conn:
@@ -438,13 +448,18 @@ def logout(request: Request, response: Response):
                 "WHERE token_hash = %s AND revoked_at IS NULL",
                 (utc_now_str(), _hash(token)))
             conn.commit()
+    wants_json = "application/json" in (request.headers.get("accept") or "")
+    out = response if wants_json else RedirectResponse(
+        "/v1/label", status_code=303)
     # The delete must repeat the attributes the cookie was set with -- a
     # browser ignores a deletion whose path or secure flag doesn't match.
-    response.delete_cookie(
+    out.delete_cookie(
         key=config.SESSION_COOKIE_NAME, path="/",
         httponly=True, secure=config.SESSION_COOKIE_SECURE, samesite="lax")
-    # 200 even with no session: a logout that 401s is a confusing dead end.
-    return {"ok": True}
+    if wants_json:
+        # 200 even with no session: a logout that 401s is a confusing dead end.
+        return {"ok": True}
+    return out
 
 
 @router.get("/v1/me")
