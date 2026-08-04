@@ -437,7 +437,7 @@ def list_jobs(
     see output is the one change this docstring exists to stop. The buckets
     ('3-5' / '6-10' / '10+') are part of the same control, not formatting: an
     exact count that increments visibly lets an observer infer WHEN somebody
-    saved something. tranche_five/28-cohort-aggregation.md § The small-N
+    saved something. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_five/28-cohort-aggregation.md` § The small-N
     problem is the full argument; the rule itself is in ../schema.py.
     """
     # THE JOINS' PARAMETERS LEAD. _EVENT_STATE_JOIN and _BUILDER_STATE_JOIN are
@@ -754,8 +754,8 @@ def derive_skips(conn, profile, app_user_id, request_id, rank, now):
     Narrowing the dedup key further would change an existing documented
     behaviour ("a list re-render is not new information") for a different
     task's benefit, so it is recorded here and in
-    docs/ingest/engagement-events.md (deleted 2026-08-02; behind
-    refactor-freeze-2026-08-02) rather than changed in passing.
+    `git show refactor-freeze-2026-08-02:docs/ingest/engagement-events.md`
+    (deleted 2026-08-02) rather than changed in passing.
 
     THE DERIVATION IS CONFINED TO ONE BUILDER AT BOTH ENDS -- it reads only the
     caller's own impressions (`imp.app_user_id = %s`, bound to user.id) and only
@@ -910,9 +910,9 @@ def record_events(batch: EventBatch, user: User = Depends(require_user)):
     THE 24-HOUR IMPRESSION DEDUP IS NOW KEYED (app_user_id, job_id), NOT
     (profile, job_id). That gap was not an oversight left over from adding the
     column: it was an OPEN DECISION belonging to the repo owner, recorded in
-    tranche_five/27-event-schema.md, API-CONTRACT-v1.md and
-    docs/ingest/engagement-events.md, all deleted 2026-08-02 --
-    `git show refactor-freeze-2026-08-02:docs/ingest/engagement-events.md` --
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_five/27-event-schema.md`,
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/API-CONTRACT-v1.md` and
+    `git show refactor-freeze-2026-08-02:docs/ingest/engagement-events.md`, all deleted 2026-08-02,
     and carried forward in docs/STATE-OF-THE-SYSTEM.md § 4. Its consequence was
     real: one Builder's render suppressed another Builder's impression of the
     same job for the rest of the window, and skips inherited it because

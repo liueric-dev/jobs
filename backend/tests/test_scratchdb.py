@@ -15,11 +15,11 @@ _FakeConn keeps going after a raise whether or not the SAVEPOINT exists, so
 that suite passes either way. Delete `with conn.transaction():` from
 upsert() and only `test_a_bad_row_does_not_take_the_rest_of_the_batch` below
 notices. That is the whole argument for a scratch database, and it is audit
-items 2 and 3 (`05-fetcher-harness.md:42-43`).
+items 2 and 3 (`git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:42-43`).
 
 THE OPEN QUESTION, SETTLED
 
-`05-fetcher-harness.md:77-84` asks whether to write concurrency tests for
+`git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:77-84` asks whether to write concurrency tests for
 `lib/upsert.py` and the Google claim SQL now that a scratch database makes
 them possible. The answer taken here is **the claim SQL yes, upsert no**, and
 the reason is that only one of them has a contract that exists only under
@@ -95,7 +95,7 @@ class TestTheSchemaIsTheRealSchema(unittest.TestCase):
     def test_every_table_the_pipeline_names_exists(self):
         """Asserted through schema.py's own constants, not a copied list.
 
-        `09-fetcher-harness.md:55`: make schema creation share the real path
+        `git show 68f026f:docs/tasks/refactor/tranche_two/09-fetcher-harness.md:55`: make schema creation share the real path
         "rather than a hand-maintained DDL copy, or the harness will silently
         test a schema that no longer exists." A literal list of table names
         here would be exactly that copy, one level up.
@@ -155,7 +155,7 @@ class TestTheGuards(unittest.TestCase):
     def test_ensure_schema_still_refuses_the_events_database(self):
         """`lib/dbconn.py:19` FOOTGUN 2, kept rather than worked around.
 
-        05-fetcher-harness.md:20-22 calls this refusal "a feature here; keep
+        `git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:20-22` calls this refusal "a feature here; keep
         it". A scratch schema pointed at the events database must fail as
         loudly as a production run would, so this asserts the guard fires --
         with a stub connection, because provoking it for real would mean

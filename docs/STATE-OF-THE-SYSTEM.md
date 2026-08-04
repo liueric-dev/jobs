@@ -28,7 +28,7 @@ scripts that constitute the method, the salvage and extraction tools, the raw st
 and the extracted registers are all in `orientation-2026-08-02/` beside this file.
 
 **Both workflows were retired 2026-08-03 and the archived copies do not run.** They shell out to
-`tools/audit-docs.py` and read ~40 paths under `docs/`, all deleted in the commit that produced
+`git show refactor-freeze-2026-08-02:backend/tools/audit-docs.py` and read ~40 paths under `docs/`, all deleted in the commit that produced
 this file — the method audited prose against code, and the prose is gone. They are kept as the
 record of how this file was made, not as something to invoke; the registered
 `/orientation-from-code` and `/orientation-phase2` skills were removed with them.
@@ -201,8 +201,9 @@ status column was never trustworthy on its own.
 **Marked todo, actually further along:** 30 (two DoD items met), 25 (six of seven), 48 (done, its
 own row never flipped until this commit).
 
-**Two task numbers are used twice.** `tranche_seven/47-widen-the-c4-match-body.md` and
-`tranche_eight/47-split-the-entry-point.md` are different tasks; only the second has a register
+**Two task numbers are used twice.**
+`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_seven/47-widen-the-c4-match-body.md` and
+`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_eight/47-split-the-entry-point.md` are different tasks; only the second has a register
 row, so the index implies 47 is done when half of it was never started. Duplicate 34 was diagnosed
 and closed on 2026-07-31 (`3f42e2d`) — that one is resolved.
 

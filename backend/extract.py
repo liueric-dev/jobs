@@ -472,7 +472,7 @@ _MARKUP_RESIDUE = re.compile(
 #:
 #: CONSIDERED AND REJECTED ON MEASUREMENT, recorded so it is not proposed again:
 #:   a marker blocklist (`data-testid=`, `pointer-events-auto`) -- the query
-#:     `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:410-413` used. It finds 3 of the 8 contaminated rows. It misses
+#:     `git show e11fabf:docs/tasks/refactor/HANDOFF.md:410-413` used. It finds 3 of the 8 contaminated rows. It misses
 #:     both google_jobs rows and both of the Tailwind-only greenhouse rows,
 #:     because those leaked class names and no data- attribute.
 #:   repeated-content density (duplicate 60-char shingles in the window) -- aimed

@@ -266,7 +266,7 @@ class InputSanityCassetteTests(unittest.TestCase):
     include: the ">" inside the class attribute ended lib/text.strip_html()'s
     old `<[^>]+>` early, so the remainder of the tag was emitted as prose. A
     hand-written "some markup" fixture tests the sentence "some markup", which
-    is the trap `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:571-574` names -- all three failure modes task 18
+    is the trap `git show e11fabf:docs/tasks/refactor/HANDOFF.md:571-574` names -- all three failure modes task 18
     found live were invisible to its four constructed fixtures.
 
     It also runs the REAL ingest function (ats.greenhouse_description) rather
@@ -590,7 +590,7 @@ class MarkupRatioTests(unittest.TestCase):
     def test_tailwind_class_residue_with_no_data_attribute_is_counted(self):
         # e93ddca38b45bb929e6e46cd (Databricks). A marker blocklist built from
         # `data-testid=` / `pointer-events-auto` -- the query
-        # `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:410`
+        # `git show e11fabf:docs/tasks/refactor/HANDOFF.md:410`
         # used -- scores this at zero and lets it through.
         self.assertGreater(extract.markup_ratio('p]:pt-0 [&>p]:mb-2 [&>p]:my-0">'),
                            0.5)

@@ -2,7 +2,7 @@
 
 WHY THIS IS A SERVER-RENDERED PAGE AND NOT A JSON ENDPOINT
     Labels come from ~10 Builder volunteers (task 29), not from the person who
-    wrote the harness. `docs/ingestion_tests/03-metrics-and-golden-set.md:101`
+    wrote the harness. `git show refactor-freeze-2026-08-02:docs/ingestion_tests/03-metrics-and-golden-set.md:101`
     specifies a CLI --
 
         python3 -m evals label --corpus ... --n 30
@@ -19,7 +19,7 @@ WHY THIS IS A SERVER-RENDERED PAGE AND NOT A JSON ENDPOINT
     eventually filled with something that has an opinion.
 
 WHY THIS IS IN webapp/ AND NOT api/
-    `07-metrics-and-golden-set.md:53` says to reuse the existing auth "since
+    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_two/07-metrics-and-golden-set.md:53` says to reuse the existing auth "since
     Google SSO and sessions already exist". They do -- in THIS package
     (auth.py), not in `api/`. `api/` is the contributor work queue: bearer
     tokens hashed in `api_keys` (api/app.py:159), a caller assumed hostile, and
@@ -72,7 +72,7 @@ log = logging.getLogger("webapp.label")
 router = APIRouter()
 
 #: Enough of the posting for a human to answer the questions. The full
-#: description_text is shown deliberately -- 03-metrics-and-golden-set.md:127
+#: description_text is shown deliberately -- `git show refactor-freeze-2026-08-02:docs/ingestion_tests/03-metrics-and-golden-set.md:127`
 #: is explicit that the point is a human judgement on THE SAME INPUT THE MODEL
 #: GOT, and a `summary` would be showing them the model's reading of it instead.
 _DETAIL_COLUMNS = ("id", "title", "company_name", "location_raw", "platform",

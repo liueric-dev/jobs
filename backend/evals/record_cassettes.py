@@ -103,7 +103,7 @@ def record_ats_greenhouse_domsoup():
     """A LIVE greenhouse posting whose `content` is a pasted browser DOM.
 
     THE FIXTURE FOR TASK 35, and it is a recording rather than a constructed
-    string for the reason `git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:571-574` states: fixtures written from a
+    string for the reason `git show e11fabf:docs/tasks/refactor/HANDOFF.md:571-574` states: fixtures written from a
     specification test the specification. Nobody would invent
     `[&:has([data-writing-block])>*]:pointer-events-auto` -- and that exact
     token is the defect, because the ">" inside the class attribute is what
@@ -152,7 +152,7 @@ def record_ats_greenhouse_domsoup():
     # REFUSE TO RECORD BYTES THAT NO LONGER CARRY THE DEFECT. A cassette that
     # has quietly stopped reproducing its own failure reads like coverage and
     # is worse than none -- the lesson task 18 wrote down
-    # (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/HANDOFF.md:565-570`).
+    # (`git show e11fabf:docs/tasks/refactor/HANDOFF.md:565-570`).
     # If Taboola fixes this job description, this recipe must fail loudly so
     # the fixture is re-sourced rather than silently downgraded to two clean
     # postings that assert nothing.

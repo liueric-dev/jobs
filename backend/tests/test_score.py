@@ -5,7 +5,7 @@ WHAT THESE PIN, AND WHAT THEY DELIBERATELY DO NOT
     the right fit_score for a posting, so nothing here asserts that a score is
     correct -- only that whatever the model said reaches job_scores in a form
     the column can hold, or does not reach it at all. The boundary is argued
-    in docs/ingestion_tests/04-score-validation.md:8-37 and it is the whole
+    in `git show refactor-freeze-2026-08-02:docs/ingestion_tests/04-score-validation.md:8-37` and it is the whole
     scope of D15.
 
 NO NETWORK, NO DATABASE, like the rest of the suite. llm.call is stubbed at
@@ -14,14 +14,14 @@ is what lets the batch-isolation test assert on the SQL that a tombstone
 actually emits.
 
 THE MALFORMED RESPONSES ARE SYNTHESISED, AND THAT IS A DEPARTURE.
-    04-score-validation.md:119-120 asks for normalize() to be validated
+    `git show refactor-freeze-2026-08-02:docs/ingestion_tests/04-score-validation.md:119-120` asks for normalize() to be validated
     "against real cached responses from task 02's cache". There are none: all
     entries in backend/evals/.cache are extract responses, because no score
     run had ever been made through the harness. Every response below is
     instead built from a shape the code path can actually produce -- and the
     two that matter most are not hypothetical at all: `frontend_core` and the
     fit_score-without-a-track row are both taken from production rows
-    measured on 2026-07-28 (docs/score-validation.md).
+    measured on 2026-07-28 (`git show refactor-freeze-2026-08-02:docs/score-validation.md`).
 """
 
 import io
@@ -426,7 +426,7 @@ class TestBuildPromptWithoutBuckets(unittest.TestCase):
     def test_validate_still_accepts_a_persona_without_buckets(self):
         """Pinned deliberately, against the task file's own suggestion.
 
-        04-score-validation.md:168-172 proposes adding `buckets` to
+        `git show refactor-freeze-2026-08-02:docs/ingestion_tests/04-score-validation.md:168-172` proposes adding `buckets` to
         validate()'s required keys. The active `pursuit` profile ships
         without one -- there is no single target role to bucket against under
         the Pursuit scope -- so requiring it would reject a profile that

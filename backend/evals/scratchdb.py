@@ -1,7 +1,7 @@
 """A throwaway copy of the real schema, created by the real schema code.
 
 WHY A SCRATCH DATABASE AT ALL
-    `docs/ingestion_tests/05-fetcher-harness.md:42` splits the audit's seven
+    `git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:42` splits the audit's seven
     fetcher defects in two: items 1, 4, 5 and 7 are cassette tests, items 2
     and 3 need a database. The reason is specific rather than general. Both
     are claims about POSTGRES TRANSACTION BEHAVIOUR:
@@ -42,7 +42,7 @@ A SCHEMA, NOT A DATABASE, AND THAT IS FORCED
     from.
 
 SCHEMA CREATION SHARES THE REAL PATH
-    `09-fetcher-harness.md:55` requires this and it is worth restating why:
+    `git show 68f026f:docs/tasks/refactor/tranche_two/09-fetcher-harness.md:55` requires this and it is worth restating why:
     a hand-maintained DDL copy tests a schema that no longer exists, and
     this pipeline has already paid for that once -- `schema.py:5-8` exists
     because six ingest scripts each carried their own drifting

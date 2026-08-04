@@ -90,7 +90,7 @@ class TestQuestions(unittest.TestCase):
                          ("ai_involvement", "seniority_level"))
 
     def test_the_priority_fields_are_either_asked_or_recorded_as_unstable(self):
-        # 03-metrics-and-golden-set.md:116 -- let the selfcheck narrow the set,
+        # `git show refactor-freeze-2026-08-02:docs/ingestion_tests/03-metrics-and-golden-set.md:116` -- let the selfcheck narrow the set,
         # and record what it removed. A field silently missing from the form is
         # indistinguishable from one nobody thought of.
         for field in extract_task.PRIORITY_FIELDS:
@@ -1623,7 +1623,7 @@ class TestSchemaAgainstPostgres(unittest.TestCase):
         # record()'s round_no parameter, both partial unique indexes and
         # intra_annotator() were all correct and jointly unreachable: no route
         # through the built surface could produce a round-2 row, and
-        # docs/ingestion_tests/03-metrics-and-golden-set.md:25's "5-10 jobs
+        # `git show refactor-freeze-2026-08-02:docs/ingestion_tests/03-metrics-and-golden-set.md:25`'s "5-10 jobs
         # labelled twice, a week apart" was uncollectable at any turnout.
         self._overlap_set()
         self._answer("r00", "alice")
@@ -1909,7 +1909,7 @@ def _drawn(job_ids, *, overlap=()):
 @unittest.skipUnless(scratchdb.available(),
                      "no reachable Postgres for a scratch schema")
 class TestASetCannotBeRedrawnOnceItIsDrawn(unittest.TestCase):
-    """The window HANDOFF.md:275 calls closed, closed in code.
+    """The window `git show 5fb2b72:docs/tasks/refactor/HANDOFF.md:275` calls closed, closed in code.
 
     THE DEFECT THIS PINS. register_set() inserts `ON CONFLICT DO NOTHING` on
     both tables, so re-running `evals label sample` with a different --seed or
@@ -2242,7 +2242,7 @@ class TestTheFrozenCorpusCannotMeasureRoleTrack(unittest.TestCase):
     """The corpus is not the thing to fix, and the report has to say so.
 
     Writing `role_track` values into it would be inventing model answers in an
-    eval corpus, in a file with no generator script (HANDOFF.md:1043-1047) whose
+    eval corpus, in a file with no generator script (`git show a666694:docs/tasks/refactor/HANDOFF.md:1043-1047`) whose
     rows also carry tests/test_match.py's pinned scores and ranks. It is not
     covered by tests/test_evals.py:454's sha256 pin either, so such an edit
     would be quiet rather than loud. Re-extracting it at a facts_version that
