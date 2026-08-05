@@ -327,7 +327,10 @@ numbers here are kept only so a citation to e.g. item 4 still resolves to someth
    (`TASKS.md`'s `T-24`), and `score.py` has since written real `primary_track` values for this
    profile, including `Re-Entry & Growth` rows — one of the two values `OQ-8` itself named a fit
    judgment rather than a job family. The live consequence for `webapp/onboarding.derive_tracks()`
-   is `DEV_TASKS.md`'s `OQ-22`.
+   was `DEV_TASKS.md`'s `OQ-22`, **closed 2026-08-05**: `derive_tracks()` now excludes
+   `'Re-Entry & Growth'` alongside `'Poor Fit'`, after a full replacement of `score.TRACKS` for
+   `pursuit` was researched and rejected as disproportionate to the harm (`primary_track` is never
+   rendered to Builders; only `ROLE_TRACK` is).
 7. **Task 29 round 2** (~2026-08-09) and ≥100 distinct postings from ≥5 labellers. Today: 2
    labellers, 36 postings, 10 overlap, unchanged. **Deliberately deferred past the MVP, owner
    decision 2026-08-04** — recruiting is easier once people can see the app working, and nothing

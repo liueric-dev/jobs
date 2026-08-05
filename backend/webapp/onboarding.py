@@ -379,10 +379,11 @@ def derive_tracks(conn, profile, job_ids):
     reacting to twenty real postings than from a dropdown, and the dropdown
     would need a vocabulary nobody has agreed (task 30).
 
-    'Poor Fit' is excluded. It is a real score.TRACKS value and it is the
-    model's way of saying the posting is wrong for the cohort; subscribing
-    somebody to it because they liked one posting the scorer misjudged would
-    turn one disagreement into a standing preference.
+    'Poor Fit' and 'Re-Entry & Growth' are excluded. Both are real
+    score.TRACKS values and both are the model's way of making a fit
+    judgment rather than naming a job family (score.py:283-298); subscribing
+    somebody to either because they liked one posting the scorer judged that
+    way would turn one disagreement into a standing preference.
 
     THIS NO LONGER RETURNS NOTHING. It did as of 2026-08-02, when `pursuit`
     had daily_narrative_budget = 0 and job_scores held zero pursuit rows, so
@@ -390,13 +391,9 @@ def derive_tracks(conn, profile, job_ids):
     NULL. The budget went nonzero on 2026-08-05 (query the `profiles` table
     for the live value) and a scoring pass wrote real primary_track values
     for this profile -- as of that same date, 92 non-'Poor Fit' rows,
-    including 'Re-Entry & Growth' ones. This function excludes 'Poor Fit'
-    below but NOT 'Re-Entry & Growth', the other value score.TRACKS' own
-    comment (score.py:283-298) names as a fit judgment rather than a job
-    family -- so a Builder who likes a seed posting the model scored
-    'Re-Entry & Growth' gets that written into their `tracks` today. Whether
-    to exclude it too, or leave it, is DEV_TASKS.md's OQ-22 -- unresolved as
-    of this comment. config/pursuit-persona.json's `_no_buckets_comment`
+    including 3 'Re-Entry & Growth' ones. DEV_TASKS.md's OQ-22 (closed
+    2026-08-05) is the record of that finding and of excluding it here too,
+    same as 'Poor Fit'. config/pursuit-persona.json's `_no_buckets_comment`
     carries the same history. The derivation is written the way it is
     because the alternative is a checkbox shipped instead.
     """
@@ -406,7 +403,8 @@ def derive_tracks(conn, profile, job_ids):
         """
         SELECT DISTINCT s.primary_track FROM job_scores s
         WHERE s.profile = %s AND s.job_id = ANY(%s)
-          AND s.primary_track IS NOT NULL AND s.primary_track <> 'Poor Fit'
+          AND s.primary_track IS NOT NULL
+          AND s.primary_track NOT IN ('Poor Fit', 'Re-Entry & Growth')
         ORDER BY s.primary_track
         """,
         (profile, list(job_ids)),

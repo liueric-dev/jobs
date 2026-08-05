@@ -743,6 +743,20 @@ class TestTrackSubscriptionsComeFromBehaviour(unittest.TestCase):
             self.assertIsNone(conn.execute(
                 "SELECT tracks FROM builder_profiles").fetchone()[0])
 
+    def test_re_entry_and_growth_is_never_subscribed_to(self):
+        # DEV_TASKS.md's OQ-22, closed 2026-08-05: the other score.TRACKS value
+        # that is a fit judgment rather than a job family (score.py:283-298).
+        # Excluded the same way 'Poor Fit' is, for the same reason.
+        with web_scratch_schema() as (conn, _name):
+            seed_profile(conn)
+            seed_users(conn, USER)
+            ids = seed_jobs(conn, 2, tracks=["Re-Entry & Growth"])
+            with routed_at(conn):
+                onboarding.post_onboarding(body(seed_judgements=[
+                    {"job_id": ids[0], "verdict": "interested"}]), USER)
+            self.assertIsNone(conn.execute(
+                "SELECT tracks FROM builder_profiles").fetchone()[0])
+
     def test_an_unscored_cohort_derives_nothing_and_stores_null(self):
         """THE LIVE CASE AS OF 2026-08-02, and the code is still right.
 
