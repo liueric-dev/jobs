@@ -69,13 +69,35 @@ if WEBAPP not in sys.path:
 
 import config                                    # noqa: E402  (path insert first)
 from fastapi.staticfiles import StaticFiles      # noqa: E402
+from starlette.datastructures import MutableHeaders  # noqa: E402
 from app import app                              # noqa: E402
+
+
+class CacheControlledStaticFiles(StaticFiles):
+    """StaticFiles, plus an explicit Cache-Control on every response.
+
+    Starlette's StaticFiles sends no Cache-Control of its own, so Cloudflare
+    fills the gap with its own default heuristic caching for known static
+    extensions -- observed serving a stale app.css for hours after a deploy
+    (T-21). no-cache forces revalidation on every request via the ETag /
+    Last-Modified FileResponse already sets, rather than the edge serving a
+    cached copy outright for its default TTL.
+    """
+
+    async def __call__(self, scope, receive, send):
+        async def send_with_cache_control(message):
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["cache-control"] = "no-cache"
+            await send(message)
+
+        await super().__call__(scope, receive, send_with_cache_control)
+
 
 # html=True serves index.html for "/" and 404s anything else, which is what a
 # hash-routed client needs: every client route is "/#/...", so the server only
 # ever sees "/". check_dir=True is the default and is wanted -- a typo'd path
 # should fail at startup, not on the first request.
-app.mount("/", StaticFiles(directory=HERE, html=True), name="frontend")
+app.mount("/", CacheControlledStaticFiles(directory=HERE, html=True), name="frontend")
 
 
 #: Bind addresses that reach this machine and nothing else. Anything outside

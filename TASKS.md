@@ -720,41 +720,42 @@ off this list rather than turned into rows nobody asked for, per this file's own
 
 ---
 
-### T-21 — Static assets carry no `Cache-Control`, so Cloudflare can serve a stale `app.css`/`app.mjs` for up to 4 hours after every deploy
+### ~~T-21~~ — Static assets carry no `Cache-Control`, so Cloudflare can serve a stale `app.css`/`app.mjs` for up to 4 hours after every deploy
 
-**Found 2026-08-04 while closing `DEV_TASKS.md`'s `OQ-14`** (the phone test). A real fix to
-`frontend/app.css` landed on disk and was served correctly by the origin (`curl` against
-`127.0.0.1:8421` showed it immediately), but `https://jobs.etotheric.com/app.css` kept returning
-the pre-fix bytes — `cf-cache-status: HIT`, `cache-control: max-age=14400`. `frontend/serve.py`'s
-`StaticFiles` mount sends no `Cache-Control` header of its own, so Cloudflare fills the gap with
-its own default heuristic caching for known static extensions (`.css` was cached; `.mjs`, oddly,
-was not — `cf-cache-status: DYNAMIC` on `js/app.mjs` in the same test). `index.html` itself is
-never cached (`DYNAMIC`), which is what made the one-off fix possible at all: a cache-busting
-query string on the stylesheet `<link>` (`app.css?v=20260805-hidden-fix`) forced a fresh fetch
-without touching the Cloudflare account. That is a manual step, though, and nothing stops the same
-staleness recurring on the next edit to `app.css` or any file under `frontend/js/`.
+**Closed 2026-08-05, for the origin-side half.** `frontend/serve.py:76-90` wraps the `StaticFiles`
+mount in `CacheControlledStaticFiles`, an ASGI-level `send` wrapper that sets
+`Cache-Control: no-cache` on every response — 200 and 304 alike, since it mutates the raw
+`http.response.start` message rather than going through `StaticFiles.file_response`, which would
+have missed the header on a conditional-GET 304. Confirmed against a throwaway instance on
+`PORT=18421` (the live `jobs-webapp.service` was already bound to `8421` and was not touched for
+this): `app.css`, `js/app.mjs` and `/` (`index.html`) all carry the header on a fresh `200`, and a
+conditional `GET` with `If-None-Match` still carries it on the `304`. All three suites print `OK`
+(1449 / 354 / 117), both frontend checkers pass, `audit-citations.py` reports `0 new`, and the file
+is outside both `ruff`'s and `mypy`'s scoped paths so neither ran against it.
 
-**How to do it.** Give `frontend/serve.py`'s `StaticFiles` mount (or a thin wrapper around it) an
-explicit `Cache-Control` header on every static response. `no-cache` (always revalidate via
-`ETag`/`Last-Modified`, a cheap `304` when nothing changed) is the safer default for a pre-launch
-app whose frontend is still changing often; a short `max-age` is the fallback if `304` round-trips
-ever show up as a measured cost, which nothing today suggests they will. `backend/webapp/README.md`
-notes this same file is `NOT FOR DEPLOYMENT`-flavored caution that turned out not to apply once
-`T-`-closing work confirmed the tunnel fronts it in production regardless (see `OQ-14`'s closure) —
-this row's fix belongs in the same file for the same reason.
+**The rest of the row does not close, and splits into `DEV_TASKS.md`'s new `OQ-23`.** With the
+owner's go-ahead, `jobs-webapp.service` was restarted (`systemctl --user restart
+jobs-webapp.service`) to verify through the actual tunnel — the same origin-side fix, live. It
+fixed the CDN half cleanly: `js/app.mjs` now round-trips `cache-control: no-cache` through
+Cloudflare untouched (`cf-cache-status: DYNAMIC`), and `app.css` no longer gets served as a blind
+multi-hour `HIT` — a forced-fresh request (`?cachetest=<random>`) came back `cf-cache-status: MISS`,
+and a same-URL repeat came back `EXPIRED` then `REVALIDATED`, meaning Cloudflare is now actually
+asking the origin rather than replaying stale bytes for four hours.
+
+**But `app.css` specifically still reaches the browser with `cache-control: max-age=14400`, not
+the origin's `no-cache`** — confirmed on a guaranteed-fresh `MISS`, so this is not a stale cache
+entry, it is Cloudflare rewriting the header on every response for that extension. There is no
+Cloudflare API token in any of this repo's three `.env` files, so this is a dashboard-only change
+(Caching → Configuration → Browser Cache TTL, or a Cache Rule scoped to static paths) and outside
+what a session can do unaided — `OQ-23` is that row. **The manual `?v=` cache-bust in
+`frontend/index.html` stays in place until `OQ-23` closes**: removing it now would reintroduce the
+exact staleness this row exists to end, for `app.css` specifically.
 
 ```bash
-cd backend/webapp && .venv/bin/python ../../frontend/serve.py &
-curl -sI http://127.0.0.1:8421/app.css | grep -i cache-control   # must be present, not absent
+cd backend/webapp && PORT=18421 .venv/bin/python ../../frontend/serve.py &
+curl -sI http://127.0.0.1:18421/app.css | grep -i cache-control   # present: no-cache
 kill %1
 ```
-
-**Done when:** every static response under `frontend/` carries an explicit `Cache-Control` header,
-confirmed both directly against the origin and through the tunnel
-(`curl -sI https://jobs.etotheric.com/app.css`, expecting `cf-cache-status: MISS` or `EXPIRED` on
-the next request after an edit, never a multi-hour-stale `HIT`), and the manual `?v=` cache-bust
-added to `index.html` on 2026-08-04 can be removed without the staleness this row describes coming
-back.
 
 ---
 

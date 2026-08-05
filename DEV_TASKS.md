@@ -17,7 +17,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-23`.**
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-24`.**
 Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
 citations to it keep resolving.
 
@@ -443,6 +443,47 @@ was standing in front of.
 `webapp/onboarding.py`'s `derive_tracks()` query and docstring are updated to match, and a test
 confirms a seed judgement on a `'Re-Entry & Growth'`-scored posting no longer survives into
 `tracks`.
+
+---
+
+### OQ-23 — Cloudflare rewrites `app.css`'s `Cache-Control` to `max-age=14400` regardless of what the origin sends
+
+**Why it is yours:** account. The Cloudflare dashboard, not this repo — there is no Cloudflare API
+token in any of the three `backend/**/.env` files, so nothing here can change a zone setting.
+
+**What:** `TASKS.md`'s `T-21` closed the origin-side half of the stale-asset bug found in `OQ-14` —
+`frontend/serve.py` now sends `Cache-Control: no-cache` on every static response. Verified live
+through the tunnel after a `jobs-webapp.service` restart: `js/app.mjs` round-trips `no-cache`
+through Cloudflare untouched (`cf-cache-status: DYNAMIC`), and `app.css` no longer gets replayed as
+a blind multi-hour `HIT` — the edge now genuinely asks the origin (`MISS`, then `EXPIRED` /
+`REVALIDATED` on repeat). **But `app.css` alone still reaches the browser carrying
+`cache-control: max-age=14400`**, not the origin's `no-cache` — confirmed on a guaranteed-fresh
+`MISS` (`curl -sI "https://jobs.etotheric.com/app.css?cachetest=<random>"`), so this is Cloudflare
+rewriting the header on every response for that extension, not a cache freshness question. That
+means a Builder's own browser — not Cloudflare's edge — will still hold a stale `app.css` for up to
+4 hours after a deploy. `js/app.mjs` was never subject to this, which is why only `.css` shows it:
+`T-21`'s own investigation already found Cloudflare's default heuristic caching doesn't pick up
+`.mjs` as a known static extension the way it does `.css`.
+
+**How to do it.** In the Cloudflare dashboard for the zone fronting `jobs.etotheric.com`: Caching →
+Configuration → Browser Cache TTL, set to "Respect Existing Headers" if that option is available on
+the current plan; if not, a Cache Rule scoped to `/*.css` (or all static paths under `frontend/`)
+that bypasses the default heuristic caching is the fallback. Confirm with the same guaranteed-fresh
+`MISS` check `T-21` used:
+
+```bash
+curl -sI "https://jobs.etotheric.com/app.css?cachetest=$RANDOM" | grep -i cache-control
+# must read the origin's no-cache, not a rewritten max-age=14400
+```
+
+**What it unblocks:** removing the manual `?v=` cache-bust from `frontend/index.html`, added
+2026-08-04 and still there — `T-21` deliberately left it in place because pulling it now would
+reintroduce the exact staleness this pair of rows exists to end.
+
+**Done when:** the check above reads `no-cache` (or whatever `Cache-Control` the origin actually
+sends) on a confirmed edge `MISS`, and the `?v=` cache-bust is removed from `frontend/index.html`
+in the same change, with both frontend checkers (`verify_fixtures.py`, `check_client.mjs`) still
+passing.
 
 ---
 
