@@ -489,22 +489,61 @@ def list_jobs(
         where.append("v.posted_at_ts >= %s::timestamptz")
         params.append(since)
 
-    columns = ", ".join(f"v.{c}" for c in LIST_COLUMNS)
-    sql = f"""
-        SELECT {columns},
-        {_STATE_COLUMNS},
-        {_COHORT_COLUMNS}
-        FROM jobs_app v
-        {_EVENT_STATE_JOIN}
-        {_BUILDER_STATE_JOIN}
-        {_COHORT_SIGNAL_JOIN}
-        WHERE {' AND '.join(where)}
-        ORDER BY {ORDER_BY}
-        LIMIT %s
-    """  # noqa: S608 -- where built from fixed literals only, values always bound via params -- see the comment above on join ordering
-    params.append(limit + 1)   # one extra row: is there a next page?
+    # Onboarding's four resolved preferences (location_pref, remote_pref,
+    # comp_floor, tracks -- onboarding.RESOLVABLE, read off builder_profiles
+    # via onboarding.resolved_for), applied the same way the client-supplied
+    # remote/nyc/min_score params above are: an always-on WHERE (T-23), never
+    # a match_score adjustment -- match_score stays cohort-level, and a
+    # per-Builder read must not be the thing that touches it. A local import:
+    # onboarding.py imports this module at its own top level, so importing it
+    # back up there would be a load-time cycle; by the time a request reaches
+    # this function both modules have already finished loading.
+    import onboarding
 
     with db() as conn:
+        prefs = onboarding.resolved_for(conn, user)
+
+        # location_pref and remote_pref answer different questions -- where a
+        # Builder will work versus how strict they are about onsite -- so a
+        # Builder who has answered both gets both clauses.
+        if prefs["location_pref"] == "nyc":
+            where.append("coalesce(v.location_is_nyc, FALSE) = TRUE")
+        elif prefs["location_pref"] == "remote":
+            where.append("coalesce(v.location_is_remote, FALSE) = TRUE")
+
+        if prefs["remote_pref"] == "remote_only":
+            where.append("coalesce(v.location_is_remote, FALSE) = TRUE")
+        elif prefs["remote_pref"] == "hybrid_ok":
+            # Only a posting KNOWN onsite-only is excluded. NULL and
+            # extract.py's own 'unknown' both stay visible -- the same rule
+            # comp_floor and tracks apply below: unpriced information must
+            # not read as a rejection.
+            where.append("coalesce(v.remote_policy, '') <> 'onsite'")
+
+        if prefs["comp_floor"]:
+            where.append("(v.comp_max IS NULL OR v.comp_max >= %s)")
+            params.append(prefs["comp_floor"])
+
+        if prefs["tracks"]:
+            where.append(
+                "(v.primary_track IS NULL OR v.primary_track = ANY(%s))")
+            params.append(prefs["tracks"])
+
+        columns = ", ".join(f"v.{c}" for c in LIST_COLUMNS)
+        sql = f"""
+            SELECT {columns},
+            {_STATE_COLUMNS},
+            {_COHORT_COLUMNS}
+            FROM jobs_app v
+            {_EVENT_STATE_JOIN}
+            {_BUILDER_STATE_JOIN}
+            {_COHORT_SIGNAL_JOIN}
+            WHERE {' AND '.join(where)}
+            ORDER BY {ORDER_BY}
+            LIMIT %s
+        """  # noqa: S608 -- where built from fixed literals only, values always bound via params -- see the comment above on join ordering
+        params.append(limit + 1)   # one extra row: is there a next page?
+
         rows = conn.execute(sql, params).fetchall()
 
     has_more = len(rows) > limit

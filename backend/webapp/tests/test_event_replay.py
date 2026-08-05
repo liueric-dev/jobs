@@ -175,6 +175,53 @@ def seed(conn, n=N, users=(USER,)):
     return ids
 
 
+def seed_facts(conn, job_id, *, remote_policy=None, comp_min=None, comp_max=None,
+               primary_track=None, location_is_nyc=None, location_is_remote=None,
+               profile=PROFILE):
+    """The three places T-23's onboarding filters read a posting's own data
+    from: jobs' two location booleans, job_facts (remote_policy, comp), and
+    job_scores (primary_track). All optional and NULL by default, because a
+    posting that has not been through extract.py or score.py yet is the
+    common case these filters must not silently punish.
+    """
+    conn.execute(
+        "UPDATE jobs SET location_is_nyc = %s, location_is_remote = %s "
+        "WHERE id = %s",
+        (location_is_nyc, location_is_remote, job_id))
+    conn.execute(
+        """
+        INSERT INTO job_facts (job_id, facts_version, remote_policy, comp_min,
+                               comp_max, extracted_at)
+        VALUES (%s, 3, %s, %s, %s, '2026-08-01T00:00:00')
+        """,
+        (job_id, remote_policy, comp_min, comp_max))
+    if primary_track is not None:
+        conn.execute(
+            """
+            INSERT INTO job_scores (job_id, profile, primary_track, scored_at)
+            VALUES (%s, %s, %s, '2026-08-01T00:00:00')
+            """,
+            (job_id, profile, primary_track))
+    conn.commit()
+
+
+def seed_builder_profile(conn, user, *, location_pref=None, remote_pref=None,
+                          comp_floor=None, tracks=None):
+    """One Builder's override row, written directly rather than through
+    onboarding.post_onboarding -- these tests are about list_jobs' WHERE, not
+    about the endpoint that fills this table."""
+    conn.execute(
+        """
+        INSERT INTO builder_profiles (app_user_id, parent_profile, location_pref,
+                                      remote_pref, comp_floor, tracks,
+                                      onboarded_at, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, '2026-08-01T00:00:00',
+               '2026-08-01T00:00:00', '2026-08-01T00:00:00')
+        """,
+        (user.id, user.profile, location_pref, remote_pref, comp_floor, tracks))
+    conn.commit()
+
+
 @contextlib.contextmanager
 def redirect_db(conn):
     """Point jobs.db at the scratch connection for the duration.
@@ -677,6 +724,172 @@ class TestListState(unittest.TestCase):
             row = next(j for j in back["jobs"] if j["id"] == ids[2])
             self.assertFalse(row["dismissed"])
             self.assertIsNone(row["dismiss_reason"])
+
+
+@requires_db
+class TestBuilderPreferenceFilters(unittest.TestCase):
+    """T-23: onboarding's four resolved preferences, as list_jobs WHERE
+    clauses -- a read-time filter, never a match_score adjustment, so
+    job_matches and match_reasons stay exactly what match.py wrote.
+
+    Every filtering test pairs a posting the preference should exclude with
+    one carrying NO signal on that field at all, because the failure mode
+    that matters here is not "the filter does nothing" -- it is a filter that
+    reads absence of data as a rejection, which is the exact thing
+    onboarding.DEFAULTS' own docstring spends a paragraph refusing to do for
+    an unanswered PREFERENCE. These tests are the same refusal, one layer
+    down, for unscored DATA.
+    """
+
+    def list_for(self, user, **kwargs):
+        call = dict(limit=jobs.MAX_LIMIT, cursor=None, q=None, remote=None,
+                    nyc=None, min_score=None, since=None,
+                    include_dismissed=False)
+        call.update(kwargs)
+        return jobs.list_jobs(user=user, **call)
+
+    def test_a_builder_with_no_profile_row_sees_everything(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=3)
+            for job_id in ids:
+                seed_facts(conn, job_id)
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual({j["id"] for j in shown["jobs"]}, set(ids))
+
+    def test_location_pref_nyc_excludes_non_nyc(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=2)
+            seed_facts(conn, ids[0], location_is_nyc=True)
+            seed_facts(conn, ids[1], location_is_nyc=False)
+            seed_builder_profile(conn, USER, location_pref="nyc")
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual([j["id"] for j in shown["jobs"]], [ids[0]])
+
+    def test_location_pref_remote_excludes_non_remote(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=2)
+            seed_facts(conn, ids[0], location_is_remote=True)
+            seed_facts(conn, ids[1], location_is_remote=False)
+            seed_builder_profile(conn, USER, location_pref="remote")
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual([j["id"] for j in shown["jobs"]], [ids[0]])
+
+    def test_location_pref_either_filters_nothing(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=2)
+            seed_facts(conn, ids[0], location_is_nyc=True)
+            seed_facts(conn, ids[1], location_is_nyc=False, location_is_remote=False)
+            seed_builder_profile(conn, USER, location_pref="either")
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual({j["id"] for j in shown["jobs"]}, set(ids))
+
+    def test_remote_pref_hybrid_ok_excludes_only_known_onsite(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=3)
+            seed_facts(conn, ids[0], remote_policy="onsite")
+            seed_facts(conn, ids[1], remote_policy="hybrid")
+            seed_facts(conn, ids[2])   # no remote_policy signal at all
+            seed_builder_profile(conn, USER, remote_pref="hybrid_ok")
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual({j["id"] for j in shown["jobs"]}, {ids[1], ids[2]})
+
+    def test_remote_pref_remote_only_requires_the_location_boolean(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=2)
+            seed_facts(conn, ids[0], location_is_remote=True,
+                       remote_policy="remote_anywhere")
+            seed_facts(conn, ids[1], location_is_remote=False,
+                       remote_policy="hybrid")
+            seed_builder_profile(conn, USER, remote_pref="remote_only")
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual([j["id"] for j in shown["jobs"]], [ids[0]])
+
+    def test_remote_pref_onsite_ok_filters_nothing(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=1)
+            seed_facts(conn, ids[0], remote_policy="onsite")
+            seed_builder_profile(conn, USER, remote_pref="onsite_ok")
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual([j["id"] for j in shown["jobs"]], ids)
+
+    def test_comp_floor_excludes_only_a_known_ceiling_below_it(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=3)
+            seed_facts(conn, ids[0], comp_max=90000)
+            seed_facts(conn, ids[1], comp_max=150000)
+            seed_facts(conn, ids[2])   # no comp signal at all
+            seed_builder_profile(conn, USER, comp_floor=100000)
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual({j["id"] for j in shown["jobs"]}, {ids[1], ids[2]})
+
+    def test_a_zero_comp_floor_filters_nothing(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=1)
+            seed_facts(conn, ids[0], comp_max=1)
+            seed_builder_profile(conn, USER, comp_floor=0)
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual([j["id"] for j in shown["jobs"]], ids)
+
+    def test_tracks_excludes_only_a_known_mismatched_track(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=3)
+            seed_facts(conn, ids[0], primary_track="Core SWE")
+            seed_facts(conn, ids[1], primary_track="Poor Fit")
+            seed_facts(conn, ids[2])   # never fit-scored -- must still show
+            seed_builder_profile(conn, USER, tracks=["Core SWE"])
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual({j["id"] for j in shown["jobs"]}, {ids[0], ids[2]})
+
+    def test_a_null_tracks_subscription_shows_every_track(self):
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=2)
+            seed_facts(conn, ids[0], primary_track="Core SWE")
+            seed_facts(conn, ids[1], primary_track="Poor Fit")
+            seed_builder_profile(conn, USER, tracks=None)
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual({j["id"] for j in shown["jobs"]}, set(ids))
+
+    def test_match_score_and_match_reasons_are_untouched(self):
+        # T-23's invariant: a read-time filter, never a match_score
+        # adjustment. The rows that survive keep exactly what seed() gave
+        # them, not a rescored value reflecting the preference that admitted
+        # them.
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=2)
+            seed_facts(conn, ids[0], location_is_nyc=True)
+            seed_facts(conn, ids[1], location_is_nyc=True)
+            seed_builder_profile(conn, USER, location_pref="nyc")
+            with redirect_db(conn):
+                shown = self.list_for(USER)
+            self.assertEqual([j["match_score"] for j in shown["jobs"]], [99, 98])
+            # match_reasons is TEXT (schema.py:583); seed() writes the
+            # literal '[]' and nothing here has any reason to touch it.
+            self.assertTrue(all(j["match_reasons"] == "[]" for j in shown["jobs"]))
+
+    def test_a_second_builder_on_the_shared_profile_is_unaffected(self):
+        # job_matches and job_scores are keyed (job_id, profile), not per
+        # Builder -- USER's preferences must not leak into USER_B's list.
+        with web_scratch_schema() as (conn, _):
+            ids = seed(conn, n=2, users=(USER, USER_B))
+            seed_facts(conn, ids[0], location_is_nyc=True)
+            seed_facts(conn, ids[1], location_is_nyc=False)
+            seed_builder_profile(conn, USER, location_pref="nyc")
+            with redirect_db(conn):
+                mine = self.list_for(USER)
+                theirs = self.list_for(USER_B)
+            self.assertEqual([j["id"] for j in mine["jobs"]], [ids[0]])
+            self.assertEqual({j["id"] for j in theirs["jobs"]}, set(ids))
 
 
 @requires_db

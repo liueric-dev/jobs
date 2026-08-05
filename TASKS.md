@@ -835,42 +835,47 @@ grepping the new script for `groq` or `z.ai` returns nothing, and `git status` s
 
 ---
 
-### T-23 — Six onboarding fields are collected from every Builder and read by nothing
+### ~~T-23~~ — Six onboarding fields are collected from every Builder and read by nothing
 
-**Where this came from.** The superseded resume-tailoring draft recorded it with a grep behind it,
-and it is independent of the personal-scoring-layer feature that draft was about — which is why it
-is a row of its own rather than a line in an ADR. `builder_profiles`
-(`backend/webapp/schema_web.py:600-611`) holds `location_pref`, `remote_pref`, `comp_floor`,
-`tracks`, `prior_years`, `situation` and `schedule_constraints` for every Builder who completes
-onboarding, and the ranking pipeline references none of it. That is a personal layer that is free,
-needs no LLM call, changes no privacy posture and is already collected.
+**Closed 2026-08-05, scoped to the four fields the row itself said would resolve** —
+`location_pref`, `remote_pref`, `comp_floor`, `tracks`. `situation`, `schedule_constraints` and
+`prior_years` remain stored and unread; they were never in scope (`onboarding.RESOLVABLE` still
+excludes them, `backend/webapp/onboarding.py:115`).
 
-**Start by re-running the grep rather than trusting this paragraph** — it was true when written and
-this file is not the kind of thing that stays true by itself.
+**The chosen shape: a read-time `WHERE`, not a `match_score` adjustment.** The row left both open;
+asked, the answer was to mirror the file's own existing pattern — `list_jobs`'s client-supplied
+`remote`/`nyc`/`min_score` params are already always-just-WHERE, never a rank adjustment, so the
+server-derived preferences became four more clauses of the same kind
+(`backend/webapp/jobs.py:492-531`) rather than a second mechanism. `match_score` and `match_reasons`
+are untouched — `job_matches` still holds exactly what `match.py` wrote, pinned by
+`TestBuilderPreferenceFilters.test_match_score_and_match_reasons_are_untouched`
+(`backend/webapp/tests/test_event_replay.py`).
 
-**Scope it to the four fields that actually resolve.** `RESOLVABLE` is `tuple(DEFAULTS)` —
-`location_pref`, `remote_pref`, `comp_floor`, `tracks` (`backend/webapp/onboarding.py:87-92`,
-`backend/webapp/onboarding.py:115`) — applied key-wise over cohort then shared default, skipping any
-value that is `None` (`backend/webapp/onboarding.py:220-226`), with `resolved_for(conn, user)` as the
-entry point (`backend/webapp/onboarding.py:240`). `situation`, `schedule_constraints` and
-`prior_years` are stored but do not flow through `resolve()`, and `load_builder` selects only the
-four (`backend/webapp/onboarding.py:234-238`). A design assuming all seven will not work.
+**Each filter is permissive on absence, the same rule `DEFAULTS` already applies to an unanswered
+preference, applied to unscored/unextracted DATA instead.** `location_pref`/`remote_pref` reuse the
+view's own `location_is_nyc`/`location_is_remote` booleans and `job_facts.remote_policy` exactly as
+the existing `nyc`/`remote` query params do; `comp_floor` excludes only a posting with a KNOWN
+`comp_max` below it, never an unpriced one; `tracks` excludes only a posting with a KNOWN
+`primary_track` outside the subscribed set, never one `score.py` hasn't reached yet. A Builder who
+answered nothing still sees everything — `test_a_builder_with_no_profile_row_sees_everything`.
 
-Two invariants bound the answer. **Whatever this becomes must not break the `(job_id, profile)`
-keying** that makes cost flat in users, which rules out a per-Builder `job_scores` row; a read-time
-filter or a free arithmetic adjustment on top of `match_score` both survive it. And
-`match_reasons` must still carry per-rule attribution on every row.
+**Called through `onboarding.resolved_for(conn, user)`, not a raw `builder_profiles` query, and the
+grep below is still non-empty** — a comment in `jobs.py` names the table, honestly rather than for
+the check's sake: `onboarding.py` already imports `jobs` at module scope, so importing `onboarding`
+back at `jobs.py`'s own top level would be a load-time cycle. The `import onboarding` inside
+`list_jobs` is local for exactly that reason (`backend/webapp/jobs.py:501`).
 
 ```bash
 cd backend
-grep -rn builder_profiles match.py score.py webapp/jobs.py    # empty today; must not be after
-python3 -m unittest discover -s tests
-cd webapp && .venv/bin/python -m unittest discover -s tests
+grep -rn builder_profiles match.py score.py webapp/jobs.py    # non-empty now
+python3 -m unittest discover -s tests                          # 1449, OK
+cd webapp && .venv/bin/python -m unittest discover -s tests    # 367 (+13 new), OK
+cd ../api && .venv/bin/python -m unittest discover -s tests    # 117, OK
 ```
 
-**Done when:** that grep is non-empty, all three suites print `OK`, and — if `LIST_COLUMNS` changed
-at all — `python3 frontend/verify_fixtures.py` and `node frontend/check_client.mjs` both pass with
-the five shipped fixtures hand-edited in the same commit.
+`LIST_COLUMNS` did not change — no new response field, just four more `WHERE` clauses — so the
+frontend fixtures and `frontend/verify_fixtures.py`/`node frontend/check_client.mjs` were not
+touched. `ruff` and `mypy` were re-run against the changed files; no new findings in either.
 
 ---
 
