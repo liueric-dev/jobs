@@ -758,7 +758,22 @@ back.
 
 ---
 
-### T-22 — Turn a Builder's background paragraph into a persona, prototyped, no UI and no `profiles` row
+### ~~T-22~~ — Turn a Builder's background paragraph into a persona, prototyped, no UI and no `profiles` row
+
+**Closed 2026-08-05.** `backend/tools/persona-from-background`, run against a scratch background
+paragraph (a pharmacy technician six months into the program, not committed — the row asks for no
+storage and this needs none either): one LLM call turns free text into a persona carrying all four
+required keys, `profiles.validate(persona, {})` accepts it without raising, `score.build_prompt()`
+accepts it against three real postings from `frontend/fixtures/shipped/GET_v1_jobs.json` without
+raising, and three real `gap_bridging_angle` narratives print. `--model` takes `evals/models.py`'s
+own SPEC format (bare, `MODEL@BASE_URL@API_KEY`, or `claude:MODEL`) rather than a hardcoded
+provider — `grep -in "groq\|z\.ai" backend/tools/persona-from-background` returns nothing.
+`git status` shows one new untracked file and nothing under `backend/config/`, no migration. A
+`plan-verifier` pass first (per the session's own instruction) found three of the row's own
+citations had drifted by a handful of lines — `score.py` had just been edited by this session's own
+`T-24` — and confirmed everything else, including that `GET_v1_jobs.json`'s job objects really are
+`_facts_block`'s shape. All three suites still print `OK` (1449/354/117), `mypy` and `ruff` are both
+clean on the new file, and `audit-citations.py` reports `0 new`.
 
 **Where this came from.** A draft scoping a *personal scoring layer* — a second
 `gap_bridging_angle`/`risk_factors` narrative per posting, computed against one Builder's own

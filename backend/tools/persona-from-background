@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""
+Persona-from-background: T-22's prototype for the personal scoring layer.
+
+Turns one Builder's own background paragraph into a persona shaped like
+config/pursuit-persona.json (background_summary, strengths, honest_gaps,
+scoring_instructions -- no buckets key, per D16/profiles.py:139-146), then
+feeds it to score.build_prompt() against real postings and prints what the
+model comes back with. See docs/adr/0005-personal-scoring-layer-annotates-only.md
+for why this exists and what it deliberately stops short of.
+
+NO DATABASE WRITE, NO `profiles` ROW. A Builder gets a `builder_profiles`
+row through POST /v1/onboarding and never a `profiles` row
+(migrations/migrate_profiles.py:4-22) -- creating one here would put a new
+cohort in front of extract.py and match.py every night, which is what
+--new-cohort is for and this script never calls it.
+
+CACHING NOTE for whoever builds the client on top of this: do not reuse
+job_scores' three cache keys (facts_version, persona_sha, prompt_version).
+facts_version is not in LIST_COLUMNS (webapp/jobs.py:119-128) and is exposed
+to the client nowhere, and that tuple's order is asserted against five
+shipped fixture files -- adding a field is not free. A sha256 of the exact
+prompt string build_prompt() returns subsumes all three: it changes
+whenever any of them would have, and needs no new field. This script prints
+that digest below to show the shape; nothing reads it back.
+
+    cd backend
+    python3 tools/persona-from-background --background-file <fixture> --n 3
+    python3 tools/persona-from-background --background-file <fixture> \\
+        --model "deepseek-v4-flash@https://api.deepseek.com@env:DEEPSEEK_API_KEY"
+
+--model takes the same SPEC evals/models.py defines: bare MODEL,
+MODEL@BASE_URL@API_KEY, or claude:MODEL. Bare (or omitted) means "read the
+pipeline's own environment", exactly as llm.call_detailed() already treats
+None -- so this script names no provider itself.
+"""
+import argparse
+import hashlib
+import json
+import os
+import sys
+from pathlib import Path
+
+# tools/ sits one level below the pipeline modules it imports, same as every
+# other script here (cost-test.py, compare-models.py) -- Python puts THIS
+# file's directory on sys.path, not its parent, so the parent is added by
+# hand. That same insert is what reaches lib/ and evals/.
+BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BACKEND)
+
+import llm  # noqa: E402
+import profiles  # noqa: E402
+import score  # noqa: E402
+from evals import models  # noqa: E402
+from lib import envfile  # noqa: E402
+
+DEFAULT_JOBS_FIXTURE = os.path.join(
+    os.path.dirname(BACKEND), "frontend", "fixtures", "shipped", "GET_v1_jobs.json")
+
+GENERATE_PERSONA_PROMPT = """You are turning one person's own words about their background into a structured persona used to score job postings for fit against them specifically. Respond with ONLY a single JSON object -- no markdown fences, no explanation before or after.
+
+BACKGROUND, IN THIS PERSON'S OWN WORDS:
+{background}
+
+Respond with exactly this JSON schema (no other text):
+{{
+  "background_summary": "<2-4 sentences, third person, summarizing the background above -- do not invent experience, employers, titles, degrees or years it does not state>",
+  "strengths": ["<3-5 specific, concrete strengths this background actually supports>"],
+  "honest_gaps": ["<2-4 specific gaps or mismatches a hiring manager would notice -- named plainly, not softened>"],
+  "scoring_instructions": "<2-4 sentences telling a model how to score a posting's fit against THIS person specifically -- what should score high, what should score low, and why>"
+}}
+
+Do not include a "buckets" key."""
+
+
+def generate_persona(background_text, call_kwargs):
+    """One LLM call: free-text background -> a persona shaped like config/pursuit-persona.json."""
+    raw = llm.call(GENERATE_PERSONA_PROMPT.format(background=background_text), **call_kwargs)
+    persona = llm.parse_json(raw)
+    if persona is None:
+        raise SystemExit(f"persona-from-background: model did not return parseable JSON:\n{raw}")
+    return persona
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--background-file", required=True,
+                    help="plain text file: one person's background, in their own words")
+    ap.add_argument("--n", type=int, default=3,
+                    help="how many postings from the jobs fixture to score against")
+    ap.add_argument("--model", default=None,
+                    help="MODEL, MODEL@BASE_URL@API_KEY, or claude:MODEL "
+                         "(evals/models.py's SPEC format); omit to read the "
+                         "pipeline's own environment")
+    ap.add_argument("--jobs-fixture", default=DEFAULT_JOBS_FIXTURE,
+                    help="a GET /v1/jobs response shape; defaults to the shipped fixture")
+    args = ap.parse_args()
+
+    # Establish the environment the same way run-daily.py does, so this works
+    # from a bare shell. Anything already exported wins.
+    envfile.load(os.path.join(BACKEND, ".env"))
+
+    try:
+        spec = models.parse(args.model) if args.model else models.ModelSpec(
+            model=llm.model(), base_url=llm.base_url(),
+            api_key=llm.api_key(), backend=llm.backend())
+    except models.SpecError as e:
+        print(f"persona-from-background: {e}", file=sys.stderr)
+        sys.exit(2)
+    call_kwargs = spec.call_kwargs()
+
+    background_text = Path(args.background_file).read_text().strip()
+    if not background_text:
+        raise SystemExit(f"persona-from-background: {args.background_file} is empty")
+
+    persona = generate_persona(background_text, call_kwargs)
+
+    # The same check profiles.upsert() runs before every write
+    # (profiles.py:186 -> :123). criteria={} is a legitimate, empty criteria
+    # blob -- base defaults to 0 (profiles.py:154) -- so this exercises only
+    # the persona half of the contract without a criteria file, which this
+    # row is explicit about not touching.
+    profiles.validate(persona, {})
+
+    print(f"PERSONA (model {spec.label}):", file=sys.stderr)
+    print(json.dumps(persona, indent=2))
+
+    jobs = json.loads(Path(args.jobs_fixture).read_text())["jobs"][:args.n]
+    if not jobs:
+        raise SystemExit(f"persona-from-background: {args.jobs_fixture} has no jobs")
+
+    for job in jobs:
+        prompt = score.build_prompt(persona, job)
+        digest = hashlib.sha256(prompt.encode()).hexdigest()[:12]
+        raw = llm.call(prompt, **call_kwargs)
+        result = llm.parse_json(raw)
+        values = score.normalize(result) if result is not None else None
+
+        print(f"\n--- {job.get('title')} @ {job.get('company_name')} "
+              f"(prompt sha256:{digest}) ---", file=sys.stderr)
+        if values is None:
+            print(f"UNUSABLE RESPONSE, would tombstone: {raw!r}", file=sys.stderr)
+            continue
+        print(f"fit_score={values['fit_score']} "
+              f"primary_track={values['primary_track']!r}", file=sys.stderr)
+        print(values["gap_bridging_angle"] or "(no gap_bridging_angle)")
+        if values["risk_factors"]:
+            print("risks: " + "; ".join(values["risk_factors"]), file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
