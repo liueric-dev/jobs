@@ -742,14 +742,16 @@ multi-hour `HIT` — a forced-fresh request (`?cachetest=<random>`) came back `c
 and a same-URL repeat came back `EXPIRED` then `REVALIDATED`, meaning Cloudflare is now actually
 asking the origin rather than replaying stale bytes for four hours.
 
-**But `app.css` specifically still reaches the browser with `cache-control: max-age=14400`, not
-the origin's `no-cache`** — confirmed on a guaranteed-fresh `MISS`, so this is not a stale cache
-entry, it is Cloudflare rewriting the header on every response for that extension. There is no
-Cloudflare API token in any of this repo's three `.env` files, so this is a dashboard-only change
-(Caching → Configuration → Browser Cache TTL, or a Cache Rule scoped to static paths) and outside
-what a session can do unaided — `OQ-23` is that row. **The manual `?v=` cache-bust in
-`frontend/index.html` stays in place until `OQ-23` closes**: removing it now would reintroduce the
-exact staleness this row exists to end, for `app.css` specifically.
+**`app.css` specifically still reached the browser with `cache-control: max-age=14400`, not
+the origin's `no-cache`** — confirmed on a guaranteed-fresh `MISS`, so this was not a stale cache
+entry, it was Cloudflare rewriting the header on every response for that extension. There is no
+Cloudflare API token in any of this repo's three `.env` files, so this was a dashboard-only change
+outside what a session could do unaided — split off as `DEV_TASKS.md`'s `OQ-23`.
+
+**`OQ-23` closed 2026-08-05**: owner set Browser Cache TTL to "Respect Existing Headers" in the
+Cloudflare dashboard. The manual `?v=` cache-bust in `frontend/index.html`, left in place until
+then to avoid reintroducing the exact staleness this row exists to end, is now removed — see
+`OQ-23`'s own closure entry for the confirming `curl` output.
 
 ```bash
 cd backend/webapp && PORT=18421 .venv/bin/python ../../frontend/serve.py &
