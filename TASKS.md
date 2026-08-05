@@ -8,7 +8,7 @@ budget: 400
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-22`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-25`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -755,3 +755,136 @@ confirmed both directly against the origin and through the tunnel
 the next request after an edit, never a multi-hour-stale `HIT`), and the manual `?v=` cache-bust
 added to `index.html` on 2026-08-04 can be removed without the staleness this row describes coming
 back.
+
+---
+
+### T-22 — Turn a Builder's background paragraph into a persona, prototyped, no UI and no `profiles` row
+
+**Where this came from.** A draft scoping a *personal scoring layer* — a second
+`gap_bridging_angle`/`risk_factors` narrative per posting, computed against one Builder's own
+persona rather than the cohort's, run in the Builder's browser on the Builder's own key, shown on
+the job detail screen only. Cut into rows on 2026-08-05 and deleted with the cut; its six decisions
+are [`docs/adr/0005-personal-scoring-layer-annotates-only.md`](docs/adr/0005-personal-scoring-layer-annotates-only.md)
+and the draft itself is `git show 7dfbc7e:docs/DRAFT-personal-layer-resume-tailoring.md` plus this
+repo's history. **Everything else in that feature is an owner decision** — `DEV_TASKS.md`'s `OQ-18`
+through `OQ-21`. This row is the one piece blocked on nothing, and it stops deliberately short of
+any UI, any storage and any database write.
+
+**Why one generated persona rather than the raw paragraph in every call.** The persona is the only
+point at which a wrong inference about a person is visible and correctable. A background paragraph
+pasted into every scoring call would repeat a bad reading of someone silently, forever, and cost
+more per call besides.
+
+**How to do it.** The persona contract is already pinned and needs nothing new:
+`profiles.validate` (`backend/profiles.py:147-150`) requires `background_summary`, `strengths`,
+`honest_gaps` and `scoring_instructions`; `buckets` is deliberately *not* required
+(`backend/profiles.py:139-146`) and `build_prompt` omits the whole section when the key is absent
+(`backend/score.py:601-628`). `backend/config/pursuit-persona.json` is the readable example of the
+shape. Feed the result straight to `build_prompt(persona, job)` (`backend/score.py:588`), which
+reads exactly five keys and nothing else.
+
+**The postings can come from disk — this row needs no database.** `_facts_block`
+(`backend/score.py:555`) reads a shortlist row, and every field it touches is in `LIST_COLUMNS`
+(`backend/webapp/jobs.py:119-128`), so the job objects already in
+`frontend/fixtures/shipped/GET_v1_jobs.json` are exactly the right shape.
+
+**Model and base URL are parameters, not UI copy.** `llm.call_detailed` takes per-call `model` and
+`base_url` overrides (`backend/llm.py:206-208`) and the module already speaks to four providers
+(`backend/llm.py:7-13`). Hardcoding one is how this codebase lost a model it was relying on before.
+
+**Two things this row must not do.** It must not create a `personal` row in the `profiles` table:
+`backend/migrations/migrate_profiles.py:4-22` states the split — a Builder gets a `builder_profiles`
+row through `POST /v1/onboarding` and never a `profiles` row — and creating one now takes
+`--new-cohort` and puts a new profile in front of `extract.py` and `match.py` every night. And it
+must not reuse the server's three cache keys for a future client-side cache: `facts_version` is not
+in `LIST_COLUMNS` and is exposed to the client nowhere, and adding it is not free, because
+`LIST_COLUMNS` order is a contract asserted against five shipped fixture files
+(`backend/webapp/jobs.py:111-118`). **A `sha256` of the exact prompt string subsumes all three keys,
+needs no new field and invalidates on the same events.** Record that in the script, not here.
+
+```bash
+cd backend
+python3 tools/persona-from-background --background-file <fixture> --n 3
+```
+
+**The script is spelled without its suffix above, deliberately.** Give it the repo's usual `.py`
+name; it is written this way here only because `tools/audit-citations.py` cannot tell a file a row
+is *about* to create from a citation that has drifted, and the `PostToolUse` hook blocks the edit
+either way. Silencing that in `config/citation-baseline.json` is not the alternative.
+
+**Done when:** that command prints a persona carrying all four keys `profiles.validate` requires,
+`build_prompt` accepts it against three real postings without raising, three narratives are printed,
+grepping the new script for `groq` or `z.ai` returns nothing, and `git status` shows no change under
+`backend/config/` and no migration. No database write, no `profiles` row, no frontend file touched.
+
+---
+
+### T-23 — Six onboarding fields are collected from every Builder and read by nothing
+
+**Where this came from.** The superseded resume-tailoring draft recorded it with a grep behind it,
+and it is independent of the personal-scoring-layer feature that draft was about — which is why it
+is a row of its own rather than a line in an ADR. `builder_profiles`
+(`backend/webapp/schema_web.py:600-611`) holds `location_pref`, `remote_pref`, `comp_floor`,
+`tracks`, `prior_years`, `situation` and `schedule_constraints` for every Builder who completes
+onboarding, and the ranking pipeline references none of it. That is a personal layer that is free,
+needs no LLM call, changes no privacy posture and is already collected.
+
+**Start by re-running the grep rather than trusting this paragraph** — it was true when written and
+this file is not the kind of thing that stays true by itself.
+
+**Scope it to the four fields that actually resolve.** `RESOLVABLE` is `tuple(DEFAULTS)` —
+`location_pref`, `remote_pref`, `comp_floor`, `tracks` (`backend/webapp/onboarding.py:87-92`,
+`backend/webapp/onboarding.py:115`) — applied key-wise over cohort then shared default, skipping any
+value that is `None` (`backend/webapp/onboarding.py:220-226`), with `resolved_for(conn, user)` as the
+entry point (`backend/webapp/onboarding.py:240`). `situation`, `schedule_constraints` and
+`prior_years` are stored but do not flow through `resolve()`, and `load_builder` selects only the
+four (`backend/webapp/onboarding.py:234-238`). A design assuming all seven will not work.
+
+Two invariants bound the answer. **Whatever this becomes must not break the `(job_id, profile)`
+keying** that makes cost flat in users, which rules out a per-Builder `job_scores` row; a read-time
+filter or a free arithmetic adjustment on top of `match_score` both survive it. And
+`match_reasons` must still carry per-rule attribution on every row.
+
+```bash
+cd backend
+grep -rn builder_profiles match.py score.py webapp/jobs.py    # empty today; must not be after
+python3 -m unittest discover -s tests
+cd webapp && .venv/bin/python -m unittest discover -s tests
+```
+
+**Done when:** that grep is non-empty, all three suites print `OK`, and — if `LIST_COLUMNS` changed
+at all — `python3 frontend/verify_fixtures.py` and `node frontend/check_client.mjs` both pass with
+the five shipped fixtures hand-edited in the same commit.
+
+---
+
+### T-24 — Three places in the code still say the cohort narrative budget is zero, and it is 200
+
+**Found 2026-08-05 while cutting the personal-scoring-layer draft into rows**, by a `plan-verifier`
+run that checked the live database rather than only the code — which is the only reason it was
+caught, because every one of these citations still *resolves*.
+
+`backend/config/pursuit-persona.json`'s `_no_buckets_comment` says `daily_narrative_budget` is 0 and
+leans on that to argue a known prompt/vocabulary mismatch is harmless because "score.py writes
+nothing for this profile." `backend/score.py:602-603` says the same. `frontend/js/ui.mjs:45-46` goes
+furthest and is the one with a user-visible consequence: it tells the next reader that
+`gap_bridging_angle` is *"null on EVERY row"* and that the card's `summary` fallback is therefore
+the only path that ever runs. **All three are now false.** The budget was raised to 200 and a
+scoring pass ran on 2026-08-05, writing narratives for most of the shortlist.
+
+**Why this is not just tidying.** The `pursuit-persona.json` comment is a *decision record* — it
+argues that `score.TRACKS`'s five-value enum, two of whose values are fit judgments rather than job
+families, is safe to leave alone precisely because nothing scores this profile. That argument
+expired when the budget changed, and `OQ-8` closed on it. Whoever fixes the comment has to say
+whether the mismatch is still harmless now that the calls are real.
+
+```bash
+cd backend
+grep -rn "daily_narrative_budget is 0\|null on EVERY row" config/ score.py ../frontend/js/
+python3 -m unittest discover -s tests
+```
+
+**Done when:** that grep is empty, each of the three sites states what is actually true (read the
+number out of the `profiles` table, do not transcribe `200` into a comment that will drift the same
+way), the `score.TRACKS` question above is answered in the persona file or handed to a new row, and
+all three suites print `OK`.

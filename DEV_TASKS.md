@@ -17,7 +17,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-18`.**
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-22`.**
 Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
 citations to it keep resolving.
 
@@ -43,6 +43,7 @@ cannot compress, so start them first even though they finish last.
 | if you have | do this |
 |---|---|
 | **5 minutes** | `OQ-9` — pick the floor of record. Every model figure you or anyone quotes is provisional until you do |
+| **10 minutes, and it costs money** | `OQ-19` — the cohort's nightly narrative budget is zero, so no Builder has ever seen a `gap_bridging_angle`. Fund it or decide not to; the personal scoring layer's whole display design turns on the answer |
 | **a week of lead time, once the MVP has shipped** | `OQ-3` — line up labellers for round 2. This is the gate the scoring redesign's *validation* is waiting on, not the MVP itself |
 
 **`OQ-3` validates whether the scoring redesign worked; it does not gate shipping.** The redesign
@@ -295,6 +296,110 @@ relying on it.
 
 **Done when:** the Adzuna and USAJobs keys are in `backend/.env` and the stubs are no longer
 stubs.
+
+---
+
+### OQ-18 — The personal scoring layer's own validation plan is blocked by a rule this repo chose on purpose
+
+**Why it is yours:** decision. Both available answers are defensible and the code cannot pick.
+
+**What:** The draft's plan was to validate the premise cheaply and server-side: score the same
+postings with a hand-authored personal persona and with the cohort's, and compare both against your
+own Axis B labels. **That comparison cannot be printed today, and the
+refusal is deliberate rather than a missing feature.** `evals label report`
+(`backend/evals/__main__.py:653-655`) is the only model-vs-human command and it exits 2 while there
+is one labeller, because *"model-vs-human is uninterpretable without a floor and a ceiling beside
+it"* (`backend/evals/labels.py:39-45`). There is deliberately no `--force`, and
+`backend/tools/label-findings.py:25-35` says it is not a way around that. The ceiling needs a second
+labeller — `OQ-3`, which you sequenced *after* the MVP on 2026-08-04.
+
+**How to do it.** Name one of three:
+
+1. **A paired comparison rather than an agreement rate.** "Which of two personas agrees better
+   against the same labels" is not the per-item accuracy the guard is about, and `labels.ordering()`
+   (`backend/evals/labels.py:2479`) and `labels.recall_bound()` (`backend/evals/labels.py:2418`) are
+   both axis-B aware and neither is an agreement rate.
+2. **Wait for `OQ-3`.** Correct and slow: the personal layer ships unvalidated or waits.
+3. **Build it unvalidated and say so** — it annotates and never orders, so a bad narrative costs a
+   Builder some words, not a ranking.
+
+`n=1` is a property of the situation, not a flaw in the plan: you are the only person who can label
+for themselves. **What it unblocks:** the sequencing of the feature — `T-22` is independent either
+way.
+
+**Done when:** one of the three is chosen and written into an ADR under `docs/adr/`, since it either
+reverses or ratifies a documented position.
+
+---
+
+### OQ-19 — Cohort narratives went live on 2026-08-05; does a personal one replace them or sit beside them?
+
+**Why it is yours:** decision. Its funding half answered itself while these rows were being written.
+
+**What:** This row was drafted claiming the `pursuit` cohort's `daily_narrative_budget` was zero, so
+no Builder had ever seen a `gap_bridging_angle` and a personal narrative would be the only one on
+screen. **That was false within hours of being written, and the code still says it.** The live
+`profiles` row carries a budget of **200**, changed 2026-08-05, and `job_scores` holds 178 `pursuit`
+rows with a populated `gap_bridging_angle`, scored the same night against
+`deepseek-v4-flash`. Cohort narratives are real, and the cards have been rendering them since.
+
+**So the display question is the whole question now.** The detail screen can show both, labelled —
+one is what the cohort sees, one is yours, and the two disagreeing is honest — or the personal one
+can replace the cohort one in place. The first is more honest and busier; the second is cleaner and
+hides a disagreement the Builder might want to see. One constraint either way:
+`frontend/js/ui.mjs:13` — *"NO SCORE, ANYWHERE. Not match_score, not fit_score."* A personal
+**narrative** is in scope; a visible personal **score** is not.
+
+**Look at one on a phone first.** Nobody has seen a real `gap_bridging_angle` render — `OQ-14`'s
+phone test predates the scoring pass by a day — and its length and tone decide whether two of them
+fit on one screen at all.
+
+**Done when:** replace-in-place or side-by-side is chosen, having looked at a real rendered
+narrative first, and `TASKS.md`'s `T-24` has corrected the three places in the code that still say
+this budget is zero.
+
+---
+
+### OQ-20 — `localStorage` is plaintext, and this cohort may be sharing devices
+
+**Why it is yours:** decision, about people you know and this codebase does not.
+
+**What:** The personal layer runs in the Builder's browser on the Builder's own API key, which has
+to be stored somewhere. `localStorage` is the only real option in a client with no build step, and
+anything else running in that browser profile can read it — including the next person to use that
+computer. The superseded draft framed the Builder's exposure as being to their chosen LLM provider
+rather than to the operator, which is true and incomplete: **the third party that matters here is
+whoever else uses that browser.**
+
+Worth knowing first: the client stores **nothing** in web storage today — that grep is empty and all
+state rides the session cookie on the webapp's own origin (`frontend/js/api.mjs:27`).
+
+**How to do it.** Answer one question: do Builders in this cohort share machines — a lab, a library,
+a family computer? If yes, the options are session-only storage (re-paste each visit: annoying,
+safe) or no stored key at all. If no, `localStorage` plus a plain warning is proportionate. It
+unblocks the storage half of the client feature and does not block `T-22`.
+
+**Done when:** the answer is known from the cohort rather than assumed, and the chosen storage is
+written into the row that builds the client.
+
+---
+
+### OQ-21 — Is the class-issued Groq key real, still valid, and one key or thirty?
+
+**Why it is yours:** account. Nobody but you can check it.
+
+**What:** The cost argument assumes each Builder brings their own key, and the draft says the cohort
+was issued Groq keys as part of the class. If that is stale, or if it is one key shared across
+thirty people, both the economics and the rate-limit behaviour change — a shared key means one
+Builder's burst throttles everyone else's narratives.
+
+**How to do it.** Confirm with Pursuit whether the keys were issued, are still valid and are
+per-person. Do not design around Groq either way: `backend/llm.py:7-13` already speaks to four
+providers over one wire format and `backend/llm.py:206-208` takes per-call `model` and `base_url`
+overrides — parameters, not UI copy. It unblocks nothing structural, only how the client asks.
+
+**Done when:** you know whether the keys exist, are current and are per-Builder, and it is written
+into this row.
 
 ---
 
