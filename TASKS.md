@@ -858,7 +858,37 @@ the five shipped fixtures hand-edited in the same commit.
 
 ---
 
-### T-24 — Three places in the code still say the cohort narrative budget is zero, and it is 200
+### ~~T-24~~ — Three places in the code still say the cohort narrative budget is zero, and it is 200
+
+**Closed 2026-08-05.** A second `plan-verifier` pass (run before starting this row, per the
+session's own instruction) found the row undercounted: the same false claim also appeared in
+`backend/score.py:296` (caught by the row's own suggested grep), and in two sites the row's grep
+did not cover because they spell it `daily_narrative_budget = 0` rather than `is 0` —
+`backend/webapp/onboarding.py:387-390` and `frontend/fixtures/shipped/MANIFEST.json:133` — plus
+`docs/STATE-OF-THE-SYSTEM.md:323-326`. All seven sites are now corrected, each pointing at the
+`profiles` table for the live number rather than transcribing `200` into a comment that will drift
+the same way. Independently verified against the live database rather than trusting the row:
+`daily_narrative_budget = 200` for `pursuit`, 178 `job_scores` rows carry a non-null
+`gap_bridging_angle`, `scored_at` runs 2026-08-05 01:42:46–01:56:24, all against
+`deepseek-v4-flash@api.deepseek.com`.
+
+**The `score.TRACKS` question does not still hold.** `pursuit-persona.json`'s argument that the
+enum mismatch is harmless "because nothing scores this profile" expired the day the budget did:
+`job_scores` now has 92 non-`'Poor Fit'` `primary_track` rows for `pursuit`, including 3
+`'Re-Entry & Growth'` — a value `OQ-8`'s own decision named a fit judgment rather than a job
+family. That surfaces functionally, not just in prose: `webapp/onboarding.derive_tracks()` already
+excludes `'Poor Fit'` from what it seeds into `builder_profiles.tracks` but not `'Re-Entry &
+Growth'`, so a Builder can already get that value seeded today. `OQ-8` itself is not reversed — the
+enum still isn't getting renamed — but its "dead code anyway" premise is gone, and the live
+consequence is a new row, `DEV_TASKS.md`'s `OQ-22`, rather than a decision folded silently into
+this one.
+
+All three suites print `OK` (1449 / 354 / 117), `mypy` is clean, `audit-citations.py` reports `0
+new`, and both frontend checkers pass.
+
+---
+
+**Original row, for history.**
 
 **Found 2026-08-05 while cutting the personal-scoring-layer draft into rows**, by a `plan-verifier`
 run that checked the live database rather than only the code — which is the only reason it was

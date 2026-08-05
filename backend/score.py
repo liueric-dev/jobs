@@ -292,8 +292,12 @@ REQUIRED_FIELDS = (
 #: per-job rather than per-profile, already has nine cluster-derived slugs
 #: with hand-written plain-language copy (config/search-queries.json), and is
 #: already live end-to-end (webapp/jobs.py's LIST_COLUMNS, frontend fixtures).
-#: This tuple stays as-is and stays dead code for pursuit, where
-#: daily_narrative_budget is 0.
+#: This tuple stays as-is. It stopped being dead code for pursuit on
+#: 2026-08-05, when that profile's daily_narrative_budget went from 0 to
+#: nonzero (query `profiles.daily_narrative_budget` for the live value) and
+#: a scoring pass wrote real primary_track values, including 'Re-Entry &
+#: Growth' rows -- see DEV_TASKS.md's OQ-22 for the live consequence this
+#: has for webapp/onboarding.derive_tracks().
 TRACKS = ("Core SWE", "AI Integration", "Bridge & Solutions",
           "Re-Entry & Growth", "Poor Fit")
 
@@ -599,8 +603,10 @@ def build_prompt(persona, job):
     validated cleanly and then raised KeyError inside the thread pool, taking
     down the whole profile's batch because run_for_profile materialises
     pool.map through list(). That is not hypothetical any more: the `pursuit`
-    profile is active with no `buckets` key, and stays quiet only because its
-    daily_narrative_budget is 0.
+    profile is active with no `buckets` key. It no longer stays quiet, either
+    -- `daily_narrative_budget` went from 0 to nonzero on 2026-08-05 (query
+    the `profiles` table for the live value) and this path now runs for real
+    postings every night.
 
     The fix is here rather than in profiles.validate() -- see the note there.
     A persona with no positioning buckets is a legitimate persona under the

@@ -17,7 +17,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-22`.**
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-23`.**
 Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
 citations to it keep resolving.
 
@@ -43,7 +43,7 @@ cannot compress, so start them first even though they finish last.
 | if you have | do this |
 |---|---|
 | **5 minutes** | `OQ-9` — pick the floor of record. Every model figure you or anyone quotes is provisional until you do |
-| **10 minutes, and it costs money** | `OQ-19` — the cohort's nightly narrative budget is zero, so no Builder has ever seen a `gap_bridging_angle`. Fund it or decide not to; the personal scoring layer's whole display design turns on the answer |
+| **a few minutes, and needs a phone screen to look at first** | `OQ-19` — the funding half is done: the cohort's nightly narrative budget went to 200 on 2026-08-05 and Builders are already seeing a `gap_bridging_angle`. What is open now is only the display question — does a personal narrative replace the cohort one or sit beside it |
 | **a week of lead time, once the MVP has shipped** | `OQ-3` — line up labellers for round 2. This is the gate the scoring redesign's *validation* is waiting on, not the MVP itself |
 
 **`OQ-3` validates whether the scoring redesign worked; it does not gate shipping.** The redesign
@@ -403,6 +403,49 @@ into this row.
 
 ---
 
+### OQ-22 — `score.TRACKS` values are now live in `job_scores.primary_track`; does `derive_tracks()` need to exclude `Re-Entry & Growth` too?
+
+**Why it is yours:** decision. Reopens the substance of a closed decision now that its premise
+changed underneath it.
+
+**What:** `OQ-8` (closed 2026-08-03) decided `score.TRACKS` stays unrenamed for `pursuit`, resting
+partly on the argument that it was dead code: `daily_narrative_budget` was 0, so `score.py` wrote
+no `primary_track` values for this profile and `webapp/onboarding.derive_tracks()`
+(`onboarding.py:372-407`) always derived an empty set. `TASKS.md`'s `T-24` found the budget went to
+200 on 2026-08-05 and a scoring pass ran the same night. Verified against the live database: 178
+`pursuit` rows now carry a `primary_track`, and 92 of them are not `'Poor Fit'` — `Bridge &
+Solutions` 43, `AI Integration` 39, `Core SWE` 7, `Re-Entry & Growth` 3.
+`derive_tracks()` already excludes `'Poor Fit'` from what it seeds into `builder_profiles.tracks`
+(`onboarding.py:382-385`) — but not `'Re-Entry & Growth'`, the *other* value `OQ-8`'s own decision
+named a fit judgment rather than a job family. A Builder onboarding today whose liked seed postings
+include one of those 3 rows gets `'Re-Entry & Growth'` written into their `tracks` column: the
+exact invented-narrowness harm `OQ-8` was decided to prevent, now live rather than hypothetical.
+`OQ-8` itself is not wrong and stays closed — the enum is still not getting renamed — but the
+"harmless, dead code" half of its reasoning has expired, and this row is the piece that reasoning
+was standing in front of.
+
+**How to do it.** Name one of three:
+
+1. **Exclude `'Re-Entry & Growth'` from `derive_tracks()` too**, mirroring the existing `'Poor
+   Fit'` exclusion — one line. Leaves open what happens if a sixth `TRACKS` value is ever added:
+   whoever adds it has to remember to re-ask this question, since nothing enforces "exclude every
+   fit-judgment value" as a rule rather than two hand-picked exceptions.
+2. **Leave `derive_tracks()` as it is.** Three rows out of 178 is a thin surface to act on, and an
+   argument could be made that a Builder liking a `Re-Entry & Growth`-scored posting is meaningful
+   behavioural signal rather than an invented label — closer to what task 26 asked
+   `derive_tracks()` to capture than `OQ-8`'s framing assumed.
+3. **Revisit whether `score.TRACKS` should be replaced for `pursuit` outright**, now that its
+   values are surfacing in front of Builders for real rather than sitting dead in a column nobody
+   read. Option 1 patches a symptom `OQ-8` already anticipated without answering whether the
+   underlying enum mismatch is still the right trade now that it has a live consequence.
+
+**Done when:** one of the three is chosen and written here. If it's option 1,
+`webapp/onboarding.py`'s `derive_tracks()` query and docstring are updated to match, and a test
+confirms a seed judgement on a `'Re-Entry & Growth'`-scored posting no longer survives into
+`tracks`.
+
+---
+
 ## Closed — kept so citations resolve
 
 | # | what it was | outcome |
@@ -411,7 +454,7 @@ into this row.
 | ~~OQ-6~~ | `D31` (urlopen call sites bypassing `lib.http`'s retries) needed an owner decision, not a fix | **Closed 2026-08-03 — confirmed already decided.** `4d6f7aa` (2026-08-02), *"D31 decided — three of four urlopen sites reach lib.http, and one must not"*, resolved it: `fetch_feed`, `fetch_page` and `serpapi_search` now go through `lib.http`; `builtin-nyc.fetch_description` stays on raw `urllib.request.urlopen` deliberately, because `lib.http`'s retry-on-429 schedule would spend four extra requests before `RateLimited` could abandon the detail pass. This row only survived because the register tracking `D31` was deleted in the 2026-08-02 purge before the row was struck there too |
 | ~~OQ-9~~ | Two n=115 selfchecks, five days apart, disagreed by up to 9.6 points with no supersession marker on either | **Closed 2026-08-03.** Owner picked option 3: both as a range, act on the lower bound. Both `evals/fixtures/results/selfcheck-n120-*.json` files now carry a `_comment` recording this; `docs/STATE-OF-THE-SYSTEM.md` § 6 and `.claude/CLAUDE.md`'s landmine paragraph state the decision and the per-field floors instead of presenting both as open |
 | ~~OQ-2~~ | The 24h impression dedup was keyed `(profile, job_id)`, so one Builder's render suppressed thirty Builders' impressions of the same jobs | **Closed 2026-08-03.** Owner picked option 1: `(app_user_id, job_id)`. `backend/webapp/jobs.py`'s `record_events` NOT EXISTS predicate now binds `prior.app_user_id` instead of `prior.profile`; the existing `idx_job_events_user_job` partial index already served it, so no schema change was needed. Existing rows are not backfilled. Two new replay tests in `tests/test_event_replay.py` (`TestSkipReplay`) cover both directions — a second Builder's impression is no longer deduped by the first, and the same Builder's re-render still is. Full webapp suite (354 tests) green |
-| ~~OQ-8~~ | `score.TRACKS`'s five-value enum "does not describe this population" (persona `_comment`); task 30's display half needed a browsable vocabulary | **Closed 2026-08-03.** These are two different "track" concepts, not one. `score.TRACKS` is the narrative LLM call's per-profile vocabulary, two of whose five values ("Re-Entry & Growth", "Poor Fit") are fit judgments rather than job families — renaming it for Pursuit would be exactly the invented narrowness the persona `_comment` warns against, and it's dead code for this profile anyway (`daily_narrative_budget` is 0). `extract.ROLE_TRACK` is the separate, per-job, already-live nine-slug vocabulary task 11 built for this purpose, with hand-written plain-language copy already in `config/search-queries.json`. Decision: task 30's display half ships with `ROLE_TRACK`; `score.TRACKS` is left as-is. Recorded in `score.py`'s `TRACKS` comment and the persona's `_no_buckets_comment` |
+| ~~OQ-8~~ | `score.TRACKS`'s five-value enum "does not describe this population" (persona `_comment`); task 30's display half needed a browsable vocabulary | **Closed 2026-08-03.** These are two different "track" concepts, not one. `score.TRACKS` is the narrative LLM call's per-profile vocabulary, two of whose five values ("Re-Entry & Growth", "Poor Fit") are fit judgments rather than job families — renaming it for Pursuit would be exactly the invented narrowness the persona `_comment` warns against, and it's dead code for this profile anyway (`daily_narrative_budget` is 0). `extract.ROLE_TRACK` is the separate, per-job, already-live nine-slug vocabulary task 11 built for this purpose, with hand-written plain-language copy already in `config/search-queries.json`. Decision: task 30's display half ships with `ROLE_TRACK`; `score.TRACKS` is left as-is. Recorded in `score.py`'s `TRACKS` comment and the persona's `_no_buckets_comment`. **The "dead code anyway" half stopped being true 2026-08-05** (`T-24`) — the enum decision itself stands, but the live consequence for `onboarding.derive_tracks()` is reopened as `OQ-22` |
 | ~~OQ-16~~ | Whether the `kind: record` carve-out (one document allowed to claim frozen history rather than current state) stays | **Closed 2026-08-03 — carve-out removed, option 2.** The last `kind: record` handoff document is deleted, recoverable at `git show refactor-freeze-2026-08-02:backend/docs/HANDOFF-multimachine-google-jobs.md`. Its still-live facts moved before deletion rather than being lost with it: the multi-machine shared-budget bug it found moved to `backend/README.md`'s locking section, and its Step 3 (a dry-run-verified id migration for `google_jobs` rows, checked today and confirmed **still unapplied 9 days later**) became `TASKS.md`'s `T-20` — a genuinely live finding this closure surfaced, not mere history. The rest was already duplicated in code comments (`lib/ids.py`). Rule is now unqualified: only the three `kind: contract` files may claim current state, no exceptions |
 | ~~OQ-12~~ | Whether any contributor API key has ever been minted and handed to a person | **Closed 2026-08-03. No.** Owner confirmed none were generated; `cd backend/api && .venv/bin/python manage_users.py list` (with `api/.env` exported into the shell) returns `no contributors yet` — `api_keys` is empty. Written into `OQ-1`: retiring `api/` would be a deletion, not a migration, if that is the direction chosen |
 | ~~OQ-11~~ | Is `SESSION_COOKIE_SECURE` true in the deployed `.env`? | **Closed 2026-08-04. Yes.** `backend/webapp/.env` has `SESSION_COOKIE_SECURE=true`, and the deployment is no longer localhost-only — the Cloudflare tunnel (`OQ-4b`) went live the same day, with a real Google sign-in completed through the public URL |

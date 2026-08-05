@@ -42,11 +42,16 @@ export function jobCard(job) {
 
   // WHEN THERE IS NO FIT STORY, THE SUMMARY IS THE CARD, not a footnote. This
   // was styled faint and italic until it was rendered against the live
-  // database, where `gap_bridging_angle` is null on EVERY row -- scoring is
-  // budget-limited and this profile has no scores yet. De-emphasising the only
-  // text on the card made the whole list look broken. The ::before marker is
-  // what keeps the two claims apart: one is a fit story written for this
-  // Builder, the other is the posting describing itself.
+  // database, back when `gap_bridging_angle` was null on every row -- scoring
+  // was budget-limited and this profile had no scores yet. That changed
+  // 2026-08-05: the budget went nonzero and most of the shortlist now has a
+  // narrative, so this fallback renders only for the unscored remainder, not
+  // every card. De-emphasising the only text on the card made the whole list
+  // look broken when this was written, and nothing about that argument
+  // depended on the count being 100% -- it still applies to whichever cards
+  // fall back. The ::before marker is what keeps the two claims apart: one is
+  // a fit story written for this Builder, the other is the posting describing
+  // itself.
   const body = angle
     ? `<p class="angle">${esc(angle)}</p>`
     : job.summary

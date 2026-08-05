@@ -320,10 +320,14 @@ numbers here are kept only so a citation to e.g. item 4 still resolves to someth
 5. ~~Which of the two committed n=115 selfchecks is the floor of record?~~ **Closed 2026-08-03
    (`OQ-9`).** Both kept as a range, act on the lower bound per field — recorded in both result
    JSONs, § 6 below, and `.claude/CLAUDE.md`.
-6. ~~Name the tracks.~~ **Closed 2026-08-03 (`OQ-8`).** `score.TRACKS` stays as-is — dead code for
-   the `pursuit` profile (`daily_narrative_budget` is 0), and renaming it would invent the
-   narrowness the persona `_comment` warns against. Task 30's display half ships with
-   `extract.ROLE_TRACK`'s nine-slug vocabulary instead.
+6. ~~Name the tracks.~~ **Closed 2026-08-03 (`OQ-8`).** `score.TRACKS` stays as-is, and renaming it
+   would invent the narrowness the persona `_comment` warns against. Task 30's display half ships
+   with `extract.ROLE_TRACK`'s nine-slug vocabulary instead. **The "dead code" half of the argument
+   is no longer true**: `pursuit`'s `daily_narrative_budget` went from 0 to nonzero on 2026-08-05
+   (`TASKS.md`'s `T-24`), and `score.py` has since written real `primary_track` values for this
+   profile, including `Re-Entry & Growth` rows — one of the two values `OQ-8` itself named a fit
+   judgment rather than a job family. The live consequence for `webapp/onboarding.derive_tracks()`
+   is `DEV_TASKS.md`'s `OQ-22`.
 7. **Task 29 round 2** (~2026-08-09) and ≥100 distinct postings from ≥5 labellers. Today: 2
    labellers, 36 postings, 10 overlap, unchanged. **Deliberately deferred past the MVP, owner
    decision 2026-08-04** — recruiting is easier once people can see the app working, and nothing

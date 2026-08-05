@@ -384,14 +384,21 @@ def derive_tracks(conn, profile, job_ids):
     somebody to it because they liked one posting the scorer misjudged would
     turn one disagreement into a standing preference.
 
-    THIS RETURNS NOTHING TODAY AND THE CODE IS STILL RIGHT. primary_track is
-    written by score.py, and `pursuit` has daily_narrative_budget = 0 -- so
-    score.py writes no rows for the cohort profile at all, and job_scores holds
-    zero pursuit rows as of 2026-08-02. Every seed judgement therefore derives
-    an empty set and the caller leaves `tracks` NULL. config/
-    pursuit-persona.json's `_no_buckets_comment` records why the budget is 0 and
-    that score.TRACKS' names "do not describe this population" anyway. The
-    derivation is written now because the alternative is a checkbox shipped now.
+    THIS NO LONGER RETURNS NOTHING. It did as of 2026-08-02, when `pursuit`
+    had daily_narrative_budget = 0 and job_scores held zero pursuit rows, so
+    every seed judgement derived an empty set and the caller left `tracks`
+    NULL. The budget went nonzero on 2026-08-05 (query the `profiles` table
+    for the live value) and a scoring pass wrote real primary_track values
+    for this profile -- as of that same date, 92 non-'Poor Fit' rows,
+    including 'Re-Entry & Growth' ones. This function excludes 'Poor Fit'
+    below but NOT 'Re-Entry & Growth', the other value score.TRACKS' own
+    comment (score.py:283-298) names as a fit judgment rather than a job
+    family -- so a Builder who likes a seed posting the model scored
+    'Re-Entry & Growth' gets that written into their `tracks` today. Whether
+    to exclude it too, or leave it, is DEV_TASKS.md's OQ-22 -- unresolved as
+    of this comment. config/pursuit-persona.json's `_no_buckets_comment`
+    carries the same history. The derivation is written the way it is
+    because the alternative is a checkbox shipped instead.
     """
     if not job_ids:
         return []
