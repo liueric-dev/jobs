@@ -298,22 +298,6 @@ stubs.
 
 ---
 
-### OQ-14 — The phone test
-
-**Why it is yours:** device, plus a registration that is not in this repo.
-
-**What:** A physical phone, plus a Google Cloud Console redirect-URI registration. The frontend
-has never been exercised on a phone.
-
-**How to do it.** Needs `OQ-4b` first — the client uses `credentials: "same-origin"` with
-`BASE = ""`, so it must be served from the webapp's own origin or every request silently loses
-the session cookie and renders as the sign-in screen with no error anywhere. Add the tunnel
-hostname as an authorised redirect URI in Google Cloud Console, then load it on the phone.
-
-**Done when:** sign-in completes on a phone and the Today screen renders.
-
----
-
 ## Closed — kept so citations resolve
 
 | # | what it was | outcome |
@@ -327,6 +311,7 @@ hostname as an authorised redirect URI in Google Cloud Console, then load it on 
 | ~~OQ-12~~ | Whether any contributor API key has ever been minted and handed to a person | **Closed 2026-08-03. No.** Owner confirmed none were generated; `cd backend/api && .venv/bin/python manage_users.py list` (with `api/.env` exported into the shell) returns `no contributors yet` — `api_keys` is empty. Written into `OQ-1`: retiring `api/` would be a deletion, not a migration, if that is the direction chosen |
 | ~~OQ-11~~ | Is `SESSION_COOKIE_SECURE` true in the deployed `.env`? | **Closed 2026-08-04. Yes.** `backend/webapp/.env` has `SESSION_COOKIE_SECURE=true`, and the deployment is no longer localhost-only — the Cloudflare tunnel (`OQ-4b`) went live the same day, with a real Google sign-in completed through the public URL |
 | ~~OQ-4b~~ | The account half of deployment, and one verified restore | **Closed 2026-08-04.** Cloudflare account, domain, tunnel, and `cloudflared` binary all confirmed live (`OQ-11`). Off-machine backup: `~/.config/jobs-backup.env` points `JOBS_BACKUP_REMOTE` at a Backblaze B2 bucket via a new `rclone` remote (`b2jobs:`); `backup-jobs.sh` run by hand landed a real dump, checksum, and roles-only dump in the bucket. `verify-jobs-backup.sh` then restored that dump into a scratch database and matched all 29 tables' row counts against production, and `--self-test` (truncating `job_facts` in the restored copy) correctly failed the comparison — the check can fail, so passing means something. Both timers installed via `OQ-4a` |
+| ~~OQ-14~~ | The phone test — sign-in and the Today screen, on a real device | **Closed 2026-08-04. Sign-in completes and onboarding is reachable, confirmed on a real phone.** The row's own prerequisite (a Google Console redirect URI matching the tunnel hostname) was already done as part of `OQ-11`. What actually blocked it was three bugs nobody had hit, because **the client had never been loaded end to end through the deployed tunnel, on any device, before this row** — the phone was the first thing to try. (1) `deploy/systemd/jobs-webapp.service` ran bare `uvicorn app:app`, never `frontend/serve.py` — so `/` 404'd for everyone since the tunnel went live, not just phones; fixed by pointing `ExecStart` at `frontend/serve.py`, which mounts the client after every API route. (2) `frontend/app.css` had zero `[hidden]` rules, and `.topbar`/`.sheet-backdrop`/`.toast` each set their own unconditional `display: flex` — an author `display` rule always beats the browser's built-in `[hidden] { display: none }` regardless of specificity, so all three had been rendering on top of the page this whole time; the dismiss-reason sheet ("Why isn't this one for you?") sat directly over the sign-in button. Fixed with one global `[hidden] { display: none !important; }` rule rather than three per-class patches. (3) Cloudflare's edge was caching `app.css` for 4 hours by default (`frontend/serve.py`'s `StaticFiles` mount sends no `Cache-Control`, so Cloudflare's own heuristic — cache known static extensions — filled the gap), which meant fix (2) didn't visibly land until `index.html`'s stylesheet link was cache-busted (`index.html` itself is `cf-cache-status: DYNAMIC`, never cached, so that edit propagated immediately). **Separately, a VPN on the host machine caused the "page cannot be reached" symptom seen mid-diagnosis** — `cloudflared` holds QUIC-over-UDP connections to Cloudflare's edge, which the VPN degraded while leaving ordinary HTTPS/TCP untouched; turning the VPN off fixed it immediately and was unrelated to the three bugs above. The caching gap in (3) is real and recurring — every future static-asset edit will get stuck behind the same 4-hour window without a fresh cache-bust — tracked separately as `TASKS.md`'s `T-21` |
 
 ---
 

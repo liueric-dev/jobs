@@ -8,7 +8,7 @@ budget: 400
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-21`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-22`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -717,3 +717,41 @@ returns two equal numbers.
 `nyc-events-postgres` bound to `127.0.0.1:5432` only. Steps 4 (`job_sources` provenance table) and
 6 (a second worker) are unbuilt and, per the doc, 6 was confirmed never planned (2026-07-26) — left
 off this list rather than turned into rows nobody asked for, per this file's own ceiling.
+
+---
+
+### T-21 — Static assets carry no `Cache-Control`, so Cloudflare can serve a stale `app.css`/`app.mjs` for up to 4 hours after every deploy
+
+**Found 2026-08-04 while closing `DEV_TASKS.md`'s `OQ-14`** (the phone test). A real fix to
+`frontend/app.css` landed on disk and was served correctly by the origin (`curl` against
+`127.0.0.1:8421` showed it immediately), but `https://jobs.etotheric.com/app.css` kept returning
+the pre-fix bytes — `cf-cache-status: HIT`, `cache-control: max-age=14400`. `frontend/serve.py`'s
+`StaticFiles` mount sends no `Cache-Control` header of its own, so Cloudflare fills the gap with
+its own default heuristic caching for known static extensions (`.css` was cached; `.mjs`, oddly,
+was not — `cf-cache-status: DYNAMIC` on `js/app.mjs` in the same test). `index.html` itself is
+never cached (`DYNAMIC`), which is what made the one-off fix possible at all: a cache-busting
+query string on the stylesheet `<link>` (`app.css?v=20260805-hidden-fix`) forced a fresh fetch
+without touching the Cloudflare account. That is a manual step, though, and nothing stops the same
+staleness recurring on the next edit to `app.css` or any file under `frontend/js/`.
+
+**How to do it.** Give `frontend/serve.py`'s `StaticFiles` mount (or a thin wrapper around it) an
+explicit `Cache-Control` header on every static response. `no-cache` (always revalidate via
+`ETag`/`Last-Modified`, a cheap `304` when nothing changed) is the safer default for a pre-launch
+app whose frontend is still changing often; a short `max-age` is the fallback if `304` round-trips
+ever show up as a measured cost, which nothing today suggests they will. `backend/webapp/README.md`
+notes this same file is `NOT FOR DEPLOYMENT`-flavored caution that turned out not to apply once
+`T-`-closing work confirmed the tunnel fronts it in production regardless (see `OQ-14`'s closure) —
+this row's fix belongs in the same file for the same reason.
+
+```bash
+cd backend/webapp && .venv/bin/python ../../frontend/serve.py &
+curl -sI http://127.0.0.1:8421/app.css | grep -i cache-control   # must be present, not absent
+kill %1
+```
+
+**Done when:** every static response under `frontend/` carries an explicit `Cache-Control` header,
+confirmed both directly against the origin and through the tunnel
+(`curl -sI https://jobs.etotheric.com/app.css`, expecting `cf-cache-status: MISS` or `EXPIRED` on
+the next request after an edit, never a multi-hour-stale `HIT`), and the manual `?v=` cache-bust
+added to `index.html` on 2026-08-04 can be removed without the staleness this row describes coming
+back.

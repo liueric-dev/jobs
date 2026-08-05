@@ -17,12 +17,19 @@ WorkingDirectory=/home/eric/apps/jobs/backend/webapp
 # backend/ share schema.py and lib/ and nothing else -- none imports another --
 # and this unit is where that separation is either kept or quietly lost.
 EnvironmentFile=/home/eric/apps/jobs/backend/webapp/.env
-# The venv's uvicorn, never the system one. This venv sets
+# The venv's python, never the system one. This venv sets
 # include-system-site-packages = false, so anything missing here is missing at
 # runtime and nowhere else -- an ImportError under uvicorn and in no test, which
 # backend/api/README.md:69-77 records having already happened once.
-ExecStart=/home/eric/apps/jobs/backend/webapp/.venv/bin/uvicorn app:app \
-          --host 127.0.0.1 --port 8421
+#
+# frontend/serve.py, not bare `uvicorn app:app`: it mounts frontend/ at "/"
+# after every router (see its own docstring), which is what lets one hostname
+# serve both the page and the API per backend/webapp/README.md's Phase 2 step
+# 3 and .claude/rules/frontend.md. Bare `uvicorn app:app` -- what this line ran
+# until 2026-08-04 -- serves the API alone; every browser request for "/"
+# 404s, undetected until the phone test (DEV_TASKS.md OQ-14) tried it.
+ExecStart=/home/eric/apps/jobs/backend/webapp/.venv/bin/python3 \
+          /home/eric/apps/jobs/frontend/serve.py --host 127.0.0.1
 # 127.0.0.1, NOT 0.0.0.0. cloudflared connects from this same host, so binding
 # wider buys nothing and would make the service reachable from the LAN the
 # moment someone opens a firewall for an unrelated reason.

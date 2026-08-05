@@ -7,6 +7,18 @@
   even at the narrowest width this supports (320px).
 */
 
+/* An author `display` declaration on a class always beats the UA stylesheet's
+   `[hidden] { display: none }`, at any specificity -- CSS's cascade ranks
+   author-normal above user-agent-normal outright. #topbar, #reason-sheet and
+   #toast all toggle via the `hidden` attribute (js/app.mjs, js/ui.mjs) while
+   also carrying a class with its own unconditional `display: flex`, so all
+   three rendered on top of the page regardless of `hidden` until this rule
+   existed -- confirmed live, `hidden` had never once worked. One rule for
+   every current and future `hidden` element rather than a per-class fix. */
+[hidden] {
+  display: none !important;
+}
+
 :root {
   --bg: #ffffff;
   --surface: #f6f7f9;

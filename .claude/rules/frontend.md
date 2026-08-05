@@ -7,8 +7,10 @@ paths:
 
 **A shipping client, not a prototype.** Plain HTML, one stylesheet, ES modules — **no build step,
 no framework, no npm, no `package.json`**, and that is a constraint to keep. Five screens exist and
-all five are routed: Today, Job detail, Saved, Search and Onboarding. Not built: Contribute, and
-the phone test.
+all five are routed: Today, Job detail, Saved, Search and Onboarding. Not built: Contribute. The
+phone test ran 2026-08-04 (`DEV_TASKS.md`'s `OQ-14`) and found three real bugs nobody had hit
+because the client had never been loaded end to end through the deployed tunnel before — see that
+row's closure for what they were.
 
 **Serve it on the webapp's own origin, not a second dev server.** The client uses
 `credentials: "same-origin"` with `BASE = ""` — served from any other host, every request loses the
