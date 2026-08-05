@@ -8,7 +8,7 @@ budget: 400
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-25`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-26`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -941,3 +941,39 @@ python3 -m unittest discover -s tests
 number out of the `profiles` table, do not transcribe `200` into a comment that will drift the same
 way), the `score.TRACKS` question above is answered in the persona file or handed to a new row, and
 all three suites print `OK`.
+
+---
+
+### ~~T-25~~ — `tools/ats-discover.py`'s circuit breaker trips on most nightly runs, against the same WAF-protected employers
+
+**Closed 2026-08-05.** The repeat-offender count the row asked for: 30 `blocked` rows in
+`ats_seed`, and (once actually broken out by `probe_attempts`) all 30 had been reprobed at least
+once — 4 at 2 attempts, 25 at 3, 1 at 4 — none of the 96-row `only_unresolved` pool held a single
+never-probed or first-attempt row. That's what the alternate-source question turned on: SerpApi is
+already fully committed to the four job-search buckets (`ingest/google-serpapi.py`) at 250
+searches/month, and there's no path today from `--add-employer` to a known token in `company_ats`
+without a human looking one up by hand — so bypassing the block wasn't a free lever, and several of
+the blocked hosts (the `nyc.gov` agencies) likely have no discoverable third-party ATS regardless of
+the WAF. Decision: retire, not reroute.
+
+**Chosen shape: stop reoffering, don't touch the breaker's denominator.** A host still `blocked`
+after `GIVE_UP_AFTER_ATTEMPTS` (3) probes is excluded from `select_employers(only_unresolved=True)`
+(`tools/ats-discover.py:956-991`) — it never answered differently across three separate due-cycles,
+so a fourth attempt spends this batch's blocked-fraction budget on a result already known. The
+alternative (exclude repeat-blocked probes from the breaker's `blocked/i` fraction but keep sending
+them) was rejected: it keeps probing hosts confirmed to refuse every request forever, which is the
+same politeness mistake the file's own "never retry into a block" rule already forbids at a shorter
+period.
+
+**Nothing is silently dropped.** `last_probe_outcome` stays `'blocked'` — the row is excluded from
+future *selection*, not from the table or the report. `print_report()` now breaks the `blocked` line
+out explicitly: `...of which given up (>= 3 blocked probes, excluded from nightly re-probe)`, so the
+summary can't be misread as "still retrying" once it isn't.
+
+```bash
+cd backend
+python3 -m unittest discover -s tests   # 1449, OK
+.venv-dev/bin/ruff check tools/ats-discover.py --statistics    # 24, same as before this change
+.venv-dev/bin/mypy                                              # no findings in this file
+python3 tools/ats-discover.py --report | grep "given up"        # 26 (of 30 blocked; 4 still under threshold)
+```

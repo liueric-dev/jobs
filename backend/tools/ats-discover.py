@@ -151,6 +151,18 @@ DEFAULT_INTERVAL_DAYS = 30
 #: for manual review -- the stale-feed signature.
 STALE_COUNT_DAYS = 60
 
+#: T-25. A host that has refused the SAME probe this many times is not going
+#: to answer differently on attempt N+1 -- ats-discover.py's own docstring
+#: (POLITENESS) already treats "never retry into a block" as correct manners
+#: within a run; reprobing the identical host every due-cycle forever is that
+#: same mistake at a longer period. Past this threshold, select_employers()
+#: stops offering the row to the nightly batch so it can't keep poisoning the
+#: circuit breaker's blocked-fraction denominator (11/31, 12/25, 11/31 blocked
+#: on 08-03..08-05, all from a ~30-employer repeat-offender set that was
+#: never going to resolve). last_probe_outcome stays 'blocked', so the row is
+#: never dropped from the report -- see GIVE_UP_AFTER_ATTEMPTS in print_report.
+GIVE_UP_AFTER_ATTEMPTS = 3
+
 WATERMARK = "ats-discovery"
 
 
@@ -837,6 +849,12 @@ def print_report(conn):
     print("\n-- ats_seed probe outcomes ------------------------------------")
     for outcome, n in outcomes:
         print(f"  {outcome:18s} {n:5d}")
+    given_up = conn.execute(
+        f"SELECT count(*) FROM {SEED_TABLE} WHERE last_probe_outcome = 'blocked' "  # noqa: S608 -- splices SEED_TABLE, a module-level constant
+        f"AND probe_attempts >= %s", (GIVE_UP_AFTER_ATTEMPTS,)).fetchone()[0]
+    if given_up:
+        print(f"  ...of which given up (>= {GIVE_UP_AFTER_ATTEMPTS} blocked "
+              f"probes, excluded from nightly re-probe): {given_up:5d}")
     if cov and cov[0]:
         nt_probed, nt_valid, nt_public, t_probed, t_valid = cov
         # BOTH denominators, always, side by side.
@@ -964,6 +982,12 @@ def select_employers(conn, limit=None, all_rows=False, only=None,
     retries the ones a WAF refused, without re-fetching the careers page of
     every employer already settled, which would be several hundred requests a
     night to learn nothing.
+
+    Within that, a host still `blocked` after GIVE_UP_AFTER_ATTEMPTS probes is
+    excluded too (T-25) -- it has never once answered differently, so
+    reoffering it every due-cycle only spends this batch's blocked-fraction
+    budget on a result already known. It stays `blocked` in ats_seed and in
+    the report; only the nightly re-probe stops selecting it.
     """
     where, params = [], {}
     if only:
@@ -972,6 +996,9 @@ def select_employers(conn, limit=None, all_rows=False, only=None,
     if only_unresolved:
         where.append("(last_probe_outcome IS NULL "
                      "OR last_probe_outcome NOT IN ('found','not_found'))")
+        where.append("NOT (last_probe_outcome = 'blocked' "
+                     "AND probe_attempts >= %(give_up_after)s)")
+        params["give_up_after"] = GIVE_UP_AFTER_ATTEMPTS
     sql = (f"SELECT employer_name, careers_url, sector, is_non_tech "  # noqa: S608 -- splices SEED_TABLE, a module-level constant
            f"FROM {SEED_TABLE}")
     if where:
