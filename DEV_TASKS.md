@@ -96,44 +96,6 @@ human ceiling sits **above** the model floor on at least the fields it currently
 
 ---
 
-### OQ-1 — `backend/api/` stays; who issues a contributor credential is still open
-
-**Why it is yours:** decision, and it is a product call rather than a technical one. **The parent
-question is answered as of 2026-08-03: the crowdsourcing service stays.** `deploy/systemd/
-jobs-api.service`'s deprecation marking is therefore stale and should not be acted on as written.
-The credential-issuance sub-question is deliberately still open — owner's words: "I don't know
-what the current plan for implementation is. It may change" — so this row is not closeable by
-picking one of `DEC-84`'s three options today; it would be answering a question that is not yet
-stable enough to answer.
-
-**What:** `api/` is the crowdsourcing service — volunteers run a worker script on their own
-machine with their own SerpApi account, claim queries from this server's priority queue, and
-submit raw results back, so nobody but the operator ever touches Postgres (`backend/api/
-app.py`'s module docstring, `backend/api/README.md`). It is unrelated to labelling. `OQ-12`
-(closed 2026-08-03) found zero contributors have ever been onboarded, so there is no live
-credential to migrate — whatever mechanism gets picked, it is greenfield, not a cutover.
-
-**How to do it, once the implementation plan firms up.** Pick one of `DEC-84`'s three options for
-issuing a credential:
-
-1. Grant `jobs_web` INSERT on `jobs_api`'s tables — simplest, weakest isolation.
-2. A server-to-server mint — most work, cleanest boundary.
-3. A request queue you service by hand — no code, does not scale, fine for ~30 Builders.
-
-```bash
-# what exists today
-backend/api/manage_users.py list          # contributors and keys
-backend/api/manage_users.py create        # mint a contributor + API key
-```
-
-**`OQ-12`, closed 2026-08-03: no contributor API key has ever been minted or handed to anyone.**
-Whatever mechanism eventually gets picked here has zero existing users to migrate.
-
-**Done when:** the implementation plan for `api/` firms up and task 24 has a chosen credential
-path written into `DEC-84`. Not blocked on anything except that plan existing.
-
----
-
 ---
 
 ---
@@ -207,36 +169,6 @@ now serves, rather than the original SWE-focused, tech-heavy corpus it was deriv
 
 **Done when:** either Phase 3 sourcing is confirmed to have landed and the re-derivation is
 run and reviewed, or this row is struck with the reason it is still premature.
-
----
-
-### OQ-15 — Is the `ingest/google-*.py` ↔ `serp/providers/*` duplication temporary or permanent?
-
-**Why it is yours:** decision. The code supports both readings and they imply opposite fixes.
-**The error-disposition bug this row originally described is already fixed** — re-verified
-2026-08-04, see below. What remains is the structural question only.
-
-**What:** Two SerpApi implementations still coexist. They used to **disagree** on what an `error`
-key in a 200 response means: `backend/ingest/google-serpapi.py` raised on any `error` key, so
-"no results" was recorded as a query failure, while `backend/serp/providers/serpapi.py` treated
-it as empty. **That disagreement was fixed in `a80f254` (2026-08-03)** — the live script now
-imports `EMPTY_ERROR_MARKERS` from `serp/providers/serpapi.py` and only raises for the
-non-empty-result error cases (`ingest/google-serpapi.py:335-356`); one new test covers it. The
-commit's own message explains why the two implementations were **not** merged at the same time:
-they serve different, currently-unrelated call sites (the live nightly batch script vs. an
-on-demand search path that is dead code in production), and merging now would repeat the exact
-risk `DEC-99` held back on. Router fallthrough is still unimplemented and unflagged.
-
-**How to do it.** If **temporary**, the fix is to finish the seam: make `serp/providers/` the
-one implementation, delete the duplicate, implement router fallthrough. If **permanent**, the fix
-is to document the split — the two now already agree on what "no results" means, so this half of
-the original "How to do it" is done regardless of which way the temporary/permanent question
-lands.
-
-**What it unblocks:** task 23's remaining half.
-
-**Done when:** one implementation exists in the tree, or two exist with a `_comment` at each
-saying why the split is permanent.
 
 ---
 
@@ -409,6 +341,8 @@ into this row.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~OQ-1~~ | `backend/api/` stays; who issues a contributor credential was still open | **Closed 2026-08-05 — direction chosen, not yet built.** Auto-mint a credential server-to-server (`DEC-84` option 2) the moment a Builder logs in or hits a "Contribute" affordance, rather than `manage_users.py create` run by hand. The worker itself becomes a long-running local daemon (start once, poll on an interval) instead of a script re-invoked daily — the thing that actually kept `OQ-12`'s contributor count at zero. SerpApi stays called from the contributor's own machine on their own key, never proxied server-side: SerpApi blocks browser-origin calls outright (confirmed), and there is no confirmed SerpApi policy on many accounts sharing one server IP, a pattern that risks real accounts getting banned. A paid SerpApi tier was checked and set aside on purpose — cheaper today, but a fixed ceiling, where crowdsourcing scales with cohort headcount at near-zero marginal cost. Full reasoning in `docs/adr/0006-contributor-credential-auto-minted-local-daemon.md`. Implementation (mint endpoint, daemon script, packaging) is unscoped — follow-up `T-`/`OQ-` rows, next session |
+| ~~OQ-15~~ | Is the `ingest/google-*.py` ↔ `serp/providers/*` SerpApi duplication temporary or permanent? | **Closed 2026-08-05, option A: permanent, documented, not merged.** Checked against the live database before deciding — the row's own premise ("an on-demand search path that is dead code in production") was stale: `serp.dispatch.SearchQueryProvider` has been dispatched nightly from `searchqueries.py` since `tranche_four/23` (2026-08-02), one day before the row calling it dead code was written, and `search_query_results` held 253 dispatched rows as of this closure, most recently that same morning. Both implementations spend real SerpApi credit every night — the risk calculus the row was written against (merge a live path into a dead one) no longer holds, since a merge now would mean changing two live nightly paths at once. `_comment`s recording why the split stays permanent are at `ingest/google-serpapi.py:348-363` and `serp/providers/serpapi.py`'s module docstring; the two files were not otherwise touched |
 | ~~OQ-22~~ | `score.TRACKS` values are now live in `job_scores.primary_track`; does `derive_tracks()` need to exclude `Re-Entry & Growth` too, or should `score.TRACKS` be replaced for `pursuit` outright? | **Closed 2026-08-05.** Owner picked option 1, after option 3 (revisit the enum outright) was researched and rejected: `primary_track` is never rendered to Builders — `frontend/js/tracks.mjs` explicitly rejects it in favor of `extract.ROLE_TRACK`, the nine-slug vocabulary that *is* displayed (`frontend/fixtures/shipped/MANIFEST.json`). Its only live consequence was the one this row named. A full replacement would drop `primary_track` from the narrative prompt schema, bumping `SCORE_PROMPT_VERSION` — one of the three `_STALE_ANY` arms — and stale the entire `job_scores` backlog (1,231+ rows) for re-scoring, for no additional visible benefit. `webapp/onboarding.py`'s `derive_tracks()` now excludes `'Re-Entry & Growth'` alongside `'Poor Fit'` (`onboarding.py:409-410`), its docstring updated to match, and `webapp/tests/test_builder_profiles.py`'s `test_re_entry_and_growth_is_never_subscribed_to` covers it. Full webapp suite (368 tests) green |
 | ~~OQ-23~~ | Cloudflare rewrote `app.css`'s `Cache-Control` to `max-age=14400` regardless of what the origin sent | **Closed 2026-08-05.** Owner set Browser Cache TTL to "Respect Existing Headers" in the Cloudflare dashboard for the zone fronting `jobs.etotheric.com` (option A was available on the current plan). Verified on a guaranteed-fresh edge `MISS`: `curl -sI "https://jobs.etotheric.com/app.css?cachetest=$RANDOM"` now reads `cache-control: no-cache` / `cf-cache-status: MISS` — the origin's header, not a rewritten `max-age`. The `?v=` cache-bust in `frontend/index.html`, left in place since `T-21`/`OQ-14` specifically to cover this gap, is removed. Both frontend checkers still pass: `verify_fixtures.py` matches, `check_client.mjs` reports 57 checks, 0 failed |
 | ~~OQ-7~~ | The live database was missing task 25's five search objects and `cohort_signal`'s GRANT | **Closed 2026-08-02.** `init-schema` created them; the seven GRANTs were issued by hand. The lesson worth keeping: this row read as a nicety for a day **while the whole webapp was down** — `verify_schema()` raised in the lifespan and the process exited. Nobody had started it |

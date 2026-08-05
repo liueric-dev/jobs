@@ -64,3 +64,4 @@ next to the number they explain. Do not migrate them here.
 | [0003](0003-layer-3-is-recorded-not-built.md) | Nothing is built at harness Layer 3 — deferred, deliberately |
 | [0004](0004-provision-database-issues-no-grants.md) | `provision-database.py` creates objects and issues no privileges |
 | [0005](0005-personal-scoring-layer-annotates-only.md) | The personal scoring layer annotates and never orders; resume tailoring is cut |
+| [0006](0006-contributor-credential-auto-minted-local-daemon.md) | Contributor credentials auto-mint on login; the SerpApi worker stays local and long-running, never proxied server-side |

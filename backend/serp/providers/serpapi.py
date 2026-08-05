@@ -27,6 +27,20 @@ WHAT IS NEW HERE, AND IT IS THE REASON THIS IS NOT A PURE MOVE
     hasn't returned any results" in particular is a SUCCESSFUL search that
     found nothing: raising on it made a quiet query indistinguishable from a
     broken one, and both spend the credit.
+
+WHY THIS FILE AND ingest/google-serpapi.py BOTH STILL EXIST
+    OQ-15, closed 2026-08-05, option A: permanently, not as an in-progress
+    merge. Both call SerpApi with real credentials every night -- this one
+    through searchqueries.py's dispatch of due Builder-seeded queries
+    (search_query_results held 253 rows as of 2026-08-05), the other through
+    its own bucketed-query sweep. Different shapes of work, not one dead
+    path: ingest/google-serpapi.py owns watermarks, bucket rotation and date
+    backfill for an unattended nightly sweep; this file is the one adapter
+    `serp.dispatch` calls per due query, behind the shared cache/quota
+    ledger and the three-way failure classification in serp/__init__.py.
+    Finishing DEC-99's held-back migration would now mean changing both live
+    paths at once -- see ingest/google-serpapi.py:348-363 for the full
+    argument.
 """
 
 import json

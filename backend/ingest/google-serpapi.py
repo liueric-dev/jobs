@@ -342,12 +342,25 @@ def serpapi_search(query, location, date_chip=None):
     #
     # EMPTY_ERROR_MARKERS is imported from serp/providers/serpapi.py rather
     # than redefined here so there is one place that says what SerpApi's
-    # "found nothing" wording is, not two that could drift -- that module
-    # already made this distinction for the (currently unwired) search-query
-    # dispatch path; this ports the classification, not the whole module.
-    # Deliberately does not call serp.providers.serpapi.fetch() itself: that
-    # would be finishing the migration DEC-99 held back on purpose, on the one
-    # path that spends metered credits nightly.
+    # "found nothing" wording is, not two that could drift. This ports the
+    # classification, not the whole module.
+    #
+    # OQ-15, closed 2026-08-05, option A: the two implementations stay
+    # separate permanently -- DEC-99's held-back migration is not getting
+    # finished. The premise this row was opened on ("an on-demand search path
+    # that is dead code in production") was already false by the time it was
+    # written: serp.dispatch.SearchQueryProvider went live in
+    # searchqueries.py's nightly step the day before (tranche_four/23,
+    # 2026-08-02), and search_query_results held 253 dispatched rows as of
+    # 2026-08-05, most recently that same morning. Both implementations spend
+    # real SerpApi credit every night. What justifies keeping two is the shape
+    # of the work, not one side being unused: this function sweeps a fixed
+    # bucketed query bank (config/google-queries.json) unattended, with its
+    # own watermark/backoff machinery; serp.dispatch.SearchQueryProvider
+    # serves one due Builder-seeded query at a time through serp/__init__.py's
+    # three-way failure classification and the shared cache/quota ledger.
+    # Merging them now means changing two live nightly paths at once instead
+    # of one dead one -- that risk, not disuse, is why the merge stays off.
     data = http.get_json(url, headers={"User-Agent": "hermes-jobs-ingest/1.0"})
     error = data.get("error")
     if error:

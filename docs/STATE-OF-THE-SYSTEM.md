@@ -194,7 +194,7 @@ status column was never trustworthy on its own.
 | 13 Cohort criteria | 16/20 and 10/20 against a DoD asking 20/20. Correctly not tuned into being met |
 | 16 ATS token discovery | 96 of 376 employers never probed; the nightly backfill trips its own circuit breaker (48% > 35%) and exits 1. The positive control failed 4 of 4, so `not_found` is not evidence of absence |
 | 18 Workday CXS | Block rate needs a week of runs; three exist, all one day |
-| 23 SERP abstraction | Two SerpApi implementations still coexist. The disagreement described here — `ingest/google-serpapi.py` raising on any `error` key vs. `serp/providers/serpapi.py` treating "no results" as empty — was **fixed in `a80f254` (2026-08-03)**; both now agree via the shared `EMPTY_ERROR_MARKERS` (`ingest/google-serpapi.py:335-356`). What is still unmet: router fallthrough is unimplemented and unflagged, and whether the duplication itself is temporary or permanent is still open (`OQ-15`) |
+| 23 SERP abstraction | Two SerpApi implementations still coexist, **and now permanently by decision** (`OQ-15`, closed 2026-08-05). The disagreement described here — `ingest/google-serpapi.py` raising on any `error` key vs. `serp/providers/serpapi.py` treating "no results" as empty — was **fixed in `a80f254` (2026-08-03)**; both now agree via the shared `EMPTY_ERROR_MARKERS` (`ingest/google-serpapi.py:335-356`). What is still unmet: router fallthrough is unimplemented and unflagged |
 | 26 Profile creation | The four onboarding preferences are stored and filter nothing |
 | 34 Cleanup | Genuinely done; the Status line still says `NEXT` |
 
@@ -300,8 +300,11 @@ numbers here are kept only so a citation to e.g. item 4 still resolves to someth
 
 1. ~~Is `api/` being retired or kept warm?~~ **Answered 2026-08-03 (`OQ-1`).** The parent
    question is settled: the crowdsourcing service stays, and `jobs-api.service`'s deprecation
-   marking is stale and should not be acted on. Left open: who issues a contributor credential —
-   deliberately, per the owner ("I don't know what the current plan for implementation is").
+   marking is stale and should not be acted on. **The child question — who issues a contributor
+   credential — closed 2026-08-05, direction only:** auto-mint on login, a long-running local
+   daemon in place of a script re-invoked daily, SerpApi never proxied server-side. Reasoning in
+   `docs/adr/0006-contributor-credential-auto-minted-local-daemon.md`. Not yet built — the mint
+   endpoint, daemon script and packaging are unscoped follow-up rows.
 2. ~~Deployment is entirely owner-side.~~ **Closed 2026-08-04 (`OQ-4a`/`OQ-4b`).** Cloudflare
    account, domain, `cloudflared` binary and tunnel are all live. All 13 tracked units are
    installed at `~/.config/systemd/user/` as symlinks (not the regular-file copies this line used
@@ -337,12 +340,16 @@ numbers here are kept only so a citation to e.g. item 4 still resolves to someth
    about the MVP depends on these labels (`score_job()` reads no label table). See `OQ-3`.
 8. **The phone test** — still open, but its blocker is gone: the tunnel (`OQ-4b`) is live, so only
    a physical phone and a Google Cloud Console redirect-URI registration remain.
-9. **Is the duplication between `ingest/google-*.py` and `serp/providers/*` temporary or
-   permanent?** Still open, but narrower than this line states: the two implementations used to
-   **disagree** on what a "no results" `error` key means, and that was fixed in `a80f254`
+9. ~~Is the duplication between `ingest/google-*.py` and `serp/providers/*` temporary or
+   permanent?~~ **Closed 2026-08-05 (`OQ-15`), option A: permanent.** The two implementations used
+   to **disagree** on what a "no results" `error` key means, and that was fixed in `a80f254`
    (2026-08-03) by porting `serp/providers/serpapi.py`'s `EMPTY_ERROR_MARKERS` classification into
-   the live script. What remains is only whether the duplication itself should be merged or
-   formally documented as permanent (`OQ-15`).
+   the live script. The row's own premise for the temporary/permanent question — one path being
+   "dead code in production" — was itself stale: `serp.dispatch.SearchQueryProvider` has
+   dispatched real nightly queries since 2026-08-02, and `search_query_results` held 253 rows at
+   closure. Both implementations spend live SerpApi credit nightly, and merging them now would
+   touch two live paths, not one dead one — the argument recorded at
+   `ingest/google-serpapi.py:348-363`.
 10. **Registrations that block work:** Adzuna and USAJobs (task 15) are still open. Firecrawl
     (task 20) is not — re-checked 2026-08-04, a populated `FIRECRAWL_API_KEY` already sits in
     `backend/webapp/.env` (nothing in the tree reads it yet, since task 20 has no code either).

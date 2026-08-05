@@ -86,8 +86,8 @@ Exception: `tools/learned-ranker-probe.py` (numpy, sklearn) **cannot run on a cl
 ## Layout
 
 **`backend/` holds three deliberately separate processes** — the nightly pipeline at the top level,
-`api/` (the contributor work queue — **staying, per `OQ-1` decided 2026-08-03**; credential
-mechanism still open; **may not start against the deployed database**) and `webapp/` (port 8421).
+`api/` (the contributor work queue — **staying, per `OQ-1`**; credential mechanism decided,
+unbuilt, `docs/adr/0006`; **may not start against the deployed database**) and `webapp/` (port 8421).
 Each has its own `.env`, venv and Postgres role. `api/`/`webapp/` import nothing from each other and
 no pipeline module imports either — but `webapp/` imports the pipeline's `profiles`, `searchnorm`
 and `evals.labels`, and `api/` imports `google_jobs`: each a coupling a pipeline change can break
