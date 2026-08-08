@@ -23,7 +23,21 @@ of them, so putting these routes there would mean relaxing the one property
 that README is about.
 
 So: a second process with a second database identity, sharing `../schema.py`
-and `../lib/` and importing nothing from `api/`. The two do not talk.
+and `../lib/` and importing nothing from `api/`.
+
+**They talk over exactly one route, in one direction** — `contribute.py` POSTs
+to `api/`'s `/v1/internal/contributors` to mint a contributor credential on a
+Builder's behalf (`docs/adr/0007` decision 1, `T-27`). That sentence used to
+read "The two do not talk", and the amendment is the whole design question this
+row had to answer: `api_keys` is `api/`'s table, `jobs_api` is the only role
+granted INSERT on it, and `docs/adr/0006`'s consequences reject the alternative
+— granting `jobs_web` INSERT there — outright. So this service authenticates
+the person and that one issues the credential.
+
+**The coupling is a URL and a shared secret, not an import.** No module here
+imports anything from `api/`, no grant crosses the two roles, and the two
+databases identities are unchanged. What this service stores is the opaque
+`contributor_id` and a timestamp, on its own `app_users` — never key material.
 
 ## Setup
 
@@ -124,6 +138,21 @@ session cookie.
 | `GET /v1/label` | the golden-set labelling form (HTML) |
 | `POST /v1/label` | record one person's answers, then serve the next posting |
 | `GET /v1/label/progress` | `{label_set, done, total}` for the signed-in labeller |
+| `POST /v1/contribute/opt-in` | mint a contributor credential; returns `{filename, config}` |
+
+`POST /v1/contribute/opt-in` is the installer (`docs/adr/0007` decision 1). It
+returns the exact `config.json` the Builder drops beside the contributor
+worker: `{"JOBS_API_BASE_URL": …, "JOBS_API_KEY": …, "SERPAPI_API_KEY": ""}`.
+The SerpApi field is empty on purpose — that key is typed by the Builder on
+their own machine and never reaches this server (`docs/adr/0006` decision 3,
+retained by 0007).
+
+**The raw key is in that one response and is never readable again.** There is
+no route that returns an existing credential, here or in `api/`; only its
+sha256 is stored, and by `api/`, not here. Calling it a second time **re-keys**
+— the previous credential is revoked in the same statement that issues its
+replacement — which is also the recovery path for a Builder who lost the file.
+`503` if the server has no mint configured, `502` if `api/` cannot be reached.
 
 `GET /v1/jobs` takes `limit` (≤100), `cursor`, `q`, `remote`, `nyc`,
 `min_score`, `since` and `include_dismissed`, and returns
@@ -350,7 +379,16 @@ engagement, and rewrite nothing.
 - **No CREATE.** DDL runs only through `manage_app_users.py init-schema` and
   its separate admin credential.
 - **Nothing on `api/`'s tables** (`contributors`, `api_keys`,
-  `submission_log`) and nothing on the events database.
+  `submission_log`) and nothing on the events database. **Still true after
+  `T-27` added the contributor mint**, and deliberately: that route asks `api/`
+  over HTTP precisely so this line does not have to change.
+  `tests/test_grants.py`'s `TestContributeIsScanned` asserts it in both
+  directions — neither table may appear in `contribute.py`'s SQL nor in
+  `REQUIRED_TABLES`.
+- **`app_users.contributor_id` and `contributor_opted_in_at` need no new
+  grant.** The grant above is table-level, so it covers columns added later;
+  verified live with `has_column_privilege('jobs_web', 'app_users', …)` rather
+  than assumed, which is the same check `job_events`' six added columns get.
 
 The grants are re-creatable from `schema_web.REQUIRED_TABLES` and
 `REQUIRED_SEQUENCES`, which are the source of truth for the startup check, the
@@ -382,6 +420,15 @@ is checked.
 | `SESSION_TTL_DAYS` | `30` | sliding, refreshed past half-life |
 | `OAUTH_STATE_TTL_MINUTES` | `10` | how long a started login stays redeemable |
 | `PORT` | `8421` | documentation only; uvicorn takes `--port` |
+| `JOBS_MINT_SHARED_SECRET` | *(none — minting 503s without it)* | server-to-server secret; **the same value and the same name in `../api/.env`** |
+| `CONTRIBUTOR_API_INTERNAL_URL` | `http://127.0.0.1:8420` | where **this process** reaches `api/` |
+| `CONTRIBUTOR_API_PUBLIC_URL` | *(none — minting 503s without it)* | what goes into the Builder's `config.json`; **the address their laptop calls** |
+| `CONTRIBUTOR_MINT_TIMEOUT_SECONDS` | `10` | a Builder is waiting on this request |
+
+The two contributor URLs are **not** interchangeable and the mistake is silent:
+`CONTRIBUTOR_API_PUBLIC_URL` has no default because `127.0.0.1` is the wrong
+value that would look most plausible in a log, and a `config.json` carrying it
+works on the server and fails on every Builder's machine.
 
 `DATABASE_URL` has no default anywhere in this repo. Applications on this
 Postgres instance are told apart only by the database named in the URL and all

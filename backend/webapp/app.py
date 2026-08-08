@@ -37,6 +37,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import auth
+import contribute
 import jobs
 import label
 import onboarding
@@ -110,6 +111,13 @@ app.include_router(onboarding.router)
 # labelling screen and is not in scope for one. A <form> and a 303 needs no
 # client at all, which is still the right trade for ten volunteers.
 app.include_router(label.router)
+# Opting in to contribute (docs/adr/0007 decision 1). Raises plain
+# HTTPException rather than jobs.ContractError, so it is registered on the
+# auth.py/label.py side of the handler above and its 401/502/503 bodies keep
+# FastAPI's {"detail": ...} shape -- the same choice require_user already
+# makes, and this route's only failures are that dependency's or the
+# operator's.
+app.include_router(contribute.router)
 
 
 @app.get("/v1/health")

@@ -196,6 +196,14 @@ REQUIRED_COLUMNS = {
     # repairs it until someone remembers. labels.record() names both columns
     # unconditionally.
     "eval_labels": ("facts_version", "facts_version_known"),
+    # app_users is THIS service's own table, so the window is narrower than
+    # either entry above -- ensure_schema() here creates the columns and
+    # _ensure_contributor_link backfills an existing table. It is listed anyway
+    # because the deploy that goes wrong is the one where webapp/ ships and
+    # `manage_app_users.py init-schema` is not re-run, and the symptom is
+    # identical to the two above: a 500 on the first opt-in rather than a
+    # refusal to start. contribute.py names both columns in its UPDATE.
+    "app_users": ("contributor_id", "contributor_opted_in_at"),
 }
 
 #: eval_labels.id is BIGSERIAL for the same reason and needs the same grant.
@@ -441,6 +449,32 @@ def _ensure_app_users_profile_key(conn):
         conn.commit()
 
 
+def _ensure_contributor_link(conn):
+    """Add the opt-in columns to an app_users that predates them.
+
+    WHAT IS STORED HERE, AND WHAT DELIBERATELY IS NOT. `contributor_id` is
+    ../api/'s opaque `c_<hex>`, and `contributor_opted_in_at` is when this
+    Builder last minted. NO KEY MATERIAL -- not the raw key, not its hash. The
+    hash is ../api/'s to hold and this service has no use for either: it never
+    authenticates a worker, it only mints on a Builder's behalf. Storing a hash
+    "in case" would be a second copy of a credential artefact in a second
+    database with a second backup policy, for no caller.
+
+    THE ID IS WHAT MAKES A SECOND OPT-IN A RE-KEY. Without it, a Builder who
+    clicks twice becomes two contributors with two live keys and no way to tell
+    which laptop holds which. With it, the mint route revokes and reissues.
+
+    Same guard and same reasoning as _ensure_prior_domain above: routed through
+    dbconn.add_missing_columns so the steady state issues no DDL and no
+    ACCESS EXCLUSIVE lock. No CHECK constraint, because the shape of the id is
+    ../api/'s business and duplicating it here is a second definition to drift.
+    """
+    return dbconn.add_missing_columns(conn, "app_users", [
+        ("contributor_id", "TEXT"),
+        ("contributor_opted_in_at", "TEXT"),
+    ])
+
+
 def ensure_schema(conn):
     """Create this service's tables. Idempotent, DDL, admin credential only.
 
@@ -470,6 +504,11 @@ def ensure_schema(conn):
             active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TEXT NOT NULL,
             last_login_at TEXT,
+            -- The contributor this Builder opted in as, and when. See
+            -- _ensure_contributor_link for what these are and, more to the
+            -- point, what they are NOT: no key material, hashed or otherwise.
+            contributor_id TEXT,
+            contributor_opted_in_at TEXT,
             CONSTRAINT app_users_prior_domain CHECK ({_PRIOR_DOMAIN_CHECK}),
             -- Redundant against the primary key and referenced by
             -- builder_profiles. See _ensure_app_users_profile_key.
@@ -478,6 +517,7 @@ def ensure_schema(conn):
     """)
     _ensure_prior_domain(conn)
     _ensure_app_users_profile_key(conn)
+    _ensure_contributor_link(conn)
     # profile is bare TEXT with NO foreign key to profiles(profile), matching
     # job_scores.profile and job_matches.profile in ../schema.py. A real FK
     # would make this service's DDL depend on a table it must not own, which is

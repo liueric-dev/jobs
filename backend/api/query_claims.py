@@ -53,8 +53,10 @@ declared in ../schema.py with the rest of that table, so the one command that
 stands a database up from nothing creates them (see TASKS.md's T-26).
 """
 
+import hashlib
 import json
 import os
+import secrets
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -286,6 +288,71 @@ def ensure_schema(conn):
         "ON submission_log(contributor_id, submitted_at)"
     )
     conn.commit()
+
+
+# --------------------------------------------------------------------------
+# Minting a credential
+# --------------------------------------------------------------------------
+
+#: Server-to-server secret for the mint route in app.py. Unset by default, and
+#: an unset value DISABLES the route rather than defaulting to something --
+#: `oauth_configured()` in ../webapp/config.py is the same shape, and for the
+#: same reason: a credential-issuing endpoint that a missing env var leaves
+#: open is the one default nobody would notice until it had been used.
+#:
+#: WHY THIS EXISTS AT ALL. ../webapp/ authenticates the Builder and this
+#: service owns `api_keys`; they hold different Postgres roles and 0006's
+#: consequences reject granting `jobs_web` INSERT here. So webapp asks this
+#: service to mint, over one authenticated route, in one direction. See
+#: docs/adr/0006, and the "Minting" section of README.md.
+MINT_SHARED_SECRET = os.environ.get("JOBS_MINT_SHARED_SECRET", "")
+
+
+def mint_credential(conn, name, label=None, contributor_id=None, notes=None):
+    """Create (or re-key) a contributor and return the ONE copy of the raw key.
+
+    THE ONLY MINT IN THIS REPO. `manage_users.py create` and app.py's mint
+    route are both callers -- there is deliberately no second place that
+    generates a key, because the property that makes a leaked database dump
+    worthless is "only sha256 is stored", and that property is only as good as
+    its least careful copy.
+
+    RE-KEYING REVOKES, IT DOES NOT ADD. Passing an existing contributor_id
+    revokes every live key that contributor holds and issues one new one, so a
+    Builder who opts in twice ends with exactly one working credential. The
+    revoked rows are KEPT, matching revoke's behaviour and for the reason
+    app.py's authenticate() gives: a revoked key must never be silently
+    re-minted into validity.
+
+    The caller commits. This function issues no transaction of its own so that
+    the webapp-facing route can fail after it and leave nothing behind.
+    """
+    now = utc_now_str()
+    if contributor_id is None:
+        contributor_id = f"c_{secrets.token_hex(6)}"
+        conn.execute(
+            "INSERT INTO contributors (id, name, created_at, notes) VALUES (%s, %s, %s, %s)",
+            (contributor_id, name, now, notes),
+        )
+    else:
+        conn.execute(
+            "UPDATE api_keys SET revoked_at = %s "
+            "WHERE contributor_id = %s AND revoked_at IS NULL",
+            (now, contributor_id),
+        )
+
+    # token_urlsafe(32) -> ~43 chars, 256 bits of entropy. Long enough that
+    # online guessing is hopeless, and the server only ever compares hashes.
+    raw_key = secrets.token_urlsafe(32)
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    conn.execute(
+        """
+        INSERT INTO api_keys (key_hash, contributor_id, label, created_at, revoked_at)
+        VALUES (%s, %s, %s, %s, NULL)
+        """,
+        (key_hash, contributor_id, label, now),
+    )
+    return contributor_id, raw_key, key_hash, now
 
 
 # --------------------------------------------------------------------------

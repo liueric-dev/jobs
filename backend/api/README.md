@@ -93,6 +93,13 @@ python3 manage_users.py revoke --key-hash <prefix>
 The raw key prints **once** and is never stored — only `sha256(key)`. If a key
 is lost, revoke it and mint a new one; there is no recovery command by design.
 
+**`create` is the manual fallback, not the normal path** (`docs/adr/0006`,
+`docs/adr/0007` decision 1). A Builder gets a credential by opting in through
+`../webapp/`, which POSTs `/v1/internal/contributors` here — see "Minting for
+another process" under **API** below. Both go through one implementation,
+`query_claims.mint_credential()`, so there is a single place that decides a key
+is `token_urlsafe(32)` and that only its sha256 is stored.
+
 ### Who is contributing, and whose worker is broken
 
 ```bash
@@ -172,7 +179,9 @@ not a failure, and this suite has modules that skip.
 
 ## API
 
-All endpoints require `Authorization: Bearer <key>`.
+All endpoints require `Authorization: Bearer <key>`. **Two different kinds of
+key** — a contributor's, for everything in the first table, and the operator's
+own server-to-server secret, for the one route in the second.
 
 | Endpoint | Purpose |
 |---|---|
@@ -200,6 +209,34 @@ out again.
 stores anything. `mode` drives `location_is_remote`, so guessing it is a wrong
 stored fact that nothing downstream can distinguish from a right one.
 
+### Minting for another process
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /v1/internal/contributors` | `{"name", "label", "contributor_id"}` → `{"contributor_id", "api_key", "key_hash", "created_at"}`, `201` |
+
+**Authenticated by `JOBS_MINT_SHARED_SECRET`, not by a contributor key** —
+`app.authenticate_service()`, a separate function from `authenticate()` on
+purpose. If the two mechanisms were one, any leaked contributor key would mint
+more keys. Unset secret means the route **503s**; it never means "allow
+anything".
+
+**Its only caller is `../webapp/`'s `POST /v1/contribute/opt-in`.** That
+service authenticates the Builder and this one owns `api_keys`; they hold
+different Postgres roles and `docs/adr/0006`'s consequences reject granting
+`jobs_web` INSERT here. `0006` named "the server-to-server shared secret" as
+the unscoped follow-up — this is it, and `T-27` is where it landed.
+
+**Passing `contributor_id` is a RE-KEY**: every live key that contributor holds
+is revoked and one new key is issued, in one statement, sharing one timestamp.
+Omit it and a new contributor row is created. An id this service has never seen
+is a **409**, never a silent create — a re-key that quietly became a first mint
+would leave the caller's stored id pointing at nothing.
+
+**`internal` in the path is intent, not a control.** The shared secret is the
+control; the reverse proxy refusing `/v1/internal/` from outside is the belt —
+see **Deployment** below.
+
 ## Security model
 
 Every caller is untrusted: contributors run code on machines the operator
@@ -219,6 +256,15 @@ doesn't control, and keys can leak.
   per-contributor daily volume (`MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY`, counted
   from `submission_log`).
 - **Keys are stored hashed**, and revoked rows are kept rather than deleted.
+- **The mint route holds a different credential from every other route.**
+  `JOBS_MINT_SHARED_SECRET` identifies another of the operator's own processes,
+  compared with `secrets.compare_digest` — the contributor path can afford a
+  plain compare because it compares hashes of a 256-bit secret, but this one
+  compares the secret itself. Unset disables the route.
+- **The raw key exists in exactly one response and is never readable again.**
+  No route returns an existing credential, `manage_users.py list` prints a hash
+  prefix, and losing one means re-keying. `tests/test_mint.py` asserts this by
+  trying to read the key back out of everything that was written.
 
 ## Database privileges
 
@@ -293,6 +339,13 @@ passwordless; the real connection string lives in `.env` (mode 600, gitignored)
 — see `.env.example`. The old shared default password was rotated out on
 2026-07-24, and on 2026-07-26 this service moved off the superuser onto the
 restricted `jobs_api` role described above.
+
+**`/v1/internal/` must be refused at the edge.** Nothing in this repo can do
+that — it is a line in the deployed reverse proxy's config, on a machine no
+session touches — so it is `DEV_TASKS.md`'s `OQ-30`, together with generating
+`JOBS_MINT_SHARED_SECRET` and putting the same value in this service's `.env`
+and `../webapp/.env`. Until that secret exists the route 503s, which is the
+safe direction: the mint is off, not open.
 
 **~~Not automated by this repo~~ — automated as of task 33.** The systemd unit,
 the tunnel config and the install sequence are tracked in
@@ -387,3 +440,4 @@ Two of these are still open, and both are real once strangers can call it:
 | `MAX_QUERIES_PER_CLAIM` | `5` | per-request query cap |
 | `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` | `50` | daily per-contributor cap |
 | `MAX_BODY_BYTES` | `2097152` | request body ceiling, enforced pre-parse |
+| `JOBS_MINT_SHARED_SECRET` | *(none — `/v1/internal/contributors` 503s without it)* | server-to-server secret; **the same value and the same name in `../webapp/.env`** |

@@ -37,6 +37,7 @@ would expose them.
 
 import os
 import hashlib
+import secrets
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 
@@ -248,6 +249,19 @@ class ReleaseRequest(BaseModel):
     reason: str | None = None
 
 
+class MintRequest(BaseModel):
+    #: Whatever the calling service calls this contributor. It lands in
+    #: `contributors.name`, is operator-facing only, and is never checked
+    #: against anything -- this service has no user directory and must not
+    #: grow one.
+    name: str = Field(min_length=1, max_length=200)
+    label: str | None = Field(default=None, max_length=200)
+    #: Present on a RE-KEY. An existing contributor gets its live keys revoked
+    #: and one new key issued; absent, a new contributor row is created. The
+    #: caller owns this mapping -- see the route.
+    contributor_id: str | None = Field(default=None, max_length=64)
+
+
 # --------------------------------------------------------------------------
 # Endpoints
 # --------------------------------------------------------------------------
@@ -255,6 +269,77 @@ class ReleaseRequest(BaseModel):
 @app.get("/v1/health")
 def health():
     return {"ok": True}
+
+
+def authenticate_service(authorization):
+    """The mint route's auth, and deliberately NOT authenticate() above.
+
+    Two different kinds of caller, so two different credentials. A contributor
+    bearer token identifies someone whose machine the operator does not
+    control; this one identifies another of the operator's own processes. If
+    they shared a mechanism, any contributor key would mint more keys.
+
+    UNSET MEANS OFF, NOT OPEN. With no JOBS_MINT_SHARED_SECRET configured the
+    route 503s: a credential-issuing endpoint whose auth a missing env var
+    turns off is the failure this check is shaped around.
+    """
+    if not qc.MINT_SHARED_SECRET:
+        raise HTTPException(status_code=503, detail="minting is not configured")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    token = authorization[len("Bearer "):].strip()
+    # compare_digest, not ==. The contributor path can afford a plain compare
+    # because it compares hashes of a 256-bit secret; this compares the secret
+    # itself, so the timing of a mismatch is worth not leaking.
+    if not secrets.compare_digest(token, qc.MINT_SHARED_SECRET):
+        raise HTTPException(status_code=401, detail="invalid service credential")
+
+
+@app.post("/v1/internal/contributors", status_code=201)
+def mint(req: MintRequest, authorization: str = Header(default=None)):
+    """Mint a contributor credential on behalf of another operator process.
+
+    WHY THIS ROUTE EXISTS, AND WHY IT IS HERE RATHER THAN IN ../webapp/.
+    `api_keys` is this service's table and `jobs_api` is the only role granted
+    INSERT on it. docs/adr/0006's consequences reject the alternative -- DEC-84
+    option 1, granting `jobs_web` INSERT on this service's tables -- "outright,
+    same blast-radius argument". 0007 decision 1 then made the mint an
+    interactive act a Builder triggers, and the Builder's session lives in
+    ../webapp/. So: webapp authenticates the person, this service issues the
+    credential, and the two talk over exactly this one route, in one direction,
+    on a shared secret. 0006's consequences list named that secret as an
+    unscoped follow-up; this is it.
+
+    THE RAW KEY IS IN THIS RESPONSE AND NOWHERE ELSE, EVER. Only sha256 is
+    stored, there is no read-back route, and `manage_users.py list` prints a
+    hash prefix. A caller that loses it re-mints, which revokes the lost one.
+
+    NOT INTERNET-FACING. "internal" in the path is a statement of intent, not a
+    control: README's deployment section is where the reverse proxy is told to
+    refuse /v1/internal/ from outside. The shared secret is the control.
+    """
+    authenticate_service(authorization)
+    with db() as conn:
+        if req.contributor_id is not None:
+            known = conn.execute(
+                "SELECT 1 FROM contributors WHERE id = %s", (req.contributor_id,)
+            ).fetchone()
+            if known is None:
+                # The caller believes it owns a contributor this service has
+                # never heard of -- a restored webapp database against a fresh
+                # api one, most likely. Refuse rather than silently creating
+                # it: a re-key that quietly becomes a first mint would leave
+                # the caller's stored id pointing at nothing.
+                raise HTTPException(status_code=409,
+                                    detail="unknown contributor_id")
+        contributor_id, raw_key, key_hash, created_at = qc.mint_credential(
+            conn, req.name, label=req.label, contributor_id=req.contributor_id)
+    return {
+        "contributor_id": contributor_id,
+        "api_key": raw_key,
+        "key_hash": key_hash,
+        "created_at": created_at,
+    }
 
 
 @app.post("/v1/queries/claim")

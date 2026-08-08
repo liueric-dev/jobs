@@ -27,8 +27,6 @@ the long-running service hold no schema-modification rights at all.
 
 import os
 import sys
-import secrets
-import hashlib
 import argparse
 from datetime import datetime, timezone
 
@@ -72,24 +70,21 @@ def cmd_init_schema(args):
 
 
 def cmd_create(args):
-    with connect() as conn:
-        contributor_id = f"c_{secrets.token_hex(6)}"
-        # token_urlsafe(32) -> ~43 chars, 256 bits of entropy. Long enough that
-        # online guessing is hopeless, and the server only ever compares hashes.
-        raw_key = secrets.token_urlsafe(32)
-        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    """The manual fallback, per docs/adr/0006. Still here, still not the
+    primary path -- 0007 decision 1 makes the webapp's opt-in the way a Builder
+    normally gets one, and this is what the operator runs when that is not
+    available or when the contributor is not a Builder at all.
 
-        conn.execute(
-            "INSERT INTO contributors (id, name, created_at, notes) VALUES (%s, %s, %s, %s)",
-            (contributor_id, args.name, utc_now(), args.notes),
-        )
-        conn.execute(
-            """
-            INSERT INTO api_keys (key_hash, contributor_id, label, created_at, revoked_at)
-            VALUES (%s, %s, %s, %s, NULL)
-            """,
-            (key_hash, contributor_id, args.label, utc_now()),
-        )
+    THE MINT MOVED, THE BEHAVIOUR DID NOT. qc.mint_credential() is now the one
+    implementation, shared with app.py's mint route, so there is a single place
+    that decides a key is `token_urlsafe(32)` and that only its sha256 is
+    stored. This command passes no contributor_id, so it always creates a new
+    contributor rather than re-keying one -- which is exactly what it did
+    before.
+    """
+    with connect() as conn:
+        contributor_id, raw_key, key_hash, _ = qc.mint_credential(
+            conn, args.name, label=args.label, notes=args.notes)
         conn.commit()
 
     print(f"contributor_id : {contributor_id}")

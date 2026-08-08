@@ -17,7 +17,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-30`.**
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-31`.**
 Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
 citations to it keep resolving.
 
@@ -469,6 +469,49 @@ is unchanged here.
 **Done when:** both statements have run as owner against the deployed database, `jobs-api` starts
 clean (`systemctl status`, not inference), and `backend/api/README.md`'s privilege table names
 `search_queries` with the column list rather than a bare UPDATE.
+
+---
+
+
+### OQ-30 — The mint secret, and refusing `/v1/internal/` at the edge
+
+**Why it is yours:** machine and account — a secret generated and placed in two `.env` files on the
+deployed host, plus a line in the reverse proxy's config. No session touches either.
+
+**What:** `T-27` shipped the mint. `../webapp/`'s `POST /v1/contribute/opt-in` calls `api/`'s
+`POST /v1/internal/contributors` with a shared secret, because `webapp` and `api` hold different
+Postgres roles and [`docs/adr/0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md)
+rejects granting `jobs_web` INSERT on `api_keys`. Three things have to be true on the deployed host
+and none of them is code:
+
+1. **One secret, one name, two files.** Generate it (`python3 -c 'import secrets;
+   print(secrets.token_urlsafe(32))'`) and set `JOBS_MINT_SHARED_SECRET` to the **same value** in
+   `backend/api/.env` and `backend/webapp/.env`. Deliberately the same variable name in both, so
+   there are not two names to keep in agreement.
+2. **`CONTRIBUTOR_API_PUBLIC_URL` in `backend/webapp/.env`**, set to the address a **Builder's
+   laptop** reaches `api/` on — not `127.0.0.1`, which is what
+   `CONTRIBUTOR_API_INTERNAL_URL` is for. It has no default precisely because the wrong value here
+   is silent: the mint succeeds and the `config.json` fails on every contributor's machine.
+3. **The reverse proxy must refuse `/v1/internal/` from outside.** The shared secret is the control
+   and this is the belt. `api/` is the internet-facing process behind the Cloudflare Tunnel, so
+   without this the mint route is reachable by anyone who finds it — protected only by the secret.
+
+**Nothing is open until this runs, which is the safe direction.** With no secret set the route
+returns **503** and `webapp`'s opt-in returns 503 too. An unset credential-issuing endpoint must
+never mean "allow anything", and `api/tests/test_mint.py` asserts that it does not.
+
+**One thing found while closing `T-27` and left alone, because it is also yours.** `backend/webapp/
+.env`'s `JOBS_ADMIN_DATABASE_URL` is set but its role is **not the owner of `app_users`** — the
+`T-27` column migration failed as that role with `must be owner of table app_users` and was applied
+as `jobs_pipeline`, which `pg_tables` confirms is the owner. So `manage_app_users.py init-schema`,
+whose whole reason for a separate credential is DDL, cannot currently issue DDL on this service's
+own table. Either point that URL at the owning role or record why it does not.
+
+**Done when:** the secret is set in both `.env` files, `CONTRIBUTOR_API_PUBLIC_URL` is set to a
+public address, `curl` against `/v1/internal/contributors` from outside the host is refused by the
+proxy (checked, not inferred), one real opt-in through the webapp returns a `config.json` whose
+`JOBS_API_BASE_URL` a contributor's machine can actually reach, and the `JOBS_ADMIN_DATABASE_URL`
+question above has an answer either way.
 
 ---
 

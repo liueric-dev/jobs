@@ -8,7 +8,7 @@ budget: 500
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-39`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-40`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -40,8 +40,8 @@ that reasoning is unchanged and `T-1` has a grep proving it holds.
 
 ## Order
 
-**Everything before `T-27` is closed** — the toolchain rows, the five harness layers, the
-§ 4a defects, and `0007`'s first server-side row — and each is one line in the table at the foot of
+**Everything before `T-28` is closed** — the toolchain rows, the five harness layers, the
+§ 4a defects, and `0007`'s two server-side rows — and each is one line in the table at the foot of
 this file. `T-1` and `T-2` were the
 reason for the original ordering: they are the enforcement layer every later row leaned on, and what
 makes a session's claims checkable without hand-transcription. Everything since runs against CI
@@ -49,32 +49,44 @@ rather than against a transcribed count.
 
 **The twelve open rows are one project, not a queue.** They cut
 [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md) into buildable
-steps and are listed in dependency order, not priority order: `T-27` is the remaining server-side
-row and nothing on a contributor's machine works without it; `T-28` … `T-31` are the worker; `T-32`
+steps and are listed in dependency order, not priority order: the server side is done, so `T-28`
+… `T-31` — the worker — is what nothing on a contributor's machine works without now; `T-32`
 … `T-37` are policy that needs both halves in place. `T-32` and `T-33` are the two that change live
-pipeline behaviour rather than adding to it. `T-38` is the exception to the dependency order: it is
-not a cut of `0007` but a gap `T-26` opened and could not close, and it belongs beside `T-27`
-rather than at the end.
+pipeline behaviour rather than adding to it. `T-38` and `T-39` are the exceptions to the dependency
+order: neither is a cut of `0007`, each is a gap a closed row opened and could not close (`T-26`
+and `T-27` respectively), and they belong at the front rather than at the end.
+
+**`T-28` inherits a contract it did not write.** `T-27` shipped the payload as
+`webapp/contribute.CONFIG_FIELDS`, and `webapp/tests/test_contribute.py`'s `TestTheWorkerContract`
+pins it against `google-serpapi-worker.py`'s **own source** rather than against a fixture — so
+renaming or dropping a field on either side is red in the webapp suite. Read that test before
+touching the worker's settings block.
 
 **None of these rows is the critical path.** [`DEV_TASKS.md`](DEV_TASKS.md)'s `OQ-3` is — the
 scoring redesign completed 2026-07-28 and has never been validated, and every row here improves a
 system nobody has confirmed works. It needs people, so no session can start it. `OQ-24` … `OQ-28`
 are the owner-side half of `0007` specifically, and `OQ-25` — watching one Builder install the
-worker — is the one that decides whether `T-27` … `T-30` were worth building.
+worker — is the one that decides whether `T-27` … `T-30` were worth building. `OQ-30` is new and
+blocks the row that just closed: the mint 503s until the operator generates
+`JOBS_MINT_SHARED_SECRET` and puts it in both `.env` files.
 
 ---
 
 ## Contributor pipeline — [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md)
 
-Twelve open rows, eleven of them cutting `0007` into buildable steps and `T-38` a consequence
-of one of them. `0007` supersedes
+Twelve open rows, ten of them cutting `0007` into buildable steps and `T-38` and `T-39`
+consequences of two that closed. `0007` supersedes
 [`0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md) decisions 1, 2 and 4;
 `0006` decision 3 — local execution, contributor's own key, own IP, never proxied — stands and is
 load-bearing for every row here. The owner-side half is `DEV_TASKS.md`'s `OQ-24` … `OQ-28`.
 
-**Baseline: all three suites are green — `1449` / `368` / `145`, all `OK`, measured 2026-08-07.**
-The api figure was `117` when these rows were written; `T-26` added the 28 cases in
-`api/tests/test_search_query_claims.py`.
+**Baseline: all three suites are green — `1449` / `397` / `160`, all `OK`, measured 2026-08-08.**
+Both service figures have moved twice since these rows were written and the rows below still quote
+the old ones: the api suite was `117`, then `145` after `T-26`'s 28 cases in
+`api/tests/test_search_query_claims.py`, and is now `160` after `T-27`'s 15 in `api/tests/
+test_mint.py`; the webapp suite was `368` and is now `397` after `T-27`'s 22 in
+`webapp/tests/test_contribute.py` and 7 added to `webapp/tests/test_grants.py`. **Re-measure rather
+than trusting a row's own number** — that is what these two paragraphs exist to say.
 Commands below are still scoped to a module or a grep rather than a whole-suite `OK`, which is the
 cheaper check and localizes a regression to the row that caused it.
 
@@ -87,30 +99,6 @@ whole detail page, catching the posting's own `ageLabel()` and passing only whil
 fixture's fixed `posted_at_ts` sat in that function's seven-day `"last week"` window. **Derive every
 timestamp in a test from one clock, or freeze all of them — never one of each.** `T-31` and `T-32`
 are the rows most exposed to this, since both turn on elapsed time.
-
----
-
-### T-27 — Mint-at-opt-in endpoint in `webapp`, returning a `config.json` payload
-
-`0007` decision 1: the mint endpoint **is** the installer. Opting in mints a contributor credential
-and returns it inside the exact `config.json` the Builder drops beside the worker — one paste, and
-one secret they type themselves (their SerpApi key, which never reaches the server).
-
-The credential shape already exists and must not be re-invented: `manage_users.py create`
-(`backend/api/manage_users.py:74`) mints `c_<hex>` + `token_urlsafe(32)` and stores only the sha256.
-It stays as the manual fallback per `0006`. `webapp` and `api` share no code and no database role, so
-how `webapp` gets a row into `api_keys` is the real design question in this row — name the answer in
-the commit, because `0006`'s consequences list left "the server-to-server shared secret" unscoped.
-
-```bash
-cd backend
-grep -rn "config\.json" webapp/*.py                 # today: prints nothing
-cd webapp && .venv/bin/python -m unittest discover -s tests
-```
-
-**Done when:** the endpoint returns a payload the worker in `T-28` loads unmodified, the raw key
-appears in exactly one response and is never readable again, and the webapp suite prints `OK` at
-`368` plus the new cases.
 
 ---
 
@@ -376,6 +364,46 @@ industries, NYC — rather than one person's résumé.
 
 ---
 
+### T-39 — `contributors` and `api_keys` are unreachable from the one stand-up-from-nothing command
+
+**Found while closing `T-27`, and filed rather than folded in.** This is `T-19` still open along one
+edge, and `T-27` made it load-bearing for a second service without widening it.
+
+`tools/provision-database.py` runs five `STEPS` (`backend/tools/provision-database.py:70-76`) and
+none of them reaches `api/query_claims.ensure_schema()`, where the DDL for `contributors` and
+`api_keys` lives (`backend/api/query_claims.py:245-261`). Only `manage_users.py init-schema`
+(`backend/api/manage_users.py:55`) does. So on a database stood up by the one command that claims to
+create everything, those two tables do not exist — and since `T-27` a **webapp** route depends on
+them, one process away from the command that would have created them.
+
+`T-26` hit the same trap from the other side and escaped it by putting its DDL in `schema.py`
+instead. That option is not available here: these are `api/`'s own tables, owned by the service
+whose README's whole argument is that the pipeline holds nothing on them, so moving the DDL would
+trade a provisioning gap for an ownership lie.
+
+**Two shapes, and the second is not obviously worse** — (1) add `qc.ensure_schema` as a sixth step,
+which means `provision-database.py` importing `api/` and so acquiring a third venv's worth of
+import path; (2) leave the DDL where it is and make the gap loud — `--verify-only` reports the two
+tables as missing rather than not looking, so a fresh database says so before a Builder's first
+opt-in does. Say in the commit which and why.
+
+Note the asymmetry that makes this less urgent than it reads: CI provisions a fresh `postgres:16`
+and the api suite is green there, because every test in it uses a fake connection rather than the
+schema. That is exactly why the gap survived — nothing that runs proves the tables exist.
+
+```bash
+cd backend
+grep -n "STEPS = \[" -A 8 tools/provision-database.py     # today: five, none of them api/'s
+python3 tools/provision-database.py --verify-only          # today: says nothing about api_keys
+```
+
+**Done when:** a database provisioned only by `tools/provision-database.py` either has
+`contributors` and `api_keys`, or is reported by `--verify-only` as not having them, with a test
+that fails if a future table is added to `api/`'s DDL and to neither; and all three suites stay
+green.
+
+---
+
 ### T-38 — Nothing advances a `search_queries` row's run statistics after a contributor submits
 
 **Found while closing `T-26`, and filed rather than folded in.** That row built the claim half of
@@ -443,6 +471,7 @@ not assumed.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~T-27~~ | `0007` decision 1's mint-at-opt-in endpoint: the credential shape existed in `manage_users.py create`, but `webapp` and `api` share no code and no database role, so how `webapp` got a row into `api_keys` was unanswered | **Closed 2026-08-08.** **The answer is that it does not.** Three candidates: grant `jobs_web` INSERT on `api_keys` (rejected outright by `0006`'s consequences, DEC-84 option 1), a request queue for `manage_users.py create` to drain (rejected by `0006` decision 1), and a server-to-server call — the only survivor, and the one `0006`'s consequences already assumed by naming "the server-to-server shared secret" as the unscoped follow-up. So `webapp` authenticates the Builder, POSTs `api/`'s new `/v1/internal/contributors`, and **no grant crosses the two roles**: `jobs_api` already held INSERT on `contributors` and `api_keys`, `jobs_web` gains nothing, and `webapp/README.md`'s "The two do not talk" is amended rather than quietly falsified. The mint itself moved to `qc.mint_credential()` with `manage_users.py create` as a caller — one implementation, per `.claude/CLAUDE.md`. **Both key properties were asserted by trying to break them, not by reading the code**: the raw key is fetched back out of everything written and out of a second mint, and the `config.json` field list is pinned against the T-28 worker's own source rather than a fixture, so a rename on either side is red. Two findings filed rather than folded in: `T-39` (`api_keys` is unreachable from `provision-database.py`) and `OQ-30` (the shared secret, and refusing `/v1/internal/` at the edge). One thing found and left alone: `webapp/.env`'s `JOBS_ADMIN_DATABASE_URL` is not the owner of `app_users`, so the migration ran as `jobs_pipeline` — `OQ-30` carries it |
 | ~~T-26~~ | `api/query_claims.py` could lease a **dataset string** in `job_ingest_state` and nothing else; `0007`'s per-query dispatch needs to lease a `search_queries` row, which had no claim columns at all | **Closed 2026-08-07.** Three columns added to `search_queries` via `add_missing_columns` inside `schema.ensure_search_query_schema()` — **in `schema.py`, deliberately not beside the precedent it mirrors.** A `plan-verifier` pass found the row's two halves in tension: `job_ingest_state`'s three claim columns have no single owner (`claimed_at` in `lib/state.py`, reachable from `provision-database.py`; `claimed_by` and `claim_granted_at` in `api/query_claims.ensure_schema()`, which is **not** one of its five steps), so mirroring the precedent literally would have shipped a column nobody provisions — `T-19` straight back. `try_claim_search_query` is a plain conditional `UPDATE`, not an upsert: a `search_queries` row exists because a Builder saved the keyword, so a claim must never conjure one. **Both protections were asserted by breaking them**, not by reading the predicate: dropping `claim_granted_at` from `holds_search_query_claim` turns exactly one test red, and removing the parentheses around the `OR` turns exactly one other red — the second matters because without them a claim aimed at one row takes over every expired claim in the table and still reports a win. Two findings filed rather than folded in: `T-38` (nothing advances a claimed row's run statistics after a submit) and `OQ-29` (the two column-scoped GRANTs the new `REQUIRED_TABLES` entry now demands at startup) |
 | ~~T-1~~ | There was no linter and no formatter, and a tranche README said wiring one in was wrong for this repo | **Closed 2026-08-03**, `56ce823`. `ruff` adopted as a **dev-and-CI tool only**, reversing an outright ban by owner decision. `backend/pyproject.toml` carries `[tool.ruff]` and nothing else — no build backend, no packaging, because nothing here is installed as a package. Landed against a recorded baseline rather than a mass reformat: a large unreviewable diff is the exact move that produced the documents this repo deleted. In none of the three `requirements.txt`, and CI greps to prove it. Reasoning is [`docs/adr/0001`](docs/adr/0001-ruff-as-a-dev-only-linter.md) |
 | ~~T-2~~ | A live remote, no CI, no git hooks — every result verified by hand and transcribed into a commit message | **Closed 2026-08-03.** Green run: `https://github.com/liueric-dev/jobs/actions/runs/30818425894`, its three `Ran N tests` lines matching a local run exactly — the clause that mattered, because a CI job reporting green on *less* was the failure this row existed to catch. **It was red first, and that is what it bought:** a database entry point that did not exist (`T-19`), a test-isolation defect, and confirmation that the DB gating and no-skip guard both work |
