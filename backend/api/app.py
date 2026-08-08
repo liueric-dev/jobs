@@ -53,6 +53,22 @@ MAX_QUERIES_PER_CLAIM = int(os.environ.get("MAX_QUERIES_PER_CLAIM", "5"))
 MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY = int(
     os.environ.get("MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY", "50")
 )
+#: How long a worker should wait before claiming again -- docs/adr/0007
+#: decision 3, and the whole of the control layer this service holds over the
+#: machines that poll it. It rides on the claim response (see `claim`), so the
+#: operator moves every contributor's cadence by changing it HERE, and nothing
+#: on thirty other people's machines has to be told. That is what made 0006
+#: decision 4's deferred control layer unnecessary rather than merely deferred:
+#: a number carried on a reply the worker already makes needs no local
+#: listener, so Safari's mixed-content rules and Chrome's Private Network
+#: Access rules never enter it.
+#:
+#: THE WORKER FLOORS THIS, AND CANNOT BE TALKED BELOW ITS FLOOR. Setting it to
+#: 10 does not make thirty machines hammer this endpoint -- each raises it to
+#: its own MIN_POLL_INTERVAL_SECONDS (contributor-worker/
+#: google-serpapi-worker.py:181). Raising it is honoured; lowering it past the
+#: floor is not, deliberately, and this end may not assume otherwise.
+POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "3600"))
 # Hard ceiling on request body size. SerpApi returns ~10 postings per query and
 # each is a few KB, so a legitimate submit is well under 1MB; anything larger
 # is a bug or an attack, and rejecting it before parsing avoids spending memory
@@ -367,6 +383,14 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
     from abuse and would exhaust an honest cron's daily allowance on the
     (common) days there is no work. Polling volume is a request-rate concern for
     whatever terminates TLS, not something this cap can express.
+
+    THE REPLY CARRIES THE NEXT INTERVAL (POLL_INTERVAL_SECONDS, docs/adr/0007
+    decision 3). It is an ASK, not an enforcement: the worker floors it and this
+    end has no way to make it poll faster, so nothing above may be relaxed on
+    the strength of it. It is also not the rate limit the paragraph above says
+    this cap cannot express -- a cooperating worker's cadence and a hostile
+    one's request rate are different problems, and only the first is answered
+    here.
     """
     with db() as conn:
         contributor_id = authenticate(conn, authorization)
@@ -396,6 +420,12 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
             conn.commit()
 
         return {
+            # ON EVERY CLAIM, INCLUDING THE ONES THAT GRANT NOTHING. The
+            # granted-nothing reply is the COMMON one -- the bank is fresh most
+            # days -- so a cadence carried only alongside work would reach a
+            # quiet contributor never, and the quiet ones are exactly the
+            # machines an operator needs to be able to slow down or wave off.
+            "poll_interval_seconds": POLL_INTERVAL_SECONDS,
             "queries": [
                 {
                     "dataset": f"google_jobs:query:{q['slug']}",

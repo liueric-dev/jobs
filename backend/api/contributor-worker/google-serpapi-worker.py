@@ -163,13 +163,15 @@ LAUNCH_AGENT_LABEL = "com.github.liueric-dev.jobs.contributor-worker"
 #: THE LOCAL FLOOR. The shortest interval this worker will ever poll on, and
 #: what --install writes into the plist.
 #:
-#: It is defined HERE, in T-29, and not in T-31 -- the row that introduces the
-#: server-dictated interval and clamps it. T-29's acceptance criteria require
-#: the plist's StartInterval to match "the local floor T-31 defines", and T-31
-#: is unbuilt, so the constant is introduced by whichever of the two lands
-#: first. T-31 INHERITS THIS NAME AND THIS VALUE; it should clamp against this
-#: constant rather than declaring a second one, because two floors that drift
-#: apart is a worker polling on one number and scheduled on another.
+#: It was defined HERE, in T-29, before T-31 -- the row that introduced the
+#: server-dictated interval and clamps it -- existed. T-29's acceptance criteria
+#: require the plist's StartInterval to match "the local floor T-31 defines", so
+#: the constant was introduced by whichever of the two landed first. T-31 HAS
+#: NOW INHERITED THIS NAME AND THIS VALUE rather than declaring a second one:
+#: clamp_poll_interval() floors against it and build_launch_agent() schedules on
+#: it, so the number a run refuses to go below and the number launchd fires on
+#: are one edit, not two that can drift into a worker polling on one and
+#: scheduled on the other.
 #:
 #: One hour, for the reason T-31 states: a server that says "poll in 10 seconds"
 #: must not be able to make thirty machines hammer one endpoint, while a server
@@ -226,6 +228,70 @@ def serpapi_search(query, location, date_chip):
     return data.get("jobs_results", [])
 
 
+def clamp_poll_interval(asked):
+    """The interval the server asked for, raised to the local floor.
+
+    A FLOOR, NOT A RANGE, AND THE DIRECTION IS THE WHOLE POINT. "Poll in ten
+    seconds" is raised to MIN_POLL_INTERVAL_SECONDS, because a server that has
+    been changed, or compromised, or simply typo'd must not be able to turn
+    thirty volunteers' machines into a load generator against one endpoint.
+    "Poll in six hours" is honoured unchanged, because slowing down costs the
+    Builder nothing and is how an operator waves machines off -- clamping that
+    to an hour would make the one safe direction unavailable and turn a
+    deliberate quiet period into thirty machines ignoring it. So: max(), never
+    min(), and never a ceiling.
+
+    ANYTHING THAT IS NOT A FINITE NUMBER IS THE FLOOR, INCLUDING ABSENCE. A
+    server that predates docs/adr/0007 sends no interval at all, and that must
+    behave exactly like the install that never heard of one -- which is what
+    makes deploying the two ends in either order safe. `True` is excluded by
+    hand because bool is an int in Python and `max(True, 3600)` would quietly
+    read a flag as a cadence.
+    """
+    if isinstance(asked, bool) or not isinstance(asked, (int, float)):
+        if asked is not None:
+            log(f"poll interval is not a number ({asked!r}); using the floor")
+        return MIN_POLL_INTERVAL_SECONDS
+    try:
+        seconds = int(asked)
+    except (ValueError, OverflowError):
+        # NaN and infinity: both survive isinstance and neither survives int().
+        log(f"poll interval is not finite ({asked!r}); using the floor")
+        return MIN_POLL_INTERVAL_SECONDS
+    return max(seconds, MIN_POLL_INTERVAL_SECONDS)
+
+
+def report_poll_interval(interval):
+    """Say what cadence the server asked for, when it is not the one running.
+
+    NOTHING HERE CHANGES THE SCHEDULE, AND SAYING SO IS THE POINT OF THE
+    FUNCTION. The OS owns the schedule (docs/adr/0007 decision 2): launchd runs
+    this script on the StartInterval written into the plist at --install time,
+    which is MIN_POLL_INTERVAL_SECONDS and nothing else, because install_agent
+    takes no interval from a Builder and none from the server. A run cannot
+    move it either -- rewriting the plist would mean a scheduled run unloading
+    and reloading the very agent that is running it, which this row does not
+    build. So a server that moves the interval moves it at the next --install
+    and not before.
+
+    Which leaves a Builder who was told the cadence changed watching a machine
+    that still polls hourly, with nothing on screen to say why. THAT is what
+    this prints, and it prints only on the disagreement: the ordinary run, on
+    the ordinary machine, where the ask and the schedule agree, stays silent.
+    A paused worker being indistinguishable from a broken one is the failure
+    this exists to prevent, so the line names the schedule as the schedule
+    rather than reporting it as a fault.
+    """
+    if interval == MIN_POLL_INTERVAL_SECONDS:
+        log(f"server asked for {interval}s, which is what is scheduled")
+        return
+    print(f"worker: the server asks to be polled every {interval // 60} "
+          f"minutes; this machine is scheduled every "
+          f"{MIN_POLL_INTERVAL_SECONDS // 60}, and a run cannot change that. "
+          f"The schedule is the one written at --install. This is a schedule, "
+          f"not a fault.")
+
+
 def main():
     missing = [n for n, v in (
         ("JOBS_API_BASE_URL", JOBS_API_BASE_URL),
@@ -253,6 +319,13 @@ def main():
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
         print(f"worker FAILED: could not reach {JOBS_API_BASE_URL}: {e}")
         sys.exit(1)
+
+    # BEFORE the nothing-to-do exit below, deliberately. The interval rides on
+    # every claim reply including the empty one, and the empty one is the
+    # common one -- reading it after the early return would mean the machines
+    # with no work, the ones an operator most wants to slow down, are the only
+    # ones never told.
+    report_poll_interval(clamp_poll_interval(claimed.get("poll_interval_seconds")))
 
     queries = claimed.get("queries", [])
     if not queries:
@@ -454,7 +527,7 @@ SERPAPI_ACCOUNT_URL = "https://serpapi.com/account"
 #: What --check offers to release when it asks the server whether the
 #: credential works. NOTHING CAN EVER HOLD A CLAIM ON IT: every real dataset
 #: name is built server-side as "google_jobs:query:<slug>" out of the server's
-#: own query bank (api/app.py:401), and no slug is spelled like this.
+#: own query bank (api/app.py:431), and no slug is spelled like this.
 CHECK_PROBE_DATASET = "google_jobs:query:__check__"
 
 
@@ -504,7 +577,7 @@ def probe(request, timeout=None):
 def check_base_url(send=probe):
     """Is JOBS_API_BASE_URL an address where this service answers?
 
-    /v1/health (api/app.py:269) needs no credential, so this separates "your
+    /v1/health (api/app.py:285) needs no credential, so this separates "your
     address is wrong" from "your key is wrong" -- which the next check depends
     on, and which the row requires be distinguishable in the output.
     """
@@ -543,7 +616,7 @@ def check_credential(base_url_ok, send=probe):
     THE PROBE IS A RELEASE OF A DATASET NOBODY CAN HOLD, AND THE 409 IS THE
     PASS. Every authenticated route on that server does something. /v1/queries/
     claim locks rows out of the pool for CLAIM_TTL_MINUTES apiece and meters
-    the caller against a daily cap (api/app.py:345, query_claims.py:196), so
+    the caller against a daily cap (api/app.py:361, query_claims.py:196), so
     checking a credential with it would spend the allowance being checked, and
     on a day when the bank is stale it would leave real queries claimed by a
     worker that was only asking a question. Release is the one authenticated

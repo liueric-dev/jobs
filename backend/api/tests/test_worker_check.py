@@ -192,7 +192,7 @@ class TestNoSerpApiCreditIsSpent(_CheckCase):
     def test_the_probe_dataset_is_one_the_query_bank_cannot_produce(self):
         # If a real slug could ever spell this, the probe would release a
         # query somebody was working on. The server builds every dataset name
-        # as google_jobs:query:<slug> (app.py:401), so this is a claim about
+        # as google_jobs:query:<slug> (app.py:431), so this is a claim about
         # the bank's slugs.
         buckets = qc.load_query_buckets()
         slugs = [q["slug"] for b in buckets.values() for q in b["queries"]]
