@@ -192,7 +192,7 @@ class TestNoSerpApiCreditIsSpent(_CheckCase):
     def test_the_probe_dataset_is_one_the_query_bank_cannot_produce(self):
         # If a real slug could ever spell this, the probe would release a
         # query somebody was working on. The server builds every dataset name
-        # as google_jobs:query:<slug> (app.py:431), so this is a claim about
+        # as google_jobs:query:<slug> (app.py:362), so this is a claim about
         # the bank's slugs.
         buckets = qc.load_query_buckets()
         slugs = [q["slug"] for b in buckets.values() for q in b["queries"]]
@@ -547,6 +547,74 @@ class TestTheServerSideOfTheProbe(unittest.TestCase):
                 self.release_probe(conn)
             details[name] = raised.exception.detail
         self.assertNotEqual(details["bad"], details["good"])
+
+
+class TestTheProbeSafetyCitationsStillPointAtTheClaim(unittest.TestCase):
+    """The probe is safe because no real slug can spell CHECK_PROBE_DATASET, and
+    that rests on the server building every dataset name itself. Two comments say
+    so and both carry an `app.py:NNN` -- T-46's subject, and T-40's fix shape:
+    pin the one claim in the file that makes it rather than build a content
+    checker. audit-citations.py resolves the number and cannot read the line;
+    this reads the line.
+
+    BOTH ENDS OF THE CLAIM, because either alone stays green under the drift it
+    exists to catch. A number that merely lands somewhere in `claim` still looks
+    right; what matters is that the line CONSTRUCTS the dataset string, which is
+    what makes "no slug is spelled like this" a property of the server rather
+    than of a comment.
+    """
+
+    #: (file that makes the claim, the text its citation follows). Parsed by
+    #: hand rather than with `re`, deliberately: importing one more name here
+    #: would shift every line below it, which is the exact defect T-46 is about.
+    CITERS = (
+        ("contributor-worker/google-serpapi-worker.py", "own query bank (api/app.py:"),
+        ("tests/test_worker_check.py", "as google_jobs:query:<slug> (app.py:"),
+    )
+
+    @staticmethod
+    def _cited_line_number(text, anchor):
+        at = text.find(anchor)
+        if at < 0:
+            return None
+        digits = ""
+        for ch in text[at + len(anchor):]:
+            if not ch.isdigit():
+                break
+            digits += ch
+        return int(digits) if digits else None
+
+    def _app_py_lines(self):
+        path = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "app.py")
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().split("\n")
+
+    def test_each_citer_names_a_line_that_builds_the_dataset_name(self):
+        api_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        lines = self._app_py_lines()
+        for relpath, anchor in self.CITERS:
+            with self.subTest(citer=relpath):
+                with open(os.path.join(api_dir, relpath), encoding="utf-8") as fh:
+                    cited = self._cited_line_number(fh.read(), anchor)
+                self.assertIsNotNone(
+                    cited, f"{relpath} no longer carries the citation this pins")
+                self.assertLessEqual(cited, len(lines), f"{relpath}: line past EOF")
+                self.assertIn(
+                    'f"google_jobs:query:{q[', lines[cited - 1],
+                    f"{relpath} cites app.py:{cited}, which does not build the "
+                    f"dataset name: {lines[cited - 1].strip()!r}")
+
+    def test_the_probe_dataset_is_not_something_the_server_could_build(self):
+        # The other end of the same claim: whatever app.py builds, it is always
+        # the prefix plus a bank slug, so a dataset with no slug after the
+        # prefix cannot be produced however the bank is edited.
+        self.assertTrue(
+            worker.CHECK_PROBE_DATASET.startswith("google_jobs:query:"))
+        self.assertNotIn(
+            worker.CHECK_PROBE_DATASET[len("google_jobs:query:"):],
+            [q["slug"] for b in qc.load_query_buckets().values()
+             for q in b["queries"]])
 
 
 if __name__ == "__main__":

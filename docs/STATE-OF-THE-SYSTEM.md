@@ -218,18 +218,18 @@ forward commit, so a mechanical revert scan under-reports what was undone.
 ### (a) Needs work — someone could pick these up
 
 - **`api/` may not start — but nothing in the code says so, and this entry was wrong twice.**
-  Re-checked 2026-08-03; line numbers re-checked 2026-08-08 (`T-42`), after `T-31` added 16 lines
-  above `db()` and moved every number in this entry. `verify_schema()` is at
-  `backend/api/app.py:99` (not `:160`; the column
-  loop is `:160-171`, the raise `:173-179`), and it requires `submission_log.action`
-  (`query_claims.py:128`). **There is no mismatch between the two definitions:**
-  `qc.ensure_schema` creates the table *with* `action TEXT` (`query_claims.py:233`) *and*
-  backfills it via `dbconn.add_missing_columns` (`:244`), so `manage_users.py init-schema`
+  Re-checked 2026-08-03; line numbers re-checked 2026-08-08 (`T-46`), after `T-39` moved the check
+  itself out of this file. `app.verify_schema()` is still at `backend/api/app.py:99` but is now only
+  the connection half; the list it runs is `qc.verify_schema()` (`backend/api/query_claims.py:323`),
+  whose column loop is `:399-410` and whose raise is `:412-419`, and it requires
+  `submission_log.action` (`query_claims.py:196-197`). **There is no mismatch between the two
+  definitions:** `qc.ensure_schema` creates the table *with* `action TEXT` (`query_claims.py:304`) *and*
+  backfills it via `dbconn.add_missing_columns` (`:315`), so `manage_users.py init-schema`
   satisfies the check on a fresh or an existing database. What remains is a claim about **live
   database state** — that init-schema has not been run against the deployed DB — which this repo
   can neither confirm nor refute. Run it and see.
   The recovery claim was also wrong: `JOBS_ADMIN_DATABASE_URL` is indeed absent from
-  `backend/api/.env`, but `manage_users.py:42` reads
+  `backend/api/.env`, but `manage_users.py:40` reads
   `os.environ.get("JOBS_ADMIN_DATABASE_URL", qc.DATABASE_URL)` and **falls back**. If anything
   blocks self-repair it is that `jobs_api` lacks CREATE on public — a grant question, not an
   env-file one.

@@ -494,7 +494,7 @@ host no session can reach — `OQ-30` first, and this is the only reason to do i
 **What:** `T-30` shipped `--check`, and one of its three checks is unverified against anything
 real. The credential check asks the deployed `api/` to release a claim nobody holds and reads the
 **409** as "your key is good" and the **401** as "your key is not" — an ordering inside
-`release` (`backend/api/app.py:580`, `:582`) that `api/tests/test_worker_check.py` pins with a fake
+`release` (`backend/api/app.py:511`, `:513`) that `api/tests/test_worker_check.py` pins with a fake
 connection. **The 401 branch has been run against a real HTTP server; the 409 branch never has.**
 A fake that agrees with the code it stands in for is exactly the thing that cannot tell you the
 deployed service agrees too.
@@ -577,7 +577,7 @@ property no test in this tree can observe:
 
 - **(a) `--install` asks the server once.** Costs no SerpApi credit — only a claimed *search*
   does — but `claim` is the only route that returns `poll_interval_seconds`
-  (`backend/api/app.py:428`), and claiming leases queries the installing process will not run.
+  (`backend/api/app.py:359`), and claiming leases queries the installing process will not run.
   So (a) is either a leak of live claims at install time or a server change to carry the interval
   somewhere cheaper. It also reverses `T-30`'s split, which specified `--install` to talk to
   nothing and `--check` to be the thing that talks to the server — that split is *why* an
@@ -644,6 +644,13 @@ cite-`file:line` rule would need an explicit carve-out saying so.
 
 **Open rows are out of scope**: a session stands on those, so `T-46` corrects `T-35`'s pair however
 this lands.
+
+**`T-46` found a case none of the three options covers, and it is the one that decides this.** A
+closed row's narrative contains numbers that are *quoted history* — `T-42`'s "→ `:209`" list and
+`T-30`'s "had drifted to `:269`" record what those rows wrote at their own commit. Option (1)
+rewrites them, which does not maintain the record, it falsifies it; (2) and (3) do not reach them at
+all. So a closed row holds two kinds of number and only one is a pointer. `T-46` left the historical
+ones and marked the one ambiguous case; that split needs blessing or replacing, not inheriting.
 
 **Done when:** the answer is a decision in [`docs/adr/`](docs/adr/), since it changes what
 `.claude/CLAUDE.md`'s citation rule means, and `T-46` is edited to match. **If the answer is (1),

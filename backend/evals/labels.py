@@ -370,7 +370,7 @@ def ensure_schema(conn):
     """Create the label tables. Idempotent, DDL, admin credential only.
 
     Deliberately a separate explicitly-invoked step rather than something a
-    service does at startup, matching webapp/schema_web.py:69 and
+    service does at startup, matching webapp/schema_web.py:478 and
     api/app.py:99: the long-running browser-facing process holds no CREATE
     rights, so a missing table is a deployment error to report rather than
     damage to silently repair.
