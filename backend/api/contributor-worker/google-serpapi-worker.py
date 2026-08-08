@@ -16,10 +16,32 @@ already ran recently, so credits don't get spent re-fetching the same thing.
 DEPENDENCIES: none -- Python 3 standard library only. No database driver, no
 pip install. That's deliberate, so this runs on any machine with Python.
 
-SETUP:
-    export JOBS_API_BASE_URL=https://<the server's address>
-    export JOBS_API_KEY=<the key you were given>
-    export SERPAPI_API_KEY=<your own SerpApi key from serpapi.com>
+SETUP -- either of these, and the environment wins if you use both:
+
+    (a) config.json, the file you are handed when you opt in on the website.
+        Drop it in this directory, BESIDE THIS SCRIPT, and type your own
+        SerpApi key into the field that arrives empty:
+
+            {
+              "JOBS_API_BASE_URL": "https://<the server's address>",
+              "JOBS_API_KEY": "<minted for you when you opted in>",
+              "SERPAPI_API_KEY": "<your own key from serpapi.com>"
+            }
+
+        It is looked for beside this script and not in whatever directory you
+        happened to run from, so a scheduled run finds it too.
+
+    (b) the environment, which is what a debugging run overrides with:
+
+            export JOBS_API_BASE_URL=https://<the server's address>
+            export JOBS_API_KEY=<the key you were given>
+            export SERPAPI_API_KEY=<your own SerpApi key from serpapi.com>
+
+    Those three settings are the whole of config.json. MAX_QUERIES,
+    HTTP_TIMEOUT and DEBUG are environment-only on purpose: how much to spend
+    per run is the server's call, delivered in its answer to each poll, not a
+    number frozen into a file at install time. Any other key in config.json is
+    ignored.
 
 RUN:
     python3 google-serpapi-worker.py
@@ -43,9 +65,62 @@ import urllib.parse
 import urllib.request
 import urllib.error
 
-JOBS_API_BASE_URL = os.environ.get("JOBS_API_BASE_URL", "").rstrip("/")
-JOBS_API_KEY = os.environ.get("JOBS_API_KEY", "")
-SERPAPI_API_KEY = os.environ.get("SERPAPI_API_KEY", "")
+#: Beside THIS SCRIPT, resolved from __file__ rather than from the working
+#: directory. A relative path would find the file every time you ran the
+#: worker by hand from this directory and miss it on every scheduled run,
+#: which is the one that matters and the one nobody watches.
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+
+
+def load_config(path=CONFIG_PATH):
+    """Read the config.json a Builder dropped beside this script.
+
+    Absent is the ordinary case and returns {} -- an environment-configured
+    run has no file, and saying anything about it would be noise. Present but
+    broken is not ordinary, and gets its own message naming the file: a
+    Builder who mistyped their JSON would otherwise be told to set variables
+    they can see they already set, and go looking in their shell.
+
+    Only the three settings below are read out of the result; any other key is
+    ignored rather than rejected, so a stale file from an older opt-in keeps
+    working.
+    """
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as fh:
+        try:
+            data = json.load(fh)
+        except ValueError as e:
+            raise ValueError(f"{path} is not valid JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must hold a JSON object, "
+                         f"not a {type(data).__name__}")
+    unstringly = sorted(k for k, v in data.items() if not isinstance(v, str))
+    if unstringly:
+        raise ValueError(f"{path}: every value must be a string, and these are "
+                         f"not: {', '.join(unstringly)}")
+    return data
+
+
+try:
+    FILE_CONFIG = load_config()
+except (OSError, ValueError) as e:
+    print(f"worker FAILED: {e}")
+    sys.exit(1)
+
+# Environment first so a debugging run can override one setting without
+# editing the file, then config.json. Each name is spelled out at both ends
+# rather than looped over: webapp/tests/test_contribute.py reads THIS SOURCE
+# to check that the file it writes and the settings this reads are the same
+# three, and a loop over a tuple would leave it nothing to read.
+JOBS_API_BASE_URL = (os.environ.get("JOBS_API_BASE_URL", "")
+                     or FILE_CONFIG.get("JOBS_API_BASE_URL", "")).rstrip("/")
+JOBS_API_KEY = (os.environ.get("JOBS_API_KEY", "")
+                or FILE_CONFIG.get("JOBS_API_KEY", ""))
+SERPAPI_API_KEY = (os.environ.get("SERPAPI_API_KEY", "")
+                   or FILE_CONFIG.get("SERPAPI_API_KEY", ""))
+# Not in config.json, deliberately: docs/adr/0007 decision 3 puts per-run
+# policy in the server's poll response, not in a file written once at install.
 MAX_QUERIES = int(os.environ.get("MAX_QUERIES", "1"))
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "45"))
 DEBUG = os.environ.get("DEBUG", "") == "1"
@@ -105,7 +180,15 @@ def main():
         ("SERPAPI_API_KEY", SERPAPI_API_KEY),
     ) if not v]
     if missing:
-        print(f"worker FAILED: set {', '.join(missing)} (see this file's header)")
+        # With no config.json this is byte for byte the message it has always
+        # been -- a Builder with nothing set is being told about their shell,
+        # and pointing them at a file that is not there would be a wrong lead.
+        # With one present, the file is named, because that is where they will
+        # have typed the value that did not take.
+        where = (f" in {CONFIG_PATH} or in the environment"
+                 if os.path.exists(CONFIG_PATH) else "")
+        print(f"worker FAILED: set {', '.join(missing)}{where} "
+              f"(see this file's header)")
         sys.exit(1)
 
     try:

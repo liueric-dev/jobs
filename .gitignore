@@ -21,6 +21,10 @@ dist/
 *.pem
 *.key
 secrets.json
+# T-28: the contributor worker reads a config.json beside itself, and that file
+# holds a minted API key. Not a .env, so the rules above miss it; scoped to the
+# one directory because config.json is an ordinary name elsewhere.
+backend/api/contributor-worker/config.json
 credentials.json
 
 # cloudflared. `cloudflared tunnel create` writes ~/.cloudflared/<UUID>.json,

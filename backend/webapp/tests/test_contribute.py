@@ -7,11 +7,12 @@ TWO PROPERTIES, AND THEY ARE THE ROW'S OWN ACCEPTANCE CRITERIA.
      from a second opt-in, from every other route that takes a session -- not
      by reading contribute.py and agreeing with it.
 
-  2. The payload is the exact file T-28's worker will load unmodified. T-28 is
-     unbuilt, so TestTheWorkerContract reads the WORKER'S OWN SOURCE and
-     compares. That is what makes it a contract rather than a fixture: renaming
-     a field on either side turns this red, and a fixture copied from
-     CONFIG_FIELDS would agree with a rename forever.
+  2. The payload is the exact file T-28's worker loads unmodified.
+     TestTheWorkerContract reads the WORKER'S OWN SOURCE and compares. That is
+     what makes it a contract rather than a fixture: renaming a field on either
+     side turns this red, and a fixture copied from CONFIG_FIELDS would agree
+     with a rename forever. T-28 landed 2026-08-08 and the worker now reads the
+     file, so this binds two shipped halves rather than guarding an unbuilt one.
 
 ONE CLOCK. Every timestamp asserted here comes from the fake connection's
 record of what was written, compared against a bound captured from the same
@@ -36,7 +37,7 @@ import contribute  # noqa: E402
 from auth import User  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 
-#: The worker T-28 will teach to read the file this row writes.
+#: The worker that reads the file this row writes (taught to, by T-28).
 WORKER = os.path.join(os.path.dirname(WEBAPP_DIR), "api", "contributor-worker",
                       "google-serpapi-worker.py")
 
@@ -159,10 +160,13 @@ def run_opt_in(conn, mint, **settings):
 class TestTheWorkerContract(unittest.TestCase):
     """The contract between this row and T-28, read from the worker's source.
 
-    The worker today takes all four settings from the environment and exits 1
-    naming three of them. T-28 makes it fall back to `config.json` beside
-    itself. Until that lands, THIS is what stops the two halves being built
-    against different field names.
+    The worker reads six settings out of the environment and requires three of
+    them; those three are this payload, and T-28 made them fall back to a
+    `config.json` beside the script. (The three it does not require --
+    MAX_QUERIES, HTTP_TIMEOUT, DEBUG -- are deliberately not in the file:
+    docs/adr/0007 decision 3 puts per-run policy in the poll response.) THIS is
+    what stops the two halves drifting onto different field names; the other
+    direction is asserted in ../../api/tests/test_contributor_worker.py.
     """
 
     def _worker_source(self):

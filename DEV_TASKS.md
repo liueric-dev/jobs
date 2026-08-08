@@ -405,6 +405,9 @@ questions the code cannot answer:
   removes the credential too — and note that a Builder who never runs it is the common case.
 
 **The third has a deadline the others do not:** it is only cheap while `T-28` and `T-29` are unbuilt.
+**Half of that deadline passed on 2026-08-08**, when `T-28` closed and the worker began reading a
+plaintext `config.json` beside itself. `T-29` — the row that would own an `--uninstall` that removes
+it — is still unbuilt, so the lever is still there, but it is now the only one.
 
 **Done when:** all three are answered and the third is written into `T-28`/`T-29` before either is
 implemented.
