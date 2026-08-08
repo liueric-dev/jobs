@@ -65,3 +65,4 @@ next to the number they explain. Do not migrate them here.
 | [0004](0004-provision-database-issues-no-grants.md) | `provision-database.py` creates objects and issues no privileges |
 | [0005](0005-personal-scoring-layer-annotates-only.md) | The personal scoring layer annotates and never orders; resume tailoring is cut |
 | [0006](0006-contributor-credential-auto-minted-local-daemon.md) | Contributor credentials auto-mint on login; the SerpApi worker stays local and long-running, never proxied server-side |
+| [0007](0007-contributor-credential-opt-in-scheduled-worker.md) | Credentials mint at opt-in instead; the worker is OS-scheduled rather than resident, and the server dictates interval, pause and budget — superseding `0006` 1, 2 and 4 |

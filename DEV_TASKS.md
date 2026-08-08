@@ -17,7 +17,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-24`.**
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-29`.**
 Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
 citations to it keep resolving.
 
@@ -94,12 +94,6 @@ human ceiling sits **above** the model floor on at least the fields it currently
 
 ---
 
----
-
----
-
----
-
 ### OQ-5 — Apply the `revenue_commercial` archetype, once round 2 closes
 
 **Why it is yours:** decision, and it is partly a one-way door. **Decided 2026-08-03, staged
@@ -172,8 +166,6 @@ run and reviewed, or this row is struck with the reason it is still premature.
 
 ---
 
----
-
 ### OQ-4a — One clock left, nothing to do but wait
 
 **Why it is yours:** machine. No account needed — this one is just a terminal, and as of
@@ -199,12 +191,6 @@ runs.
 
 **Done when:** `python3 tools/volume-check.py` reports a comparison rather than
 `insufficient history` on every source.
-
----
-
----
-
----
 
 ---
 
@@ -335,7 +321,120 @@ into this row.
 
 ---
 
+### OQ-24 — The cohort OS census, before `0007` decision 7 is final
+
+**Why it is yours:** people. Nobody can count thirty laptops from a terminal.
+
+**What:** [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md)
+decision 7 makes Windows manual-run-only, on the ground that "the cohort is overwhelmingly Mac" —
+the one claim in `0007` resting on an unmeasured fact, and `TASKS.md`'s `T-29` (a launchd agent, so
+macOS-only) is built entirely on top of it. If the Windows share is a third rather than a handful,
+`T-29` covers a minority and Scheduled Tasks stops being out of scope.
+
+**How to do it.** Ask. One question in the cohort channel. **Count Linux separately** rather than
+folding it into "not Mac" — a Linux Builder can be handed a `systemd --user` timer for the cost of
+one file, which is a different answer from Windows.
+
+**Done when:** the Mac / Windows / Linux split is known from the cohort rather than assumed and is
+written into this row. A changed answer is a new ADR, not an edit to `0007`.
+
 ---
+
+### OQ-25 — Watch one Builder install the worker end to end, and record where they stall
+
+**Why it is yours:** people, and a room. This cannot be simulated by whoever wrote the installer.
+
+**What:** `0007`'s premise is that the expensive part of onboarding was never the credential — it
+was installing software on a personal machine, which `OQ-12` measured at zero contributors. `T-27`
+… `T-30` are four guesses about where that friction actually lives. One watched install says which
+of the four mattered and which was invented, including whether `--check`'s output means anything to
+a reader — the criterion `T-30` explicitly declines to invent, because plain language is a human
+judgement.
+
+**Sit with them and say nothing.** The instinct to help destroys the measurement. Write down where
+they hesitate, what they read, and what they typed instead of what the instructions said.
+
+**How to do it.** One Builder, one machine that is not yours, the real opt-in flow, no shell access
+for you, fifteen minutes. Before writing installer documentation, not after.
+
+**Done when:** one non-author install has been watched start to finish and the stall points are
+written into this row — including "none", if that is the honest answer.
+
+---
+
+### OQ-26 — The metric that replaces `OQ-12`'s zero, and the signal that reopens decision 6
+
+**Why it is yours:** decision. Picking the number you will be judged by is not delegable.
+
+**What:** `OQ-12` closed on a count of zero minted credentials — a metric that could only go up and
+said nothing about whether the system works. Two things need naming:
+
+1. **The replacement metric.** None is obviously right: *contributors with a check-in in the last 7
+   days* measures liveness and ignores value; *queries dispatched per week* measures throughput and
+   flatters a contributor spending credits on nothing anyone watches; *postings reaching
+   `search_query_results` that no other source produced* measures the only thing that justifies the
+   arrangement and is the hardest to attribute. Pick one, and say what number would mean this was
+   not worth building.
+2. **The empty-claim rate that reopens `0007` decision 6.** Decision 6 defers the leech path until
+   the rate shows spare capacity exists. That becomes measurable once `T-35` reports check-ins, but
+   "shows it exists" is not a number. Name one.
+
+**Pick before the data arrives.** Both depend on `T-35` landing, since nothing today records a poll
+that was granted nothing — choosing the metric afterwards is choosing the flattering one.
+
+**Done when:** one metric and one threshold are named, and the decision 6 half is written into an
+ADR, since it either ratifies or reverses a documented position.
+
+---
+
+### OQ-27 — Offboarding at cohort end
+
+**Why it is yours:** decision, and it involves other people's machines and other people's money.
+
+**What:** `0007` scopes onboarding completely and offboarding not at all. A cohort ends. Three
+questions the code cannot answer:
+
+- **Credential revocation.** `manage_users.py revoke` exists (`backend/api/manage_users.py:123`), so
+  the mechanism is there and the policy is not. An alumnus spending their own credits on the next
+  cohort's search is a gift — and also an account you no longer have a relationship with.
+- **Keyword retention.** `search_queries` deliberately carries no per-Builder identity
+  (`backend/schema.py:1045`), so a keyword survives its Builder by construction. That was a privacy
+  decision, and it makes this question harder rather than easier.
+- **The config file on a returned machine.** `T-28` puts a credential in a plaintext `config.json`.
+  If the laptop is Pursuit-issued and passed on, that file goes with it. Say whether `--uninstall`
+  removes the credential too — and note that a Builder who never runs it is the common case.
+
+**The third has a deadline the others do not:** it is only cheap while `T-28` and `T-29` are unbuilt.
+
+**Done when:** all three are answered and the third is written into `T-28`/`T-29` before either is
+implemented.
+
+---
+
+### OQ-28 — Is the operator's own SerpApi key contributor zero, or a separate pool?
+
+**Why it is yours:** decision, and it is your account and your credits.
+
+**What:** `0007` paces every contributor against their own plan (`T-32`) behind a reserve floor
+(`T-34`). The operator's key is not in that system at all: the nightly bucketed sweep
+(`ingest/google-serpapi.py`) spends `SERPAPI_DAILY_QUERY_BUDGET` outside the claim mechanism, and
+`OQ-15` closed on keeping that split permanent. Does the operator's key **also** enroll — so one
+mechanism governs everything and the nightly sweep becomes one participant among thirty — or stay
+separate, making the crowdsourced path purely additive?
+
+**Each way.** Enrolling means one mechanism, one place spending is visible, and the operator's key
+gets the same reserve-floor protection. Staying separate means the path that produces most of what
+this pipeline ingests cannot be starved by a claim storm — `OQ-15`'s argument against merging two
+live nightly paths, one level up.
+
+**Check the arithmetic against whichever you pick:** 250 searches/month against a sweep already
+spending 8/day leaves very little reserve to allocate, which may settle it.
+
+**Done when:** one of the two is chosen and written into an ADR, since it constrains `T-32` and
+`T-34` and touches `OQ-15`'s documented split.
+
+---
+
 
 ## Closed — kept so citations resolve
 

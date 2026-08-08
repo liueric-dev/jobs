@@ -15,7 +15,15 @@ WHAT IT CAN AND CANNOT SEE, because overstating this would make it the exact
 thing it exists to prevent:
 
   * A path that does not exist -- CHECKED, and mechanical.
-  * A line number past the end of the file it names -- CHECKED, and mechanical.
+  * A line number past the end of the file it names -- CHECKED, and mechanical,
+    **EXCEPT behind the tag form described below, which is skipped whole.**
+    `git show <ref>:<path>:99999` resolves exactly as cleanly as a correct one:
+    the tag-span test in `scan()` `continue`s before any line-range check can
+    run. Found by reading content, not by this tool -- citations to a 144-line
+    file at line numbers as high as 1047 passed silently across two sessions
+    (`T-18`). RE-RUN `--all` AFTER EVERY BATCH of citation edits: the
+    PostToolUse hook fires on the file being edited, so its silence says
+    nothing about a citation in a file you touched two commits ago.
   * A citation whose line still exists but no longer says anything like what
     the citing comment claims -- **NOT CHECKED, and not checkable here.**
   * Whether a path is present because the tree contains it or because the

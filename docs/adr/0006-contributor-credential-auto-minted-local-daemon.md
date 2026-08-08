@@ -6,6 +6,8 @@ generator: none
 
 # 0006 — Contributor credentials are auto-minted; the worker stays local and long-running
 
+> **Superseded in part by [0007](0007-contributor-credential-opt-in-scheduled-worker.md) (2026-08-07): decisions 1, 2 and 4 are replaced; decision 3 stands unchanged.**
+
 **Status:** accepted. Direction only — no implementation exists yet.
 
 ## Context

@@ -746,27 +746,38 @@ class TestTheSeamIsClosed(unittest.TestCase):
         return query_id
 
     @staticmethod
-    def _five_days_ago():
+    def _days_ago(days):
         """A real-clock timestamp, because the chip is a function of elapsed
         wall time: run_due() does not thread `now` through to the provider, so
         datechip.choose() reads the clock. Five days back lands in `week`,
-        which is what the cassette was recorded with."""
+        which is what the cassette was recorded with.
+
+        EVERY timestamp in these two tests comes from here, and that is a fix
+        for real rot rather than a tidy-up. `now` used to be the literal
+        "2026-08-02T12:00:00" while last_run_at was five REAL days back, so the
+        pair only satisfied searchnorm.is_due() while the wall clock sat near
+        2026-08-02. It stopped satisfying it on 2026-08-06T16:00Z, and both
+        tests then failed with last_run_at THIRTEEN HOURS AFTER `now` --
+        _hours_between() went negative, due_queries() returned nothing, and the
+        failure read as "the seam is broken" rather than "the clock moved".
+        Offsets from the same clock cannot drift apart that way.
+        """
         from datetime import datetime, timedelta, timezone
         return (datetime.now(timezone.utc)
-                - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%S")
+                - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
 
     @require_serpapi
     def test_recorded_bytes_become_attached_results(self):
         with scratchdb.scratch_schema() as (conn, _name):
             query_id = self._register(
                 conn, RECORDED_QUERY, RECORDED_LOCATION,
-                last_run_at=self._five_days_ago(), now="2026-08-02T00:00:00")
+                last_run_at=self._days_ago(5), now=self._days_ago(6))
 
             provider = dispatch.SearchQueryProvider(conn, provider="serpapi",
                                                     creds="secret")
             with cassettes.replay("google-serpapi"):
                 dispatched, due = searchqueries.run_due(
-                    conn, provider=provider, now="2026-08-02T12:00:00")
+                    conn, provider=provider, now=self._days_ago(0))
 
             self.assertEqual(due, 1)
             self.assertEqual(dispatched, 1)
@@ -811,13 +822,13 @@ class TestTheSeamIsClosed(unittest.TestCase):
             try:
                 with scratchdb.scratch_schema() as (conn, _name):
                     self._register(conn, RECORDED_QUERY, RECORDED_LOCATION,
-                                   last_run_at=self._five_days_ago(),
-                                   now="2026-08-02T00:00:00")
+                                   last_run_at=self._days_ago(5),
+                                   now=self._days_ago(6))
                     provider = dispatch.SearchQueryProvider(
                         conn, provider="serpapi", creds="secret",
                         cache=serpcache)
                     query = searchqueries.due_queries(
-                        conn, now="2026-08-02T12:00:00")[0]
+                        conn, now=self._days_ago(0))[0]
                     with cassettes.replay("google-serpapi"):
                         first = provider(query)
                     # No cassette this time: a live fetch would raise, so a

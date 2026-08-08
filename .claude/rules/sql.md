@@ -25,3 +25,11 @@ compiler output, never a request parameter, a config value, or ATS/employer/labe
 holds; each non-test site carries a `# noqa: S608` naming what it splices. If you add a new spliced
 identifier, it must be a constant too — a runtime string here is the vulnerability this convention
 exists to avoid.
+
+**A `# noqa` on the opening line of an unterminated triple-quoted f-string is inert.** It becomes
+part of the string rather than a comment, and it fails silently — nothing warns you, and `RUF100`
+cannot see it either. `ruff` reports the finding at the line the statement *starts* on, which is
+often not a line a directive can live on. **Put the directive on the line the string closes.** That
+is why some sites in this tree carry the comment somewhere other than the row `ruff` prints; it is
+deliberate, confirmed empirically while writing `T-16`'s 92 directives, and not a formatting slip
+to tidy up.

@@ -469,7 +469,20 @@ it("a populated cohort_signal renders the bucket, and says Builders not others",
   // included (backend/cohort.py:113).
   assert.ok(!/other Builders/.test(html),
             "the count includes the reader, so 'other' overstates it");
-  assert.ok(!/\bexactly\b|\bago\b|computed/.test(html),
+  // Scoped to the signal block, not the page, and that is the assertion --
+  // not a loosening of it. A posting's OWN age is rendered by format.mjs
+  // ageLabel() as "Posted 2 weeks ago", which is a property of the posting and
+  // has its own check below; the recency this block must never leak is the
+  // cohort fold's (detail.mjs says computed_at is deliberately not served).
+  // Unscoped, /\bago\b/ matched that age label instead, so this check passed
+  // only while the shipped fixture's fixed posted_at_ts happened to land in
+  // ageLabel's one "last week" window -- days 7..13, i.e. a seven-day window
+  // that expired on 2026-08-08 and took the check red with it.
+  const block = html.split(/<section class="detail-block">/)
+                    .find((s) => s.includes("saved this posting"));
+  assert.ok(block, "the cohort signal renders its own block");
+  const signal = block.slice(0, block.indexOf("</section>"));
+  assert.ok(!/\bexactly\b|\bago\b|computed/.test(signal),
             "never an exact count, never a recency, never an identity");
 });
 
