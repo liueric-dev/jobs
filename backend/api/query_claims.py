@@ -37,10 +37,20 @@ holds_claim, mark_success, release_claim). It is a superset of lib.state's
 question the pipeline never asks. Keep it operating on the same row with the
 same conditional-update shape and it stays compatible.
 
-SCHEMA OWNERSHIP: ../schema.py owns the jobs table, the watermark table and
-google_jobs_query_stats; ensure_schema() below calls it rather than restating
-it. This module declares only the three contributor tables and the two extra
-claim columns, and never drops or rewrites anything the pipeline owns.
+THERE ARE TWO CLAIM MODES, over two different tables. The four functions above
+lease a DATASET STRING in job_ingest_state; try_claim_search_query,
+holds_search_query_claim and release_search_query_claim lease one
+`search_queries` ROW, which is what docs/adr/0007 dispatches per query. Same two
+protections, mirrored rather than re-derived -- the section above those three
+says what differs and why, and it is one thing, not several.
+
+SCHEMA OWNERSHIP: ../schema.py owns the jobs table, the watermark table,
+google_jobs_query_stats and search_queries; ensure_schema() below calls it
+rather than restating it. This module declares only the three contributor
+tables and the two extra claim columns on job_ingest_state, and never drops or
+rewrites anything the pipeline owns -- search_queries' claim columns are
+declared in ../schema.py with the rest of that table, so the one command that
+stands a database up from nothing creates them (see TASKS.md's T-26).
 """
 
 import json
@@ -101,7 +111,36 @@ REQUIRED_TABLES = {
     "contributors": ("SELECT", "INSERT"),
     "api_keys": ("SELECT", "INSERT", "UPDATE"),
     "submission_log": ("SELECT", "INSERT"),
+    "search_queries": ("SELECT", "UPDATE"),
 }
+
+#: search_queries is the seventh table and the only PIPELINE-owned one this
+#: service may WRITE, so the grant that backs it is narrower than the line above
+#: can express and must be issued column-wise:
+#:
+#:     GRANT SELECT ON search_queries TO jobs_api;
+#:     GRANT UPDATE (claimed_at, claimed_by, claim_granted_at)
+#:         ON search_queries TO jobs_api;
+#:
+#: NOT a table-wide UPDATE. last_run_at, run_count, provider_last_used,
+#: result_count_last_run and last_result_at are ../searchqueries.py's, whose
+#: record_run() is their only writer by design -- a table-wide grant would let a
+#: contributor's submit forge a run history and silence a query for everyone by
+#: writing a future last_run_at. NO INSERT either: registering a query is the
+#: webapp's act (../schema.py:993), and a service that could insert one could
+#: dispatch a Builder's SerpApi credit at a keyword nobody asked for.
+#:
+#: has_table_privilege(current_user, 'search_queries', 'UPDATE') answers TRUE on
+#: a column-level grant, so verify_schema() accepts the narrow form -- what it
+#: cannot do is tell the two apart, which is why the columns are written out
+#: here and in README rather than left to the reader.
+#:
+#: THIS IS A NEW STARTUP REQUIREMENT ON AN ALREADY-DEPLOYED SERVICE. Until the
+#: two statements above have run, verify_schema() refuses to start and names the
+#: missing grant. That is the designed behaviour and the reason this map exists
+#: -- the alternative is a service that starts cleanly and 500s on the first
+#: claim -- but it is an action on a deployed database, so it is DEV_TASKS.md's
+#: `OQ-29` rather than something a session can close.
 
 #: submission_log.id is BIGSERIAL, so INSERT on the table is not enough on its
 #: own -- the nextval() needs USAGE on the sequence. README's privilege table
@@ -353,6 +392,133 @@ def release_claim(conn, dataset):
     conn.execute(
         "UPDATE job_ingest_state SET claimed_at = NULL, claimed_by = NULL, claim_granted_at = NULL WHERE dataset = %s",
         (dataset,),
+    )
+    conn.commit()
+
+
+# --------------------------------------------------------------------------
+# Claiming, second mode: one `search_queries` row
+# --------------------------------------------------------------------------
+#
+# WHY THERE ARE TWO MODES AND NOT ONE. The three functions above lease a
+# DATASET STRING in job_ingest_state -- "google_jobs:query:<slug>", one row per
+# entry in config/google-queries.json, a bank the pipeline and this service both
+# read from a file. docs/adr/0007 dispatches something else: a `search_queries`
+# row, which is a Builder's own saved keyword, registered at runtime by the
+# webapp and carrying its own run statistics. There is no slug and no file, so
+# there is nothing to name a dataset string after.
+#
+# The two protections are not re-derived, they are mirrored. The conditional
+# UPDATE below has the same `claimed_at IS NULL OR claimed_at < ttl_cutoff`
+# shape try_claim_query uses, and holds_search_query_claim checks the same three
+# conditions holds_claim does, for the same reason and against the same failure
+# -- see that docstring, which is where the whole sequence is written out.
+#
+# THE ONE STRUCTURAL DIFFERENCE, and it is deliberate: this is a plain UPDATE,
+# not an upsert. try_claim_query INSERTs because a dataset that has never run
+# has no job_ingest_state row and the claim is what creates it. A search_queries
+# row is never created by claiming it -- id is BIGSERIAL and the row exists
+# because a Builder saved the keyword or the seeder wrote it, so a claim against
+# an id that is not there must fail rather than conjure a query nobody asked
+# for. `RETURNING id` reports both outcomes the same way: no row back means the
+# claim was not granted, whether because someone else holds it or because there
+# was nothing to claim.
+
+def try_claim_search_query(conn, query_id, now_dt, claimed_by):
+    """Atomic claim on one search_queries row. False if it is already held.
+
+    Same conditional-update shape as try_claim_query -- the WHERE is evaluated
+    by the server against the stored row, which is what makes "two claimants
+    never get the same query" true across two processes rather than true by
+    convention.
+
+    The parentheses around the OR are load-bearing: without them the `id = ...`
+    binds to the first arm only and an expired-claim row of ANY id satisfies the
+    statement, which is a claim on somebody else's query reported as a win.
+    """
+    now_str = now_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ttl_cutoff_str = (now_dt - timedelta(minutes=CLAIM_TTL_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
+    cur = conn.execute(
+        """
+        UPDATE search_queries
+           SET claimed_at = %(now)s, claimed_by = %(by)s, claim_granted_at = %(now)s
+         WHERE id = %(id)s
+           AND (claimed_at IS NULL OR claimed_at < %(ttl_cutoff)s)
+        RETURNING id
+        """,
+        {"id": query_id, "now": now_str, "ttl_cutoff": ttl_cutoff_str, "by": claimed_by},
+    )
+    won = cur.fetchone() is not None
+    conn.commit()
+    return won
+
+
+def holds_search_query_claim(conn, query_id, contributor_id, now_dt):
+    """True only if this contributor still holds a live claim on this query.
+
+    THE GUARD IS holds_claim's, UNCHANGED -- read that docstring for the
+    takeover sequence it defends against; it is not restated here because one
+    copy that drifts is worse than a pointer.
+
+    WHAT IS DIFFERENT ON THIS TABLE, and it is worth knowing before deciding
+    the third condition is dead weight: `search_queries` has no claimed_at
+    writer in this tree today. The pipeline runs these rows through
+    ../searchqueries.py's due_queries() and record_run(), neither of which
+    leases anything, so the takeover route that made claim_granted_at
+    necessary on job_ingest_state -- lib.state.try_claim rewriting claimed_at
+    while knowing nothing of claimed_by -- has no caller here YET.
+
+    That is an argument for building the guard now, not for leaving it out.
+    0007 puts the local pipeline and N contributors on the same rows, so the
+    first writer that leases one without knowing about claimed_by makes this
+    live, and a guard added after the writer is a guard added after the
+    corruption. tests/test_search_query_claims.py exercises the sequence
+    against a writer of exactly that shape and says so.
+    """
+    ttl_cutoff_str = (now_dt - timedelta(minutes=CLAIM_TTL_MINUTES)).strftime("%Y-%m-%dT%H:%M:%S")
+    row = conn.execute(
+        "SELECT claimed_by, claimed_at, claim_granted_at "
+        "FROM search_queries WHERE id = %s",
+        (query_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    claimed_by, claimed_at, claim_granted_at = row
+    if claimed_by != contributor_id or not claimed_at:
+        return False
+    if claim_granted_at != claimed_at:
+        return False  # somebody re-claimed this after it was granted
+    return claimed_at >= ttl_cutoff_str
+
+
+def release_search_query_claim(conn, query_id):
+    """Free the query. The only way a claim on this table is given back early.
+
+    Called on a failed fetch, for release_claim's reason -- another contributor
+    with a different SerpApi account may not share the transient error -- and
+    also after a successful submit, which is where this mode differs from the
+    first one and the difference is not an oversight.
+
+    THERE IS NO mark_success TWIN HERE. On job_ingest_state the watermark and
+    the claim are columns of one row, so one statement advances the first and
+    clears the second. This table's watermark half is last_run_at, run_count,
+    provider_last_used, result_count_last_run and last_result_at -- and
+    ../searchqueries.py's record_run() says in its own docstring that it is THE
+    ONLY WRITER of those. It is also the only one that can be: this service's
+    role holds no UPDATE on them (../schema.py:993), which is the grant that
+    stops a submitted result from forging a run history. So a submit against a
+    search_queries row releases the claim here and the run statistics are
+    advanced by whoever owns them -- and nothing in this repo does that yet.
+    That gap is T-38 in ../../TASKS.md, filed rather than folded in.
+
+    Releasing is still enough to consume a claim: it clears all three columns,
+    so a second submit against the same claim finds nothing held, which is the
+    double-advance mark_success prevents on the other table.
+    """
+    conn.execute(
+        "UPDATE search_queries SET claimed_at = NULL, claimed_by = NULL, "
+        "claim_granted_at = NULL WHERE id = %s",
+        (query_id,),
     )
     conn.commit()
 

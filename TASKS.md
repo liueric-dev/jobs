@@ -8,7 +8,7 @@ budget: 500
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-38`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-39`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -40,18 +40,21 @@ that reasoning is unchanged and `T-1` has a grep proving it holds.
 
 ## Order
 
-**Everything before `T-26` is closed** — the toolchain rows, the five harness layers, and the
-§ 4a defects — and each is one line in the table at the foot of this file. `T-1` and `T-2` were the
+**Everything before `T-27` is closed** — the toolchain rows, the five harness layers, the
+§ 4a defects, and `0007`'s first server-side row — and each is one line in the table at the foot of
+this file. `T-1` and `T-2` were the
 reason for the original ordering: they are the enforcement layer every later row leaned on, and what
 makes a session's claims checkable without hand-transcription. Everything since runs against CI
 rather than against a transcribed count.
 
 **The twelve open rows are one project, not a queue.** They cut
 [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md) into buildable
-steps and are listed in dependency order, not priority order: `T-26` and `T-27` are the server side
-and nothing on a contributor's machine works without them; `T-28` … `T-31` are the worker; `T-32` …
-`T-37` are policy that needs both halves in place. `T-32` and `T-33` are the two that change live
-pipeline behaviour rather than adding to it.
+steps and are listed in dependency order, not priority order: `T-27` is the remaining server-side
+row and nothing on a contributor's machine works without it; `T-28` … `T-31` are the worker; `T-32`
+… `T-37` are policy that needs both halves in place. `T-32` and `T-33` are the two that change live
+pipeline behaviour rather than adding to it. `T-38` is the exception to the dependency order: it is
+not a cut of `0007` but a gap `T-26` opened and could not close, and it belongs beside `T-27`
+rather than at the end.
 
 **None of these rows is the critical path.** [`DEV_TASKS.md`](DEV_TASKS.md)'s `OQ-3` is — the
 scoring redesign completed 2026-07-28 and has never been validated, and every row here improves a
@@ -63,12 +66,15 @@ worker — is the one that decides whether `T-27` … `T-30` were worth building
 
 ## Contributor pipeline — [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md)
 
-Twelve rows cutting `0007` into buildable steps. `0007` supersedes
+Twelve open rows, eleven of them cutting `0007` into buildable steps and `T-38` a consequence
+of one of them. `0007` supersedes
 [`0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md) decisions 1, 2 and 4;
 `0006` decision 3 — local execution, contributor's own key, own IP, never proxied — stands and is
 load-bearing for every row here. The owner-side half is `DEV_TASKS.md`'s `OQ-24` … `OQ-28`.
 
-**Baseline: all three suites are green — `1449` / `368` / `117`, all `OK`, measured 2026-08-07.**
+**Baseline: all three suites are green — `1449` / `368` / `145`, all `OK`, measured 2026-08-07.**
+The api figure was `117` when these rows were written; `T-26` added the 28 cases in
+`api/tests/test_search_query_claims.py`.
 Commands below are still scoped to a module or a grep rather than a whole-suite `OK`, which is the
 cheaper check and localizes a regression to the row that caused it.
 
@@ -81,32 +87,6 @@ whole detail page, catching the posting's own `ageLabel()` and passing only whil
 fixture's fixed `posted_at_ts` sat in that function's seven-day `"last week"` window. **Derive every
 timestamp in a test from one clock, or freeze all of them — never one of each.** `T-31` and `T-32`
 are the rows most exposed to this, since both turn on elapsed time.
-
----
-
-### T-26 — A second claim mode, over `search_queries` rows
-
-`api/query_claims.py` claims a **dataset** string in `job_ingest_state` (`try_claim_query`,
-`backend/api/query_claims.py:256`). Per-query dispatch under `0007` needs to claim a `search_queries`
-row instead, with the same two protections: the conditional `UPDATE ... WHERE claimed_at IS NULL OR
-claimed_at < ttl_cutoff` that makes granting atomic, and the `claim_granted_at` takeover check that
-`holds_claim` (`backend/api/query_claims.py:283`) exists for — the nightly pipeline rewrites
-`claimed_at` without knowing about `claimed_by`, so a naive owner check hands a stale claimant a
-write. That whole failure sequence is written out in that docstring; do not re-derive it.
-
-`search_queries` has no claim columns at all today (`backend/schema.py:1021`), so this is a DDL
-change as well as a code change, and `provision-database.py` must still create it.
-
-```bash
-cd backend
-grep -n "claimed_by\|claim_granted_at" schema.py    # today: prints nothing
-cd api && .venv/bin/python -m unittest discover -s tests
-```
-
-**Done when:** that grep names `search_queries`, the new mode's takeover test fails when
-`claim_granted_at` is dropped from the predicate (assert the guard by breaking it, the way
-`holds_claim`'s own reasoning demands), and the api suite still prints `OK` at `117` plus the new
-cases.
 
 ---
 
@@ -396,6 +376,50 @@ industries, NYC — rather than one person's résumé.
 
 ---
 
+### T-38 — Nothing advances a `search_queries` row's run statistics after a contributor submits
+
+**Found while closing `T-26`, and filed rather than folded in.** That row built the claim half of
+per-query dispatch and stopped exactly where the claim stops. The other half has no owner.
+
+On `job_ingest_state` the two halves are columns of one row, so `mark_success`
+(`backend/api/query_claims.py:356`) advances the watermark and clears the claim in one statement.
+`search_queries` splits them: the run statistics are `last_run_at`, `run_count`,
+`provider_last_used`, `result_count_last_run` and `last_result_at`, and
+`searchqueries.record_run()` (`backend/searchqueries.py:348`) says in its own docstring that it is
+**the only writer** of them. It is also the only thing that *can* be — `T-26` grants the `jobs_api`
+role UPDATE on the three claim columns and nothing else, deliberately, because a table-wide grant
+would let a contributor's submit forge a run history and silence a query for every Builder by
+writing a future `last_run_at`.
+
+**The consequence, concretely:** a contributor claims a `search_queries` row, spends their SerpApi
+credit, submits, and `release_search_query_claim` (`backend/api/query_claims.py:484`) frees the row
+with `last_run_at` untouched. `due_queries()` (`backend/searchqueries.py:303`) therefore returns it
+on the next cycle, and the next, and the credit is spent again each time. `0007` decision 4 paces
+spending against a contributor's own plan, which makes a query that is never satisfiable the most
+expensive kind of row there is.
+
+**Three shapes, and this row is where one gets picked** — do not treat the first as the default
+because it is the shortest: (1) widen the grant to `last_run_at` and friends and let `api/` write
+them, which reopens the forging argument above; (2) a narrow server-side writer in `api/` that
+calls nothing the contributor controls, taking provider and result count from the same server-side
+normalization `/submit` already applies; (3) the pipeline reconciles from `search_query_results`,
+which it already owns — no new grant at all, at the cost of the run statistics lagging by a nightly
+cycle. Say in the commit which and why; if it is a real decision rather than a mechanism, it is an
+ADR and not this row.
+
+```bash
+cd backend
+grep -n "record_run" searchqueries.py api/*.py    # today: only searchqueries.py
+cd api && .venv/bin/python -m unittest discover -s tests
+```
+
+**Done when:** a contributor's submit against a `search_queries` row leaves that row not due on the
+next `due_queries()` call, with a test that fails if the run statistics are left untouched;
+`record_run`'s "only writer" docstring is either still true or amended to say what else writes;
+and the api suite prints `OK` at `145` plus the new cases.
+
+---
+
 ## Closed — kept so citations resolve
 
 **Compacted 2026-08-07, and this is a compaction, not a deletion.** These twenty-five rows were
@@ -419,6 +443,7 @@ not assumed.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~T-26~~ | `api/query_claims.py` could lease a **dataset string** in `job_ingest_state` and nothing else; `0007`'s per-query dispatch needs to lease a `search_queries` row, which had no claim columns at all | **Closed 2026-08-07.** Three columns added to `search_queries` via `add_missing_columns` inside `schema.ensure_search_query_schema()` — **in `schema.py`, deliberately not beside the precedent it mirrors.** A `plan-verifier` pass found the row's two halves in tension: `job_ingest_state`'s three claim columns have no single owner (`claimed_at` in `lib/state.py`, reachable from `provision-database.py`; `claimed_by` and `claim_granted_at` in `api/query_claims.ensure_schema()`, which is **not** one of its five steps), so mirroring the precedent literally would have shipped a column nobody provisions — `T-19` straight back. `try_claim_search_query` is a plain conditional `UPDATE`, not an upsert: a `search_queries` row exists because a Builder saved the keyword, so a claim must never conjure one. **Both protections were asserted by breaking them**, not by reading the predicate: dropping `claim_granted_at` from `holds_search_query_claim` turns exactly one test red, and removing the parentheses around the `OR` turns exactly one other red — the second matters because without them a claim aimed at one row takes over every expired claim in the table and still reports a win. Two findings filed rather than folded in: `T-38` (nothing advances a claimed row's run statistics after a submit) and `OQ-29` (the two column-scoped GRANTs the new `REQUIRED_TABLES` entry now demands at startup) |
 | ~~T-1~~ | There was no linter and no formatter, and a tranche README said wiring one in was wrong for this repo | **Closed 2026-08-03**, `56ce823`. `ruff` adopted as a **dev-and-CI tool only**, reversing an outright ban by owner decision. `backend/pyproject.toml` carries `[tool.ruff]` and nothing else — no build backend, no packaging, because nothing here is installed as a package. Landed against a recorded baseline rather than a mass reformat: a large unreviewable diff is the exact move that produced the documents this repo deleted. In none of the three `requirements.txt`, and CI greps to prove it. Reasoning is [`docs/adr/0001`](docs/adr/0001-ruff-as-a-dev-only-linter.md) |
 | ~~T-2~~ | A live remote, no CI, no git hooks — every result verified by hand and transcribed into a commit message | **Closed 2026-08-03.** Green run: `https://github.com/liueric-dev/jobs/actions/runs/30818425894`, its three `Ran N tests` lines matching a local run exactly — the clause that mattered, because a CI job reporting green on *less* was the failure this row existed to catch. **It was red first, and that is what it bought:** a database entry point that did not exist (`T-19`), a test-isolation defect, and confirmation that the DB gating and no-skip guard both work |
 | ~~T-3~~ | The three `requirements.txt` specified floors, not pins | **Closed 2026-08-03.** All three pin `==` at the version already installed in the interpreter each file governs — the pipeline's system `python3`, `api/.venv`, `webapp/.venv`. CI installs fresh on a clean runner with no lockfile and no cache, so pinning to locally-validated versions is the same environment, not a departure from it. Every comment header untouched |

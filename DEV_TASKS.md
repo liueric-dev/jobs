@@ -17,7 +17,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-29`.**
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-30`.**
 Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
 citations to it keep resolving.
 
@@ -432,6 +432,43 @@ spending 8/day leaves very little reserve to allocate, which may settle it.
 
 **Done when:** one of the two is chosen and written into an ADR, since it constrains `T-32` and
 `T-34` and touches `OQ-15`'s documented split.
+
+---
+
+### OQ-29 — Two GRANTs on `search_queries`, or the contributor API stops starting
+
+**Why it is yours:** machine — it is a statement issued as the database owner against the deployed
+database, which no session may touch.
+
+**What:** `T-26` gave `api/query_claims.py` a claim mode over `search_queries`, so that table is now
+the seventh entry in `REQUIRED_TABLES` (`backend/api/query_claims.py:104`) and `verify_schema()`
+checks it at startup like the other six. Until these run, the service refuses to start and names the
+missing grant:
+
+```sql
+GRANT SELECT ON search_queries TO jobs_api;
+GRANT UPDATE (claimed_at, claimed_by, claim_granted_at) ON search_queries TO jobs_api;
+```
+
+**The second one is column-scoped and must stay that way.** A table-wide `GRANT UPDATE` would hand
+`jobs_api` the run statistics as well, and a contributor's submit could then forge a run history —
+writing a future `last_run_at` silences that query for every Builder. `has_table_privilege(...,
+'UPDATE')` answers TRUE for either form, so `verify_schema()` cannot tell them apart and this is the
+only place the distinction is enforced.
+
+**Refusing to start is the designed behaviour, not a regression** — the alternative is a service
+that starts cleanly and 500s on a contributor's first claim, which is the failure `REQUIRED_TABLES`
+exists to convert into a startup error, and `OQ-7` is the precedent for how that reads when nobody
+notices (the whole webapp was down for a day and the row read as a nicety). Nothing calls the new
+mode from a route yet, so there is no rush beyond the next restart of `jobs-api`.
+
+**Neither `provision-database.py` nor `init-schema` will do this for you** — no tool in this repo
+issues GRANTs, per [`docs/adr/0004`](docs/adr/0004-provision-database-issues-no-grants.md), and that
+is unchanged here.
+
+**Done when:** both statements have run as owner against the deployed database, `jobs-api` starts
+clean (`systemctl status`, not inference), and `backend/api/README.md`'s privilege table names
+`search_queries` with the column list rather than a bare UPDATE.
 
 ---
 

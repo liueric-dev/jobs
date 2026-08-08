@@ -1057,6 +1057,44 @@ def ensure_search_query_schema(conn: psycopg.Connection) -> None:
     #   deliberate trade: re-attributing on every request would make the
     #   displayed spelling change the moment someone new arrived, which is a
     #   recency channel of exactly the kind tranche_five/28 forbids.
+
+    # -- the claim columns, ADDED rather than declared ----------------------
+    #
+    # search_queries.claimed_at, .claimed_by and .claim_granted_at, in that
+    # order of dependence.
+    #
+    # Per-query dispatch (docs/adr/0007) leases a search_queries row the way
+    # api/query_claims.py already leases a job_ingest_state one: claimed_at is
+    # the lease, claimed_by is who holds it, and claim_granted_at is what
+    # claimed_at was at the moment this service granted it. The third column
+    # is not redundant -- any writer that knows only claimed_at can rewrite it
+    # under a live claimant, and an owner check reading claimed_by alone would
+    # then hand a stale claimant a write. `holds_search_query_claim` in
+    # ../api/query_claims.py carries that sequence in full.
+    #
+    # WHY add_missing_columns AND NOT THREE MORE LINES IN THE CREATE ABOVE.
+    # Every already-provisioned database has this table, so a column that
+    # exists only inside `CREATE TABLE IF NOT EXISTS` would never reach one --
+    # the statement is a no-op the moment the table is there. lib/state.py:59
+    # adds claimed_at to the watermark table for exactly this reason, and
+    # `ALTER ... ADD COLUMN IF NOT EXISTS` is avoided for the lock argument
+    # dbconn.add_missing_columns states.
+    #
+    # THIS IS NOT THE created_by THE BLOCK ABOVE REFUSES, and the difference is
+    # the whole reason it is allowed here. created_by would be permanent
+    # attribution of who asked for a query. claimed_by is a transient lease
+    # holder -- cleared on release, on success and on expiry -- and it holds a
+    # CONTRIBUTOR id (`c_<hex>`, minted in api/), not the app_user_id that
+    # identifies a Builder to the webapp. It is also absent from
+    # backend/webapp/search.py:73's QUERY_COLUMNS allowlist, so nothing renders
+    # it; that allowlist exists precisely so a column added here cannot ship to
+    # a client by default, and this is the case it was written for.
+    dbconn.add_missing_columns(conn, SEARCH_QUERIES_TABLE, [
+        ("claimed_at", "TEXT"),
+        ("claimed_by", "TEXT"),
+        ("claim_granted_at", "TEXT"),
+    ])
+
     conn.execute(f"""
         CREATE TABLE IF NOT EXISTS {SEARCH_WATCHERS_TABLE} (
             query_id BIGINT NOT NULL REFERENCES {SEARCH_QUERIES_TABLE}(id)
