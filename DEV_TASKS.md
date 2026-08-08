@@ -12,46 +12,41 @@ argument and stay one sentence. Those documents were deleted on 2026-08-02 -- DE
 AUDIT.md, OPEN-QUESTIONS.md and the task files are all behind refactor-freeze-2026-08-02 now --
 so the "How to do it" column absorbed them. Raised once, deliberately, with the reason recorded.
 The spec's rule applies from here: past 450, move narrative out rather than raise the number.
+
+T-47 tried that on 2026-08-08 and could not: 711 pruned to 534, and filing the finding as OQ-34
+put it at 565. The shortfall is the row's own finding, not an unfinished job. Nothing could be
+moved out -- an open row is an unsettled question by definition, so docs/adr/ cannot hold one,
+T-43's freeze question is unanswered, and .claude/CLAUDE.md rules out a third file -- so only
+prose could go, and it did. No row, no open question, no option in a decision, no date and no
+file:line was dropped; the citation set was diffed before and after to prove it. What is left is
+options and "why a session cannot answer this", which is what the budget exists to protect rather
+than trim. OQ-34 carries the three ways out. Everything cut is in git at 9a05925.
 -->
 
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-34`.**
-Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
-citations to it keep resolving.
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-35`.** Numbers are
+never reused and never renumbered; `OQ-7` is closed and stays in the table so citations resolve.
 
-**Every row here needs you.** A session cannot start any of them: each needs a machine, an
-account, a device, other people, or a decision only you can take. That is what makes this the
-critical path and the least visible thing in the repo.
+**Every row here needs you.** A session cannot start any of them: each needs a machine, an account,
+a device, other people, or a decision only you can take — the critical path, and the least visible
+thing in the repo. Session-doable work is not here; it is in [`TASKS.md`](TASKS.md), which owns
+`T-`. Do not move rows between the two; between them, that is meant to be the whole list. This is
+Part A of `git show
+refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_nine/53-owner-queue-and-changelog.md`, which
+specified it under `docs/` as OWNER-QUEUE.md; Part B was never built and is `T-9` now.
 
-It is Part A of `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_nine/53-owner-queue-and-changelog.md`,
-which specified it under `docs/` as OWNER-QUEUE.md — same six columns, same `OQ-` namespace, at
-the root under the name you asked for. Part B was never built; it is `T-9` now.
+**How to use it.** Sort on *Why it is yours*: `decision` rows are free and unblock work immediately,
+`account` and `device` rows cost money or a signup, and `people` rows have a lead time you cannot
+compress — so start those first even though they finish last. **Do not restate these rows
+elsewhere**; link here. When a row closes, strike it and keep it.
 
-**How to use it.** The *Why it is yours* column is the one to sort on, because it says whether
-waiting helps. `decision` rows are free and unblock work immediately — nothing is stopping them
-but you. `account` and `device` rows cost money or a signup. `people` rows have a lead time you
-cannot compress, so start them first even though they finish last.
-
-**Do not restate these rows elsewhere** — link here. When a row closes, strike it and keep it.
-
----
-
-## The one-minute version
-
-| if you have | do this |
-|---|---|
-| **5 minutes** | `OQ-9` — pick the floor of record. Every model figure you or anyone quotes is provisional until you do |
-| **a few minutes, and needs a phone screen to look at first** | `OQ-19` — the funding half is done: the cohort's nightly narrative budget went to 200 on 2026-08-05 and Builders are already seeing a `gap_bridging_angle`. What is open now is only the display question — does a personal narrative replace the cohort one or sit beside it |
-| **a week of lead time, once the MVP has shipped** | `OQ-3` — line up labellers for round 2. This is the gate the scoring redesign's *validation* is waiting on, not the MVP itself |
-
-**`OQ-3` validates whether the scoring redesign worked; it does not gate shipping.** The redesign
-completed 2026-07-28 and has never been validated — GATE 4 of the master plan needs labels that
-do not exist yet — but `score_job()` already runs and the frontend already displays its output
-independent of any label. Owner decision 2026-08-04: `OQ-3` is deliberately sequenced after the
-MVP ships (see the row itself). Everything else on this list improves or validates a system that
-already works for users, it does not unblock it.
+**Start `OQ-3` today**, for the lead time alone. **It does not gate shipping:** the 2026-07-28
+scoring redesign has never been validated — GATE 1 came in at 16/20 and 10/20 against a definition
+of done asking 20/20, GATE 4 has never been attempted — but `score_job()` is pure, reads no label
+table, and the frontend has been showing its output throughout. Every row in both files improves a
+system that already works, not one waiting to be unblocked.
 
 ---
 
@@ -59,333 +54,238 @@ already works for users, it does not unblock it.
 
 ### OQ-3 — More labellers on the same ten overlap rows, and round 2
 
-**Why it is yours:** people. Longest lead time on the list; start it today even though it
-finishes last. **Deliberately deferred past the MVP, 2026-08-04** — see below.
+**Why it is yours:** people. Longest lead time here; start it today even though it finishes last.
+**Deferred past the MVP deliberately, 2026-08-04** — easier to recruit once people see the app work.
 
 **What:** Round 2 is due around 2026-08-09 and needs ≥100 distinct postings from ≥5 labellers.
-Today there are 2 labellers, 36 postings, and **10 rows of overlap**.
+Today: 2 labellers, 36 postings, **10 rows of overlap**. More *postings* do nothing — 25 of the 36
+carry a single labeller and add exactly zero to the ceiling; what is needed is **more people
+labelling the same ten rows**. Recruiting can widen past the cohort: the access gate
+(`backend/webapp/manage_app_users.py add`) is an allowlist by email, not a cohort check. Progress:
+`cd backend && python3 -m evals label status`. It unblocks task 13's weights, task 12's next
+`FACTS_VERSION` bump, `OQ-5` and GATE 4, and un-denominates every model-vs-human figure in the repo.
 
-**This does not block the MVP or anything a user sees.** `match_score`/`fit_score` are computed
-by `score_job()`, which is pure and reads no label table — the frontend already displays scores
-today with zero dependency on this row. Owner decision 2026-08-04: recruiting more labellers is
-easier once people can see the app working, so this is sequenced **after** the MVP ships, not
-before. Recruiting can still widen past the cohort when it resumes — the access gate
-(`backend/webapp/manage_app_users.py add`) is an allowlist by email, not a cohort-membership
-check.
-
-**How to do it, once resumed.** More *postings* do nothing — 25 of the 36 carry a single
-labeller and add exactly zero to the ceiling. What is needed is **more people labelling the same
-ten rows**. Point each at the labelling flow, and check progress with:
-
-```bash
-cd backend && python3 -m evals label status
-```
-
-**What it unblocks:** task 13's weights, task 12's next `FACTS_VERSION` bump, `OQ-5`'s staged
-`revenue_commercial` archetype, and GATE 4 of the master plan — which is the gate that says
-whether the 2026-07-28 scoring redesign worked. (Previously this line also named task 30; that
-was closed independently via `OQ-8` on 2026-08-03 using `extract.ROLE_TRACK`, without needing
-these labels — struck here since it no longer depends on this row.) It also un-denominates every
-model-vs-human figure in the repo, all of which are currently computed against a ceiling derived
-from those 10 rows.
-
-**Done when:** `evals label status` shows ≥5 labellers on the overlap set, and the recomputed
-human ceiling sits **above** the model floor on at least the fields it currently sits below.
-
----
+**Done when:** `evals label status` shows ≥5 labellers on the overlap set, and the recomputed human
+ceiling sits **above** the model floor on at least the fields it currently sits below.
 
 ### OQ-5 — Apply the `revenue_commercial` archetype, once round 2 closes
 
-**Why it is yours:** decision, and it is partly a one-way door. **Decided 2026-08-03, staged
-rather than applied** — this is now a timing row, not an open question.
+**Why it is yours:** decision, partly a one-way door. **Decided 2026-08-03, staged rather than
+applied** — a timing row now, not an open question.
 
-**What:** Proposed in `DEC-64`/`DEC-65`, apply it. Checked before touching anything, per this
-row's own "weigh how many that is before deciding": `python3 -m evals label status` shows **all
-271 labels collected so far (2 labellers) are unrecorded provenance** — every one predates
-`DEC-95`'s facts_version-stamping fix, so none of them would survive a re-extraction. `job_facts`
-is keyed on `job_id` alone (`backend/schema.py`), with no version history, so a bump now would
-silently overwrite the exact facts every current label was formed against, on the corpus round
-`OQ-3` calls the single highest-priority item in this whole file (due ~2026-08-09).
+**What:** Proposed in `DEC-64`/`DEC-65`. `evals label status` shows **all 271 labels collected so far
+(2 labellers) are unrecorded provenance**, every one predating `DEC-95`'s facts_version-stamping fix,
+so none would survive a re-extraction; `job_facts` is keyed on `job_id` alone (`backend/schema.py`)
+with no version history, so bumping now silently overwrites the exact facts every current label was
+formed against, on the corpus `OQ-3` relabels ~2026-08-09.
 
-**How to do it, once round 2 closes:**
+**How to do it, once round 2 closes** — six steps, landing together in one change:
 
-1. Add `"revenue_commercial"` to `extract.ARCHETYPE` (27th value).
-2. Bump `schema.FACTS_VERSION` 3 → 4 (both vocabularies interpolate into `extract._INSTRUCTIONS`,
-   whose own comment asks for a bump on exactly this kind of change).
-3. Price it in both criteria files — **already decided and staged as a `_comment` in each,
-   so this step is transcription, not re-deriving**: `config/criteria.json` → **-30** (the
-   `marketing_ops`/`pm` tier — non-technical commercial/GTM work, off the author's SWE target);
-   `config/pursuit-criteria.json` → **10** (the `solutions`/`it_internal`/`business_systems`
-   bridge tier — 63% of the pursuit `other` rows that got a `role_track` at all landed on
-   `business_operations` or `revenue_operations`, so this is a plausible entry-level reach).
-4. Bump the count at `tests/test_extract.py`'s ARCHETYPE-length assertion, 26 → 27.
-5. Consider adding one disambiguating clause to `_INSTRUCTIONS` for the `revenue_commercial` vs
-   `solutions` overlap (pre-sales solutions architecture reads as either) — the same tension
-   `implementation_analyst` already carries against `forward_deployed`/`solutions`.
-6. Let the next nightly run re-extract, or run `extract.py` by hand. Not a cost question —
-   task 12 measured a full re-extraction at 863 calls / ~28 min / ~\$0.33.
+1. Add `"revenue_commercial"` to `extract.ARCHETYPE` (27th value); `role_archetype = other` stops
+   being a catch-all for commercial/GTM work.
+2. Bump `schema.FACTS_VERSION` 3 → 4 — both vocabularies interpolate into `extract._INSTRUCTIONS`,
+   whose comment asks for a bump on exactly this change.
+3. Price it in both files — **staged as a `_comment` in each, so this is transcription**:
+   `config/criteria.json` → **-30** (the `marketing_ops`/`pm` tier, off the author's SWE target);
+   `config/pursuit-criteria.json` → **10** (the `solutions`/`it_internal`/`business_systems` bridge
+   tier — 63% of pursuit `other` rows with a `role_track` landed on `business_operations` or
+   `revenue_operations`).
+4. Bump `tests/test_extract.py`'s ARCHETYPE-length assertion, 26 → 27.
+5. Consider a disambiguating clause in `_INSTRUCTIONS` for `revenue_commercial` vs `solutions`
+   (pre-sales solutions architecture reads as either).
+6. Re-extract nightly or by hand — task 12 measured a full re-extraction at 863 calls / ~28 min /
+   ~\$0.33, so this is not a cost question.
 
-**What it unblocks:** `role_archetype = other` stops being a catch-all for commercial/GTM work.
-
-**Done when:** round 2 closes, the five steps above land together in one change, and the two
-staged `_comment`s are replaced by real `archetypes` entries.
-
----
+**Done when:** round 2 closes, the six steps land together, and the two staged `_comment`s become
+real `archetypes` entries.
 
 ### OQ-17 — The archetype/track vocabularies read tech-leaning; review after round 2
 
-**Why it is yours:** decision, and a genuinely bigger one than OQ-5 — this is a request to
-re-examine the whole superset, not just add one value.
+**Why it is yours:** decision, and bigger than `OQ-5` — it asks to re-examine the whole superset, not
+to add one value. Flagged 2026-08-03 alongside it.
 
-**What:** Flagged 2026-08-03 alongside OQ-5. Both vocabularies say this about themselves
-already: `extract.ROLE_TRACK`'s own comment calls its nine values "PROVISIONAL" and derived
-from "a pre-Phase-3 corpus" that is "overwhelmingly software companies and ATS-clean postings,"
-and `config/pursuit-criteria.json`'s `_archetypes_other_comment` says the 26-value `ARCHETYPE`
-superset was "derived from a tech-heavy corpus" and that 44% of the actual cohort corpus —
-entry-level, all-industry, NYC — goes unnamed by it. So the "options lean toward tech" read is
-not a misimpression; it is a documented, load-bearing caveat in the code, not yet acted on.
+**What:** Both vocabularies say it about themselves already. `extract.ROLE_TRACK`'s comment calls its
+nine values "PROVISIONAL" and derived from "a pre-Phase-3 corpus" that is "overwhelmingly software
+companies and ATS-clean postings"; `config/pursuit-criteria.json`'s `_archetypes_other_comment` says
+the 26-value `ARCHETYPE` superset was "derived from a tech-heavy corpus" and that 44% of the actual
+cohort corpus goes unnamed by it. A documented, load-bearing caveat in the code, not a misimpression.
 
-**How to do it.** `backend/tools/derive-role-tracks.py` exists precisely to re-run this
-derivation, and its own task file (deleted, behind `refactor-freeze-2026-08-02`) sequenced the
-re-run for **after Phase 3** adds non-tech sourcing — which has not landed yet. Re-running it
-today would re-derive a vocabulary from the same tech-heavy corpus that produced the one being
-questioned. Before spending a session on this: (1) check whether Phase 3 sourcing has landed
-enough non-tech employers to change the corpus mix meaningfully, (2) if not, this is a
-re-derivation to schedule after that lands, not before; (3) if it has, re-run
-`derive-role-tracks.py --archetypes --tracks` and read the result against the same
-employer-spread discipline `git show refactor-freeze-2026-08-02:docs/role-track-derivation.md`
-used (read `emp` first — a
-candidate whose mass sits at one employer is that employer's hiring spree, not a vocabulary
-gap).
+**How to do it.** `backend/tools/derive-role-tracks.py` re-runs the derivation, but its own task file
+(deleted, behind `refactor-freeze-2026-08-02`) sequenced that for **after Phase 3** adds non-tech
+sourcing, which has not landed — re-running today re-derives the vocabulary from the same corpus that
+produced the one being questioned. So: check whether Phase 3 has moved the corpus mix; if not,
+schedule this after it lands; if it has, run `derive-role-tracks.py --archetypes --tracks` and read
+the result against the employer-spread discipline `git show
+refactor-freeze-2026-08-02:docs/role-track-derivation.md` used — read `emp` first, because a
+candidate whose mass sits at one employer is that employer's hiring spree, not a vocabulary gap.
 
-**What it unblocks:** a vocabulary that describes the all-industry NYC cohort this pipeline
-now serves, rather than the original SWE-focused, tech-heavy corpus it was derived from.
-
-**Done when:** either Phase 3 sourcing is confirmed to have landed and the re-derivation is
-run and reviewed, or this row is struck with the reason it is still premature.
-
----
+**Done when:** either Phase 3 sourcing is confirmed landed and the re-derivation is run and reviewed,
+or this row is struck with the reason it is still premature.
 
 ### OQ-4a — One clock left, nothing to do but wait
 
-**Why it is yours:** machine. No account needed — this one is just a terminal, and as of
-2026-08-04 there is nothing left to type. All 13 tracked units are installed and enabled, and
-`systemctl --user list-unit-files 'jobs-*'` shows a clean list — no `bad` entries. `jobs-backup.
-timer` and `jobs-backup-verify.timer` joined the rest today, once `OQ-4b`'s off-machine
-destination existed to make them meaningful.
+**Why it is yours:** machine — but as of 2026-08-04 there is nothing left to type. All 13 tracked
+units are installed and enabled, `systemctl --user list-unit-files 'jobs-*'` shows no `bad` entries,
+and `jobs-backup.timer`/`jobs-backup-verify.timer` joined once `OQ-4b`'s off-machine destination
+existed to make them meaningful.
 
-**`jobs-volume-digest.timer`/`.service` were deleted from the repo, and are now fully
-un-installed.** Decided 2026-08-04: a weekly Telegram report nobody reads is exactly the kind of
-alert that trains a channel to be ignored — same failure mode `jobs-volume-digest.service`'s own
-comment warned about for its sibling alarm ("an alert about a failed report is how a channel
-stops being read"), just applied one level up. `backend/tools/volume-check.py --digest` still
-exists for a manual check-in; only the automation is gone. The initial deletion left two dangling
-symlinks behind at `~/.config/systemd/user/jobs-volume-digest.{service,timer}` (`systemctl --user
-list-unit-files` reported both `bad`) — found and removed 2026-08-04, `daemon-reload` run, list
-is clean.
+**`jobs-volume-digest.timer`/`.service` were deleted and are fully un-installed.** Decided
+2026-08-04: a weekly Telegram report nobody reads is the kind of alert that trains a channel to be
+ignored — the failure mode that unit's own comment warned about for its sibling alarm, one level up.
+`backend/tools/volume-check.py --digest` remains for a manual check-in; only the automation is gone.
 
-**Not closeable today, and it is not yours to fix:** `python3 tools/volume-check.py` needs a few
-days of nightly history before it reports a real comparison instead of `insufficient history` on
-every source. That part is a clock, not a task — check back after a few more `jobs-ingest.timer`
-runs.
+**Not closeable today, and not yours to fix:** `volume-check.py` needs a few days of nightly history
+before it reports a real comparison. That is a clock, not a task.
 
 **Done when:** `python3 tools/volume-check.py` reports a comparison rather than
 `insufficient history` on every source.
 
----
-
 ### OQ-13 — Registrations that block work: Adzuna, USAJobs, Firecrawl
 
-**Why it is yours:** account. Each is a signup you have to do. **Re-checked 2026-08-04: Firecrawl
-is already registered**, so only Adzuna and USAJobs remain open.
+**Why it is yours:** account. Each is a signup you have to do. **Re-checked 2026-08-04: Firecrawl is
+already registered**, so only Adzuna and USAJobs remain open.
 
 **What:** Task 15 has **no commit and no code at all** — it is blocked on an Adzuna
 `app_id`/`app_key`. `backend/tools/ats-discover.py:55-60` documents the seam and says so:
-`adzuna_top_companies()` is stubbed, and filling it in flows employers into `ats_seed` with no
-other change. Firecrawl blocks task 20 — but **`FIRECRAWL_API_KEY` is already set in
-`backend/webapp/.env`** (populated, `fc-…` prefix, present since 2026-08-04's deploy). Nothing in
-the tree reads it yet (`grep -rn FIRECRAWL_API_KEY **/*.py` is empty — task 20 has no code
-either), and it is filed in `webapp/.env`, not `backend/.env`, so whoever picks up task 20 should
-confirm that's the right process for it to live in before writing code against it.
+`adzuna_top_companies()` is stubbed, and filling it in flows employers into `ats_seed` with no other
+change. Firecrawl blocks task 20 — but **`FIRECRAWL_API_KEY` is already set in
+`backend/webapp/.env`** (populated, `fc-…` prefix, present since 2026-08-04's deploy). Nothing reads
+it yet, and it sits in `webapp/.env` rather than `backend/.env`, so whoever picks up task 20 should
+confirm that is the right process for it before writing code.
 
-**How to do it.** Register for Adzuna and USAJobs, put the credentials in `backend/.env`, and
-hand tasks 15 and 20 to a session. Adzuna is free for low volume; check USAJobs' terms before
-relying on it.
-
-**Done when:** the Adzuna and USAJobs keys are in `backend/.env` and the stubs are no longer
-stubs.
-
----
+**Done when:** the Adzuna and USAJobs keys are registered and in `backend/.env` — Adzuna is free for
+low volume, and check USAJobs' terms before relying on it — and the stubs are no longer stubs.
 
 ### OQ-18 — The personal scoring layer's own validation plan is blocked by a rule this repo chose on purpose
 
 **Why it is yours:** decision. Both available answers are defensible and the code cannot pick.
 
-**What:** The draft's plan was to validate the premise cheaply and server-side: score the same
-postings with a hand-authored personal persona and with the cohort's, and compare both against your
-own Axis B labels. **That comparison cannot be printed today, and the
-refusal is deliberate rather than a missing feature.** `evals label report`
+**What:** The plan was to score the same postings with a hand-authored personal persona and with the
+cohort's, and compare both against your own Axis B labels. **That comparison cannot be printed today,
+and the refusal is deliberate rather than a missing feature.** `evals label report`
 (`backend/evals/__main__.py:653-655`) is the only model-vs-human command and it exits 2 while there
 is one labeller, because *"model-vs-human is uninterpretable without a floor and a ceiling beside
 it"* (`backend/evals/labels.py:39-45`). There is deliberately no `--force`, and
 `backend/tools/label-findings.py:25-35` says it is not a way around that. The ceiling needs a second
-labeller — `OQ-3`, which you sequenced *after* the MVP on 2026-08-04.
+labeller — `OQ-3`. `n=1` is a property of the situation, not a flaw in the plan.
 
-**How to do it.** Name one of three:
-
-1. **A paired comparison rather than an agreement rate.** "Which of two personas agrees better
-   against the same labels" is not the per-item accuracy the guard is about, and `labels.ordering()`
-   (`backend/evals/labels.py:2479`) and `labels.recall_bound()` (`backend/evals/labels.py:2418`) are
-   both axis-B aware and neither is an agreement rate.
-2. **Wait for `OQ-3`.** Correct and slow: the personal layer ships unvalidated or waits.
-3. **Build it unvalidated and say so** — it annotates and never orders, so a bad narrative costs a
-   Builder some words, not a ranking.
-
-`n=1` is a property of the situation, not a flaw in the plan: you are the only person who can label
-for themselves. **What it unblocks:** the sequencing of the feature — `T-22` is independent either
-way.
+**How to do it.** Name one of three. (1) **A paired comparison rather than an agreement rate** — not
+the per-item accuracy the guard is about, and `labels.ordering()` (`backend/evals/labels.py:2479`)
+and `labels.recall_bound()` (`backend/evals/labels.py:2418`) are both axis-B aware and neither is an
+agreement rate. (2) **Wait for `OQ-3`** — correct and slow. (3) **Build it unvalidated and say so** —
+it annotates and never orders, so a bad narrative costs a Builder words, not a ranking. `T-22` is
+independent either way.
 
 **Done when:** one of the three is chosen and written into an ADR under `docs/adr/`, since it either
 reverses or ratifies a documented position.
-
----
 
 ### OQ-19 — Cohort narratives went live on 2026-08-05; does a personal one replace them or sit beside them?
 
 **Why it is yours:** decision. Its funding half answered itself while these rows were being written.
 
 **What:** This row was drafted claiming the `pursuit` cohort's `daily_narrative_budget` was zero, so
-no Builder had ever seen a `gap_bridging_angle` and a personal narrative would be the only one on
-screen. **That was false within hours of being written, and the code still says it.** The live
-`profiles` row carries a budget of **200**, changed 2026-08-05, and `job_scores` holds 178 `pursuit`
-rows with a populated `gap_bridging_angle`, scored the same night against
-`deepseek-v4-flash`. Cohort narratives are real, and the cards have been rendering them since.
+no Builder had ever seen a `gap_bridging_angle`. **That was false within hours of being written, and
+the code still says it.** The live `profiles` row carries a budget of **200**, changed 2026-08-05,
+and `job_scores` holds 178 `pursuit` rows with a populated `gap_bridging_angle`, scored that night
+against `deepseek-v4-flash`. So the display question is the whole question: show both, labelled — one
+is what the cohort sees, one is yours, and the two disagreeing is honest — or replace the cohort one
+in place. The first is more honest and busier; the second is cleaner and hides a disagreement the
+Builder might want to see. One constraint either way: `frontend/js/ui.mjs:13` — *"NO SCORE, ANYWHERE.
+Not match_score, not fit_score."* A personal **narrative** is in scope; a personal **score** is not.
+**Look at one on a phone first** — nobody has seen a real `gap_bridging_angle` render, and its length
+decides whether two fit on one screen.
 
-**So the display question is the whole question now.** The detail screen can show both, labelled —
-one is what the cohort sees, one is yours, and the two disagreeing is honest — or the personal one
-can replace the cohort one in place. The first is more honest and busier; the second is cleaner and
-hides a disagreement the Builder might want to see. One constraint either way:
-`frontend/js/ui.mjs:13` — *"NO SCORE, ANYWHERE. Not match_score, not fit_score."* A personal
-**narrative** is in scope; a visible personal **score** is not.
-
-**Look at one on a phone first.** Nobody has seen a real `gap_bridging_angle` render — `OQ-14`'s
-phone test predates the scoring pass by a day — and its length and tone decide whether two of them
-fit on one screen at all.
-
-**Done when:** replace-in-place or side-by-side is chosen, having looked at a real rendered
-narrative first, and `TASKS.md`'s `T-24` has corrected the three places in the code that still say
-this budget is zero.
-
----
+**Done when:** replace-in-place or side-by-side is chosen, having looked at a real rendered narrative
+first, and `TASKS.md`'s `T-24` has corrected the three places in the code that still say this budget
+is zero.
 
 ### OQ-20 — `localStorage` is plaintext, and this cohort may be sharing devices
 
 **Why it is yours:** decision, about people you know and this codebase does not.
 
-**What:** The personal layer runs in the Builder's browser on the Builder's own API key, which has
-to be stored somewhere. `localStorage` is the only real option in a client with no build step, and
+**What:** The personal layer runs in the Builder's browser on the Builder's own API key, which has to
+be stored somewhere. `localStorage` is the only real option in a client with no build step, and
 anything else running in that browser profile can read it — including the next person to use that
-computer. The superseded draft framed the Builder's exposure as being to their chosen LLM provider
-rather than to the operator, which is true and incomplete: **the third party that matters here is
-whoever else uses that browser.**
-
-Worth knowing first: the client stores **nothing** in web storage today — that grep is empty and all
+computer. The earlier framing had the Builder's exposure running to their LLM provider rather than to
+the operator, which is true and incomplete: **the third party that matters here is whoever else uses
+that browser.** The client stores **nothing** in web storage today — that grep is empty, and all
 state rides the session cookie on the webapp's own origin (`frontend/js/api.mjs:27`).
 
 **How to do it.** Answer one question: do Builders in this cohort share machines — a lab, a library,
-a family computer? If yes, the options are session-only storage (re-paste each visit: annoying,
-safe) or no stored key at all. If no, `localStorage` plus a plain warning is proportionate. It
-unblocks the storage half of the client feature and does not block `T-22`.
+a family computer? If yes, the options are session-only storage (re-paste each visit: annoying, safe)
+or no stored key at all. If no, `localStorage` plus a plain warning is proportionate. Does not block
+`T-22`.
 
 **Done when:** the answer is known from the cohort rather than assumed, and the chosen storage is
 written into the row that builds the client.
-
----
 
 ### OQ-21 — Is the class-issued Groq key real, still valid, and one key or thirty?
 
 **Why it is yours:** account. Nobody but you can check it.
 
 **What:** The cost argument assumes each Builder brings their own key, and the draft says the cohort
-was issued Groq keys as part of the class. If that is stale, or if it is one key shared across
-thirty people, both the economics and the rate-limit behaviour change — a shared key means one
-Builder's burst throttles everyone else's narratives.
-
-**How to do it.** Confirm with Pursuit whether the keys were issued, are still valid and are
-per-person. Do not design around Groq either way: `backend/llm.py:7-13` already speaks to four
-providers over one wire format and `backend/llm.py:206-208` takes per-call `model` and `base_url`
-overrides — parameters, not UI copy. It unblocks nothing structural, only how the client asks.
+was issued Groq keys as part of the class. If that is stale, or if it is one key shared across thirty
+people, both the economics and the rate-limit behaviour change — a shared key means one Builder's
+burst throttles everyone else's narratives. Confirm with Pursuit whether the keys were issued, are
+still valid and are per-person. Do not design around Groq either way: `backend/llm.py:7-13` already
+speaks to four providers over one wire format and `backend/llm.py:206-208` takes per-call `model` and
+`base_url` overrides — parameters, not UI copy. It unblocks nothing structural, only how the client
+asks.
 
 **Done when:** you know whether the keys exist, are current and are per-Builder, and it is written
 into this row.
-
----
 
 ### OQ-24 — The cohort OS census, before `0007` decision 7 is final
 
 **Why it is yours:** people. Nobody can count thirty laptops from a terminal.
 
-**What:** [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md)
-decision 7 makes Windows manual-run-only, on the ground that "the cohort is overwhelmingly Mac" —
-the one claim in `0007` resting on an unmeasured fact, and `TASKS.md`'s `T-29` (a launchd agent, so
+**What:** [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md) decision
+7 makes Windows manual-run-only, on the ground that "the cohort is overwhelmingly Mac" — the one
+claim in `0007` resting on an unmeasured fact, and `TASKS.md`'s `T-29` (a launchd agent, so
 macOS-only) is built entirely on top of it. If the Windows share is a third rather than a handful,
-`T-29` covers a minority and Scheduled Tasks stops being out of scope.
-
-**How to do it.** Ask. One question in the cohort channel. **Count Linux separately** rather than
-folding it into "not Mac" — a Linux Builder can be handed a `systemd --user` timer for the cost of
-one file, which is a different answer from Windows.
+`T-29` covers a minority and Scheduled Tasks stops being out of scope. Ask: one question in the
+cohort channel. **Count Linux separately** rather than folding it into "not Mac" — a Linux Builder
+can be handed a `systemd --user` timer for the cost of one file, a different answer from Windows.
 
 **Done when:** the Mac / Windows / Linux split is known from the cohort rather than assumed and is
 written into this row. A changed answer is a new ADR, not an edit to `0007`.
-
----
 
 ### OQ-25 — Watch one Builder install the worker end to end, and record where they stall
 
 **Why it is yours:** people, and a room. This cannot be simulated by whoever wrote the installer.
 
-**What:** `0007`'s premise is that the expensive part of onboarding was never the credential — it
-was installing software on a personal machine, which `OQ-12` measured at zero contributors. `T-27`
-… `T-30` are four guesses about where that friction actually lives. One watched install says which
-of the four mattered and which was invented, including whether `--check`'s output means anything to
-a reader — the criterion `T-30` explicitly declines to invent, because plain language is a human
-judgement.
-
-**Sit with them and say nothing.** The instinct to help destroys the measurement. Write down where
-they hesitate, what they read, and what they typed instead of what the instructions said.
+**What:** `0007`'s premise is that the expensive part of onboarding was never the credential — it was
+installing software on a personal machine, which `OQ-12` measured at zero contributors. `T-27` …
+`T-30` are four guesses about where that friction lives. One watched install says which of the four
+mattered and which was invented, including whether `--check`'s output means anything to a reader —
+the criterion `T-30` explicitly declines to invent, because plain language is a human judgement.
 
 **How to do it.** One Builder, one machine that is not yours, the real opt-in flow, no shell access
-for you, fifteen minutes. Before writing installer documentation, not after.
+for you, fifteen minutes, before writing installer documentation rather than after. **Sit with them
+and say nothing** — the instinct to help destroys the measurement. Write down where they hesitate,
+what they read, and what they typed instead of what the instructions said.
 
 **Done when:** one non-author install has been watched start to finish and the stall points are
 written into this row — including "none", if that is the honest answer.
-
----
 
 ### OQ-26 — The metric that replaces `OQ-12`'s zero, and the signal that reopens decision 6
 
 **Why it is yours:** decision. Picking the number you will be judged by is not delegable.
 
 **What:** `OQ-12` closed on a count of zero minted credentials — a metric that could only go up and
-said nothing about whether the system works. Two things need naming:
-
-1. **The replacement metric.** None is obviously right: *contributors with a check-in in the last 7
-   days* measures liveness and ignores value; *queries dispatched per week* measures throughput and
-   flatters a contributor spending credits on nothing anyone watches; *postings reaching
-   `search_query_results` that no other source produced* measures the only thing that justifies the
-   arrangement and is the hardest to attribute. Pick one, and say what number would mean this was
-   not worth building.
-2. **The empty-claim rate that reopens `0007` decision 6.** Decision 6 defers the leech path until
-   the rate shows spare capacity exists. That becomes measurable once `T-35` reports check-ins, but
-   "shows it exists" is not a number. Name one.
-
-**Pick before the data arrives.** Both depend on `T-35` landing, since nothing today records a poll
-that was granted nothing — choosing the metric afterwards is choosing the flattering one.
+said nothing about whether the system works. Two things need naming. **(1) The replacement metric**,
+where none is obviously right: *contributors with a check-in in the last 7 days* measures liveness
+and ignores value; *queries dispatched per week* measures throughput and flatters a contributor
+spending credits on nothing anyone watches; *postings reaching `search_query_results` that no other
+source produced* measures the only thing that justifies the arrangement and is the hardest to
+attribute. Pick one, and say what number would mean this was not worth building. **(2) The
+empty-claim rate that reopens `0007` decision 6**, which defers the leech path until the rate shows
+spare capacity exists — measurable once `T-35` reports check-ins, but "shows it exists" is not a
+number. **Pick both before the data arrives:** nothing today records a poll that was granted nothing,
+and choosing the metric afterwards is choosing the flattering one.
 
 **Done when:** one metric and one threshold are named, and the decision 6 half is written into an
 ADR, since it either ratifies or reverses a documented position.
-
----
 
 ### OQ-27 — Offboarding at cohort end
 
@@ -401,28 +301,19 @@ questions the code cannot answer:
   (`backend/schema.py:1045`), so a keyword survives its Builder by construction. That was a privacy
   decision, and it makes this question harder rather than easier.
 - **The config file on a returned machine.** `T-28` puts a credential in a plaintext `config.json`.
-  If the laptop is Pursuit-issued and passed on, that file goes with it. Say whether `--uninstall`
-  removes the credential too — and note that a Builder who never runs it is the common case.
+  If the laptop is Pursuit-issued and passed on, that file goes with it.
 
-**The third had a deadline the others do not, and it has now passed in full.** It was only cheap
-while `T-28` and `T-29` were unbuilt. `T-28` closed on 2026-08-08 and the worker began reading a
-plaintext `config.json` beside itself; `T-29` closed the same day and shipped the `--uninstall` that
-would have owned the removal. **It does not remove it.** That is not the decision being made by
-default — the row declined to make it, `--uninstall` names the file and its credential in its own
-output and deletes nothing, and `api/tests/test_worker_install.py`'s
-`test_it_removes_the_schedule_and_leaves_the_credential` pins that declining answer so reversing it
-is a deliberate edit to a named test rather than a silent one.
-
-**So the shape of this question has changed and its cost has not gone up much.** It is no longer
-"decide before the code exists"; it is "decide, then change one function and one test". What did get
-more expensive is the machines already installed: every Builder who opts in from here has a
-plaintext credential on disk that nothing this repo ships will remove, and a decision to start
-removing it does not reach a laptop that already ran `--uninstall`.
+**The third had a deadline the others do not, and it has passed.** `T-28` and `T-29` both closed
+2026-08-08 and the shipped `--uninstall` **does not remove the credential** — a declining answer the
+row made deliberately, pinned by `api/tests/test_worker_install.py`'s
+`test_it_removes_the_schedule_and_leaves_the_credential`, so reversing it is a deliberate edit to a
+named test. The question is now "decide, then change one function and one test". What did get more
+expensive is the machines already installed: every Builder who opts in from here has a plaintext
+credential on disk that nothing this repo ships will remove, and a later decision to remove it does
+not reach a laptop that already ran `--uninstall`.
 
 **Done when:** all three are answered, and the third is either written into a new `T-` row that
 changes `uninstall_agent()` and its test, or recorded here as deliberately unchanged.
-
----
 
 ### OQ-28 — Is the operator's own SerpApi key contributor zero, or a separate pool?
 
@@ -431,26 +322,20 @@ changes `uninstall_agent()` and its test, or recorded here as deliberately uncha
 **What:** `0007` paces every contributor against their own plan (`T-32`) behind a reserve floor
 (`T-34`). The operator's key is not in that system at all: the nightly bucketed sweep
 (`ingest/google-serpapi.py`) spends `SERPAPI_DAILY_QUERY_BUDGET` outside the claim mechanism, and
-`OQ-15` closed on keeping that split permanent. Does the operator's key **also** enroll — so one
-mechanism governs everything and the nightly sweep becomes one participant among thirty — or stay
-separate, making the crowdsourced path purely additive?
-
-**Each way.** Enrolling means one mechanism, one place spending is visible, and the operator's key
-gets the same reserve-floor protection. Staying separate means the path that produces most of what
-this pipeline ingests cannot be starved by a claim storm — `OQ-15`'s argument against merging two
-live nightly paths, one level up.
-
-**Check the arithmetic against whichever you pick:** 250 searches/month against a sweep already
-spending 8/day leaves very little reserve to allocate, which may settle it.
+`OQ-15` closed on keeping that split permanent. Does the operator's key **also** enroll — one
+mechanism governing everything, the nightly sweep one participant among thirty — or stay separate,
+making the crowdsourced path purely additive? Enrolling means one mechanism, one place spending is
+visible, and the same reserve-floor protection for your own key. Staying separate means the path
+producing most of what this pipeline ingests cannot be starved by a claim storm — `OQ-15`'s argument
+one level up. **Check the arithmetic against whichever you pick:** 250 searches/month against a sweep
+already spending 8/day leaves very little reserve to allocate, which may settle it.
 
 **Done when:** one of the two is chosen and written into an ADR, since it constrains `T-32` and
 `T-34` and touches `OQ-15`'s documented split.
 
----
-
 ### OQ-29 — Two GRANTs on `search_queries`, or the contributor API stops starting
 
-**Why it is yours:** machine — it is a statement issued as the database owner against the deployed
+**Why it is yours:** machine — a statement issued as the database owner against the deployed
 database, which no session may touch.
 
 **What:** `T-26` gave `api/query_claims.py` a claim mode over `search_queries`, so that table is now
@@ -463,59 +348,41 @@ GRANT SELECT ON search_queries TO jobs_api;
 GRANT UPDATE (claimed_at, claimed_by, claim_granted_at) ON search_queries TO jobs_api;
 ```
 
-**The second one is column-scoped and must stay that way.** A table-wide `GRANT UPDATE` would hand
-`jobs_api` the run statistics as well, and a contributor's submit could then forge a run history —
+**The second is column-scoped and must stay that way.** A table-wide `GRANT UPDATE` would hand
+`jobs_api` the run statistics too, and a contributor's submit could then forge a run history —
 writing a future `last_run_at` silences that query for every Builder. `has_table_privilege(...,
-'UPDATE')` answers TRUE for either form, so `verify_schema()` cannot tell them apart and this is the
-only place the distinction is enforced.
-
-**Refusing to start is the designed behaviour, not a regression** — the alternative is a service
-that starts cleanly and 500s on a contributor's first claim, which is the failure `REQUIRED_TABLES`
-exists to convert into a startup error, and `OQ-7` is the precedent for how that reads when nobody
-notices (the whole webapp was down for a day and the row read as a nicety). Nothing calls the new
-mode from a route yet, so there is no rush beyond the next restart of `jobs-api`.
-
-**Neither `provision-database.py` nor `init-schema` will do this for you** — no tool in this repo
-issues GRANTs, per [`docs/adr/0004`](docs/adr/0004-provision-database-issues-no-grants.md), and that
-is unchanged here.
+'UPDATE')` answers TRUE for either form, so `verify_schema()` cannot tell them apart and this row is
+the only place the distinction is enforced. **Refusing to start is designed, not a regression**;
+`OQ-7` is the precedent for how that reads when nobody notices. **Neither `provision-database.py` nor
+`init-schema` will do this for you** — no tool here issues GRANTs, per
+[`docs/adr/0004`](docs/adr/0004-provision-database-issues-no-grants.md).
 
 **Done when:** both statements have run as owner against the deployed database, `jobs-api` starts
 clean (`systemctl status`, not inference), and `backend/api/README.md`'s privilege table names
 `search_queries` with the column list rather than a bare UPDATE.
 
----
-
-
 ### OQ-31 — Run `--check`'s credential branch against the deployed api, once
 
 **Why it is yours:** account and machine. It needs a credential the mint has not issued yet, on a
-host no session can reach — `OQ-30` first, and this is the only reason to do it in that order.
+host no session can reach — `OQ-30` first, and that is the only reason for the order.
 
-**What:** `T-30` shipped `--check`, and one of its three checks is unverified against anything
-real. The credential check asks the deployed `api/` to release a claim nobody holds and reads the
-**409** as "your key is good" and the **401** as "your key is not" — an ordering inside
-`release` (`backend/api/app.py:511`, `:513`) that `api/tests/test_worker_check.py` pins with a fake
-connection. **The 401 branch has been run against a real HTTP server; the 409 branch never has.**
-A fake that agrees with the code it stands in for is exactly the thing that cannot tell you the
-deployed service agrees too.
+**What:** `T-30` shipped `--check`, and one of its three checks is unverified against anything real.
+The credential check asks the deployed `api/` to release a claim nobody holds and reads the **409** as
+"your key is good" and the **401** as "your key is not" — an ordering inside `release`
+(`backend/api/app.py:511`, `:513`) that `api/tests/test_worker_check.py` pins with a fake connection.
+**The 401 branch has been run against a real HTTP server; the 409 branch never has.** A fake that
+agrees with the code it stands in for cannot tell you the deployed service agrees too.
 
-**How to do it.** After `OQ-30`: opt in through the webapp as yourself, drop the `config.json`
-beside the worker on any machine, and run `python3 google-serpapi-worker.py --check`. Then run it
-once more with one character of `JOBS_API_KEY` changed. Two runs, thirty seconds, no SerpApi
-account needed for either — the credential check never touches SerpApi.
-
-**Also worth reading while you are there:** the SerpApi line. `T-30` verified against the
-pipeline's own key that the account endpoint charges nothing (`this_month_usage` identical either
-side of a `--check` run), but that account is at **250/250 with 0 searches left**, so "the
-remaining count does not move" was checked on a count that could not move. A key with credit says
-it properly, and it is the same one run.
+**How to do it.** After `OQ-30`: opt in through the webapp as yourself, drop the `config.json` beside
+the worker on any machine, run `python3 google-serpapi-worker.py --check`, then run it once more with
+one character of `JOBS_API_KEY` changed. Two runs, thirty seconds, no SerpApi account needed. **Also
+worth reading while you are there:** `T-30` verified against the pipeline's own key that the account
+endpoint charges nothing, but that account is at **250/250 with 0 searches left**, so "the remaining
+count does not move" was checked on a count that could not move.
 
 **Done when:** a good credential prints the accepted line and a wrong one prints the rejected line,
-both against the deployed host, and if either says something else it is written into this row
-rather than fixed silently — `T-30` chose the 409 reading deliberately, and this is the check on
-that choice.
-
----
+both against the deployed host, and if either says something else it is written into this row rather
+than fixed silently — `T-30` chose the 409 reading deliberately, and this is the check on it.
 
 ### OQ-30 — The mint secret, and refusing `/v1/internal/` at the edge
 
@@ -523,102 +390,80 @@ that choice.
 deployed host, plus a line in the reverse proxy's config. No session touches either.
 
 **What:** `T-27` shipped the mint. `../webapp/`'s `POST /v1/contribute/opt-in` calls `api/`'s
-`POST /v1/internal/contributors` with a shared secret, because `webapp` and `api` hold different
-Postgres roles and [`docs/adr/0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md)
-rejects granting `jobs_web` INSERT on `api_keys`. Three things have to be true on the deployed host
-and none of them is code:
+`POST /v1/internal/contributors` with a shared secret, because the two hold different Postgres roles
+and [`docs/adr/0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md) rejects
+granting `jobs_web` INSERT on `api_keys`. Three things must be true on the host, and none is code:
 
 1. **One secret, one name, two files.** Generate it (`python3 -c 'import secrets;
    print(secrets.token_urlsafe(32))'`) and set `JOBS_MINT_SHARED_SECRET` to the **same value** in
-   `backend/api/.env` and `backend/webapp/.env`. Deliberately the same variable name in both, so
-   there are not two names to keep in agreement.
-2. **`CONTRIBUTOR_API_PUBLIC_URL` in `backend/webapp/.env`**, set to the address a **Builder's
-   laptop** reaches `api/` on — not `127.0.0.1`, which is what
-   `CONTRIBUTOR_API_INTERNAL_URL` is for. It has no default precisely because the wrong value here
-   is silent: the mint succeeds and the `config.json` fails on every contributor's machine.
-3. **The reverse proxy must refuse `/v1/internal/` from outside.** The shared secret is the control
-   and this is the belt. `api/` is the internet-facing process behind the Cloudflare Tunnel, so
-   without this the mint route is reachable by anyone who finds it — protected only by the secret.
+   `backend/api/.env` and `backend/webapp/.env` — the same variable name in both deliberately.
+2. **`CONTRIBUTOR_API_PUBLIC_URL` in `backend/webapp/.env`**, the address a **Builder's laptop**
+   reaches `api/` on — not `127.0.0.1`, which is what `CONTRIBUTOR_API_INTERNAL_URL` is for. It has
+   no default precisely because the wrong value is silent: the mint succeeds and the `config.json`
+   fails on every contributor's machine.
+3. **The reverse proxy must refuse `/v1/internal/` from outside.** The secret is the control, this is
+   the belt: `api/` is internet-facing behind the Cloudflare Tunnel, so without it the mint route is
+   reachable by anyone who finds it.
 
-**Nothing is open until this runs, which is the safe direction.** With no secret set the route
-returns **503** and `webapp`'s opt-in returns 503 too. An unset credential-issuing endpoint must
-never mean "allow anything", and `api/tests/test_mint.py` asserts that it does not.
+**Nothing is open until this runs, which is the safe direction.** With no secret set the route returns
+**503** and `webapp`'s opt-in returns 503 too; an unset credential-issuing endpoint must never mean
+"allow anything", and `api/tests/test_mint.py` asserts that it does not.
 
-**One thing found while closing `T-27` and left alone, because it is also yours.** `backend/webapp/
-.env`'s `JOBS_ADMIN_DATABASE_URL` is set but its role is **not the owner of `app_users`** — the
-`T-27` column migration failed as that role with `must be owner of table app_users` and was applied
-as `jobs_pipeline`, which `pg_tables` confirms is the owner. So `manage_app_users.py init-schema`,
-whose whole reason for a separate credential is DDL, cannot currently issue DDL on this service's
-own table. Either point that URL at the owning role or record why it does not.
+**Found while closing `T-27`, left alone because it is also yours.** `backend/webapp/.env`'s
+`JOBS_ADMIN_DATABASE_URL` is set but its role is **not the owner of `app_users`** — the `T-27` column
+migration failed as that role and was applied as `jobs_pipeline`, which `pg_tables` confirms is the
+owner. So `manage_app_users.py init-schema`, whose whole reason for a separate credential is DDL,
+cannot issue DDL on this service's own table. Point that URL at the owning role, or record why not.
 
-**Done when:** the secret is set in both `.env` files, `CONTRIBUTOR_API_PUBLIC_URL` is set to a
-public address, `curl` against `/v1/internal/contributors` from outside the host is refused by the
-proxy (checked, not inferred), one real opt-in through the webapp returns a `config.json` whose
-`JOBS_API_BASE_URL` a contributor's machine can actually reach, and the `JOBS_ADMIN_DATABASE_URL`
-question above has an answer either way.
-
----
+**Done when:** the secret is set in both `.env` files, `CONTRIBUTOR_API_PUBLIC_URL` is a public
+address, `curl` against `/v1/internal/contributors` from outside is refused by the proxy (checked,
+not inferred), one real opt-in returns a `config.json` whose `JOBS_API_BASE_URL` a contributor's
+machine can reach, and the `JOBS_ADMIN_DATABASE_URL` question has an answer either way.
 
 ### OQ-32 — Pick `T-41`'s route: `--install` asks the server, or a run rewrites its own plist
 
-**Why it is yours:** a decision only you can take, **and a Mac.** Both halves are yours, and the
-second is why the first cannot be delegated to a session that would otherwise just pick one.
+**Why it is yours:** a decision only you can take, **and a Mac.** The second half is why the first
+cannot be delegated to a session that would otherwise just pick one.
 
-**What:** `T-31` closed with the server's interval read, floored and honestly reported, and with
-the limit printed rather than hidden — nothing on a Builder's machine can move the schedule.
-`install_agent` takes its interval from `MIN_POLL_INTERVAL_SECONDS` and from nowhere else
+**What:** `install_agent` takes its interval from `MIN_POLL_INTERVAL_SECONDS` and from nowhere else
 (`backend/api/contributor-worker/google-serpapi-worker.py:450`), so an operator who sets
 `POLL_INTERVAL_SECONDS` to six hours gets thirty machines that report the ask and keep polling
-hourly. `TASKS.md`'s `T-41` is the implementation and is **blocked on this row**; its own text says
-the two routes are not equivalent and to pick deliberately.
+hourly. `TASKS.md`'s `T-41` is the implementation and is **blocked on this row**. The two routes
+differ on one property, and it is the one no test in this tree can observe:
 
-**Why a session cannot pick.** The routes differ on exactly one property, and it is the one
-property no test in this tree can observe:
-
-- **(a) `--install` asks the server once.** Costs no SerpApi credit — only a claimed *search*
-  does — but `claim` is the only route that returns `poll_interval_seconds`
-  (`backend/api/app.py:359`), and claiming leases queries the installing process will not run.
-  So (a) is either a leak of live claims at install time or a server change to carry the interval
-  somewhere cheaper. It also reverses `T-30`'s split, which specified `--install` to talk to
-  nothing and `--check` to be the thing that talks to the server — that split is *why* an
-  unreachable server cannot currently break an install.
+- **(a) `--install` asks the server once.** Costs no SerpApi credit — only a claimed *search* does —
+  but `claim` is the only route returning `poll_interval_seconds` (`backend/api/app.py:359`), and
+  claiming leases queries the installing process will not run, so (a) is either a leak of live claims
+  at install time or a server change to carry the interval somewhere cheaper. It also reverses
+  `T-30`'s split, which specified `--install` to talk to nothing and `--check` to be the thing that
+  talks to the server — that split is *why* an unreachable server cannot break an install today.
 - **(b) A run rewrites the plist when the ask changed.** No new network call. But `install_agent`
-  goes unload → write → load (`:464-472`), and under (b) the job being unloaded is the job making
-  the call. If launchd stops the process at the `unload` step, `load` never runs: the machine is
-  left with a plist on disk and **nothing scheduled**, with no further run to print anything,
-  because there is no further run. That is a strictly worse version of the failure `T-31` spent a
-  row preventing — there, a paused worker was merely indistinguishable from a broken one; here
-  there is no worker left to be indistinguishable.
+  goes unload → write → load (`:464-472`), and under (b) the job being unloaded is the job making the
+  call. If launchd stops the process at `unload`, `load` never runs: a plist on disk and **nothing
+  scheduled**, with no further run to report it. Strictly worse than the failure `T-31` spent a row
+  preventing — a paused worker was at least still a worker.
 
-**Whether launchd actually does that is unknowable here, and the harness hides it.** The only
-`launchctl` any test sees is `test_worker_install.py`'s `Recorder`, whose own docstring says
-answering 0 to everything "is not a claim that launchctl would" (`:76-78`), and whose
-`test_what_it_asks_launchctl_to_do` says outright that no test on this machine can assert launchd
-accepts anything (`:250-252`), deferring to `OQ-25`. A route (b) implementation would therefore be
-**green by construction** — the fake returns from `unload` instantly and never stops the caller,
-which is the precise opposite of the hazard. Green would mean nothing. `cli()` also refuses
-`--install` off Darwin (`:799-808`), so nothing here can even reach the code path.
+**Whether launchd does that is unknowable here, and the harness hides it.** The only `launchctl` any
+test sees is `test_worker_install.py`'s `Recorder`, whose docstring says answering 0 to everything
+"is not a claim that launchctl would" (`:76-78`), and whose `test_what_it_asks_launchctl_to_do` says
+no test on this machine can assert launchd accepts anything (`:250-252`). Route (b) built here would
+be **green by construction** — the fake returns from `unload` instantly and never stops its caller,
+the precise opposite of the hazard. `cli()` refuses `--install` off Darwin (`:799-808`) besides.
 
-**How to do it.** Ten minutes on a Mac answers it, and the answer is worth more than the argument:
-install the agent with a short `StartInterval`, and from inside a scheduled run call
-`launchctl unload -w` on its own plist, then write a file immediately after. If the file appears,
-(b) survives its own unload and is the cheaper route. If it does not, (b) needs a detached helper
-that outlives the unload — machinery, and machinery whose failure mode is a silently unscheduled
-fleet — and (a) is the answer despite what it costs `T-30`'s split.
+**How to do it.** Ten minutes on a Mac: install with a short `StartInterval`, and from inside a
+scheduled run call `launchctl unload -w` on its own plist, then write a file immediately after. If
+the file appears, (b) survives its own unload and is the cheaper route. If not, (b) needs a detached
+helper — machinery whose failure mode is a silently unscheduled fleet — and (a) is the answer.
 
-**Worth deciding at the same time, because it changes the answer:** whether a cadence change is
-allowed to need one `--install` per machine. If it is, neither route is needed — a run can persist
-the last-seen interval beside `config.json` and `--install` can read it, spending nothing and
-talking to nothing. That is the cheapest option on the table and the row does not name it, because
-it does not meet `T-41`'s "without a hand on each machine". Whether that clause is a requirement or
-an aspiration is yours; `0007` decision 3 says the server "holds desired state", not that machines
-converge on it unattended.
+**A third option neither route names, worth deciding at the same time:** whether a cadence change may
+need one `--install` per machine. If it may, a run can persist the last-seen interval beside
+`config.json` and `--install` can read it — spending nothing, talking to nothing, the cheapest thing
+on the table. `T-41` does not name it because it does not meet that row's "without a hand on each
+machine"; `0007` decision 3 says the server "holds desired state", not that machines converge on it
+unattended, so whether that clause is a requirement or an aspiration is yours.
 
 **Done when:** one route is chosen, the reason is written into `docs/adr/` as a decision — this is
-`0007` decision 3's missing half and belongs beside it, not in a task row — and `T-41` is edited to
-name the chosen route and drop the other.
-
----
+`0007` decision 3's missing half — and `T-41` is edited to name it and drop the other.
 
 ### OQ-33 — A closed row's `file:line` citations go stale on the next commit; is rewriting them right?
 
@@ -626,38 +471,64 @@ Filed by `T-40`, 2026-08-08, which spent its session rewriting fourteen and expe
 **A convention question, so a session cannot settle it.**
 
 **The evidence is not a projection.** `T-28`/`T-29`/`T-30` closed with correct citations into
-`google-serpapi-worker.py` and `T-30`/`T-31` broke all twelve; `T-42` corrected six into
-`api/app.py` and `T-39` broke them the next commit (`T-46` has both lists). Every one still
-resolves, so nothing reported it. `api/app.py:580-587` already carries a mitigation — two constants
-parked at the bottom so nothing is inserted above `submit()`, after task 24 re-cited about thirty
-following an eight-line shift — and `T-39` inserted above `submit()` anyway.
+`google-serpapi-worker.py` and `T-30`/`T-31` broke all twelve; `T-42` corrected six into `api/app.py`
+and `T-39` broke them the next commit (`T-46` has both lists). Every one still resolves, so nothing
+reported it. `api/app.py:580-587` already carries a mitigation — two constants parked at the bottom
+so nothing is inserted above `submit()` — and `T-39` inserted above `submit()` anyway.
 
-**Three options, not equivalent.** (1) Keep rewriting: every row pays forever, and a row that
-forgets is silently wrong — the status quo, and the only one with a per-session cost. (2) Pin a
-**closed** row's citations to the commit that closed it, `git show <sha>:<path>:NNN` — permanently
-true, and the form is already blessed for the deleted `docs/`, **but the checker skips line-range
-validation behind that form entirely** (`backend/tools/audit-citations.py:17-25`, the `T-18`
-blindspot), so it trades a citation that goes wrong loudly for one nothing can ever check, and it
-points a reader at history rather than at the code they are about to edit. (3) Drop line numbers
-from closed rows and cite the symbol — nothing to drift, nothing to check, and `.claude/CLAUDE.md`'s
-cite-`file:line` rule would need an explicit carve-out saying so.
+**Three options, not equivalent.** (1) Keep rewriting: every row pays forever and a row that forgets
+is silently wrong — the status quo, and the only one with a per-session cost. (2) Pin a **closed**
+row's citations to the commit that closed it, `git show <sha>:<path>:NNN` — permanently true, and
+already blessed for the deleted `docs/`, **but the checker skips line-range validation behind that
+form entirely** (`backend/tools/audit-citations.py:17-25`, the `T-18` blindspot), so it trades a
+citation that goes wrong loudly for one nothing can check, and points a reader at history rather than
+at the code they are about to edit. (3) Drop line numbers from closed rows and cite the symbol —
+nothing to drift, nothing to check, and `.claude/CLAUDE.md`'s cite-`file:line` rule would need an
+explicit carve-out. **Open rows are out of scope**: a session stands on those.
 
-**Open rows are out of scope**: a session stands on those, so `T-46` corrects `T-35`'s pair however
-this lands.
-
-**`T-46` found a case none of the three options covers, and it is the one that decides this.** A
-closed row's narrative contains numbers that are *quoted history* — `T-42`'s "→ `:209`" list and
-`T-30`'s "had drifted to `:269`" record what those rows wrote at their own commit. Option (1)
-rewrites them, which does not maintain the record, it falsifies it; (2) and (3) do not reach them at
-all. So a closed row holds two kinds of number and only one is a pointer. `T-46` left the historical
-ones and marked the one ambiguous case; that split needs blessing or replacing, not inheriting.
+**`T-46` found a case none of the three covers, and it is the one that decides this.** A closed row's
+narrative contains numbers that are *quoted history* — `T-42`'s "→ `:209`" list and `T-30`'s "had
+drifted to `:269`" record what those rows wrote at their own commit. Option (1) rewrites them, which
+falsifies the record rather than maintaining it; (2) and (3) do not reach them at all. So a closed row
+holds two kinds of number and only one is a pointer. `T-46` left the historical ones and marked the
+one ambiguous case; `T-47` held the same line on 2026-08-08 while renumbering this file.
 
 **Done when:** the answer is a decision in [`docs/adr/`](docs/adr/), since it changes what
-`.claude/CLAUDE.md`'s citation rule means, and `T-46` is edited to match. **If the answer is (1),
-say so explicitly** — an unrecorded status quo is what let this run for five days.
+`.claude/CLAUDE.md`'s citation rule means, and `T-46` is edited to match. **If the answer is (1), say
+so explicitly** — an unrecorded status quo is what let this run for five days.
+
+### OQ-34 — This file cannot reach its own 450-line budget, and the three ways out are all yours
+
+Filed by `T-47`, 2026-08-08, which cut 711 → 534 and could not close the rest without taking
+content the same row's "Done when" forbids taking.
+
+**Why it is yours:** decision. Every route out changes a rule you wrote, and a session picking one
+would be granting itself the exception.
+
+**What:** The BUDGET NOTE says "past 450, move narrative out rather than raise the number", but
+there is nowhere to move it. An open `OQ-` row is an unsettled question by definition, so
+[`docs/adr/`](docs/adr/) — which takes decisions, one per file, frozen on write — cannot hold one;
+`T-43`'s freeze question is unanswered on top of that; and `.claude/CLAUDE.md` puts what is left to
+do in exactly two files, so a third is not available. So the rule's own prescribed remedy is
+unavailable and only pruning is left. `T-47` pruned everything that was restatement, drafting
+history or elaboration — 25% of the file — and stopped at 534 because what remains is options,
+dates, `file:line`s and the "why a session cannot answer this" that makes each row an owner row.
+**Cutting further means cutting open questions, which is what the budget exists to protect.**
+
+**Three ways out, and they are not equivalent.** (1) **Raise the number again**, as it was raised
+once before, and record why — honest, and it concedes the budget does not bind. (2) **Allow a third
+file** for the analysis behind a row, leaving `OQ-` rows as one-paragraph pointers — this is what
+task 53 originally assumed, and `TASK-52-harness.md` is the precedent for a root-level file that is
+neither of the two; it costs an edit to `.claude/CLAUDE.md`. (3) **Let `docs/adr/` take the
+settled halves** — several rows carry decisions already taken (`OQ-5` staged 2026-08-03, `OQ-4a`'s
+digest deletion 2026-08-04), which by `.claude/CLAUDE.md`'s own rule belong in an ADR rather than in
+prose here; this needs `T-43` answered first.
+
+**Done when:** one is chosen and written down — in an ADR if it changes what `.claude/CLAUDE.md`
+means, in the BUDGET NOTE if it only moves the number — and this file is inside whatever the
+answer makes its budget.
 
 ---
-
 
 ## Closed — kept so citations resolve
 
@@ -680,32 +551,16 @@ say so explicitly** — an unrecorded status quo is what let this run for five d
 
 ---
 
-## What is not on this list, and why
+## Tranche nine, and where it ended up
 
-**Session-doable work is not here. It is in [`TASKS.md`](TASKS.md)**, which owns `T-` the way this
-file owns `OQ-` — the toolchain rows, the harness, and the § 4a defects. Do not move them here;
-this file is what only you can do. Between the two, that is meant to be the whole list.
-
-**Tranche nine is 4½ of 7 done.** The gap is why this file did not exist until now:
+**4½ of 7 done**, which is why this file exists.
 
 | task | what | state |
 |---|---|---|
 | 48 | stop the refactor at a known-green state | done (`5cca001`) |
 | 49 | orientation from code | done — produced `docs/STATE-OF-THE-SYSTEM.md` |
 | 50 | extract the durable core | done (`5046f98`) |
-| 51 | archive the rest | done, **but not the way its spec said** — see below |
+| 51 | archive the rest | done, **but not the way its spec said** — `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_nine/README.md` said *"Not delete anything. 51 is `git mv` and stubs."* `5046f98` deleted 137 and left none; `c052f23`, `20ee7d0` and `47dd212` are the bill. Recorded in `docs/adr/0002-task-51-deleted-instead-of-git-mv.md` |
 | 52 | build the harness | **not started.** `~/.claude/skills/` does not exist. Rewritten as [`TASK-52-harness.md`](TASK-52-harness.md) |
 | 53 | owner queue and changelog | **Part A only — this file.** Part B, the `whatsnew` check, is `T-9` |
 | 54 | replan the product | **superseded.** It was a task to write a plan; [`TASKS.md`](TASKS.md) is the plan |
-
-**51 deviated from its spec and nobody wrote it down.** Its tranche README — `git show
-refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_nine/README.md` — said *"Not delete
-anything. 51 is `git mv` and stubs."* `5046f98` deleted 137 and left none; `c052f23`, `20ee7d0`
-and `47dd212` are the bill. Now recorded — `docs/adr/0002-task-51-deleted-instead-of-git-mv.md`.
-
-**`OQ-3` is still the one to line up recruiting for, once the MVP ships — see the row itself for
-the 2026-08-04 sequencing decision.** The scoring redesign completed 2026-07-28 and has never
-been validated — GATE 1 came in at 16/20 and 10/20 against a definition of done asking 20/20, and
-GATE 4 has never been attempted. `OQ-3` is that gate, but the system it would validate is already
-running and displaying scores to users regardless. Every row in `TASKS.md` improves or validates
-a system that already works, not one still waiting to be unblocked.

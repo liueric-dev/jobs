@@ -16,107 +16,83 @@ that needs a machine, an account, a device, other people, or a decision only the
 Nothing here needs any of those. **Between the two files, that is meant to be the whole list** —
 if work exists in neither, it is not tracked, and that is the condition this file exists to end.
 
-This replaces `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_nine/54-replan-the-product.md`.
-54 was a task to *write* a plan against `docs/STATE-OF-THE-SYSTEM.md`; this is the plan. Its
-central requirement survives verbatim: **every row carries machine-checkable acceptance criteria —
-the exact command and what it should print.** Its second requirement survives too, and matters
-more here: *if this list turns out to be short, that is a finding and not a failure.*
+This replaces `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_nine/54-replan-the-product.md`,
+which was a task to *write* a plan; this is the plan. Both its requirements survive: **every row
+carries machine-checkable acceptance criteria — the exact command and what it should print**, and
+*if this list turns out to be short, that is a finding and not a failure.*
 
 ## The ceiling
 
 **Work discovered while executing a row becomes a row here, an `OQ-` row, or an ADR. It never
-becomes a sub-tranche or a new document.** The failure mode this whole effort exists to correct is
-a meta-project that grows: tasks 36–47 were twelve consecutive tasks of documentation
-infrastructure, every one green, and they produced no product movement. The ceiling only works
-when it is enforced at the inconvenient moment.
+becomes a sub-tranche or a new document.** The failure mode this exists to correct is a meta-project
+that grows: tasks 36–47 were twelve consecutive documentation-infrastructure tasks, every one green,
+producing no product movement. The ceiling only works when enforced at the inconvenient moment —
+`OQ-34`'s second option asks you to make one exception to it, deliberately and in writing.
 
 ## The goal these rows serve
 
-Standard tooling instead of hand-rolled convention. **The bound:** `ruff`, CI and type checking
-are development tools. **No new runtime dependency enters `backend/requirements.txt`,
-`backend/api/requirements.txt` or `backend/webapp/requirements.txt`.** The pipeline runs unattended
-on several machines and every added package is another thing that can be missing on one of them;
-that reasoning is unchanged and `T-1` has a grep proving it holds.
+Standard tooling instead of hand-rolled convention, under one bound: `ruff`, CI and type checking
+are development tools, and **no new runtime dependency enters any of the three `requirements.txt`**
+— the pipeline runs unattended on several machines, and `T-1` has a grep proving the bound holds.
 
 ## Order
 
-**Everything before `T-31` is closed** — the toolchain rows, the five harness layers, the
-§ 4a defects, `0007`'s two server-side rows and the three worker rows under them — and each is one
-line in the table at the foot of this file. `T-1` and `T-2` were the
-reason for the original ordering: they are the enforcement layer every later row leaned on, and what
-makes a session's claims checkable without hand-transcription. Everything since runs against CI
-rather than against a transcribed count.
+**Everything before `T-31` is closed** — the toolchain rows, the five harness layers, the § 4a
+defects, `0007`'s two server-side rows and the three worker rows under them — each one line in the
+table at the foot of this file. `T-1` and `T-2` set the original ordering: they are the enforcement
+layer every later row leaned on, and everything since runs against CI rather than a transcribed
+count.
 
-**The eleven open rows are one project, not a queue.** They cut
+**The ten open rows are one project, not a queue.** They cut
 [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md) into buildable
 steps and are listed in dependency order, not priority order: the server side is done, the worker
 can be installed, it can report on itself, and since `T-31` closed the server dictates its poll
 interval and the worker floors it — so the contributor's machine has every part it needs to run,
 and what is left is that nothing can *move* that schedule (`T-41`, gated on `OQ-32`); `T-32`
-… `T-37` are policy that needs both halves in place. `T-32` and `T-33` are the two that change live
-pipeline behaviour rather than adding to it. `T-38`, `T-47` and `T-48` are the exceptions to the
-dependency order: none is a cut of `0007`, and they belong at the front rather than at the end.
-`T-38` and `T-48` are each a gap a closed row opened or found and could not itself close (`T-26`
-and `T-46` respectively); `T-47` is the one nobody found, because it has been flagged at the end of
-every session for a week and filed by none of them. `T-39`
-was the third of them and closed 2026-08-08, and so did both of its own findings: `T-44`, which is
-what makes every other row's `--verify-only` output trustworthy again, and then `T-45`, which was
-blocked behind it for exactly that reason. `T-40` was the fourth and closed 2026-08-08, filing
-`T-46` and `T-47`. `T-46` was the fifth and closed 2026-08-08 — its own list of twelve sites was
-eleven short — filing `T-48`, the same defect in `webapp/app.py` at four sites. **`T-47` is now the
-front of that queue** — the budget overrun both
-task files have carried unfiled for a week, and the last open row that is neither a cut of `0007`
-nor waiting on someone.
+… `T-37` are policy that needs both halves in place, and `T-32` and `T-33` are the two that change
+live pipeline behaviour rather than adding to it. `T-38` and `T-48` are the exceptions to the
+dependency order and belong at the front: neither is a cut of `0007`, and each is a gap a closed row
+opened or found and could not itself close (`T-26` and `T-46` respectively). **`T-48` is now the
+front** — small, fully specified, four `webapp/app.py` citations, two of them in `frontend/`.
+
+**Six rows closed on 2026-08-08 and their reasoning is in the table below, not here** — `T-39`,
+then its two findings `T-44` and `T-45`, then `T-40`, `T-46` and `T-47`, each filing the next. That
+chain is why this paragraph used to carry a sentence per closed row; `T-47` cut them, because the
+table already holds them and restating a row is what `DEV_TASKS.md`'s own rule forbids.
 
 **The worker's settings block is pinned from outside its own suite, and that outlives `T-28`.**
-`T-27` shipped the payload as `webapp/contribute.CONFIG_FIELDS`, and
-`webapp/tests/test_contribute.py`'s `TestTheWorkerContract` pins it against
-`google-serpapi-worker.py`'s **own source** rather than against a fixture — by regex over
+`webapp/tests/test_contribute.py`'s `TestTheWorkerContract` pins `webapp/contribute.CONFIG_FIELDS`
+against `google-serpapi-worker.py`'s **own source** rather than a fixture — by regex over
 `os.environ.get("X")` and over everything after `def main`. So renaming a setting, or replacing
-those three spelled-out lookups with a loop over a tuple, turns the **webapp** suite red rather
-than the api one, and `T-29` … `T-31` all touch that block. Read that test before editing it, and
-run both suites.
+those three spelled-out lookups with a loop over a tuple, turns the **webapp** suite red rather than
+the api one. Read that test before editing the block, and run both suites.
 
-**None of these rows is the critical path.** [`DEV_TASKS.md`](DEV_TASKS.md)'s `OQ-3` is — the
-scoring redesign completed 2026-07-28 and has never been validated, and every row here improves a
-system nobody has confirmed works. It needs people, so no session can start it. `OQ-24` … `OQ-28`
-are the owner-side half of `0007` specifically, and `OQ-25` — watching one Builder install the
-worker — is the one that decides whether `T-27` … `T-30` were worth building. `OQ-30` blocks
-`T-27`'s mint, which 503s until the operator generates `JOBS_MINT_SHARED_SECRET` and puts it in
-both `.env` files — and `OQ-31`, filed by `T-30`, is blocked behind it in turn: the one branch of
-`--check` no session can exercise needs a credential that mint has not issued yet.
+**None of these rows is the critical path.** [`DEV_TASKS.md`](DEV_TASKS.md)'s `OQ-3` is, and it
+needs people, so no session can start it. `OQ-24` … `OQ-28` are the owner-side half of `0007`;
+`OQ-25` is the one that decides whether `T-27` … `T-30` were worth building; and `OQ-30` blocks
+`T-27`'s mint, with `OQ-31` behind it in turn. Read those rows there rather than here — they are
+summarised in that file and restating them is how both files got over budget.
 
 ---
 
 ## Contributor pipeline — [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md)
 
-Eleven open rows, eight of them cutting `0007` into buildable steps and `T-38`, `T-47` and
-`T-48` consequences of rows that closed. `0007` supersedes
+Ten open rows, eight of them cutting `0007` into buildable steps and `T-38` and `T-48`
+consequences of rows that closed. `0007` supersedes
 [`0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md) decisions 1, 2 and 4;
 `0006` decision 3 — local execution, contributor's own key, own IP, never proxied — stands and is
 load-bearing for every row here. The owner-side half is `DEV_TASKS.md`'s `OQ-24` … `OQ-28`.
 
-**Baseline: all three suites are green — `1462` / `397` / `276`, all `OK`, re-measured 2026-08-08
-after `T-40`.** `T-39` added 6 to the pipeline suite (`tests/test_provision_covers_api_schema.py`)
-and 1 to the api suite (a second case in `api/tests/test_grants.py`, splitting an assertion whose
-subject it had moved); `T-44` added 7 more to the pipeline suite
-(`tests/test_provision_env_precedence.py`), taking it from `1455` to `1462` and touching neither of
-the other two; `T-45` added 1 to the api suite, `273` to `274`, and touched neither of
-the other two. The api figure has moved eight times since these rows were written and the rows below
-still quote the old ones: it was `117`, then `145` after `T-26`'s 28 cases in
-`api/tests/test_search_query_claims.py`, then `160` after `T-27`'s 15 in `api/tests/
-test_mint.py`, then `179` after `T-28`'s 19 in `api/tests/test_contributor_worker.py`, `212`
-after `T-29`'s 33 in `api/tests/test_worker_install.py`, `251` after `T-30`'s 39 in
-`api/tests/test_worker_check.py`, and is now `272` after `T-31`'s 21 in
-`api/tests/test_poll_interval.py`, `273` after `T-39`'s one, `274` after `T-45`'s and `276` after
-`T-40`'s two — **this
-paragraph itself was two
-closures stale until `T-42` re-measured it**, which is the failure it exists to warn about; the
-webapp suite was `368` and is now `397` after `T-27`'s 22 in
-`webapp/tests/test_contribute.py` and 7 added to `webapp/tests/test_grants.py`. **Re-measure rather
-than trusting a row's own number** — that is what these two paragraphs exist to say.
-Commands below are still scoped to a module or a grep rather than a whole-suite `OK`, which is the
-cheaper check and localizes a regression to the row that caused it.
+**Baseline: all three suites are green — `1462` / `397` / `278`, all `OK`, re-measured 2026-08-08
+after `T-46`.** **The rows below still quote older numbers, and that is the point of this
+paragraph.** The api figure alone has moved ten times since those rows were written — `117` at the
+start, then once per closure through `T-26` … `T-31`, `T-39`, `T-45`, `T-40` and `T-46` — and **this
+paragraph was itself two closures stale until `T-42` re-measured it**, which is exactly the failure
+it exists to warn about. The per-closure ledger it used to carry was dropped by `T-47`: each row's
+own delta is in its line in the closed table, and copying them up here is how this paragraph went
+stale twice. **Re-measure rather than trusting a row's own number, including this one.** Commands
+below are scoped to a module or a grep rather than a whole-suite `OK`, which is the cheaper check
+and localizes a regression to the row that caused it.
 
 **Two rotting tests were found and fixed getting to that green, and the shape is worth knowing
 before writing a test for any row here.** Both mixed a real-clock timestamp with a hardcoded one and
@@ -155,24 +131,6 @@ question. `T-46` deliberately left them rather than half-renumber a set `T-43` o
 **Done when:** the four citations name the lines carrying their claim, read at the target and never
 offset; `tools/audit-citations.py` still prints `0 new`; **nothing is added to
 `config/citation-baseline.json`**, since all four resolve today.
----
-
-### T-47 — `DEV_TASKS.md` is 711 lines against a 450 budget and has never been a row
-
-Flagged at the end of session after session and filed by none of them, which is why it still grows.
-`DEV_TASKS.md`'s own **BUDGET NOTE forbids raising the number**, so the only move is moving narrative
-out. `TASKS.md` came down `576` → `511` across `T-44` and `T-45`, and is over `500` again.
-
-**The hard part is where the cut material goes.** `.claude/CLAUDE.md` puts what is left to do in
-exactly two files, so a third narrative file is not available; a settled argument belongs in
-[`docs/adr/`](docs/adr/) and an unsettled one has nowhere to go but the row it belongs to. **`T-43`
-is upstream of that half** — if the freeze covers the bytes, no ADR can absorb relocated narrative
-and this row is prose-pruning only.
-
-**Done when:** both files are inside their stated budgets, no open question and no `file:line` was
-lost, `tools/audit-citations.py` still prints `0 new`, and anything relocated is named where it
-went. The compaction that produced the closed table at the foot of this file checked every row for
-durable reasoning before dropping its prose, and said so; do the same.
 
 ---
 
@@ -215,12 +173,9 @@ the launchd hazard `report_poll_interval`'s docstring already describes,
 `backend/api/contributor-worker/google-serpapi-worker.py:272`). **Pick deliberately; do
 not build both.**
 
-**That attribution was wrong as written and is corrected above, 2026-08-08.** The row credited the
-hazard to `T-29`'s `install_agent` docstring; that docstring (`:452`) describes a *different* one —
-replacing the plist underneath a **loaded** job leaves the old schedule running, which is why
-`install_agent` unloads first. The self-referential hazard, a run unloading the agent running it,
-was written by `T-31` in `report_poll_interval` and is a claim about the route this row declines to
-pick, not about the code that exists.
+**Corrected 2026-08-08:** the hazard above is `T-31`'s, written in `report_poll_interval`. `T-29`'s
+`install_agent` docstring (`:452`) describes a *different* one — replacing the plist underneath a
+**loaded** job leaves the old schedule running, which is why `install_agent` unloads first.
 
 **Done when:** an operator can change `POLL_INTERVAL_SECONDS` on the server and have a machine
 actually fire on the new cadence, with the launchd hazard the chosen route carries either avoided
@@ -252,9 +207,19 @@ covers first, then edit.** If the answer is that it covers the argument and not 
 say so in the commit and fix both lines; if it covers the bytes, the correction belongs in a new
 ADR that supersedes, or nowhere.
 
-**Done when:** the freeze question has an answer written down, the two citations are consistent with
-it, and `tools/audit-citations.py` still prints `0 new`. **Do not add either line to
-`config/citation-baseline.json`** — both resolve today, so the baseline cannot express the problem
+**There is a third, found by `T-47` on 2026-08-08, and it makes the pattern rather than extending a
+list.** `docs/adr/0002-task-51-deleted-instead-of-git-mv.md:21` cites `../../DEV_TASKS.md:307-309`
+for the claim that the tranche's state "had to be reconciled row by row". **It was never right
+either.** At `45d6d3a`, the commit that added that ADR, and at its parent, `DEV_TASKS.md` was
+exactly `450` lines and `:307-309` was `OQ-4b`'s Cloudflare paragraph; the tranche table it means
+was at `:430-437`. So all three of this row's citations were wrong on arrival, none by drift — **the
+defect is that a citation into a moving file was never checked at its target, not that files move.**
+`T-47` renumbered `DEV_TASKS.md` and deliberately left this one rather than half-fix a set this row
+owns; its real target today is the `## Tranche nine` table.
+
+**Done when:** the freeze question has an answer written down, all three citations are consistent
+with it, and `tools/audit-citations.py` still prints `0 new`. **Do not add any of them to
+`config/citation-baseline.json`** — all resolve today, so the baseline cannot express the problem
 and adding them would record the opposite of what is wrong.
 
 ---
@@ -480,27 +445,26 @@ and the api suite prints `OK` at `145` plus the new cases.
 
 ## Closed — kept so citations resolve
 
-**Compacted 2026-08-07, and this is a compaction, not a deletion.** These twenty-five rows were
-~940 of this file's ~1300 lines: closure narrative that had already done its job. What each one is
-still *for* is that its number resolves, which a table line does as well as an essay.
-
-**To read any row in full, in the state it was closed:**
+**Compacted 2026-08-07, and this is a compaction, not a deletion.** These rows were ~940 of this
+file's ~1300 lines of closure narrative that had already done its job; what each is still *for* is
+that its number resolves, which a table line does as well as an essay. To read one in full, in the
+state it was closed:
 
 ```bash
 git log --oneline -S 'T-13' -- TASKS.md     # the commit that closed it
 git show <that-commit>:TASKS.md             # the row, verbatim, as written
 ```
 
-**Three findings were relocated rather than left to go down with the prose**, because each is a
-landmine a future session would otherwise re-trip: `T-16`'s SQL-identifier convention and its
-`# noqa`-inside-an-f-string gotcha are in [`.claude/rules/sql.md`](.claude/rules/sql.md); `T-18`'s
-tag-form blindspot is in `backend/tools/audit-citations.py`'s own docstring, beside the code that
-has it and correcting a claim that docstring used to make. Every other row's durable reasoning was
-already in the code, an ADR, or a rules file before this compaction — that was checked row by row,
-not assumed.
+**Three findings were relocated rather than left to go down with the prose**, each a landmine a
+future session would otherwise re-trip: `T-16`'s SQL-identifier convention and its
+`# noqa`-inside-an-f-string gotcha are in [`.claude/rules/sql.md`](.claude/rules/sql.md), and
+`T-18`'s tag-form blindspot is in `backend/tools/audit-citations.py`'s own docstring, correcting a
+claim that docstring used to make. Every other row's durable reasoning was already in the code, an
+ADR, or a rules file — checked row by row, not assumed.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~T-47~~ | `DEV_TASKS.md` was 711 lines against a 450 budget and `TASKS.md` 536 against 500, and the BUDGET NOTE forbids raising either number | **Closed 2026-08-08 — `TASKS.md` is inside its budget and `DEV_TASKS.md` is not, and that is the row's finding rather than an unfinished job.** `TASKS.md` came down to under `500`, mostly by compacting the `Order` preamble, which had grown a paragraph recapping each recently-closed row that the closed table below already holds — the same restatement `DEV_TASKS.md`'s own rule forbids. `DEV_TASKS.md` came down `711` → `534`, a 25% cut, and stopped there. **The row's two "Done when" clauses cannot both be satisfied by the means the row permits.** It says to move narrative out and that a settled argument goes to [`docs/adr/`](docs/adr/) — but every open `OQ-` row is an unsettled question *by definition*, so no ADR can take one; `T-43`'s freeze question is unanswered on top of that; and `.claude/CLAUDE.md` rules out a third file. So only pruning was available, and pruning ran out: what remains is options, dates, `file:line`s and the "why a session cannot answer this" that makes each row an owner row, and cutting further would have cost an open question, which the same "Done when" forbids. Filed as **`OQ-34`** with three ways out (raise the number again and say why; allow a third file for the analysis, as task 53 originally assumed and `TASK-52-harness.md` already precedents; or let `docs/adr/` take the settled halves several rows carry, which needs `T-43` first) — an owner decision, because every route changes a rule the owner wrote and a session picking one would be granting itself the exception. Filing it put the file at `565`. **What was cut was checked, not swept:** restatement first (the "one-minute version" table, whose first row pointed at `OQ-9` — *closed since 2026-08-03* — and whose other two rows restated `OQ-3` and `OQ-19`, and the tail paragraph restating `OQ-3` a third time), then drafting history, then elaboration. **No row, no open question, no option in a decision, no date and no `file:line` was dropped** — the full set of 27 backticked line references was extracted before and after and diffed byte-identical, and the 19 open and 14 closed row headings likewise. **The two citations that point *into* these files were swept for and both were handled**, on a bare `(DEV_)?TASKS.md:NNN` pattern rather than a path-prefixed one, which is the `T-46` lesson: `T-42`'s closed row carries `DEV_TASKS.md:497` → `:580`/`:582`. **This row first corrected the `:497` to `:372`, reading the citing site as a live pointer, and reverted it** — `T-46`'s rule freezes "`T-42`'s '→ `:209`' *list*", and a list entry is one record of one action: *T-42 edited line 497 and wrote :580/:582 there*. Rewriting either half makes that record claim something T-42 did not do. The right half is already stale — `T-46` corrected the real citation to `:511`/`:513` and left this record alone — so half-renumbering it would have produced exactly the half-updated sentence `T-42`'s own row exists to warn about. The sentence T-42 edited is at `DEV_TASKS.md:372` today; that belongs here, in the row that moved it, not inside T-42's record. **`plan-verifier` caught this**, and it is the row's one substantive correction. **The second is a new instance of `T-43`'s defect class and is filed there, not fixed here:** `docs/adr/0002-task-51-deleted-instead-of-git-mv.md:21` cites `../../DEV_TASKS.md:307-309` for the tranche reconciliation, and **that citation was never right** — at `45d6d3a`, the commit that added the ADR, and at its parent, `DEV_TASKS.md` was exactly `450` lines and `:307-309` was `OQ-4b`'s Cloudflare paragraph, with the tranche table at `:430-437`. It resolves, so `audit-citations.py` has never seen it; the file is frozen, so this row did not touch it. Suites `1462`/`397`/`278`, no skips; mypy clean; citations `0 new` (3 known-drifted); ruff `1004`, per-rule composition byte-identical to `HEAD`; both frontend checkers pass. **Verified against a real database: not applicable and not faked** — this row edits prose only and touches no schema, role or query. One finding filed: `OQ-34` |
 | ~~T-46~~ | `T-42` corrected six `api/app.py` citations and `T-39` moved them all again the next commit; twelve citing sites naming sixteen numbers were wrong at HEAD, and the row said that was a floor | **Closed 2026-08-08. The floor was eleven citing lines and sixteen numbers short: 32 wrong numbers across 20 citing lines in 7 files, every one read at the target and none by offsetting.** The row's own arithmetic warning held again — `:209`→`:140`, `:285`→`:216`, `:361`→`:329-334`, `:549`→`:511` are four different deltas, and `T-39` was `+7/-76` against the file, so no single offset reproduces any of it. **The two sites the row declared "correct, and to be left alone" were each half-wrong, which is the row's own subject turned on the row.** It read `evals/labels.py` and `docs/STATE-OF-THE-SYSTEM.md` as citing `api/app.py:99`, which is right and untouched — but `labels.py:373` cites `webapp/schema_web.py:69` in the same sentence (`ensure_schema` is `:478`), and the `STATE-OF-THE-SYSTEM.md` entry carries **six** more numbers in one sentence, all wrong. **`T-42`'s own closed row says outright that it corrected four numbers in that sentence together and that a half-renumbered sentence is the defect** — `T-46` then re-broke it by checking one number of the four. That entry needed more than a renumber: `T-39` moved the column loop and the raise out of `api/app.py` entirely, so they are now `query_claims.py:399-410` and `:412-419`, with `:128`→`:196-197`, `:233`→`:304`, `:244`→`:315` and `manage_users.py:42`→`:40`. **Three citing sites the row missed are closed rows `T-30`, `T-31` and `T-42` themselves**, carrying live pointers (`:345`, `:428`, `:371`, `:221`) a session reads; `T-35`'s row carries six numbers, not the two the row lists. **The sweep the row used is why it undercounted**: it matched `api/app.py:NNN`, and `test_worker_check.py`, `frontend/` and `webapp/` write the citation without the directory — re-swept on `app.py:NNN`, which is what found `T-48`. **Historical numbers inside a closed row's narrative were deliberately NOT rewritten**: `T-42`'s "→ `:209`" list and `T-30`'s "had drifted to `:269`" record what those rows wrote at their commit, and rewriting them would falsify the record rather than maintain it — the one ambiguous case is marked "what was then `:269`" instead, and the general problem is filed into `OQ-33`, which this row does not settle. **One claim is pinned, and it is not a checker** — `TestTheProbeSafetyCitationsStillPointAtTheClaim` in `api/tests/test_worker_check.py` reads the cited number out of each of the two comments that make the probe-safety claim and asserts that line in `app.py` actually builds `google_jobs:query:<slug>`. **Four deliberate breakages confirmed it bites**: the number moved one line to `:361` (which resolves, so `audit-citations.py` stays green and this turns red — the whole point), this module's own citation drifted to `:216`, the citation deleted, and `:9999` past EOF. It parses the number by hand rather than importing `re`, because one more import would shift every line below it, which is the defect this row is about. **Nothing added to `config/citation-baseline.json`** — every one of these resolved, so the baseline records the opposite of what is wrong. **No file changed line count**: every edit was in place, checked file by file against `HEAD`, after a two-line docstring edit in the worker shifted `:724`, `:799` and `:811` — including the `:799-808` pair `T-40` had just fixed — and was backed out. Suites `1462`/`397`/`278` (`+2`, the new pin), no skips; mypy clean; citations `0 new` (3 known-drifted); ruff `1004` with its **per-rule composition byte-identical** to `HEAD`, not just the total. **`plan-verifier` was run on this row and returned only after the work was finished**, so every finding above is from reading the targets directly; it then corroborated all sixteen of the row's numbers and, independently, the same three closed rows this row found (`T-30`'s `:345`, `T-31`'s `:428`, `T-42`'s `:371`/`:221`). **It also reproduced the row's central error**, which is the result worth keeping: it certified `evals/labels.py:374` and `docs/STATE-OF-THE-SYSTEM.md:223` as correct on the strength of `:99` alone — the half-sentence check that let six wrong numbers stand — and did not reach the `webapp/app.py` class (`T-48`) or `T-35`'s four narrative numbers. **A verifier that reads the number a row names, rather than the sentence that names it, undercounts the same way the row did.** Its one substantive divergence is `T-42`'s `:371`, where it proposes `:347-349`, the code that writes the row; this row kept the docstring paragraph at `:302`, because both citing sentences say "defect D41" and `T-35`'s says "read the neighbouring paragraph", and the two must name the same thing. Its own citation `tools/audit-citations.py:89-92` was checked and holds — `SKIP_PATHS` excludes `docs/orientation-2026-08-02/` as a `kind: record` snapshot, which is the reason the ~40 `app.py` numbers in that tree are out of scope here and were left untouched. **Verified against a real database: not applicable and not faked** — this row edits comments and prose only, touches no schema, role or query, and the new test reads two files off disk. One finding filed: `T-48` |
 | ~~T-40~~ | `api/tests/test_claim_metering.py:29` cited `contributor-worker/google-serpapi-worker.py:121-126` for a behaviour those lines never carried, and `tools/audit-citations.py` was green across it because the number resolved | **Closed 2026-08-08. The row's own prescribed fix was stale before it was picked up, and its "one live instance" is one of fifteen.** The citation now reads `:330-335`, read at the target. **`T-40` said the behaviour was at `:247-252`; writing that would have been new drift.** `:247-252` was exactly right at `9c5154d`, the commit that filed the row, and `f185642` (`T-31`) inserted `clamp_poll_interval` and `report_poll_interval` above `main()` the next day and moved the block by 83 lines. So the row that exists to report a stale citation went stale in five days, in the same file, by the same mechanism — which is the argument for what was built instead of a third correct number. **The claim itself is true, and was checked rather than reasoned about**: the worker was run as a subprocess against a real HTTP socket answering `{"queries": []}`, and printed `worker: nothing to do -- no stale queries available right now.` and exited `0`. Only the number was ever wrong. **The number is now pinned by `TestTheCitationInThisModulesDocstring`**, which reads the range out of this module's own docstring and asserts the cited lines are the granted-nothing branch — **both ends**, because a range that merely *contains* the print stays green while sliding off one end, which is precisely what one inserted line above `main()` does; written contents-only first, that breakage reddened one test instead of two. Three deliberate breakages: a blank line above `main()`, rewording the message, and deleting the citation. **This pins one citation and is deliberately not a checker** — the row says not to build one and is right; `audit-citations.py`'s own docstring already says it cannot be one. **The row's "the other citation into that file" is one of twenty-three, and fourteen named the wrong lines** — all corrected by reading, none by offsetting — and the arithmetic would have failed: `T-30`'s seven had all moved by +73, but `T-29`'s four split +83/+83/+83/+12 within one sentence, and `T-28`'s one had never been right at all (`:91` was `try:` on the day it was written; the resolution it claims is at `:101`). Also corrected: `T-41` and `OQ-32` cite the same Darwin refusal two different wrong ways (`:806` is the middle of the message, `:806-811` runs past `return 1` into `main()`); both now read `:799-808`, and fixing one and not its twin is the half-renumbering `T-42` warned about. **Nothing was added to `config/citation-baseline.json`** — every one of these resolves, so the baseline records the opposite of what is wrong. Suites `1462` / `397` / `276`, mypy clean, citations `0 new` (3 known-drifted), ruff `1004` — held, after backing out a change that dropped it to `1000`: a module-level assignment placed above the imports made `E402` start firing and silently turned four `RUF100` unused-noqa findings into zero, so the constant sits below them with a comment saying why. **Verified against a real database: not applicable and not faked** — this row edits comments and prose and touches no schema, role or query; the real-socket run above is the equivalent check. Two findings filed rather than folded in: `T-46` (the same defect at twelve sites in `api/app.py`, including two an open row stands on) and `T-47` (the budget overrun), plus `OQ-33`, which asks whether a closed row's citations should be pinned to the commit that closed it rather than rewritten after every commit that moves the file |
 | ~~T-45~~ | `qc.REQUIRED_COLUMNS` claimed to list the columns this service writes and listed one, so the columns the whole claim-ownership check turns on were reported by nothing | **Closed 2026-08-08. The row said two columns on one table; it is six across two, and the count is the finding.** The row named `claimed_by` and `claim_granted_at` — the two `ensure_schema()` adds to the watermark table — and both citations checked out. But the map's contract is the columns this service **writes**, not the ones it creates, and reading every statement that touches a claim adds four more: `job_ingest_state.claimed_at`, which `lib/state.ensure_state_schema(with_claims=True)` creates (`backend/lib/state.py:59`) and which `holds_claim()` reads and all three write sites set; and all three of `search_queries`' claim columns, created by `schema.ensure_search_query_schema` (`backend/schema.py:1092-1096`), written by `try_claim_search_query()` and read by `holds_search_query_claim()`. Scoping the search to `api/`'s own DDL is precisely the reasoning that left six of the seven undeclared — *"we did not create it"* is not *"we do not write it"*. **What makes all six the right ones and `dataset`/`last_success_at` the wrong ones is a single property**: every claim column arrives via `dbconn.add_missing_columns` on a table that already exists, so it can go missing on its own while the table passes `to_regclass` and its privilege check — which is the exact shape `REQUIRED_COLUMNS` was added for. A `CREATE TABLE` column cannot, and `REQUIRED_TABLES` already covers it. That distinction is written into the test as a two-entry exemption with the justification attached, because it is the one way a written column may legitimately go undeclared. **Verified on a real database, and the gap was real**: a throwaway on `pg-main` owned by `jobs_pipeline`, provisioned fresh, satisfied the widened map; dropping `job_ingest_state.claimed_at` and `search_queries.claim_granted_at` made `--verify-only` name both and exit 1 — while the **pre-`T-45` map called that same broken database `ready`, exit 0**, which is the "verify passes, first claim 500s" failure stated rather than assumed. Dropped afterwards. The deployed database was checked too and is `ready` under the widened map. **The test is the inverse of the one already there** and scans the claim SQL rather than listing columns, since a list would be maintained by whoever forgot the map: it derives per-table write sets from the `INSERT` column lists and `SET` clauses and fails on anything undeclared. Two deliberate breakages: reverting the map to its pre-`T-45` single entry turned it red naming all three missing on the first table — **it would have caught the original bug** — and adding an undeclared column to a live claim statement turned it red naming that. A guard against the scan silently covering nothing is included, `T-39`'s lesson. `test_every_declared_column_is_created_by_ensure_schema` was **widened, not relaxed**: it now reads DDL from `query_claims.py`, `schema.py` and `lib/state.py`, all three of which `provision-database.py` runs, and was renamed to say so. Suites `1462`/`397`/`274`, mypy clean, citations `0 new` (3 known-drifted), ruff `1004` — baseline held. Both new citations read at their targets. |
