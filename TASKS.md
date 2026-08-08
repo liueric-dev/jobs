@@ -47,17 +47,20 @@ reason for the original ordering: they are the enforcement layer every later row
 makes a session's claims checkable without hand-transcription. Everything since runs against CI
 rather than against a transcribed count.
 
-**The twelve open rows are one project, not a queue.** They cut
+**The eleven open rows are one project, not a queue.** They cut
 [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md) into buildable
 steps and are listed in dependency order, not priority order: the server side is done, the worker
-can be installed and it can now report on itself, so `T-31` — the poll interval, and the last of
-the worker — is what nothing on a contributor's machine works without now; `T-32`
+can be installed, it can report on itself, and since `T-31` closed the server dictates its poll
+interval and the worker floors it — so the contributor's machine has every part it needs to run,
+and what is left is that nothing can *move* that schedule (`T-41`, gated on `OQ-32`); `T-32`
 … `T-37` are policy that needs both halves in place. `T-32` and `T-33` are the two that change live
 pipeline behaviour rather than adding to it. `T-38` and `T-40` are the exceptions to the dependency
 order: neither is a cut of `0007`, each is a gap a closed row opened or found and could not itself
 close (`T-26` and `T-29` respectively), and they belong at the front rather than at the end. `T-39`
-was the third of them and closed 2026-08-08; `T-44` and `T-45` are its own two findings, and `T-44`
-belongs at the very front — it is the one row here that makes another row's verification untrustworthy.
+was the third of them and closed 2026-08-08; `T-44` and `T-45` are its own two findings. `T-44`
+closed 2026-08-08 as well, and closing it is what makes every other row's `--verify-only` output
+trustworthy again — `T-45` was blocked behind it for exactly that reason and is now the small
+unaided row at the front.
 
 **The worker's settings block is pinned from outside its own suite, and that outlives `T-28`.**
 `T-27` shipped the payload as `webapp/contribute.CONFIG_FIELDS`, and
@@ -81,16 +84,18 @@ both `.env` files — and `OQ-31`, filed by `T-30`, is blocked behind it in turn
 
 ## Contributor pipeline — [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md)
 
-Twelve open rows, eight of them cutting `0007` into buildable steps and `T-38`, `T-40`, `T-44` and
+Eleven open rows, eight of them cutting `0007` into buildable steps and `T-38`, `T-40` and
 `T-45` consequences of rows that closed. `0007` supersedes
 [`0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md) decisions 1, 2 and 4;
 `0006` decision 3 — local execution, contributor's own key, own IP, never proxied — stands and is
 load-bearing for every row here. The owner-side half is `DEV_TASKS.md`'s `OQ-24` … `OQ-28`.
 
-**Baseline: all three suites are green — `1455` / `397` / `273`, all `OK`, re-measured 2026-08-08
-after `T-39`.** `T-39` added 6 to the pipeline suite (`tests/test_provision_covers_api_schema.py`)
+**Baseline: all three suites are green — `1462` / `397` / `273`, all `OK`, re-measured 2026-08-08
+after `T-44`.** `T-39` added 6 to the pipeline suite (`tests/test_provision_covers_api_schema.py`)
 and 1 to the api suite (a second case in `api/tests/test_grants.py`, splitting an assertion whose
-subject it had moved). The api figure has moved seven times since these rows were written and the rows below
+subject it had moved); `T-44` added 7 more to the pipeline suite
+(`tests/test_provision_env_precedence.py`), taking it from `1455` to `1462` and touching neither of
+the other two. The api figure has moved seven times since these rows were written and the rows below
 still quote the old ones: it was `117`, then `145` after `T-26`'s 28 cases in
 `api/tests/test_search_query_claims.py`, then `160` after `T-27`'s 15 in `api/tests/
 test_mint.py`, then `179` after `T-28`'s 19 in `api/tests/test_contributor_worker.py`, `212`
@@ -116,57 +121,6 @@ are the rows most exposed to this, since both turn on elapsed time.
 
 ---
 
-### T-44 — `provision-database.py` connects as `jobs_web`, not as the owner, on any machine with a `webapp/.env`
-
-**Found while closing `T-39`, by running the tool against a real database rather than a scripted
-stand-in — the third consecutive row where that step found something no test would have.** Filed
-rather than folded in: the fix changes which database the tool touches on a developer machine, and
-that is the one file in this repo whose hazard banner exists because touching the wrong thing costs
-something.
-
-`import config as _webapp_config` (`backend/tools/provision-database.py:73`) runs
-`webapp/config.py`, which loads `webapp/.env` into `os.environ` as a side effect
-(`backend/webapp/config.py:40`). That file sets `DATABASE_URL` to the **webapp's** role. `main()`
-then calls `envfile.load(backend/.env)` (`backend/tools/provision-database.py:115`), which is
-`override=False` by design (`backend/lib/envfile.py:85`) — so the pipeline's own `DATABASE_URL`
-never wins, and the tool connects as `jobs_web`.
-
-Confirmed on this machine, not inferred: importing that module sets `DATABASE_URL`, and connecting
-on the result answers `jobs_web` for `current_user`.
-
-**Why it survived, and why it is worse than it looks.** On a fresh checkout and in CI there is no
-`webapp/.env` — the tool's own comment says exactly that, two lines above the import — so the path
-that provisions correctly is the only path anything tests. On the deployed machine the effect is
-silent and inverted: `jobs_web` holds no DDL rights, so a real run fails partway or is refused,
-and **`--verify-only` reports the wrong role's privileges** while looking like it worked. The
-banner tells an operator to run `--verify-only` first anywhere that matters; today that instruction
-returns an answer about a role that will not be doing the work.
-
-It also produced a false finding while `T-39` was being verified: `--verify-only` against the
-deployed database reported `submission_log` missing its `action` column. The column is present
-(`pg_attribute` confirms it); `information_schema.columns` is privilege-filtered, so the absence was
-`jobs_web`'s lack of privileges reading as a missing column. **Any privilege or column line this
-tool prints is currently untrustworthy on that machine.**
-
-Two shapes. (1) Load `backend/.env` before the webapp import, which means moving `envfile.load` out
-of `main()` to module scope — cheap, but it changes when the file is read relative to `--url`.
-(2) Pass `override=True` for `backend/.env`, which inverts the documented precedence
-(`backend/lib/envfile.py:90-94`) for this one caller and would stop an exported `DATABASE_URL` from
-winning — the case `drive`-style one-off runs against a second database depend on. Neither is
-obviously right; say in the commit which and why. Whichever is chosen, a test must pin it, because
-the failure is invisible on the machine most sessions run on.
-
-```bash
-cd backend
-python3 -c "import sys,os; sys.path.insert(0,'webapp'); import config; print('DATABASE_URL' in os.environ)"
-```
-
-**Done when:** the tool connects as the role in `backend/.env`'s `DATABASE_URL` regardless of
-whether `webapp/.env` exists, an exported `DATABASE_URL` still beats both, a test fails if the
-import order or the `override` flag is changed back, and all three suites stay green.
-
----
-
 ### T-45 — The two claim columns this service writes are not in its startup check
 
 **Found while closing `T-39`, and small.** `qc.REQUIRED_COLUMNS` holds one entry,
@@ -182,8 +136,11 @@ the failure `REQUIRED_COLUMNS` was added to prevent, described in `api/tests/tes
 docstring.
 
 Not folded into `T-39`: that row was about the provisioning tool's reach, and this is `api/`'s
-decision about its own startup contract. Note the check reads `information_schema.columns`, so
-`T-44` must land first or the answer is about the wrong role.
+decision about its own startup contract. Note the check reads `information_schema.columns`, which is
+privilege-filtered — `T-44` had to land first or the answer would have been about the wrong role,
+and it closed 2026-08-08, so this is unblocked. Re-run `--verify-only` before trusting any column
+line an earlier session recorded: everything it printed on a machine with a `webapp/.env` was
+`jobs_web`'s answer.
 
 **Done when:** `job_ingest_state`'s two claim columns are in `qc.REQUIRED_COLUMNS`, a test fails if
 a column the claim SQL writes is absent from that map, and all three suites stay green.
@@ -545,6 +502,7 @@ not assumed.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~T-44~~ | `tools/provision-database.py` connected as `jobs_web` rather than the owner on any machine with a `webapp/.env`, so its own `--verify-only` output was about the wrong role | **Closed 2026-08-08. Neither of the row's two shapes; a third, and the reason is what the two wider ones would have decided by accident.** The row's premise held on every point — `plan-verifier` checked 32 claims and found 0 drifted, and the chain reproduces on a real server: at `HEAD` the URL `main()` resolves names `jobs_web` and the server answers `current_user = jobs_web`; with the fix, `jobs_pipeline` both times. **Shape (1)** — loading `backend/.env` at module scope, ahead of the import — wins the race, but by making `backend/.env` authoritative over `webapp/.env` for **every** key the two files come to share. They share exactly one today, `DATABASE_URL` (**measured**, by diffing the two files' key names, not assumed), so the shapes are equivalent *now* and stop being equivalent silently the first time someone adds a second. It also fixes a side effect by outrunning it, which holds only while nobody reorders imports — and that ordering is already load-bearing for an unrelated reason three lines away. **Shape (2)**, `override=True`, was rejected on the row's own terms: it stops an exported `DATABASE_URL` winning, and pointing this tool at a database other than the configured one is precisely how a new one gets provisioned. **What was built** is a `_database_url_unchanged()` context manager wrapping the two webapp imports: it states the actual invariant — an import does not get to pick the database — leaves `lib.envfile`'s documented precedence untouched for every other caller, and keeps `--url` > exported `DATABASE_URL` > `backend/.env`, with `webapp/.env` contributing nothing. Wrapping rather than reordering makes the requirement structural: moving an import out of the block is visibly leaving a named guard, not transposing two lines. It also restores *before* `api/` is imported, so `query_claims`'s own module-scope `DATABASE_URL` capture (`backend/api/query_claims.py:90-91`) stops inheriting the same wrong value — inert on today's call path, which is what makes it the kind of thing noticed only after it matters. **The row's false-finding claim was reproduced, not taken on trust**: `--verify-only` against the deployed database at `HEAD` reported eight privilege lines plus `submission_log: missing column(s) action`; the column is present (`pg_attribute` confirms), `information_schema` is privilege-filtered, and the whole report was `jobs_web`'s. Post-fix the same command exits 0, `ready`. Doubly wrong, in fact — those were `api/`'s required privileges measured against a role that is neither the owner nor `jobs_api`. **Verified against a real provisioned database, not a stand-in**: a throwaway on `pg-main` owned by `jobs_pipeline` (created via the superuser, so no superuser credential was handled from the host, and dropped after) went empty → `NOT READY` naming all 31 objects across both halves → all six steps `ok` → `ready` → idempotent on a second run, 25 tables owned by `jobs_pipeline`. That run drove the tool from an **exported** `DATABASE_URL`, which is the case shape (2) would have broken. **A suspected second victim was checked and cleared**: `test_provision_covers_api_schema` imports the tool mid-suite, which looked like it would poison every DB-gated test after it — it does not, because every test module loads `backend/.env` at *discovery* time, before any `setUpClass` runs. Measured rather than reasoned about; the bug is confined to the tool's own run, as the row said. 7 cases in `tests/test_provision_env_precedence.py`, split into behaviour (the guard in isolation) and wiring (the imports asserted *inside* it, by AST rather than regex, plus `envfile.load` asserted to take no `override`) — because a correct guard nothing is wrapped in passes every behavioural test. Both rejected shapes are each ruled back out by one assertion. **Two deliberate breakages, each turning exactly the intended tests red**: moving the imports out of the guard reddened the AST test *and* the end-to-end one; adding `override=True` reddened the third. The end-to-end test is vacuous in CI and kept anyway — CI has no `webapp/.env`, so it is the machines that do, including the deployed one, where it is load-bearing, and a skip is not available since CI asserts nothing is skipped. Suites `1462`/`397`/`273`, mypy clean, citations `0 new` (3 known-drifted), ruff `1004` — held, after fixing 4 findings this row introduced, one of which was an explanatory comment that opened with the word `noqa` and was therefore read as a blanket directive, `.claude/rules/sql.md`'s gotcha in a new costume. Every citation written here was read at its target rather than trusted to the checker, `T-40`'s blindspot being the reason. Also corrected in passing, in the one paragraph this closure already had to edit: the Order section still described `T-31` as the thing "nothing on a contributor's machine works without now", two closures after it shipped. |
 | ~~T-39~~ | `contributors`, `api_keys` and `submission_log` did not exist on a database stood up by the one command that claims to create everything, and since `T-27` a webapp route depended on them | **Closed 2026-08-08. Shape (1), the sixth step — and the row's stated cost for it was simply false.** The row priced option (1) as `provision-database.py` "acquiring a third venv's worth of import path"; `api/query_claims.py` imports **no third-party package at module scope** — stdlib, plus `../schema`, `../google_jobs` and `../lib.*`, every one already imported by that tool — and it imports cleanly under system `python3`, checked rather than reasoned about. FastAPI lives in `api/app.py`, which is not imported. So this is the same shape as the `schema_web` import the file has always performed, and option (2) would have left the tool's own first line ("Create every database object this project's three processes require") a lie to avoid a cost that was not there. **Option (2) was built anyway, because it is not the same claim**: step 6 only helps a database provisioned *after* today, and the deployed one was not — so `--verify-only` now runs `qc.verify_schema` alongside the webapp's and reports the gap on databases step 6 will never touch. Both verifies run before either is reported, since stopping at the first would hide the second. **`qc.verify_schema(conn)` was moved out of `app.py` to make that possible** — one definition, taking a connection instead of opening one, exactly as `schema_web.verify_schema` already did; `app.verify_schema()` is now the credential half and nothing else. **The row named two tables and there are three**: `submission_log` has the identical reachability problem and went unmentioned, plus the two claim columns `ensure_schema` adds to the watermark table — `plan-verifier` found the third table, reading the DDL found the columns. **Step 6 is last, for three separate reasons**, all in the tool's banner: it commits internally, it issues `SET search_path` on the shared connection, and it re-enters `ensure_app_view` (via `schema.ensure_schema`, `backend/schema.py:964`) — so the T-13 DROP hazard is entered *twice* per run, and ordering it after step 3 is what keeps the second entry unreachable. **Verified against real databases, not a stand-in**: two throwaway databases on `pg-main`, owned by `jobs_pipeline`, dropped afterwards. `HEAD`'s tool against a fresh one printed `verify_schema: ready`, exit 0, with all three tables absent and both claim columns absent — the bug reproduced exactly, on a real server. The new tool's `--verify-only` against that same database named all three plus the sequence; against an empty one it reported webapp and api separately; the full run created all six steps' objects and was idempotent on a second run. **The row's stated reason for the gap surviving is also false and was left corrected, not repeated**: it says "every test in [the api suite] uses a fake connection", but three api tests build a real scratch schema by calling `qc.ensure_schema` — they prove the DDL *runs* and say nothing about whether anything calls it, which is the seam the new tests cover. 6 cases in `tests/test_provision_covers_api_schema.py`; a deliberate breakage adding a fourth table to `api/`'s DDL turned exactly the intended one red. `api/tests/test_grants.py`'s `test_verify_schema_checks_all_three_maps` scanned `app.verify_schema`'s body and was moved with the code rather than relaxed, and split in two so that "the maps are read" and "startup still reaches them" are pinned separately. Suites `1455`/`397`/`273`, mypy clean, citations `0 new` (3 known-drifted), ruff `1004` — baseline held. **Three of the citations written into this session's own new rows named lines that did not say what was claimed, and the checker passed all three** — `T-40`'s blindspot, found again while filing the rows that report it; each was corrected by reading the target. Two findings filed rather than folded in: `T-44` (the tool connects as `jobs_web`, which makes its own privilege output untrustworthy) and `T-45` |
 | ~~T-31~~ | `0007` decision 3 had no wire: the server held a cadence it could not say, so pause, resume and every interval change meant a hand on each of thirty machines **Closed 2026-08-08.** The claim reply carries `poll_interval_seconds` (`backend/api/app.py:428`, from `POLL_INTERVAL_SECONDS` at `:71`) and the worker floors it with `clamp_poll_interval` (`backend/api/contributor-worker/google-serpapi-worker.py:231`). **It is carried on the granted-nothing reply too, which is the case that matters**: the bank is fresh most days, so that is the ordinary answer, and a machine with no work is exactly the one an operator wants to slow down — attached to the queries it would reach quiet contributors never. The worker reads it *before* the nothing-to-do exit for the same reason, and a deliberate breakage moving that line below the exit turned the real-socket case red. **The clamp inherits `T-29`'s constant rather than declaring a second floor**, as that row's comment asked: `clamp_poll_interval` floors against `MIN_POLL_INTERVAL_SECONDS` (`:181`) and `build_launch_agent` schedules on it (`:427`), and a test asserts they are one constant and not two that agree — two floors that drift apart is a worker polling on one number and scheduled on another, which nothing would report. **The direction is pinned in both directions, separately**, because either case alone passes a `min()`: 10 seconds is raised to the floor, six hours is returned unchanged, and rewriting the clamp as a ceiling turns eight cases red. Absence, a string, a negative, `NaN`, infinity and `True` all land on the floor — absence silently, since a server predating `0007` sends nothing and must behave exactly like an install that never heard of an interval, which is what lets the two ends deploy in either order. **`True` is excluded by hand** because `bool` is an `int` in Python and `max(True, 1)` is `1`. **The row's "say so" clause is the printed line, and it is printed only on the disagreement** — the ordinary machine, where ask and schedule agree, stays silent, because a line per run about a cadence that did not change is noise in the one log a Builder reads for failures. It names the schedule as a schedule and not a fault, which is the failure the row named: a paused worker read as a broken one. **21 cases in `api/tests/test_poll_interval.py`, and four deliberate breakages confirmed they bite** — the clamp as `min()`, the server renaming the key, the read moved below the early exit, and the worker ignoring the reply — each turning exactly the expected test red. **The real-socket case was written wrong first and the mutation found it**: the stand-in spelled `poll_interval_seconds` itself, so a rename on the server end sailed straight past the one test whose whole premise was catching that. It now serves `app.claim()`'s own dict, and the rename turns it red. **Also run against the real FastAPI app under uvicorn on a real socket** with the real worker as a subprocess: `10` came back over the wire and was silently floored, `21600` came back and was reported as `every 360 minutes`. **`--check` was not touched**, so `T-30`'s exactly-three-requests assertion needed no edit — the interval rides on a reply `--check` never asks for. **What this row could not do is make the interval take effect**: the OS owns the schedule and nothing here rewrites the plist, so the report is honest about a cadence it cannot move — filed as `T-41` rather than half-built. Citations this row's own edits drifted were corrected in the same commit (three into `app.py` from the worker, one from `test_worker_check.py`); six that were already wrong at `5638ad3` were filed as `T-42`, not swept. Two findings filed: `T-41`, `T-42` |
 | ~~T-42~~ | Six citations into `api/app.py` resolved to lines that no longer carried the claim — `T-40`'s blindspot found again in five more places while closing `T-31`, each invisible to `tools/audit-citations.py` because each resolves | **Closed 2026-08-08.** All six corrected by **reading each target**, not by adding `T-31`'s 16-line offset: `webapp/label.py:25` → `:209` (`authenticate()`'s `sha256`), `webapp/label.py:84` → `:460` (the `MAX_BODY_BYTES` test), `evals/labels.py:374` → `:99` (`verify_schema()`), `docs/STATE-OF-THE-SYSTEM.md` → `:99`, `DEV_TASKS.md:497` → `:580`/`:582` (`authenticate()` then `holds_claim`), and `T-35`'s pair → `:380`/`:383`. **The offset was a coincidence, not a method** — three of the six had moved by other amounts, which is the whole argument for reading over arithmetic. **Two things the row did not predict.** The `STATE-OF-THE-SYSTEM.md` entry carried **three more** `app.py` numbers in the same sentence (`:143`, the column loop `:143-154`, the raise `:156-161`), and a sentence whose parenthetical exists to correct one number cannot be left half renumbered — all four moved together, to `:99`, `:160`, `:160-171`, `:173-179`. And **`T-35`'s claim is true but its reason had changed underneath it**: `claim` writes one `submission_log` row **per query it hands out** (defect D41, `backend/api/app.py:371`), so "no row when it grants nothing" now holds because zero granted is zero rows, not because `claim` never writes — which is what the pre-D41 code did, and what `claims_today`'s docstring (`:221`) exists to explain. A `T-35` session reading only `:260` would have inherited both the wrong endpoint and the pre-D41 model of the right one; both corrections are written into the `T-35` row itself, where that session will be standing. **Nothing was added to `config/citation-baseline.json`** — every one of these resolves, so the baseline cannot express the defect and adding them would record the opposite of what is wrong. Checker still prints `0 new` (3 known-drifted, unchanged); suites `1449`/`397`/`272`, mypy clean, ruff `1004` — baseline held on every one. One finding filed rather than swept: `T-43` |
