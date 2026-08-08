@@ -8,7 +8,7 @@ budget: 500
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-40`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-41`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -40,21 +40,22 @@ that reasoning is unchanged and `T-1` has a grep proving it holds.
 
 ## Order
 
-**Everything before `T-29` is closed** — the toolchain rows, the five harness layers, the
-§ 4a defects, and `0007`'s two server-side rows — and each is one line in the table at the foot of
-this file. `T-1` and `T-2` were the
+**Everything before `T-30` is closed** — the toolchain rows, the five harness layers, the
+§ 4a defects, `0007`'s two server-side rows and the two worker rows under them — and each is one
+line in the table at the foot of this file. `T-1` and `T-2` were the
 reason for the original ordering: they are the enforcement layer every later row leaned on, and what
 makes a session's claims checkable without hand-transcription. Everything since runs against CI
 rather than against a transcribed count.
 
 **The eleven open rows are one project, not a queue.** They cut
 [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md) into buildable
-steps and are listed in dependency order, not priority order: the server side is done, so `T-29`
-… `T-31` — the rest of the worker — is what nothing on a contributor's machine works without now; `T-32`
+steps and are listed in dependency order, not priority order: the server side is done and the
+worker can now be installed, so `T-30` … `T-31` — the rest of the worker — is what nothing on a
+contributor's machine works without now; `T-32`
 … `T-37` are policy that needs both halves in place. `T-32` and `T-33` are the two that change live
-pipeline behaviour rather than adding to it. `T-38` and `T-39` are the exceptions to the dependency
-order: neither is a cut of `0007`, each is a gap a closed row opened and could not close (`T-26`
-and `T-27` respectively), and they belong at the front rather than at the end.
+pipeline behaviour rather than adding to it. `T-38`, `T-39` and `T-40` are the exceptions to the dependency
+order: none is a cut of `0007`, each is a gap a closed row opened or found and could not itself
+close (`T-26`, `T-27` and `T-29` respectively), and they belong at the front rather than at the end.
 
 **The worker's settings block is pinned from outside its own suite, and that outlives `T-28`.**
 `T-27` shipped the payload as `webapp/contribute.CONFIG_FIELDS`, and
@@ -77,17 +78,18 @@ blocks the row that just closed: the mint 503s until the operator generates
 
 ## Contributor pipeline — [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md)
 
-Eleven open rows, nine of them cutting `0007` into buildable steps and `T-38` and `T-39`
-consequences of two that closed. `0007` supersedes
+Eleven open rows, eight of them cutting `0007` into buildable steps and `T-38`, `T-39` and `T-40`
+consequences of three that closed. `0007` supersedes
 [`0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md) decisions 1, 2 and 4;
 `0006` decision 3 — local execution, contributor's own key, own IP, never proxied — stands and is
 load-bearing for every row here. The owner-side half is `DEV_TASKS.md`'s `OQ-24` … `OQ-28`.
 
-**Baseline: all three suites are green — `1449` / `397` / `179`, all `OK`, measured 2026-08-08.**
-Both service figures have moved three times since these rows were written and the rows below still
-quote the old ones: the api suite was `117`, then `145` after `T-26`'s 28 cases in
+**Baseline: all three suites are green — `1449` / `397` / `212`, all `OK`, measured 2026-08-08.**
+The api figure has moved four times since these rows were written and the rows below still
+quote the old ones: it was `117`, then `145` after `T-26`'s 28 cases in
 `api/tests/test_search_query_claims.py`, then `160` after `T-27`'s 15 in `api/tests/
-test_mint.py`, and is now `179` after `T-28`'s 19 in `api/tests/test_contributor_worker.py`; the
+test_mint.py`, then `179` after `T-28`'s 19 in `api/tests/test_contributor_worker.py`, and is now
+`212` after `T-29`'s 33 in `api/tests/test_worker_install.py`; the
 webapp suite was `368` and is now `397` after `T-27`'s 22 in
 `webapp/tests/test_contribute.py` and 7 added to `webapp/tests/test_grants.py`. **Re-measure rather
 than trusting a row's own number** — that is what these two paragraphs exist to say.
@@ -106,30 +108,33 @@ are the rows most exposed to this, since both turn on elapsed time.
 
 ---
 
-### T-29 — `--install` / `--uninstall`, writing and removing a launchd `StartInterval` agent
+### T-40 — One citation into the worker names the wrong block, and the checker cannot see it
 
-`0007` decision 2: the OS owns the schedule, so it survives reboot and sleep with no process to keep
-alive. `--install` writes a `StartInterval` agent to `~/Library/LaunchAgents/` and loads it;
-`--uninstall` unloads and removes it. Both are idempotent — a Builder who runs `--install` twice has
-one agent, not two.
+`api/tests/test_claim_metering.py:29` cites `contributor-worker/google-serpapi-worker.py:121-126`
+for the worker printing "nothing to do" and exiting 0 on a granted-nothing poll. Those lines say
+nothing of the kind. **It was already wrong before `T-29` touched the file** — at `1a0b0c3` they
+were the settings block, `SERPAPI_API_KEY` through `DEBUG` — so this is drift the closing session
+found rather than drift it caused. The behaviour the comment means is at
+`google-serpapi-worker.py:247-252`.
 
-The worker parses no arguments at all today; `grep -n "argparse" google-serpapi-worker.py` prints
-nothing. Adding a flag interface is part of this row, and `T-30`'s `--check` lands on top of it.
-
-**macOS only, deliberately** — `0007` decision 7 makes Windows manual-run, and `OQ-24` is the census
-that either confirms that or reopens it. `--install` on a non-Darwin platform should say so and exit
-non-zero rather than writing a file that will never fire.
+**This is the one live instance in the tree of the blindspot `config/citation-baseline.json`'s
+`_what_this_cannot_catch` describes**: the line number resolves, so `tools/audit-citations.py`
+reports it green, and only reading the target shows the claim is about something else. Found by
+`T-29` and deliberately not folded into it.
 
 ```bash
-cd backend/api/contributor-worker
-grep -n "argparse\|StartInterval" google-serpapi-worker.py   # today: prints nothing
+cd backend
+python3 tools/audit-citations.py     # today: "citations ok: 3 known-drifted, 0 new" -- it cannot see this
+sed -n '121,126p' api/contributor-worker/google-serpapi-worker.py         # not the claim
+git show 1a0b0c3:backend/api/contributor-worker/google-serpapi-worker.py | sed -n '121,126p'
+#   the settings block -- what it pointed at before this row's file moved, and already not the claim
 ```
 
-**Done when:** `--install` then `--uninstall` leaves `~/Library/LaunchAgents/` exactly as it found it
-(diff the listing before and after), a second `--install` adds no second agent, and the plist's
-`StartInterval` matches the local floor `T-31` defines. **The half this row cannot check on this
-machine:** it is Linux, so the plist can be generated and diffed here but never loaded. Loading it is
-`OQ-25`'s watched install, not a criterion a session can meet.
+**Done when:** the citation names the lines that carry the behaviour it describes, the checker still
+prints `0 new`, and the other citation into that file (`TASKS.md`, `T-28`'s closed row) has been
+read against its target rather than assumed. **Do not generalise this into a content checker** —
+the tool's own docstring already says it cannot be one, and a second hand-rolled auditor is the
+failure mode this repo deleted 137 files to end.
 
 ---
 
@@ -452,7 +457,8 @@ not assumed.
 
 | # | what it was | outcome |
 |---|---|---|
-| ~~T-28~~ | The worker took its settings only from the environment, so `0007`'s "paste one file" install had nothing on the other end to read it | **Closed 2026-08-08.** `load_config()` resolves `config.json` from `os.path.dirname(os.path.abspath(__file__))` (`backend/api/contributor-worker/google-serpapi-worker.py:72`) and the three required settings fall back to it, environment first. **The row's own premise was wrong in one detail and `plan-verifier` caught it**: the worker reads **six** settings, not "all four", and requires three — `git show 3f76b3e` shows it was never four, so this was never-true rather than drift, and the same phrasing had been copied into `webapp/tests/test_contribute.py`'s docstring. The three it does not require stay environment-only, per `0007` decision 3: per-run policy is `T-31`'s poll response, not a file written once at install. **The cwd bug this row exists to prevent is invisible to any test that imports the module**, so all 19 cases in `api/tests/test_contributor_worker.py` are subprocess runs and `_run` asserts its `cwd` is outside the script's directory — including one that puts a *decoy* `config.json` in the working directory and requires the one beside the script to win. The unchanged-message clause was checked by diffing this build's output against `git stash`ed `HEAD`'s, not by reading the f-string. A malformed file gets its own message naming the file, because the unset-variable message would send its author to look at their shell. Three settings named at both ends rather than looped, deliberately: `TestTheWorkerContract` regexes this source and a loop would leave it nothing to read. No `config.json` is committed, and a test asserts that — it would be a committed credential and would mask the bare-environment clause. Nothing filed; `OQ-27`'s third bullet noted as overtaken |
+| ~~T-29~~ | The worker parsed no arguments at all, so `0007` decision 2's "the OS owns the schedule" had nothing to install it with | **Closed 2026-08-08.** `--install` writes `~/Library/LaunchAgents/com.github.liueric-dev.jobs.contributor-worker.plist` via `plistlib` and loads it; `--uninstall` unloads and removes it (`backend/api/contributor-worker/google-serpapi-worker.py:327`, `:367`, `:401`). Idempotence is **structural, not checked**: one label gives one path, so a second `--install` overwrites rather than adds — but it unloads first, because launchd holds the copy of the plist it read at load time and rewriting underneath a loaded job leaves the *old* schedule running and reports success. **The row's "`StartInterval` matches the local floor `T-31` defines" could not be met as written and was not faked**: `T-31` is unbuilt and no floor existed anywhere in the tree, so the constant is defined here as `MIN_POLL_INTERVAL_SECONDS = 3600` (`:169`) with `T-31` named as its inheritor — two floors that drift apart is a worker polling on one number and scheduled on another, which nothing would report. One hour for `T-31`'s own stated reason, and a granted-nothing poll spends no SerpApi credit, so what this bounds is the endpoint's cost and not the Builder's. **No `WorkingDirectory` key, deliberately** — pinning one would supply the very thing `T-28`'s suite exists to prove the agent does without; both `ProgramArguments` are absolute, `sys.executable` so the agent keeps the interpreter that was proved to work. `RunAtLoad` is false so `--install` never spends a credit; `T-30`'s `--check` is the specified way to confirm one. **The platform gate is in `cli()`, not in `install_agent()`** — that is what lets the file half be tested on this Linux box at all, and `--install` refusing here is asserted for real rather than skipped. **Nothing simulates `launchctl`**: the two cases that reach it record the argv this worker *would* send; whether a real launchd accepts the plist is `OQ-25`'s watched install and no test here reports on it. 33 cases in `api/tests/test_worker_install.py`, and **five deliberate breakages confirmed they bite** — a pinned `WorkingDirectory`, a rewrite without the unload, an `--uninstall` that deletes the credential, a second `main`-prefixed definition, and a parser that prints on the bare run — each turning exactly the expected test red, and the fourth turning the **webapp** suite red rather than the api one, which is the hazard the file now carries a comment about (that comment was itself written with the anchor string in it, twice, and the webapp suite caught it). The bare-run path was checked by diffing this build's stdout and stderr against `HEAD`'s, not by reading the parser. **`OQ-27`'s third bullet is NOT resolved here**: `--uninstall` removes the schedule, names the `config.json` still holding the credential, and deletes nothing — whether it should is an owner decision about other people's machines, and a test pins the declining answer so reversing it is a deliberate edit. One finding filed rather than folded in: `T-40` |
+| ~~T-28~~ | The worker took its settings only from the environment, so `0007`'s "paste one file" install had nothing on the other end to read it | **Closed 2026-08-08.** `load_config()` resolves `config.json` from `os.path.dirname(os.path.abspath(__file__))` (`backend/api/contributor-worker/google-serpapi-worker.py:91`) and the three required settings fall back to it, environment first. **The row's own premise was wrong in one detail and `plan-verifier` caught it**: the worker reads **six** settings, not "all four", and requires three — `git show 3f76b3e` shows it was never four, so this was never-true rather than drift, and the same phrasing had been copied into `webapp/tests/test_contribute.py`'s docstring. The three it does not require stay environment-only, per `0007` decision 3: per-run policy is `T-31`'s poll response, not a file written once at install. **The cwd bug this row exists to prevent is invisible to any test that imports the module**, so all 19 cases in `api/tests/test_contributor_worker.py` are subprocess runs and `_run` asserts its `cwd` is outside the script's directory — including one that puts a *decoy* `config.json` in the working directory and requires the one beside the script to win. The unchanged-message clause was checked by diffing this build's output against `git stash`ed `HEAD`'s, not by reading the f-string. A malformed file gets its own message naming the file, because the unset-variable message would send its author to look at their shell. Three settings named at both ends rather than looped, deliberately: `TestTheWorkerContract` regexes this source and a loop would leave it nothing to read. No `config.json` is committed, and a test asserts that — it would be a committed credential and would mask the bare-environment clause. Nothing filed; `OQ-27`'s third bullet noted as overtaken |
 | ~~T-27~~ | `0007` decision 1's mint-at-opt-in endpoint: the credential shape existed in `manage_users.py create`, but `webapp` and `api` share no code and no database role, so how `webapp` got a row into `api_keys` was unanswered | **Closed 2026-08-08.** **The answer is that it does not.** Three candidates: grant `jobs_web` INSERT on `api_keys` (rejected outright by `0006`'s consequences, DEC-84 option 1), a request queue for `manage_users.py create` to drain (rejected by `0006` decision 1), and a server-to-server call — the only survivor, and the one `0006`'s consequences already assumed by naming "the server-to-server shared secret" as the unscoped follow-up. So `webapp` authenticates the Builder, POSTs `api/`'s new `/v1/internal/contributors`, and **no grant crosses the two roles**: `jobs_api` already held INSERT on `contributors` and `api_keys`, `jobs_web` gains nothing, and `webapp/README.md`'s "The two do not talk" is amended rather than quietly falsified. The mint itself moved to `qc.mint_credential()` with `manage_users.py create` as a caller — one implementation, per `.claude/CLAUDE.md`. **Both key properties were asserted by trying to break them, not by reading the code**: the raw key is fetched back out of everything written and out of a second mint, and the `config.json` field list is pinned against the T-28 worker's own source rather than a fixture, so a rename on either side is red. Two findings filed rather than folded in: `T-39` (`api_keys` is unreachable from `provision-database.py`) and `OQ-30` (the shared secret, and refusing `/v1/internal/` at the edge). One thing found and left alone: `webapp/.env`'s `JOBS_ADMIN_DATABASE_URL` is not the owner of `app_users`, so the migration ran as `jobs_pipeline` — `OQ-30` carries it |
 | ~~T-26~~ | `api/query_claims.py` could lease a **dataset string** in `job_ingest_state` and nothing else; `0007`'s per-query dispatch needs to lease a `search_queries` row, which had no claim columns at all | **Closed 2026-08-07.** Three columns added to `search_queries` via `add_missing_columns` inside `schema.ensure_search_query_schema()` — **in `schema.py`, deliberately not beside the precedent it mirrors.** A `plan-verifier` pass found the row's two halves in tension: `job_ingest_state`'s three claim columns have no single owner (`claimed_at` in `lib/state.py`, reachable from `provision-database.py`; `claimed_by` and `claim_granted_at` in `api/query_claims.ensure_schema()`, which is **not** one of its five steps), so mirroring the precedent literally would have shipped a column nobody provisions — `T-19` straight back. `try_claim_search_query` is a plain conditional `UPDATE`, not an upsert: a `search_queries` row exists because a Builder saved the keyword, so a claim must never conjure one. **Both protections were asserted by breaking them**, not by reading the predicate: dropping `claim_granted_at` from `holds_search_query_claim` turns exactly one test red, and removing the parentheses around the `OR` turns exactly one other red — the second matters because without them a claim aimed at one row takes over every expired claim in the table and still reports a win. Two findings filed rather than folded in: `T-38` (nothing advances a claimed row's run statistics after a submit) and `OQ-29` (the two column-scoped GRANTs the new `REQUIRED_TABLES` entry now demands at startup) |
 | ~~T-1~~ | There was no linter and no formatter, and a tranche README said wiring one in was wrong for this repo | **Closed 2026-08-03**, `56ce823`. `ruff` adopted as a **dev-and-CI tool only**, reversing an outright ban by owner decision. `backend/pyproject.toml` carries `[tool.ruff]` and nothing else — no build backend, no packaging, because nothing here is installed as a package. Landed against a recorded baseline rather than a mass reformat: a large unreviewable diff is the exact move that produced the documents this repo deleted. In none of the three `requirements.txt`, and CI greps to prove it. Reasoning is [`docs/adr/0001`](docs/adr/0001-ruff-as-a-dev-only-linter.md) |

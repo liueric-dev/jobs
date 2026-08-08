@@ -404,13 +404,23 @@ questions the code cannot answer:
   If the laptop is Pursuit-issued and passed on, that file goes with it. Say whether `--uninstall`
   removes the credential too — and note that a Builder who never runs it is the common case.
 
-**The third has a deadline the others do not:** it is only cheap while `T-28` and `T-29` are unbuilt.
-**Half of that deadline passed on 2026-08-08**, when `T-28` closed and the worker began reading a
-plaintext `config.json` beside itself. `T-29` — the row that would own an `--uninstall` that removes
-it — is still unbuilt, so the lever is still there, but it is now the only one.
+**The third had a deadline the others do not, and it has now passed in full.** It was only cheap
+while `T-28` and `T-29` were unbuilt. `T-28` closed on 2026-08-08 and the worker began reading a
+plaintext `config.json` beside itself; `T-29` closed the same day and shipped the `--uninstall` that
+would have owned the removal. **It does not remove it.** That is not the decision being made by
+default — the row declined to make it, `--uninstall` names the file and its credential in its own
+output and deletes nothing, and `api/tests/test_worker_install.py`'s
+`test_it_removes_the_schedule_and_leaves_the_credential` pins that declining answer so reversing it
+is a deliberate edit to a named test rather than a silent one.
 
-**Done when:** all three are answered and the third is written into `T-28`/`T-29` before either is
-implemented.
+**So the shape of this question has changed and its cost has not gone up much.** It is no longer
+"decide before the code exists"; it is "decide, then change one function and one test". What did get
+more expensive is the machines already installed: every Builder who opts in from here has a
+plaintext credential on disk that nothing this repo ships will remove, and a decision to start
+removing it does not reach a laptop that already ran `--uninstall`.
+
+**Done when:** all three are answered, and the third is either written into a new `T-` row that
+changes `uninstall_agent()` and its test, or recorded here as deliberately unchanged.
 
 ---
 
