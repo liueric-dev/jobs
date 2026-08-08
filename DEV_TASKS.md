@@ -17,7 +17,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-31`.**
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-32`.**
 Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
 citations to it keep resolving.
 
@@ -485,6 +485,37 @@ clean (`systemctl status`, not inference), and `backend/api/README.md`'s privile
 
 ---
 
+
+### OQ-31 — Run `--check`'s credential branch against the deployed api, once
+
+**Why it is yours:** account and machine. It needs a credential the mint has not issued yet, on a
+host no session can reach — `OQ-30` first, and this is the only reason to do it in that order.
+
+**What:** `T-30` shipped `--check`, and one of its three checks is unverified against anything
+real. The credential check asks the deployed `api/` to release a claim nobody holds and reads the
+**409** as "your key is good" and the **401** as "your key is not" — an ordering inside
+`release` (`backend/api/app.py:549`, `:551`) that `api/tests/test_worker_check.py` pins with a fake
+connection. **The 401 branch has been run against a real HTTP server; the 409 branch never has.**
+A fake that agrees with the code it stands in for is exactly the thing that cannot tell you the
+deployed service agrees too.
+
+**How to do it.** After `OQ-30`: opt in through the webapp as yourself, drop the `config.json`
+beside the worker on any machine, and run `python3 google-serpapi-worker.py --check`. Then run it
+once more with one character of `JOBS_API_KEY` changed. Two runs, thirty seconds, no SerpApi
+account needed for either — the credential check never touches SerpApi.
+
+**Also worth reading while you are there:** the SerpApi line. `T-30` verified against the
+pipeline's own key that the account endpoint charges nothing (`this_month_usage` identical either
+side of a `--check` run), but that account is at **250/250 with 0 searches left**, so "the
+remaining count does not move" was checked on a count that could not move. A key with credit says
+it properly, and it is the same one run.
+
+**Done when:** a good credential prints the accepted line and a wrong one prints the rejected line,
+both against the deployed host, and if either says something else it is written into this row
+rather than fixed silently — `T-30` chose the 409 reading deliberately, and this is the check on
+that choice.
+
+---
 
 ### OQ-30 — The mint secret, and refusing `/v1/internal/` at the edge
 

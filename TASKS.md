@@ -40,18 +40,18 @@ that reasoning is unchanged and `T-1` has a grep proving it holds.
 
 ## Order
 
-**Everything before `T-30` is closed** — the toolchain rows, the five harness layers, the
-§ 4a defects, `0007`'s two server-side rows and the two worker rows under them — and each is one
+**Everything before `T-31` is closed** — the toolchain rows, the five harness layers, the
+§ 4a defects, `0007`'s two server-side rows and the three worker rows under them — and each is one
 line in the table at the foot of this file. `T-1` and `T-2` were the
 reason for the original ordering: they are the enforcement layer every later row leaned on, and what
 makes a session's claims checkable without hand-transcription. Everything since runs against CI
 rather than against a transcribed count.
 
-**The eleven open rows are one project, not a queue.** They cut
+**The ten open rows are one project, not a queue.** They cut
 [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md) into buildable
-steps and are listed in dependency order, not priority order: the server side is done and the
-worker can now be installed, so `T-30` … `T-31` — the rest of the worker — is what nothing on a
-contributor's machine works without now; `T-32`
+steps and are listed in dependency order, not priority order: the server side is done, the worker
+can be installed and it can now report on itself, so `T-31` — the poll interval, and the last of
+the worker — is what nothing on a contributor's machine works without now; `T-32`
 … `T-37` are policy that needs both halves in place. `T-32` and `T-33` are the two that change live
 pipeline behaviour rather than adding to it. `T-38`, `T-39` and `T-40` are the exceptions to the dependency
 order: none is a cut of `0007`, each is a gap a closed row opened or found and could not itself
@@ -70,9 +70,10 @@ run both suites.
 scoring redesign completed 2026-07-28 and has never been validated, and every row here improves a
 system nobody has confirmed works. It needs people, so no session can start it. `OQ-24` … `OQ-28`
 are the owner-side half of `0007` specifically, and `OQ-25` — watching one Builder install the
-worker — is the one that decides whether `T-27` … `T-30` were worth building. `OQ-30` is new and
-blocks the row that just closed: the mint 503s until the operator generates
-`JOBS_MINT_SHARED_SECRET` and puts it in both `.env` files.
+worker — is the one that decides whether `T-27` … `T-30` were worth building. `OQ-30` blocks
+`T-27`'s mint, which 503s until the operator generates `JOBS_MINT_SHARED_SECRET` and puts it in
+both `.env` files — and `OQ-31`, filed by `T-30`, is blocked behind it in turn: the one branch of
+`--check` no session can exercise needs a credential that mint has not issued yet.
 
 ---
 
@@ -135,33 +136,6 @@ prints `0 new`, and the other citation into that file (`TASKS.md`, `T-28`'s clos
 read against its target rather than assumed. **Do not generalise this into a content checker** —
 the tool's own docstring already says it cannot be one, and a second hand-rolled auditor is the
 failure mode this repo deleted 137 files to end.
-
----
-
-### T-30 — `--check`, validating credential, base URL and SerpApi key
-
-One command a Builder runs when something is wrong, printing a pass/fail line per check: the base URL
-resolves and `/v1/health` answers (`backend/api/app.py:255`), the credential authenticates, and the
-SerpApi key is accepted by SerpApi. Exit non-zero if any fails.
-
-**Spend no SerpApi credit to prove the key works.** SerpApi's account endpoint reports plan state
-without running a search; a validating search would charge the Builder for asking whether they are
-set up, which is the wrong first impression. That endpoint is also where `T-31`'s plan data comes
-from, so the two rows read the same response.
-
-```bash
-cd backend/api/contributor-worker
-python3 google-serpapi-worker.py --check    # today: exits 1, "worker FAILED: set JOBS_API_BASE_URL, ..."
-#   (the flag is unparsed; the env check fires first)
-```
-
-**Done when:** `--check` prints one line per check and exits non-zero on any failure, a wrong
-credential is distinguishable in the output from an unreachable base URL, and no SerpApi search
-credit is spent — verify against the account endpoint's own reported remaining count, before and
-after.
-
-**One criterion here is not machine-checkable and is not being invented:** "plain language" is a human
-judgement. `OQ-25` — watching one Builder install this end to end — is where that gets tested.
 
 ---
 
@@ -457,6 +431,7 @@ not assumed.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~T-30~~ | `0007`'s fourth guess at where onboarding friction lives: a Builder whose worker does nothing had no way to find out which of three things was wrong, and no way to ask that did not cost them a search credit | **Closed 2026-08-08.** `--check` prints one line per check and exits non-zero on any failure (`backend/api/contributor-worker/google-serpapi-worker.py:651`, flag at `:706`): the base URL answers at `/v1/health` (`:504`), the credential is accepted (`:540`), the SerpApi key is accepted (`:602`). **The credential is checked by offering to release a claim nobody can hold, and the 409 is the pass** — every authenticated route on that server *does* something, and `/v1/queries/claim` locks rows out of the pool and meters the caller against a daily cap (`backend/api/app.py:345`), so checking a credential with it would spend the allowance being checked and, on a stale day, lock real queries for a worker that was only asking a question. `release` authenticates first and tests claim ownership second (`backend/api/app.py:549`, `:551`), so a dataset the query bank cannot name reaches the credential check, writes nothing and commits nothing. **That ordering is now pinned from the server's side** in `api/tests/test_worker_check.py`'s `TestTheServerSideOfTheProbe`, because reversed it would tell a Builder with a good credential to go and ask for a new one. **An unreachable base URL reports the credential as `not checked`, never as bad** — the row's distinguishability clause, and the failure that would send a Builder to replace a key that was fine. **`--check` is deliberately NOT in `T-29`'s mutually-exclusive scheduling group**: it changes nothing, it works off a Mac, and it is what you run when one of those two went wrong; combining it with either is refused in a sentence rather than by argparse's grammar. `T-29`'s `test_an_unknown_flag_is_refused_rather_than_ignored` was rewritten, not deleted — its example moved from `--check` to a flag nothing intends to build, since what it pins is the parser refusing what it does not know. **Two halves, and only one of them is ours to verify.** Ours, asserted for real: no request `--check` makes is a SerpApi *search*, checked as an assertion over every URL it sends, plus the account endpoint pinned as a literal rather than as the constant (written from the constant first, it stayed green under exactly the edit it forbids). Not ours: the far ends. **One clause was met against the live endpoint and one was not.** SerpApi's account endpoint was called with the pipeline's own key before and after a real `--check` run: `this_month_usage` and `total_searches_left` were identical across it, so the check cost no credit — but the account is at 250/250 with 0 left, so the strong form of the row's before-and-after (a positive count that does not move) needs an account with credit and is `OQ-25`'s. The `409` pass path was never exercised against a running server: that needs a minted credential, which needs `OQ-30`'s secret — filed as `OQ-31`. **The live run is what found the one real bug**: `probe` truncated every body to 400 characters *before* parsing, SerpApi's account answer is longer than that, and a perfectly good key came back as "answered 200 with something that is not JSON" — invisible to all 38 scripted cases, whose fixtures were short. The body now comes back whole and truncation happens where it is printed (`:477`), with a case whose fixture is deliberately over 400 characters. Nothing prints a credential: bodies pass through `redacted()` (`:461`), the SerpApi URL — which carries the key as a query parameter — is never printed, and a test asserts both. 39 cases, and **seven deliberate breakages confirmed they bite** — the account endpoint swapped for `/search.json`, a 401 read as a pass, redaction removed, the probe pointed at `/claim`, the server's two checks reversed, `--check` moved into the scheduling group, and an unreachable server reported as a bad credential — each turning exactly the expected test red. Also run against a real socket, not only against a scripted stand-in. **The row's own worked example was stale and `plan-verifier` caught it**: it claimed `--check` exits 1 with the unset-settings message, but `T-29` landed a parser under it after the row was written, so it had been exiting 2 from argparse; its `app.py:255` citation for `/v1/health` had drifted to `:269` the same way. **The criterion this row declined to invent is still not invented**: whether the output means anything to a reader is `OQ-25`'s. One finding filed: `OQ-31` |
 | ~~T-29~~ | The worker parsed no arguments at all, so `0007` decision 2's "the OS owns the schedule" had nothing to install it with | **Closed 2026-08-08.** `--install` writes `~/Library/LaunchAgents/com.github.liueric-dev.jobs.contributor-worker.plist` via `plistlib` and loads it; `--uninstall` unloads and removes it (`backend/api/contributor-worker/google-serpapi-worker.py:327`, `:367`, `:401`). Idempotence is **structural, not checked**: one label gives one path, so a second `--install` overwrites rather than adds — but it unloads first, because launchd holds the copy of the plist it read at load time and rewriting underneath a loaded job leaves the *old* schedule running and reports success. **The row's "`StartInterval` matches the local floor `T-31` defines" could not be met as written and was not faked**: `T-31` is unbuilt and no floor existed anywhere in the tree, so the constant is defined here as `MIN_POLL_INTERVAL_SECONDS = 3600` (`:169`) with `T-31` named as its inheritor — two floors that drift apart is a worker polling on one number and scheduled on another, which nothing would report. One hour for `T-31`'s own stated reason, and a granted-nothing poll spends no SerpApi credit, so what this bounds is the endpoint's cost and not the Builder's. **No `WorkingDirectory` key, deliberately** — pinning one would supply the very thing `T-28`'s suite exists to prove the agent does without; both `ProgramArguments` are absolute, `sys.executable` so the agent keeps the interpreter that was proved to work. `RunAtLoad` is false so `--install` never spends a credit; `T-30`'s `--check` is the specified way to confirm one. **The platform gate is in `cli()`, not in `install_agent()`** — that is what lets the file half be tested on this Linux box at all, and `--install` refusing here is asserted for real rather than skipped. **Nothing simulates `launchctl`**: the two cases that reach it record the argv this worker *would* send; whether a real launchd accepts the plist is `OQ-25`'s watched install and no test here reports on it. 33 cases in `api/tests/test_worker_install.py`, and **five deliberate breakages confirmed they bite** — a pinned `WorkingDirectory`, a rewrite without the unload, an `--uninstall` that deletes the credential, a second `main`-prefixed definition, and a parser that prints on the bare run — each turning exactly the expected test red, and the fourth turning the **webapp** suite red rather than the api one, which is the hazard the file now carries a comment about (that comment was itself written with the anchor string in it, twice, and the webapp suite caught it). The bare-run path was checked by diffing this build's stdout and stderr against `HEAD`'s, not by reading the parser. **`OQ-27`'s third bullet is NOT resolved here**: `--uninstall` removes the schedule, names the `config.json` still holding the credential, and deletes nothing — whether it should is an owner decision about other people's machines, and a test pins the declining answer so reversing it is a deliberate edit. One finding filed rather than folded in: `T-40` |
 | ~~T-28~~ | The worker took its settings only from the environment, so `0007`'s "paste one file" install had nothing on the other end to read it | **Closed 2026-08-08.** `load_config()` resolves `config.json` from `os.path.dirname(os.path.abspath(__file__))` (`backend/api/contributor-worker/google-serpapi-worker.py:91`) and the three required settings fall back to it, environment first. **The row's own premise was wrong in one detail and `plan-verifier` caught it**: the worker reads **six** settings, not "all four", and requires three — `git show 3f76b3e` shows it was never four, so this was never-true rather than drift, and the same phrasing had been copied into `webapp/tests/test_contribute.py`'s docstring. The three it does not require stay environment-only, per `0007` decision 3: per-run policy is `T-31`'s poll response, not a file written once at install. **The cwd bug this row exists to prevent is invisible to any test that imports the module**, so all 19 cases in `api/tests/test_contributor_worker.py` are subprocess runs and `_run` asserts its `cwd` is outside the script's directory — including one that puts a *decoy* `config.json` in the working directory and requires the one beside the script to win. The unchanged-message clause was checked by diffing this build's output against `git stash`ed `HEAD`'s, not by reading the f-string. A malformed file gets its own message naming the file, because the unset-variable message would send its author to look at their shell. Three settings named at both ends rather than looped, deliberately: `TestTheWorkerContract` regexes this source and a loop would leave it nothing to read. No `config.json` is committed, and a test asserts that — it would be a committed credential and would mask the bare-environment clause. Nothing filed; `OQ-27`'s third bullet noted as overtaken |
 | ~~T-27~~ | `0007` decision 1's mint-at-opt-in endpoint: the credential shape existed in `manage_users.py create`, but `webapp` and `api` share no code and no database role, so how `webapp` got a row into `api_keys` was unanswered | **Closed 2026-08-08.** **The answer is that it does not.** Three candidates: grant `jobs_web` INSERT on `api_keys` (rejected outright by `0006`'s consequences, DEC-84 option 1), a request queue for `manage_users.py create` to drain (rejected by `0006` decision 1), and a server-to-server call — the only survivor, and the one `0006`'s consequences already assumed by naming "the server-to-server shared secret" as the unscoped follow-up. So `webapp` authenticates the Builder, POSTs `api/`'s new `/v1/internal/contributors`, and **no grant crosses the two roles**: `jobs_api` already held INSERT on `contributors` and `api_keys`, `jobs_web` gains nothing, and `webapp/README.md`'s "The two do not talk" is amended rather than quietly falsified. The mint itself moved to `qc.mint_credential()` with `manage_users.py create` as a caller — one implementation, per `.claude/CLAUDE.md`. **Both key properties were asserted by trying to break them, not by reading the code**: the raw key is fetched back out of everything written and out of a second mint, and the `config.json` field list is pinned against the T-28 worker's own source rather than a fixture, so a rename on either side is red. Two findings filed rather than folded in: `T-39` (`api_keys` is unreachable from `provision-database.py`) and `OQ-30` (the shared secret, and refusing `/v1/internal/` at the edge). One thing found and left alone: `webapp/.env`'s `JOBS_ADMIN_DATABASE_URL` is not the owner of `app_users`, so the migration ran as `jobs_pipeline` — `OQ-30` carries it |

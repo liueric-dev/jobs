@@ -68,6 +68,16 @@ SCHEDULE, anywhere that is not a Mac:
     crontab -e
     0 9 * * * /usr/bin/python3 /path/to/this/dir/google-serpapi-worker.py
 
+CHECK -- when something is not working:
+    python3 google-serpapi-worker.py --check
+
+    Prints one line per check -- the server answers, your credential is
+    accepted, your SerpApi key is accepted -- and exits non-zero if any of them
+    failed. It runs no search, so it costs you nothing and you can run it as
+    often as you like. It is also how you confirm an --install worked: the
+    agent itself does not run until its first scheduled time, so there is
+    otherwise nothing to see.
+
 IF A SEARCH FAILS: the script tells the server to release that query so
 somebody else can pick it up right away, rather than leaving it locked. That
 also means a failed run costs you nothing but the credit SerpApi already
@@ -425,6 +435,244 @@ def uninstall_agent(home=None, launchctl=run_launchctl):
     return 0
 
 
+# --------------------------------------------------------------------------
+# T-30: --check. The one command to run when something is wrong.
+#
+# Three checks, printed one line each, and NOTHING HERE SPENDS A SERPAPI
+# CREDIT -- see check_serpapi and check_credential for how each avoids it. A
+# diagnostic that charged a Builder for asking whether they were set up would
+# be answering the question by making it worse.
+# --------------------------------------------------------------------------
+
+#: SerpApi's account endpoint. It reports plan state -- including how many
+#: searches are left in the cycle -- WITHOUT RUNNING ONE, which is the whole
+#: reason --check asks it rather than firing a throwaway search and seeing
+#: whether it comes back. T-32's budget pacing reads this same response, so
+#: the two rows share one endpoint and one shape.
+SERPAPI_ACCOUNT_URL = "https://serpapi.com/account"
+
+#: What --check offers to release when it asks the server whether the
+#: credential works. NOTHING CAN EVER HOLD A CLAIM ON IT: every real dataset
+#: name is built server-side as "google_jobs:query:<slug>" out of the server's
+#: own query bank (api/app.py:401), and no slug is spelled like this.
+CHECK_PROBE_DATASET = "google_jobs:query:__check__"
+
+
+def redacted(text):
+    """Whatever the far end said, minus anything of yours it quoted back.
+
+    --check prints response bodies, because what the server actually objected
+    to is the useful half of a failure. A body is also the one place a key can
+    come back at you: an error that helpfully echoes the credential it rejected
+    would put it on a terminal, in a scrollback, in the screenshot a Builder
+    pastes into a chat asking for help. The command that exists to make a bad
+    key visible must not be the one that makes a good key public.
+    """
+    for secret in (JOBS_API_KEY, SERPAPI_API_KEY):
+        if secret and len(secret) >= 8:
+            text = text.replace(secret, "<redacted>")
+    return text
+
+
+def probe(request, timeout=None):
+    """Send one request and return (status, body), treating an HTTP error
+    status as an ANSWER rather than as a failure.
+
+    urllib raises on 4xx, and every status this row turns on is a 4xx: 401 is
+    the credential being rejected, 409 is the credential being accepted (see
+    check_credential). Letting those raise would collapse "the server said no"
+    into "the server said nothing", which is the one distinction the row's
+    acceptance criteria name. What still raises is a non-answer -- DNS, a
+    refused connection, a timeout, TLS -- and the callers report that as
+    unreachable, which is what it is.
+
+    THE BODY COMES BACK WHOLE, AND THE TRUNCATION HAPPENS WHERE IT IS PRINTED.
+    Cutting it here instead cost an afternoon: every scripted answer in the
+    suite is a short one, so a 400-character cap looked fine until --check was
+    pointed at the real SerpApi account endpoint, whose answer is longer than
+    that -- and a valid key came back as "answered 200 with something that is
+    not JSON". A parser must see the whole document; only a message quoting it
+    to a human needs a length.
+    """
+    try:
+        with urllib.request.urlopen(request, timeout=timeout or HTTP_TIMEOUT) as resp:
+            return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+
+
+def check_base_url(send=probe):
+    """Is JOBS_API_BASE_URL an address where this service answers?
+
+    /v1/health (api/app.py:269) needs no credential, so this separates "your
+    address is wrong" from "your key is wrong" -- which the next check depends
+    on, and which the row requires be distinguishable in the output.
+    """
+    if not JOBS_API_BASE_URL:
+        return False, "base URL", ("JOBS_API_BASE_URL is not set "
+                                   "(see this file's header).")
+    url = f"{JOBS_API_BASE_URL}/v1/health"
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "jobs-contributor-worker/1.0"})
+    try:
+        status, body = send(request)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        return False, "base URL", (f"nothing answered at {url} "
+                                   f"({redacted(str(e))}). Check the address, "
+                                   f"and check you are online.")
+    if status != 200:
+        return False, "base URL", (f"{url} answered HTTP {status}, not 200. "
+                                   f"Something is at that address, but it is "
+                                   f"not this service.")
+    try:
+        healthy = json.loads(body).get("ok") is True
+    except ValueError:
+        healthy = False
+    if not healthy:
+        # A captive portal, a parked domain and a proxy error page all answer
+        # 200. Reading the body is what tells them apart from the service.
+        return False, "base URL", (f"{url} answered 200, but not with this "
+                                   f"service's health response "
+                                   f"({redacted(body)[:120]}).")
+    return True, "base URL", f"{JOBS_API_BASE_URL} answered at /v1/health."
+
+
+def check_credential(base_url_ok, send=probe):
+    """Does the server recognise JOBS_API_KEY?
+
+    THE PROBE IS A RELEASE OF A DATASET NOBODY CAN HOLD, AND THE 409 IS THE
+    PASS. Every authenticated route on that server does something. /v1/queries/
+    claim locks rows out of the pool for CLAIM_TTL_MINUTES apiece and meters
+    the caller against a daily cap (api/app.py:345, query_claims.py:196), so
+    checking a credential with it would spend the allowance being checked, and
+    on a day when the bank is stale it would leave real queries claimed by a
+    worker that was only asking a question. Release is the one authenticated
+    route that can be made to change nothing: it authenticates FIRST and asks
+    whether the caller holds the claim SECOND (api/app.py:549, :551), so a
+    dataset the query bank cannot produce reaches the credential check, writes
+    no submission_log row, commits nothing, and comes back 409.
+
+    That ordering is the assumption this check rests on, and it is pinned from
+    the server's side by api/tests/test_worker_check.py rather than assumed --
+    reversed, this would tell a Builder their good credential was bad.
+    """
+    if not JOBS_API_KEY:
+        return False, "credential", ("JOBS_API_KEY is not set "
+                                     "(see this file's header).")
+    if not base_url_ok:
+        # Not "failed": unknowable. Saying the credential is bad because the
+        # address is wrong sends a Builder to ask for a new key they do not
+        # need, and the one they have would fail the same way afterwards.
+        return False, "credential", ("not checked -- the server never "
+                                     "answered, so nothing here would mean "
+                                     "anything. Fix the base URL first.")
+    url = (f"{JOBS_API_BASE_URL}/v1/queries/"
+           f"{urllib.parse.quote(CHECK_PROBE_DATASET)}/release")
+    request = urllib.request.Request(
+        url,
+        data=json.dumps({"reason": "--check: credential probe, no claim held"}).encode(),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {JOBS_API_KEY}",
+            "User-Agent": "jobs-contributor-worker/1.0",
+        },
+    )
+    try:
+        status, body = send(request)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        return False, "credential", (f"the server answered /v1/health but not "
+                                     f"this ({redacted(str(e))}).")
+    if status == 401:
+        return False, "credential", (f"the server does not recognise this "
+                                     f"JOBS_API_KEY (HTTP 401: "
+                                     f"{redacted(body)[:160]}). Ask for a new "
+                                     f"one where you opted in.")
+    if status == 409 or 200 <= status < 300:
+        # 409 is the expected pass, per the docstring. A 2xx would mean the
+        # server thought this worker held a claim on a dataset its own query
+        # bank cannot name -- impossible rather than good, but it is still an
+        # authenticated answer, and this check only reports on the credential.
+        return True, "credential", "accepted -- the server knows this key."
+    return False, "credential", (f"unexpected answer: HTTP {status} "
+                                 f"({redacted(body)[:160]}). The key may be "
+                                 f"fine; something else is not.")
+
+
+def check_serpapi(send=probe):
+    """Is SERPAPI_API_KEY accepted, and how much of the cycle is left?
+
+    NO SEARCH IS RUN. The account endpoint answers with plan state and is not
+    metered, so this costs nothing; a validating search would charge a Builder
+    a credit for asking whether they were set up, which is the wrong first
+    impression and is what the row forbids. The remaining count is printed
+    because it is the number that makes the answer useful: a key that is
+    accepted and has nothing left is a working install that will do no work.
+    """
+    if not SERPAPI_API_KEY:
+        return False, "SerpApi key", (
+            f"SERPAPI_API_KEY is not set. This one is yours, not the server's: "
+            f"get it from serpapi.com and type it into {CONFIG_PATH}.")
+    # The key is a query parameter, so the URL itself is a credential --
+    # nothing below prints it, and every message that quotes the far end goes
+    # through redacted() first.
+    url = (f"{SERPAPI_ACCOUNT_URL}?"
+           + urllib.parse.urlencode({"api_key": SERPAPI_API_KEY}))
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "jobs-contributor-worker/1.0"})
+    try:
+        status, body = send(request)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        return False, "SerpApi key", (f"serpapi.com did not answer "
+                                      f"({redacted(str(e))}).")
+    if status in (401, 403):
+        return False, "SerpApi key", (f"SerpApi rejected this key (HTTP "
+                                      f"{status}: {redacted(body)[:160]}). "
+                                      f"Copy it again from serpapi.com; the "
+                                      f"server never sees this one.")
+    if status != 200:
+        return False, "SerpApi key", (f"serpapi.com answered HTTP {status} "
+                                      f"({redacted(body)[:160]}), which is "
+                                      f"neither an acceptance nor a refusal.")
+    try:
+        account = json.loads(body)
+    except ValueError:
+        return False, "SerpApi key", ("serpapi.com answered 200 with "
+                                      "something that is not JSON.")
+    left = account.get("total_searches_left")
+    if left is None:
+        return True, "SerpApi key", ("accepted by SerpApi, which reported no "
+                                     "remaining count.")
+    plan = account.get("plan_name") or "your plan"
+    return True, "SerpApi key", (f"accepted by SerpApi -- {left} searches left "
+                                 f"on {plan} this cycle.")
+
+
+def run_checks(send=probe):
+    """Every check, in the order in which one failure makes the next
+    unknowable, and one line per check. Returns the exit code.
+    """
+    if os.path.exists(CONFIG_PATH):
+        print(f"worker check: settings from {CONFIG_PATH}, and from the "
+              f"environment where it is set.")
+    else:
+        print("worker check: no config.json beside this script; reading the "
+              "environment only.")
+    results = [check_base_url(send)]
+    results.append(check_credential(results[0][0], send))
+    results.append(check_serpapi(send))
+    for ok, label, detail in results:
+        print(f"  {'ok  ' if ok else 'FAIL'} {label}: {detail}")
+    failed = [r for r in results if not r[0]]
+    if failed:
+        print(f"worker FAILED: {len(failed)} of {len(results)} checks did not "
+              f"pass. No SerpApi search was run, so this cost you no credit.")
+        return 1
+    print(f"worker: all {len(results)} checks passed. No SerpApi search was "
+          f"run, so this cost you no credit.")
+    return 0
+
+
 def cli(argv=None):
     """Parse the flags, or fall through to a run.
 
@@ -446,7 +694,33 @@ def cli(argv=None):
         "--uninstall", action="store_true",
         help="unload and remove that agent. Leaves config.json, and the "
              "credential in it, alone. macOS only.")
+    # NOT A MEMBER OF THE GROUP ABOVE, DELIBERATELY. That group exists because
+    # --install and --uninstall are two directions of one action, and asking
+    # for both is a typo. --check is not a third direction: it changes nothing,
+    # it works on every platform rather than only on macOS, and it is the thing
+    # you run when one of those two went wrong. Putting it in the group would
+    # also print it in the usage line as a third way to schedule, which it is
+    # not. Combining it with either is refused below, in a sentence, rather
+    # than by argparse's grammar.
+    parser.add_argument(
+        "--check", action="store_true",
+        help="check this machine's setup and print a line per check: the "
+             "server answers, your credential is accepted, your SerpApi key "
+             "is accepted. Runs no search, so it costs you nothing. Exits "
+             "non-zero if any check failed.")
     args = parser.parse_args(argv)
+
+    if args.check and (args.install or args.uninstall):
+        # Refused rather than silently ordered: a Builder who typed both meant
+        # something specific by it, and guessing which half to do first is how
+        # a diagnostic ends up reporting on a machine it just changed.
+        print("worker FAILED: --check reports on your setup and changes "
+              "nothing; --install and --uninstall change the schedule. Run "
+              "one at a time.")
+        return 1
+
+    if args.check:
+        return run_checks()
 
     if args.install or args.uninstall:
         if sys.platform != "darwin":

@@ -444,10 +444,14 @@ class TestTheCommandLine(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
 
     def test_an_unknown_flag_is_refused_rather_than_ignored(self):
-        # Before this row the worker parsed nothing, so `--check` was silently
-        # accepted and a run happened instead. T-30 lands --check on top of
-        # this parser; until it does, asking for it has to say no.
-        result = self.run_worker("--check")
+        # Before T-29 the worker parsed nothing, so any flag was silently
+        # accepted and a run happened instead. This asserted that with
+        # `--check`, the flag T-30 was about to add; T-30 landed it, so the
+        # example moved to one nothing intends to build rather than the
+        # assertion being dropped -- what is being pinned is the parser
+        # refusing what it does not know, not the spelling of the example.
+        # `--check` has its own suite now: api/tests/test_worker_check.py.
+        result = self.run_worker("--not-a-flag-this-worker-has")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unrecognized arguments", result.stderr)
 
