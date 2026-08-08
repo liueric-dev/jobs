@@ -165,8 +165,38 @@ REQUIRED_SEQUENCES = {
 #: of failure verify_schema() exists to convert into a refusal to start. It is
 #: the same argument REQUIRED_SEQUENCES above is annotated with, one level down.
 #: backend/webapp/schema_web.py carries the identical map for the same reason.
+#:
+#: T-45 WIDENED THIS FROM ONE COLUMN TO SEVEN, and the count is the finding. The
+#: row that filed it named the two `ensure_schema()` adds to the watermark table
+#: (claimed_by, claim_granted_at). But the contract this map states is the
+#: columns this service WRITES, not the ones it creates, and reading every
+#: statement that touches a claim gives six across two tables:
+#:
+#:   * job_ingest_state -- claimed_at as well. It is added by
+#:     lib/state.ensure_state_schema(with_claims=True) rather than here, so it
+#:     was easy to miss by looking only at this file's DDL; holds_claim() reads
+#:     it and all three write sites set it. Whoever creates it is irrelevant to
+#:     whether an INSERT naming it can fail.
+#:   * search_queries -- all three, created by ../schema.py's
+#:     ensure_search_query_schema. try_claim_search_query() writes them and
+#:     holds_search_query_claim() reads them, so this service depends on them
+#:     exactly as it does on the watermark table's.
+#:
+#: EVERY ONE OF THE SIX IS ADDED BY dbconn.add_missing_columns TO A TABLE THAT
+#: ALREADY EXISTS (lib/state.py:59, ../schema.py:1092-1096, and ensure_schema()
+#: below), which is the precise shape this check exists to catch: the table
+#: passes to_regclass, passes its privilege check, and is missing the column the
+#: statement names. A column in a CREATE TABLE could not go missing on its own;
+#: these six can, and one of them going missing is a 500 on a contributor's
+#: first claim rather than a refusal to start.
+#:
+#: NOT LISTED, deliberately: dataset and last_success_at. Both are written by
+#: the claim SQL and both are in job_ingest_state's CREATE TABLE, so they exist
+#: if the table does and REQUIRED_TABLES already covers that case.
 REQUIRED_COLUMNS = {
     "submission_log": ("action",),
+    "job_ingest_state": ("claimed_at", "claimed_by", "claim_granted_at"),
+    "search_queries": ("claimed_at", "claimed_by", "claim_granted_at"),
 }
 
 #: The closed vocabulary of submission_log.action. Free TEXT with a closed set

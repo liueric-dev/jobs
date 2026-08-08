@@ -30,6 +30,9 @@ import sys
 import unittest
 
 API_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+#: ../ from api/. T-45 reads DDL out of schema.py and lib/state.py, because two
+#: of the columns this service requires at startup are created there.
+BACKEND_DIR = os.path.dirname(API_DIR)
 sys.path.insert(0, API_DIR)
 
 import query_claims as qc  # noqa: E402
@@ -68,6 +71,25 @@ _CATALOGS = {"information_schema", "pg_catalog"}
 
 _STATEMENT = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE)\b", re.I)
 _FROM_JOIN = re.compile(r"\b(?:FROM|JOIN|INTO|UPDATE)\s+([a-z_][a-z0-9_]*)", re.I)
+
+#: The two tables this service leases rows on, and the only ones it writes that
+#: it does not also own. T-45.
+_CLAIM_TABLES = ("job_ingest_state", "search_queries")
+_CLAIM_TARGET = re.compile(
+    r"\b(?:INSERT\s+INTO|UPDATE)\s+(" + "|".join(_CLAIM_TABLES) + r")\b", re.I)
+
+#: Columns the claim SQL writes that are NOT candidates for REQUIRED_COLUMNS,
+#: because they are in their table's CREATE TABLE rather than added to it
+#: afterwards: they exist if the table exists, and REQUIRED_TABLES already
+#: covers that. Every claim column proper arrives via
+#: dbconn.add_missing_columns, which is what makes it able to go missing on its
+#: own. Keep this list to that justification -- it is the one way a column can
+#: be written and legitimately undeclared, and widening it for any other reason
+#: re-opens exactly the hole T-45 closed.
+_CREATE_TABLE_COLUMNS = {
+    "job_ingest_state": {"dataset", "last_success_at"},
+    "search_queries": set(),
+}
 
 
 def sql_strings_in(path):
@@ -208,15 +230,80 @@ class TestRequiredColumns(unittest.TestCase):
     def test_action_is_declared(self):
         self.assertIn("action", qc.REQUIRED_COLUMNS["submission_log"])
 
-    def test_every_declared_column_is_created_by_ensure_schema(self):
+    def test_every_declared_column_has_ddl_behind_it_somewhere(self):
         # A declaration with no DDL behind it would refuse to start forever.
-        with open(os.path.join(API_DIR, "query_claims.py")) as fh:
-            source = fh.read()
+        #
+        # T-45 WIDENED WHERE THIS LOOKS, from query_claims.py to the three
+        # modules that actually provision these columns, and the widening is
+        # the point rather than an accommodation. Only two of the seven are
+        # created here; claimed_at on the watermark table is lib/state.py's
+        # (with_claims=True) and search_queries' three are ../schema.py's. This
+        # service depends on all of them identically, and scoping the search to
+        # its own DDL is exactly the reasoning that left six of them undeclared
+        # until T-45 -- "we did not create it" is not "we do not write it".
+        #
+        # All three are reached because provision-database.py runs all three:
+        # steps 1 and 2 create the pipeline's, step 6 this service's.
+        sources = []
+        for path in (os.path.join(API_DIR, "query_claims.py"),
+                     os.path.join(BACKEND_DIR, "schema.py"),
+                     os.path.join(BACKEND_DIR, "lib", "state.py")):
+            with open(path, encoding="utf-8") as fh:
+                sources.append(fh.read())
+        combined = "\n".join(sources)
         for table, columns in qc.REQUIRED_COLUMNS.items():
             for column in columns:
-                self.assertIn(f'("{column}", "TEXT")', source,
+                self.assertIn(f'("{column}", "TEXT")', combined,
                               f"{table}.{column} is required at startup but "
-                              f"ensure_schema never adds it")
+                              f"nothing in query_claims.py, schema.py or "
+                              f"lib/state.py ever adds it")
+
+    def test_every_claim_column_written_is_declared(self):
+        """The inverse of the test above, and T-45's actual finding.
+
+        The map's contract is the columns this service WRITES. Until T-45 it
+        held one, `submission_log.action`, while the claim SQL wrote six more
+        across two tables and reported none of them -- so on a database with
+        the table but not the column, verify_schema() passed and the first
+        claim 500'd, which is the exact failure REQUIRED_COLUMNS was added to
+        prevent.
+
+        Scanned from the SQL rather than listed, because a list would have to
+        be updated by the same person who forgot the map. A new column in a
+        claim statement fails here until it is declared.
+        """
+        written = {}
+        for sql in sql_strings_in(os.path.join(API_DIR, "query_claims.py")):
+            target = _CLAIM_TARGET.search(sql)
+            if not target:
+                continue
+            table = target.group(1).lower()
+            columns = set()
+            inserted = re.search(
+                r"INSERT\s+INTO\s+" + table + r"\s*\(([^)]*)\)", sql, re.I)
+            if inserted:
+                columns.update(c.strip().lower() for c in inserted.group(1).split(","))
+            for clause in re.findall(
+                    r"\bSET\b(.*?)(?=\s+\bWHERE\b|\s+\bRETURNING\b|$)",
+                    sql, re.I | re.S):
+                columns.update(m.lower() for m in re.findall(
+                    r"([a-z_][a-z0-9_]*)\s*=", clause, re.I))
+            written.setdefault(table, set()).update(columns)
+
+        self.assertEqual(set(written), set(_CLAIM_TABLES), (
+            "the scan did not find writes to the tables this test is about; "
+            "if a claim statement was renamed or restructured, fix the scan "
+            "rather than letting it cover nothing"))
+
+        for table, columns in sorted(written.items()):
+            missing = sorted(columns - set(qc.REQUIRED_COLUMNS.get(table, ()))
+                             - _CREATE_TABLE_COLUMNS[table])
+            self.assertEqual(missing, [], (
+                f"query_claims.py writes {table}.{', '.join(missing)} but "
+                f"REQUIRED_COLUMNS does not declare "
+                f"{'it' if len(missing) == 1 else 'them'}, so verify_schema() "
+                f"cannot report {'it' if len(missing) == 1 else 'them'} "
+                f"missing and the first claim 500s instead (T-45)"))
 
     def test_every_declared_column_is_named_by_a_writer(self):
         # The drift this guards: declaring a column and never writing it makes
