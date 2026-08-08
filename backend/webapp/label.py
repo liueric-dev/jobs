@@ -22,7 +22,7 @@ WHY THIS IS IN webapp/ AND NOT api/
     `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_two/07-metrics-and-golden-set.md:53` says to reuse the existing auth "since
     Google SSO and sessions already exist". They do -- in THIS package
     (auth.py), not in `api/`. `api/` is the contributor work queue: bearer
-    tokens hashed in `api_keys` (api/app.py:159), a caller assumed hostile, and
+    tokens hashed in `api_keys` (api/app.py:209), a caller assumed hostile, and
     a `jobs_api` role deliberately granted nothing on any pipeline table.
     Putting a browser session flow there would relax the one property three
     sections of its README exist to defend. See this package's README, "Why
@@ -81,7 +81,7 @@ _DETAIL_COLUMNS = ("id", "title", "company_name", "location_raw", "platform",
 
 #: Hard cap on the request body. The form is six short fields and two ids, so
 #: a legitimate submit is a few hundred bytes. Enforced BEFORE parsing, the
-#: same argument api/app.py:284 makes: a hostile body should be rejected on
+#: same argument api/app.py:460 makes: a hostile body should be rejected on
 #: sight, not after being deserialized into memory.
 MAX_FORM_BYTES = 64 * 1024
 

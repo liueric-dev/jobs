@@ -8,7 +8,7 @@ budget: 500
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-41`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-44`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -141,6 +141,20 @@ failure mode this repo deleted 137 files to end.
 
 ### T-41 — The dictated interval reaches the worker and stops there; nothing can move the schedule
 
+**BLOCKED on `DEV_TASKS.md`'s `OQ-32`, 2026-08-08 — the route is an owner decision, and the
+evidence that would settle it does not exist on any machine a session can reach.** The two routes
+below differ on one property: whether a scheduled run survives unloading the agent that is running
+it. No test in this tree can observe that. The only `launchctl` any test sees is
+`api/tests/test_worker_install.py`'s `Recorder`, whose docstring says answering 0 to everything "is
+not a claim that launchctl would" (`:76-78`) and whose `test_what_it_asks_launchctl_to_do` says no
+test on this machine can assert launchd accepts anything (`:250-252`); `cli()` refuses `--install`
+off Darwin (`backend/api/contributor-worker/google-serpapi-worker.py:806`) besides. **Route (b)
+built here would be green by construction** — the fake returns from `unload` instantly and never
+stops its caller, the precise opposite of the hazard — and its failure mode is thirty volunteers'
+machines silently unscheduled with no run left to report it. `OQ-32` carries the analysis, the
+ten-minute experiment on a Mac that answers it, and a third option neither route names. **Do not
+pick a route from this row.**
+
 `T-31` closed with the server's interval read, floored and reported, and with the honest limit
 printed rather than hidden: the OS owns the schedule (`0007` decision 2), so the cadence that
 actually fires is the `StartInterval` written into the plist at `--install`
@@ -160,8 +174,16 @@ interval (one claim call at install time — but `T-30` specified `--install` to
 `--check` to be the thing that talks to the server, and an unreachable server would then break an
 install that has no need of one), or a run rewrites the plist when the ask has changed (no new
 network call, but a scheduled run unloading and reloading the agent that is running it, which is
-the launchd hazard `T-29`'s `install_agent` docstring already describes). **Pick deliberately; do
+the launchd hazard `report_poll_interval`'s docstring already describes,
+`backend/api/contributor-worker/google-serpapi-worker.py:272`). **Pick deliberately; do
 not build both.**
+
+**That attribution was wrong as written and is corrected above, 2026-08-08.** The row credited the
+hazard to `T-29`'s `install_agent` docstring; that docstring (`:452`) describes a *different* one —
+replacing the plist underneath a **loaded** job leaves the old schedule running, which is why
+`install_agent` unloads first. The self-referential hazard, a run unloading the agent running it,
+was written by `T-31` in `report_poll_interval` and is a claim about the route this row declines to
+pick, not about the code that exists.
 
 **Done when:** an operator can change `POLL_INTERVAL_SECONDS` on the server and have a machine
 actually fire on the new cadence, with the launchd hazard the chosen route carries either avoided
@@ -202,6 +224,59 @@ caught it on `T-31`; nothing would have caught it on `T-35`.
 **Done when:** each citation names the line that carries the behaviour it describes, the checker
 still prints `0 new`, and nothing new is added to `config/citation-baseline.json` to achieve it.
 **Do not generalise this into a content checker** — same reasoning as `T-40`.
+
+**Closed 2026-08-08.** All six corrected, each target read before writing the number rather than
+computed by adding `T-31`'s 16-line offset: `webapp/label.py:25` → `:209` (`authenticate()`'s
+`sha256`), `webapp/label.py:84` → `:460` (the `MAX_BODY_BYTES` test), `evals/labels.py:374` → `:99`
+(`verify_schema()`), `docs/STATE-OF-THE-SYSTEM.md:221` → `:99`, `DEV_TASKS.md:497` → `:580`/`:582`
+(`authenticate()` then `holds_claim`), and `T-35`'s pair → `:380`/`:383`. **The offset was a
+coincidence, not a method** — three of the six moved by other amounts, which is why each was
+resolved by reading.
+
+**Two things the row did not predict.** First, `docs/STATE-OF-THE-SYSTEM.md:221` carries **three
+more** `app.py` numbers in the same sentence (`:143`, the column loop `:143-154`, the raise
+`:156-161`); a sentence whose parenthetical exists to correct one number cannot be left half
+renumbered, so all four moved together — `:99`, `:160`, `:160-171`, `:173-179`. Second, **`T-35`'s
+claim is true but its reason had changed underneath it**: `claim` writes one `submission_log` row
+**per query it hands out** (defect D41, `backend/api/app.py:371`), so "no row when it grants
+nothing" now holds because zero granted is zero rows, not because `claim` never writes — which is
+what the pre-D41 code did, and what `claims_today`'s docstring (`:221`) exists to explain. A `T-35`
+session reading only the old citation would have inherited the pre-D41 model of the endpoint. Both
+are written into the `T-35` row itself, where the next session will be standing.
+
+**One finding filed rather than swept: `T-43`.** Two citations to
+`docs/STATE-OF-THE-SYSTEM.md:443-448` point at the annotator-ceiling paragraph, not the claim they
+name; both live in `docs/adr/`, which is frozen on write, so neither is this row's to edit.
+
+---
+
+### T-43 — Two `docs/adr/` citations name the wrong paragraph, and the files are frozen
+
+Found while closing `T-42`, in the one place `T-42` could not fix. `docs/adr/README.md:20` and
+`docs/adr/0002-task-51-deleted-instead-of-git-mv.md:54` both cite
+`../STATE-OF-THE-SYSTEM.md:443-448` for "every high-severity finding was a document describing a
+state of the world that had since changed — not one had ever been false when written". **That
+paragraph is at `:459-464` today**, and `:443-448` is the inter-annotator ceiling — a different
+subject entirely.
+
+**It was already wrong before this session and is not `T-42`'s drift.** At `f185642` the claim sat
+at `:457-462` and the citation still read `:443-448`, so it was 14 lines out on arrival; `T-42`'s
+own edit to `:221` added two lines above it and made that 16. Neither number was ever right.
+`tools/audit-citations.py` cannot see it — the range resolves, and the tool checks only that, which
+is `T-40`'s blindspot for the third row running.
+
+**Why this is its own row: `docs/adr/` is frozen on write** (`.claude/CLAUDE.md`, "one file per
+decision, frozen on write"). A citation is not a decision, so correcting one is arguably outside
+what the freeze protects — but the freeze has no stated exception, and inventing one in passing
+while closing an unrelated row is how a convention stops meaning anything. **Decide what the freeze
+covers first, then edit.** If the answer is that it covers the argument and not the bookkeeping,
+say so in the commit and fix both lines; if it covers the bytes, the correction belongs in a new
+ADR that supersedes, or nowhere.
+
+**Done when:** the freeze question has an answer written down, the two citations are consistent with
+it, and `tools/audit-citations.py` still prints `0 new`. **Do not add either line to
+`config/citation-baseline.json`** — both resolve today, so the baseline cannot express the problem
+and adding them would record the opposite of what is wrong.
 
 ---
 
@@ -295,9 +370,23 @@ empty-claim-rate signal has nothing to read.
 `backend/api/contribution_report.py:189`) and is where this surfaces. **Last check-in is not last
 submission** — a paused or fully-fresh worker submits nothing and is healthy, and `0007`'s dormancy
 consequence turns on exactly that distinction. `claim` deliberately writes no `submission_log` row
-when it grants nothing (`backend/api/app.py:260`), so check-in needs its own record; do not meter it
+when it grants nothing (`backend/api/app.py:380`), so check-in needs its own record; do not meter it
 as a claim, or an honest idle poll starts consuming the daily allowance
-(`backend/api/app.py:204`).
+(`backend/api/app.py:383`).
+
+**Both citations were corrected 2026-08-08 by `T-42`, and the first pointed somewhere actively
+misleading.** They read `:260` and `:204`: `:260` was a comment line inside `MintRequest`, so a
+session starting this row from it would have been reading the **mint** endpoint while implementing
+against the **claim** one, and `:204` was `authenticate()`'s `Bearer ` test. The claim itself holds,
+and the real target argues it better than the row does — `claim`'s docstring makes the
+grants-nothing case explicitly ("A request that is granted NOTHING writes nothing, deliberately",
+`:380`) and gives the reason this row's check-in must not be metered as one: charging for an empty
+poll "would make 'the bank is fully fresh today' indistinguishable from abuse and would exhaust an
+honest cron's daily allowance on the (common) days there is no work" (`:383`). **Read the
+neighbouring paragraph before building**: `claim` writes one `submission_log` row **per query it
+hands out** (defect D41, `:371`), so zero granted means zero rows — it is not that `claim` never
+writes, which is what the pre-D41 code did and what `claims_today`'s docstring (`:221`) exists to
+explain.
 
 Remaining quota is contributor-reported, not server-observed. Store it as reported, with the time it
 was reported, and never present it as authoritative.

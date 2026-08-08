@@ -17,7 +17,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-32`.**
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-33`.**
 Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
 citations to it keep resolving.
 
@@ -494,7 +494,7 @@ host no session can reach — `OQ-30` first, and this is the only reason to do i
 **What:** `T-30` shipped `--check`, and one of its three checks is unverified against anything
 real. The credential check asks the deployed `api/` to release a claim nobody holds and reads the
 **409** as "your key is good" and the **401** as "your key is not" — an ordering inside
-`release` (`backend/api/app.py:549`, `:551`) that `api/tests/test_worker_check.py` pins with a fake
+`release` (`backend/api/app.py:580`, `:582`) that `api/tests/test_worker_check.py` pins with a fake
 connection. **The 401 branch has been run against a real HTTP server; the 409 branch never has.**
 A fake that agrees with the code it stands in for is exactly the thing that cannot tell you the
 deployed service agrees too.
@@ -556,6 +556,67 @@ public address, `curl` against `/v1/internal/contributors` from outside the host
 proxy (checked, not inferred), one real opt-in through the webapp returns a `config.json` whose
 `JOBS_API_BASE_URL` a contributor's machine can actually reach, and the `JOBS_ADMIN_DATABASE_URL`
 question above has an answer either way.
+
+---
+
+### OQ-32 — Pick `T-41`'s route: `--install` asks the server, or a run rewrites its own plist
+
+**Why it is yours:** a decision only you can take, **and a Mac.** Both halves are yours, and the
+second is why the first cannot be delegated to a session that would otherwise just pick one.
+
+**What:** `T-31` closed with the server's interval read, floored and honestly reported, and with
+the limit printed rather than hidden — nothing on a Builder's machine can move the schedule.
+`install_agent` takes its interval from `MIN_POLL_INTERVAL_SECONDS` and from nowhere else
+(`backend/api/contributor-worker/google-serpapi-worker.py:450`), so an operator who sets
+`POLL_INTERVAL_SECONDS` to six hours gets thirty machines that report the ask and keep polling
+hourly. `TASKS.md`'s `T-41` is the implementation and is **blocked on this row**; its own text says
+the two routes are not equivalent and to pick deliberately.
+
+**Why a session cannot pick.** The routes differ on exactly one property, and it is the one
+property no test in this tree can observe:
+
+- **(a) `--install` asks the server once.** Costs no SerpApi credit — only a claimed *search*
+  does — but `claim` is the only route that returns `poll_interval_seconds`
+  (`backend/api/app.py:428`), and claiming leases queries the installing process will not run.
+  So (a) is either a leak of live claims at install time or a server change to carry the interval
+  somewhere cheaper. It also reverses `T-30`'s split, which specified `--install` to talk to
+  nothing and `--check` to be the thing that talks to the server — that split is *why* an
+  unreachable server cannot currently break an install.
+- **(b) A run rewrites the plist when the ask changed.** No new network call. But `install_agent`
+  goes unload → write → load (`:464-472`), and under (b) the job being unloaded is the job making
+  the call. If launchd stops the process at the `unload` step, `load` never runs: the machine is
+  left with a plist on disk and **nothing scheduled**, with no further run to print anything,
+  because there is no further run. That is a strictly worse version of the failure `T-31` spent a
+  row preventing — there, a paused worker was merely indistinguishable from a broken one; here
+  there is no worker left to be indistinguishable.
+
+**Whether launchd actually does that is unknowable here, and the harness hides it.** The only
+`launchctl` any test sees is `test_worker_install.py`'s `Recorder`, whose own docstring says
+answering 0 to everything "is not a claim that launchctl would" (`:76-78`), and whose
+`test_what_it_asks_launchctl_to_do` says outright that no test on this machine can assert launchd
+accepts anything (`:250-252`), deferring to `OQ-25`. A route (b) implementation would therefore be
+**green by construction** — the fake returns from `unload` instantly and never stops the caller,
+which is the precise opposite of the hazard. Green would mean nothing. `cli()` also refuses
+`--install` off Darwin (`:806-811`), so nothing here can even reach the code path.
+
+**How to do it.** Ten minutes on a Mac answers it, and the answer is worth more than the argument:
+install the agent with a short `StartInterval`, and from inside a scheduled run call
+`launchctl unload -w` on its own plist, then write a file immediately after. If the file appears,
+(b) survives its own unload and is the cheaper route. If it does not, (b) needs a detached helper
+that outlives the unload — machinery, and machinery whose failure mode is a silently unscheduled
+fleet — and (a) is the answer despite what it costs `T-30`'s split.
+
+**Worth deciding at the same time, because it changes the answer:** whether a cadence change is
+allowed to need one `--install` per machine. If it is, neither route is needed — a run can persist
+the last-seen interval beside `config.json` and `--install` can read it, spending nothing and
+talking to nothing. That is the cheapest option on the table and the row does not name it, because
+it does not meet `T-41`'s "without a hand on each machine". Whether that clause is a requirement or
+an aspiration is yours; `0007` decision 3 says the server "holds desired state", not that machines
+converge on it unattended.
+
+**Done when:** one route is chosen, the reason is written into `docs/adr/` as a decision — this is
+`0007` decision 3's missing half and belongs beside it, not in a task row — and `T-41` is edited to
+name the chosen route and drop the other.
 
 ---
 

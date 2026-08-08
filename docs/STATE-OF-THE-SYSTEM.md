@@ -218,8 +218,10 @@ forward commit, so a mechanical revert scan under-reports what was undone.
 ### (a) Needs work — someone could pick these up
 
 - **`api/` may not start — but nothing in the code says so, and this entry was wrong twice.**
-  Re-checked 2026-08-03. `verify_schema()` is at `backend/api/app.py:82` (not `:143`; the column
-  loop is `:143-154`, the raise `:156-161`), and it requires `submission_log.action`
+  Re-checked 2026-08-03; line numbers re-checked 2026-08-08 (`T-42`), after `T-31` added 16 lines
+  above `db()` and moved every number in this entry. `verify_schema()` is at
+  `backend/api/app.py:99` (not `:160`; the column
+  loop is `:160-171`, the raise `:173-179`), and it requires `submission_log.action`
   (`query_claims.py:128`). **There is no mismatch between the two definitions:**
   `qc.ensure_schema` creates the table *with* `action TEXT` (`query_claims.py:233`) *and*
   backfills it via `dbconn.add_missing_columns` (`:244`), so `manage_users.py init-schema`
