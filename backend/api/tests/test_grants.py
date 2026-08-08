@@ -234,11 +234,30 @@ class TestRequiredColumns(unittest.TestCase):
 
     def test_verify_schema_checks_all_three_maps(self):
         # The maps are only worth maintaining if the startup path reads them.
-        import app
-        with open(app.__file__, encoding="utf-8") as fh:
+        #
+        # THE CHECK MOVED IN T-39, and this test moved with it rather than
+        # being relaxed. It used to read app.verify_schema()'s body, which is
+        # where the three loops lived; they are now qc.verify_schema()'s, so
+        # that a caller holding its own connection -- ../tools/
+        # provision-database.py, against a database it has just created --
+        # runs the same list the service starts on. Inside query_claims.py the
+        # maps are named unqualified, hence no `qc.` prefix here.
+        with open(qc.__file__, encoding="utf-8") as fh:
             body = fh.read().split("def verify_schema")[1].split("\ndef ")[0]
         for name in ("REQUIRED_TABLES", "REQUIRED_SEQUENCES", "REQUIRED_COLUMNS"):
-            self.assertIn(f"qc.{name}", body)
+            self.assertIn(name, body)
+
+    def test_startup_still_reaches_the_check(self):
+        # The other half of the move, and the reason the test above is not
+        # enough on its own: qc.verify_schema() reading all three maps proves
+        # nothing if this service no longer calls it. Between them they pin
+        # what one assertion used to -- that the maps are read ON STARTUP.
+        import app
+        with open(app.__file__, encoding="utf-8") as fh:
+            source = fh.read()
+        body = source.split("def verify_schema")[1].split("\ndef ")[0]
+        self.assertIn("qc.verify_schema(conn)", body)
+        self.assertIn("verify_schema()", source.split("async def lifespan")[1])
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ budget: 500
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-44`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-46`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -47,15 +47,17 @@ reason for the original ordering: they are the enforcement layer every later row
 makes a session's claims checkable without hand-transcription. Everything since runs against CI
 rather than against a transcribed count.
 
-**The ten open rows are one project, not a queue.** They cut
+**The twelve open rows are one project, not a queue.** They cut
 [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md) into buildable
 steps and are listed in dependency order, not priority order: the server side is done, the worker
 can be installed and it can now report on itself, so `T-31` — the poll interval, and the last of
 the worker — is what nothing on a contributor's machine works without now; `T-32`
 … `T-37` are policy that needs both halves in place. `T-32` and `T-33` are the two that change live
-pipeline behaviour rather than adding to it. `T-38`, `T-39` and `T-40` are the exceptions to the dependency
-order: none is a cut of `0007`, each is a gap a closed row opened or found and could not itself
-close (`T-26`, `T-27` and `T-29` respectively), and they belong at the front rather than at the end.
+pipeline behaviour rather than adding to it. `T-38` and `T-40` are the exceptions to the dependency
+order: neither is a cut of `0007`, each is a gap a closed row opened or found and could not itself
+close (`T-26` and `T-29` respectively), and they belong at the front rather than at the end. `T-39`
+was the third of them and closed 2026-08-08; `T-44` and `T-45` are its own two findings, and `T-44`
+belongs at the very front — it is the one row here that makes another row's verification untrustworthy.
 
 **The worker's settings block is pinned from outside its own suite, and that outlives `T-28`.**
 `T-27` shipped the payload as `webapp/contribute.CONFIG_FIELDS`, and
@@ -79,21 +81,23 @@ both `.env` files — and `OQ-31`, filed by `T-30`, is blocked behind it in turn
 
 ## Contributor pipeline — [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md)
 
-Eleven open rows, eight of them cutting `0007` into buildable steps and `T-38`, `T-39` and `T-40`
-consequences of three that closed. `0007` supersedes
+Twelve open rows, eight of them cutting `0007` into buildable steps and `T-38`, `T-40`, `T-44` and
+`T-45` consequences of rows that closed. `0007` supersedes
 [`0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md) decisions 1, 2 and 4;
 `0006` decision 3 — local execution, contributor's own key, own IP, never proxied — stands and is
 load-bearing for every row here. The owner-side half is `DEV_TASKS.md`'s `OQ-24` … `OQ-28`.
 
-**Baseline: all three suites are green — `1449` / `397` / `272`, all `OK`, re-measured 2026-08-08
-after `T-42`.** The api figure has moved six times since these rows were written and the rows below
+**Baseline: all three suites are green — `1455` / `397` / `273`, all `OK`, re-measured 2026-08-08
+after `T-39`.** `T-39` added 6 to the pipeline suite (`tests/test_provision_covers_api_schema.py`)
+and 1 to the api suite (a second case in `api/tests/test_grants.py`, splitting an assertion whose
+subject it had moved). The api figure has moved seven times since these rows were written and the rows below
 still quote the old ones: it was `117`, then `145` after `T-26`'s 28 cases in
 `api/tests/test_search_query_claims.py`, then `160` after `T-27`'s 15 in `api/tests/
 test_mint.py`, then `179` after `T-28`'s 19 in `api/tests/test_contributor_worker.py`, `212`
 after `T-29`'s 33 in `api/tests/test_worker_install.py`, `251` after `T-30`'s 39 in
 `api/tests/test_worker_check.py`, and is now `272` after `T-31`'s 21 in
-`api/tests/test_poll_interval.py` — **this paragraph itself was two closures stale until `T-42`
-re-measured it**, which is the failure it exists to warn about; the
+`api/tests/test_poll_interval.py`, and `273` after `T-39`'s one — **this paragraph itself was two
+closures stale until `T-42` re-measured it**, which is the failure it exists to warn about; the
 webapp suite was `368` and is now `397` after `T-27`'s 22 in
 `webapp/tests/test_contribute.py` and 7 added to `webapp/tests/test_grants.py`. **Re-measure rather
 than trusting a row's own number** — that is what these two paragraphs exist to say.
@@ -109,6 +113,80 @@ whole detail page, catching the posting's own `ageLabel()` and passing only whil
 fixture's fixed `posted_at_ts` sat in that function's seven-day `"last week"` window. **Derive every
 timestamp in a test from one clock, or freeze all of them — never one of each.** `T-31` and `T-32`
 are the rows most exposed to this, since both turn on elapsed time.
+
+---
+
+### T-44 — `provision-database.py` connects as `jobs_web`, not as the owner, on any machine with a `webapp/.env`
+
+**Found while closing `T-39`, by running the tool against a real database rather than a scripted
+stand-in — the third consecutive row where that step found something no test would have.** Filed
+rather than folded in: the fix changes which database the tool touches on a developer machine, and
+that is the one file in this repo whose hazard banner exists because touching the wrong thing costs
+something.
+
+`import config as _webapp_config` (`backend/tools/provision-database.py:73`) runs
+`webapp/config.py`, which loads `webapp/.env` into `os.environ` as a side effect
+(`backend/webapp/config.py:40`). That file sets `DATABASE_URL` to the **webapp's** role. `main()`
+then calls `envfile.load(backend/.env)` (`backend/tools/provision-database.py:115`), which is
+`override=False` by design (`backend/lib/envfile.py:85`) — so the pipeline's own `DATABASE_URL`
+never wins, and the tool connects as `jobs_web`.
+
+Confirmed on this machine, not inferred: importing that module sets `DATABASE_URL`, and connecting
+on the result answers `jobs_web` for `current_user`.
+
+**Why it survived, and why it is worse than it looks.** On a fresh checkout and in CI there is no
+`webapp/.env` — the tool's own comment says exactly that, two lines above the import — so the path
+that provisions correctly is the only path anything tests. On the deployed machine the effect is
+silent and inverted: `jobs_web` holds no DDL rights, so a real run fails partway or is refused,
+and **`--verify-only` reports the wrong role's privileges** while looking like it worked. The
+banner tells an operator to run `--verify-only` first anywhere that matters; today that instruction
+returns an answer about a role that will not be doing the work.
+
+It also produced a false finding while `T-39` was being verified: `--verify-only` against the
+deployed database reported `submission_log` missing its `action` column. The column is present
+(`pg_attribute` confirms it); `information_schema.columns` is privilege-filtered, so the absence was
+`jobs_web`'s lack of privileges reading as a missing column. **Any privilege or column line this
+tool prints is currently untrustworthy on that machine.**
+
+Two shapes. (1) Load `backend/.env` before the webapp import, which means moving `envfile.load` out
+of `main()` to module scope — cheap, but it changes when the file is read relative to `--url`.
+(2) Pass `override=True` for `backend/.env`, which inverts the documented precedence
+(`backend/lib/envfile.py:90-94`) for this one caller and would stop an exported `DATABASE_URL` from
+winning — the case `drive`-style one-off runs against a second database depend on. Neither is
+obviously right; say in the commit which and why. Whichever is chosen, a test must pin it, because
+the failure is invisible on the machine most sessions run on.
+
+```bash
+cd backend
+python3 -c "import sys,os; sys.path.insert(0,'webapp'); import config; print('DATABASE_URL' in os.environ)"
+```
+
+**Done when:** the tool connects as the role in `backend/.env`'s `DATABASE_URL` regardless of
+whether `webapp/.env` exists, an exported `DATABASE_URL` still beats both, a test fails if the
+import order or the `override` flag is changed back, and all three suites stay green.
+
+---
+
+### T-45 — The two claim columns this service writes are not in its startup check
+
+**Found while closing `T-39`, and small.** `qc.REQUIRED_COLUMNS` holds one entry,
+`submission_log.action` (`backend/api/query_claims.py:168-170`), and its own contract is that it
+lists the columns this service **writes**. But `ensure_schema()` also adds `claimed_by` and
+`claim_granted_at` to the watermark table (`backend/api/query_claims.py:240-243`), and the claim SQL
+writes both — they are the two columns the whole "does this contributor still own the claim" check
+turns on.
+
+So they are created by step 6 as of `T-39`, and reported by nothing. On a database that has the
+table but not the columns, `verify_schema()` passes and the first claim 500s — which is precisely
+the failure `REQUIRED_COLUMNS` was added to prevent, described in `api/tests/test_grants.py`'s own
+docstring.
+
+Not folded into `T-39`: that row was about the provisioning tool's reach, and this is `api/`'s
+decision about its own startup contract. Note the check reads `information_schema.columns`, so
+`T-44` must land first or the answer is about the wrong role.
+
+**Done when:** `job_ingest_state`'s two claim columns are in `qc.REQUIRED_COLUMNS`, a test fails if
+a column the claim SQL writes is absent from that map, and all three suites stay green.
 
 ---
 
@@ -399,45 +477,6 @@ industries, NYC — rather than one person's résumé.
 
 ---
 
-### T-39 — `contributors` and `api_keys` are unreachable from the one stand-up-from-nothing command
-
-**Found while closing `T-27`, and filed rather than folded in.** This is `T-19` still open along one
-edge, and `T-27` made it load-bearing for a second service without widening it.
-
-`tools/provision-database.py` runs five `STEPS` (`backend/tools/provision-database.py:70-76`) and
-none of them reaches `api/query_claims.ensure_schema()`, where the DDL for `contributors` and
-`api_keys` lives (`backend/api/query_claims.py:245-261`). Only `manage_users.py init-schema`
-(`backend/api/manage_users.py:55`) does. So on a database stood up by the one command that claims to
-create everything, those two tables do not exist — and since `T-27` a **webapp** route depends on
-them, one process away from the command that would have created them.
-
-`T-26` hit the same trap from the other side and escaped it by putting its DDL in `schema.py`
-instead. That option is not available here: these are `api/`'s own tables, owned by the service
-whose README's whole argument is that the pipeline holds nothing on them, so moving the DDL would
-trade a provisioning gap for an ownership lie.
-
-**Two shapes, and the second is not obviously worse** — (1) add `qc.ensure_schema` as a sixth step,
-which means `provision-database.py` importing `api/` and so acquiring a third venv's worth of
-import path; (2) leave the DDL where it is and make the gap loud — `--verify-only` reports the two
-tables as missing rather than not looking, so a fresh database says so before a Builder's first
-opt-in does. Say in the commit which and why.
-
-Note the asymmetry that makes this less urgent than it reads: CI provisions a fresh `postgres:16`
-and the api suite is green there, because every test in it uses a fake connection rather than the
-schema. That is exactly why the gap survived — nothing that runs proves the tables exist.
-
-```bash
-cd backend
-grep -n "STEPS = \[" -A 8 tools/provision-database.py     # today: five, none of them api/'s
-python3 tools/provision-database.py --verify-only          # today: says nothing about api_keys
-```
-
-**Done when:** a database provisioned only by `tools/provision-database.py` either has
-`contributors` and `api_keys`, or is reported by `--verify-only` as not having them, with a test
-that fails if a future table is added to `api/`'s DDL and to neither; and all three suites stay
-green.
-
----
 
 ### T-38 — Nothing advances a `search_queries` row's run statistics after a contributor submits
 
@@ -506,6 +545,7 @@ not assumed.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~T-39~~ | `contributors`, `api_keys` and `submission_log` did not exist on a database stood up by the one command that claims to create everything, and since `T-27` a webapp route depended on them | **Closed 2026-08-08. Shape (1), the sixth step — and the row's stated cost for it was simply false.** The row priced option (1) as `provision-database.py` "acquiring a third venv's worth of import path"; `api/query_claims.py` imports **no third-party package at module scope** — stdlib, plus `../schema`, `../google_jobs` and `../lib.*`, every one already imported by that tool — and it imports cleanly under system `python3`, checked rather than reasoned about. FastAPI lives in `api/app.py`, which is not imported. So this is the same shape as the `schema_web` import the file has always performed, and option (2) would have left the tool's own first line ("Create every database object this project's three processes require") a lie to avoid a cost that was not there. **Option (2) was built anyway, because it is not the same claim**: step 6 only helps a database provisioned *after* today, and the deployed one was not — so `--verify-only` now runs `qc.verify_schema` alongside the webapp's and reports the gap on databases step 6 will never touch. Both verifies run before either is reported, since stopping at the first would hide the second. **`qc.verify_schema(conn)` was moved out of `app.py` to make that possible** — one definition, taking a connection instead of opening one, exactly as `schema_web.verify_schema` already did; `app.verify_schema()` is now the credential half and nothing else. **The row named two tables and there are three**: `submission_log` has the identical reachability problem and went unmentioned, plus the two claim columns `ensure_schema` adds to the watermark table — `plan-verifier` found the third table, reading the DDL found the columns. **Step 6 is last, for three separate reasons**, all in the tool's banner: it commits internally, it issues `SET search_path` on the shared connection, and it re-enters `ensure_app_view` (via `schema.ensure_schema`, `backend/schema.py:964`) — so the T-13 DROP hazard is entered *twice* per run, and ordering it after step 3 is what keeps the second entry unreachable. **Verified against real databases, not a stand-in**: two throwaway databases on `pg-main`, owned by `jobs_pipeline`, dropped afterwards. `HEAD`'s tool against a fresh one printed `verify_schema: ready`, exit 0, with all three tables absent and both claim columns absent — the bug reproduced exactly, on a real server. The new tool's `--verify-only` against that same database named all three plus the sequence; against an empty one it reported webapp and api separately; the full run created all six steps' objects and was idempotent on a second run. **The row's stated reason for the gap surviving is also false and was left corrected, not repeated**: it says "every test in [the api suite] uses a fake connection", but three api tests build a real scratch schema by calling `qc.ensure_schema` — they prove the DDL *runs* and say nothing about whether anything calls it, which is the seam the new tests cover. 6 cases in `tests/test_provision_covers_api_schema.py`; a deliberate breakage adding a fourth table to `api/`'s DDL turned exactly the intended one red. `api/tests/test_grants.py`'s `test_verify_schema_checks_all_three_maps` scanned `app.verify_schema`'s body and was moved with the code rather than relaxed, and split in two so that "the maps are read" and "startup still reaches them" are pinned separately. Suites `1455`/`397`/`273`, mypy clean, citations `0 new` (3 known-drifted), ruff `1004` — baseline held. **Three of the citations written into this session's own new rows named lines that did not say what was claimed, and the checker passed all three** — `T-40`'s blindspot, found again while filing the rows that report it; each was corrected by reading the target. Two findings filed rather than folded in: `T-44` (the tool connects as `jobs_web`, which makes its own privilege output untrustworthy) and `T-45` |
 | ~~T-31~~ | `0007` decision 3 had no wire: the server held a cadence it could not say, so pause, resume and every interval change meant a hand on each of thirty machines **Closed 2026-08-08.** The claim reply carries `poll_interval_seconds` (`backend/api/app.py:428`, from `POLL_INTERVAL_SECONDS` at `:71`) and the worker floors it with `clamp_poll_interval` (`backend/api/contributor-worker/google-serpapi-worker.py:231`). **It is carried on the granted-nothing reply too, which is the case that matters**: the bank is fresh most days, so that is the ordinary answer, and a machine with no work is exactly the one an operator wants to slow down — attached to the queries it would reach quiet contributors never. The worker reads it *before* the nothing-to-do exit for the same reason, and a deliberate breakage moving that line below the exit turned the real-socket case red. **The clamp inherits `T-29`'s constant rather than declaring a second floor**, as that row's comment asked: `clamp_poll_interval` floors against `MIN_POLL_INTERVAL_SECONDS` (`:181`) and `build_launch_agent` schedules on it (`:427`), and a test asserts they are one constant and not two that agree — two floors that drift apart is a worker polling on one number and scheduled on another, which nothing would report. **The direction is pinned in both directions, separately**, because either case alone passes a `min()`: 10 seconds is raised to the floor, six hours is returned unchanged, and rewriting the clamp as a ceiling turns eight cases red. Absence, a string, a negative, `NaN`, infinity and `True` all land on the floor — absence silently, since a server predating `0007` sends nothing and must behave exactly like an install that never heard of an interval, which is what lets the two ends deploy in either order. **`True` is excluded by hand** because `bool` is an `int` in Python and `max(True, 1)` is `1`. **The row's "say so" clause is the printed line, and it is printed only on the disagreement** — the ordinary machine, where ask and schedule agree, stays silent, because a line per run about a cadence that did not change is noise in the one log a Builder reads for failures. It names the schedule as a schedule and not a fault, which is the failure the row named: a paused worker read as a broken one. **21 cases in `api/tests/test_poll_interval.py`, and four deliberate breakages confirmed they bite** — the clamp as `min()`, the server renaming the key, the read moved below the early exit, and the worker ignoring the reply — each turning exactly the expected test red. **The real-socket case was written wrong first and the mutation found it**: the stand-in spelled `poll_interval_seconds` itself, so a rename on the server end sailed straight past the one test whose whole premise was catching that. It now serves `app.claim()`'s own dict, and the rename turns it red. **Also run against the real FastAPI app under uvicorn on a real socket** with the real worker as a subprocess: `10` came back over the wire and was silently floored, `21600` came back and was reported as `every 360 minutes`. **`--check` was not touched**, so `T-30`'s exactly-three-requests assertion needed no edit — the interval rides on a reply `--check` never asks for. **What this row could not do is make the interval take effect**: the OS owns the schedule and nothing here rewrites the plist, so the report is honest about a cadence it cannot move — filed as `T-41` rather than half-built. Citations this row's own edits drifted were corrected in the same commit (three into `app.py` from the worker, one from `test_worker_check.py`); six that were already wrong at `5638ad3` were filed as `T-42`, not swept. Two findings filed: `T-41`, `T-42` |
 | ~~T-42~~ | Six citations into `api/app.py` resolved to lines that no longer carried the claim — `T-40`'s blindspot found again in five more places while closing `T-31`, each invisible to `tools/audit-citations.py` because each resolves | **Closed 2026-08-08.** All six corrected by **reading each target**, not by adding `T-31`'s 16-line offset: `webapp/label.py:25` → `:209` (`authenticate()`'s `sha256`), `webapp/label.py:84` → `:460` (the `MAX_BODY_BYTES` test), `evals/labels.py:374` → `:99` (`verify_schema()`), `docs/STATE-OF-THE-SYSTEM.md` → `:99`, `DEV_TASKS.md:497` → `:580`/`:582` (`authenticate()` then `holds_claim`), and `T-35`'s pair → `:380`/`:383`. **The offset was a coincidence, not a method** — three of the six had moved by other amounts, which is the whole argument for reading over arithmetic. **Two things the row did not predict.** The `STATE-OF-THE-SYSTEM.md` entry carried **three more** `app.py` numbers in the same sentence (`:143`, the column loop `:143-154`, the raise `:156-161`), and a sentence whose parenthetical exists to correct one number cannot be left half renumbered — all four moved together, to `:99`, `:160`, `:160-171`, `:173-179`. And **`T-35`'s claim is true but its reason had changed underneath it**: `claim` writes one `submission_log` row **per query it hands out** (defect D41, `backend/api/app.py:371`), so "no row when it grants nothing" now holds because zero granted is zero rows, not because `claim` never writes — which is what the pre-D41 code did, and what `claims_today`'s docstring (`:221`) exists to explain. A `T-35` session reading only `:260` would have inherited both the wrong endpoint and the pre-D41 model of the right one; both corrections are written into the `T-35` row itself, where that session will be standing. **Nothing was added to `config/citation-baseline.json`** — every one of these resolves, so the baseline cannot express the defect and adding them would record the opposite of what is wrong. Checker still prints `0 new` (3 known-drifted, unchanged); suites `1449`/`397`/`272`, mypy clean, ruff `1004` — baseline held on every one. One finding filed rather than swept: `T-43` |
 | ~~T-30~~ | `0007`'s fourth guess at where onboarding friction lives: a Builder whose worker does nothing had no way to find out which of three things was wrong, and no way to ask that did not cost them a search credit | **Closed 2026-08-08.** `--check` prints one line per check and exits non-zero on any failure (`backend/api/contributor-worker/google-serpapi-worker.py:651`, flag at `:706`): the base URL answers at `/v1/health` (`:504`), the credential is accepted (`:540`), the SerpApi key is accepted (`:602`). **The credential is checked by offering to release a claim nobody can hold, and the 409 is the pass** — every authenticated route on that server *does* something, and `/v1/queries/claim` locks rows out of the pool and meters the caller against a daily cap (`backend/api/app.py:345`), so checking a credential with it would spend the allowance being checked and, on a stale day, lock real queries for a worker that was only asking a question. `release` authenticates first and tests claim ownership second (`backend/api/app.py:549`, `:551`), so a dataset the query bank cannot name reaches the credential check, writes nothing and commits nothing. **That ordering is now pinned from the server's side** in `api/tests/test_worker_check.py`'s `TestTheServerSideOfTheProbe`, because reversed it would tell a Builder with a good credential to go and ask for a new one. **An unreachable base URL reports the credential as `not checked`, never as bad** — the row's distinguishability clause, and the failure that would send a Builder to replace a key that was fine. **`--check` is deliberately NOT in `T-29`'s mutually-exclusive scheduling group**: it changes nothing, it works off a Mac, and it is what you run when one of those two went wrong; combining it with either is refused in a sentence rather than by argparse's grammar. `T-29`'s `test_an_unknown_flag_is_refused_rather_than_ignored` was rewritten, not deleted — its example moved from `--check` to a flag nothing intends to build, since what it pins is the parser refusing what it does not know. **Two halves, and only one of them is ours to verify.** Ours, asserted for real: no request `--check` makes is a SerpApi *search*, checked as an assertion over every URL it sends, plus the account endpoint pinned as a literal rather than as the constant (written from the constant first, it stayed green under exactly the edit it forbids). Not ours: the far ends. **One clause was met against the live endpoint and one was not.** SerpApi's account endpoint was called with the pipeline's own key before and after a real `--check` run: `this_month_usage` and `total_searches_left` were identical across it, so the check cost no credit — but the account is at 250/250 with 0 left, so the strong form of the row's before-and-after (a positive count that does not move) needs an account with credit and is `OQ-25`'s. The `409` pass path was never exercised against a running server: that needs a minted credential, which needs `OQ-30`'s secret — filed as `OQ-31`. **The live run is what found the one real bug**: `probe` truncated every body to 400 characters *before* parsing, SerpApi's account answer is longer than that, and a perfectly good key came back as "answered 200 with something that is not JSON" — invisible to all 38 scripted cases, whose fixtures were short. The body now comes back whole and truncation happens where it is printed (`:477`), with a case whose fixture is deliberately over 400 characters. Nothing prints a credential: bodies pass through `redacted()` (`:461`), the SerpApi URL — which carries the key as a query parameter — is never printed, and a test asserts both. 39 cases, and **seven deliberate breakages confirmed they bite** — the account endpoint swapped for `/search.json`, a 401 read as a pass, redaction removed, the probe pointed at `/claim`, the server's two checks reversed, `--check` moved into the scheduling group, and an unreachable server reported as a bad credential — each turning exactly the expected test red. Also run against a real socket, not only against a scripted stand-in. **The row's own worked example was stale and `plan-verifier` caught it**: it claimed `--check` exits 1 with the unset-settings message, but `T-29` landed a parser under it after the row was written, so it had been exiting 2 from argparse; its `app.py:255` citation for `/v1/health` had drifted to `:269` the same way. **The criterion this row declined to invent is still not invented**: whether the output means anything to a reader is `OQ-25`'s. One finding filed: `OQ-31` |

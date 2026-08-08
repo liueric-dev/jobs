@@ -290,6 +290,105 @@ def ensure_schema(conn):
     conn.commit()
 
 
+def verify_schema(conn):
+    """Is `conn`'s database ready for this service? Raise listing what is not.
+
+    LIVED IN app.py UNTIL T-39, AND THE MOVE IS THE POINT. app.verify_schema()
+    is still the startup check and still the only caller that matters at
+    runtime -- but it opened its own connection on this service's own
+    credential, so the check was reachable only from inside a process that had
+    already loaded FastAPI. ../tools/provision-database.py is the second
+    caller, and it has neither: it runs on the pipeline's interpreter, as the
+    owner role, against a database that may have nothing in it yet. Taking a
+    conn rather than making one is what lets both use the same list. Same shape
+    as ../webapp/schema_web.verify_schema(), which that tool already calls for
+    exactly this reason.
+
+    Everything below is unchanged from app.py's version, including the
+    reasoning:
+
+    This process deliberately holds no DDL rights: it connects as a role
+    granted SELECT/INSERT/UPDATE on exactly the tables in REQUIRED_TABLES, and
+    nothing else. Creating the schema there -- which is what it used to do --
+    would mean an internet-facing service permanently holding CREATE on the
+    same schema the ingest pipeline owns.
+
+    So a missing table is a deployment error to report, not damage to silently
+    repair. Refusing to start is the point: a half-initialised database would
+    otherwise surface later as a confusing 500 on a contributor's submit.
+
+    Privileges are checked, not just existence. A table can exist and still be
+    unusable if a GRANT was missed, and that failure mode is real -- INSERT
+    without SELECT on google_jobs_query_stats looks fine until the first
+    ON CONFLICT runs. has_table_privilege() turns that into a startup error
+    naming the missing grant. It also answers TRUE by ownership, which is why
+    provision-database.py gets existence checking out of this and no more --
+    see that file's 'WHAT IT DOES NOT DO: GRANTS'.
+
+    The sequence is checked too. submission_log.id is BIGSERIAL, so an INSERT
+    needs USAGE on submission_log_id_seq as well as INSERT on the table. That
+    grant was in README's privilege table and in nothing that ran, which made
+    it the one documented requirement a startup check could not catch -- it
+    would have surfaced as a 500 on a contributor's first submit instead.
+
+    And the columns, for the third instance of the same argument. A table can
+    exist, be granted, and still be missing a column every INSERT names --
+    init-schema is a separate admin command, so shipping this code ahead of it
+    is one `git pull` away. REQUIRED_COLUMNS lists only columns this service
+    WRITES; reads that lose a column fail visibly at the query.
+    """
+    problems = []
+    for table, privileges in REQUIRED_TABLES.items():
+        qualified = f"public.{table}"
+        if conn.execute("SELECT to_regclass(%s)", (qualified,)).fetchone()[0] is None:
+            problems.append(f"{qualified}: missing")
+            continue
+        lacking = [
+            p for p in privileges
+            if not conn.execute(
+                "SELECT has_table_privilege(current_user, %s, %s)", (qualified, p)
+            ).fetchone()[0]
+        ]
+        if lacking:
+            problems.append(f"{qualified}: no {', '.join(lacking)}")
+
+    for sequence, privileges in REQUIRED_SEQUENCES.items():
+        qualified = f"public.{sequence}"
+        if conn.execute("SELECT to_regclass(%s)", (qualified,)).fetchone()[0] is None:
+            problems.append(f"{qualified}: missing")
+            continue
+        lacking = [
+            p for p in privileges
+            if not conn.execute(
+                "SELECT has_sequence_privilege(current_user, %s, %s)", (qualified, p)
+            ).fetchone()[0]
+        ]
+        if lacking:
+            problems.append(f"{qualified}: no {', '.join(lacking)}")
+
+    for table, columns in REQUIRED_COLUMNS.items():
+        qualified = f"public.{table}"
+        if conn.execute("SELECT to_regclass(%s)", (qualified,)).fetchone()[0] is None:
+            continue        # already reported as missing above
+        present = {r[0] for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = %s", (table,)
+        ).fetchall()}
+        absent = [c for c in columns if c not in present]
+        if absent:
+            problems.append(
+                f"{qualified}: missing column(s) {', '.join(absent)}")
+
+    if problems:
+        raise RuntimeError(
+            "database is not ready for this service -- "
+            + "; ".join(problems)
+            + ". Run `python3 manage_users.py init-schema` with an admin "
+              "credential (JOBS_ADMIN_DATABASE_URL), and check the GRANTs in "
+              "README 'Deployment'."
+        )
+
+
 # --------------------------------------------------------------------------
 # Minting a credential
 # --------------------------------------------------------------------------
