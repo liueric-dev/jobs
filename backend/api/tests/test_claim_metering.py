@@ -26,12 +26,17 @@ TWO HALVES, AND EITHER ALONE IS WRONG.
 A REQUEST GRANTED NOTHING WRITES NOTHING. It locked no row and cost nothing, and
 charging for it would exhaust an honest daily cron's allowance on exactly the
 days the bank is fresh -- the worker prints "nothing to do" and exits 0 on those
-(`contributor-worker/google-serpapi-worker.py:121-126`). Request volume with no
+(`contributor-worker/google-serpapi-worker.py:330-335`). Request volume with no
 grant is a rate concern for whatever terminates TLS, not something a per-query
 cap can express.
+
+That line range is pinned by TestTheCitationInThisModulesDocstring at the foot
+of this file, because it had been wrong since the day it was written and no
+tool in this repo could say so (`T-40`).
 """
 
 import os
+import re
 import sys
 import unittest
 
@@ -43,6 +48,14 @@ from fakedb import FakeConn, patch_db                # noqa: E402
 import app                                          # noqa: E402
 import query_claims as qc                           # noqa: E402
 from fastapi import HTTPException                   # noqa: E402
+
+#: This module's own docstring, captured because inside a class body `__doc__`
+#: means the class's and the test at the foot of this file wants this one. It
+#: sits BELOW the imports deliberately: a plain assignment above them makes
+#: ruff's E402 start firing on the four lines that already carry `# noqa: E402`,
+#: which silently turns four RUF100 unused-noqa findings into zero and moves a
+#: baseline this row has no business moving.
+MODULE_DOCSTRING = __doc__
 
 
 def run_claim(conn, max_queries=1):
@@ -172,6 +185,79 @@ class TestTheSubmissionLogVocabulary(unittest.TestCase):
             self.assertEqual(code.count("INSERT INTO submission_log"), expected,
                              f"{os.path.basename(module.__file__)} should hold "
                              f"{expected} submission_log INSERT(s)")
+
+
+class TestTheCitationInThisModulesDocstring(unittest.TestCase):
+    """This file's docstring cites a line range in the worker. Nothing read it.
+
+    `tools/audit-citations.py` reports that citation green and always will: it
+    checks that the path resolves and that the line is inside the file, and its
+    own docstring says outright that it cannot check whether the line still
+    carries the claim. This one never did. It named the worker's settings block
+    on the day it was written and `load_config()`'s JSON parsing by the time
+    anyone looked, and the checker was green across all of it -- `T-40`.
+
+    THE ROW THAT FILED IT WENT STALE TOO, WHICH IS THE ARGUMENT FOR A TEST
+    RATHER THAN A THIRD CORRECT NUMBER. `T-40` prescribed `:247-252`; that was
+    right at `9c5154d` and was moved to `:330-335` a day later by `T-31`
+    inserting two functions above `main()`. A citation into this particular
+    file has now been wrong twice in five days, and `T-41` has still to edit it.
+
+    THIS PINS ONE CITATION AND IS NOT A CHECKER. `T-40` says not to generalise
+    it into one, and it is right: the tool cannot be a content checker and a
+    second hand-rolled auditor is the failure mode this repo deleted 137 files
+    to end. What is cheap here is that this is one claim, in the file that
+    makes it, asserting the one string the claim is about -- the same idiom
+    `TestTheSubmissionLogVocabulary` above already uses on `app` and `qc`.
+    """
+
+    WORKER = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "contributor-worker", "google-serpapi-worker.py")
+
+    def cited_lines(self):
+        """The lines the docstring's citation names, read from the worker."""
+        m = re.search(
+            r"contributor-worker/google-serpapi-worker\.py:(\d+)-(\d+)",
+            MODULE_DOCSTRING)
+        self.assertIsNotNone(
+            m, "this module's docstring no longer carries the citation this "
+               "test exists to pin")
+        start, end = int(m.group(1)), int(m.group(2))
+        with open(self.WORKER, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        self.assertLessEqual(end, len(lines),
+                             f"the citation names line {end} of a "
+                             f"{len(lines)}-line file")
+        return lines[start - 1:end]
+
+    def test_the_cited_lines_are_the_granted_nothing_branch(self):
+        # BOTH ENDS, not just the contents. A range that merely contains the
+        # print still passes while sliding off one end of the block, which is
+        # exactly how a one-line insertion above main() would go unnoticed --
+        # so the first cited line is asserted to be the read of the grant,
+        # which is what makes "granted nothing" legible at all.
+        cited = self.cited_lines()
+        self.assertEqual('queries = claimed.get("queries", [])',
+                         cited[0].strip(),
+                         "the cited range does not start where the grant is "
+                         "read")
+        body = "\n".join(cited)
+        self.assertIn("if not queries:", body,
+                      "the cited range is not the granted-nothing branch")
+        self.assertIn('print("worker: nothing to do', body,
+                      "the cited range does not print what this docstring "
+                      "says it prints")
+
+    def test_the_cited_lines_leave_by_a_bare_return(self):
+        # "exits 0" is the other half of the claim and the half a nearby
+        # sys.exit(1) would quietly falsify -- main() has three of those above
+        # this branch. A bare return is what cli() turns into exit 0
+        # (`contributor-worker/google-serpapi-worker.py:811-812`, reached from
+        # `:816`), and this asserts the branch leaves that way and not another.
+        cited = self.cited_lines()
+        self.assertNotIn("sys.exit", "\n".join(cited))
+        self.assertEqual("return", cited[-1].strip())
 
 
 if __name__ == "__main__":

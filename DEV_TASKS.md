@@ -17,7 +17,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-33`.**
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-34`.**
 Numbers are never reused and never renumbered; `OQ-7` is closed and stays in the table so that
 citations to it keep resolving.
 
@@ -597,7 +597,7 @@ answering 0 to everything "is not a claim that launchctl would" (`:76-78`), and 
 accepts anything (`:250-252`), deferring to `OQ-25`. A route (b) implementation would therefore be
 **green by construction** — the fake returns from `unload` instantly and never stops the caller,
 which is the precise opposite of the hazard. Green would mean nothing. `cli()` also refuses
-`--install` off Darwin (`:806-811`), so nothing here can even reach the code path.
+`--install` off Darwin (`:799-808`), so nothing here can even reach the code path.
 
 **How to do it.** Ten minutes on a Mac answers it, and the answer is worth more than the argument:
 install the agent with a short `StartInterval`, and from inside a scheduled run call
@@ -617,6 +617,37 @@ converge on it unattended.
 **Done when:** one route is chosen, the reason is written into `docs/adr/` as a decision — this is
 `0007` decision 3's missing half and belongs beside it, not in a task row — and `T-41` is edited to
 name the chosen route and drop the other.
+
+---
+
+### OQ-33 — A closed row's `file:line` citations go stale on the next commit; is rewriting them right?
+
+Filed by `T-40`, 2026-08-08, which spent its session rewriting fourteen and expects to be back.
+**A convention question, so a session cannot settle it.**
+
+**The evidence is not a projection.** `T-28`/`T-29`/`T-30` closed with correct citations into
+`google-serpapi-worker.py` and `T-30`/`T-31` broke all twelve; `T-42` corrected six into
+`api/app.py` and `T-39` broke them the next commit (`T-46` has both lists). Every one still
+resolves, so nothing reported it. `api/app.py:580-587` already carries a mitigation — two constants
+parked at the bottom so nothing is inserted above `submit()`, after task 24 re-cited about thirty
+following an eight-line shift — and `T-39` inserted above `submit()` anyway.
+
+**Three options, not equivalent.** (1) Keep rewriting: every row pays forever, and a row that
+forgets is silently wrong — the status quo, and the only one with a per-session cost. (2) Pin a
+**closed** row's citations to the commit that closed it, `git show <sha>:<path>:NNN` — permanently
+true, and the form is already blessed for the deleted `docs/`, **but the checker skips line-range
+validation behind that form entirely** (`backend/tools/audit-citations.py:17-25`, the `T-18`
+blindspot), so it trades a citation that goes wrong loudly for one nothing can ever check, and it
+points a reader at history rather than at the code they are about to edit. (3) Drop line numbers
+from closed rows and cite the symbol — nothing to drift, nothing to check, and `.claude/CLAUDE.md`'s
+cite-`file:line` rule would need an explicit carve-out saying so.
+
+**Open rows are out of scope**: a session stands on those, so `T-46` corrects `T-35`'s pair however
+this lands.
+
+**Done when:** the answer is a decision in [`docs/adr/`](docs/adr/), since it changes what
+`.claude/CLAUDE.md`'s citation rule means, and `T-46` is edited to match. **If the answer is (1),
+say so explicitly** — an unrecorded status quo is what let this run for five days.
 
 ---
 
