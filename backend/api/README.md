@@ -245,7 +245,7 @@ every poll and written only by `manage_users.py settings`:
 |---|---|---|
 | `paused` | not paused | `claim` grants nothing and answers `{"paused": true, "queries": [], "poll_interval_seconds": N}` |
 | `daily_cap` | `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` | this contributor's claims-per-day ceiling, replacing the service default rather than capping it |
-| `reserve_floor` | `0` | credits per day the Builder keeps; `allowance = max(0, cap − floor)` |
+| `reserve_floor` | `0` | SerpApi credits the Builder keeps unspent — a **level**, read against the balance their worker last reported, not a slice of the cap |
 
 ```bash
 python3 manage_users.py settings --contributor c_ab12 --paused
@@ -270,6 +270,22 @@ arrive on.
 else. A number the worker could act on is a number it could disagree about, and
 `0007` decision 3 gives it no policy beyond its poll-interval floor.
 
+**The floor binds against a balance, and the balance is the Builder's own
+report** (`T-54`). `allowance` has two readings and which one applies depends on
+whether `contributor_status.quota_remaining` holds something recent:
+
+| The last reported balance is | `allowance` is | Why |
+|---|---|---|
+| present, and no older than `QUOTA_STALE_AFTER_POLLS` × the poll interval | `min(cap, used + max(0, balance − floor))` | the floor is a level the credits must not drop below; the cap is still the operator's ceiling |
+| absent, or older than that | `max(0, cap − floor)` | `T-34`'s reading, kept as the fallback — a machine that has never finished a run has reported nothing, and refusing it on the strength of a number that never came is worse than reserving conservatively |
+
+`used` is added back because `allowance` is a **day total** that `claim` then
+subtracts `used` from again, while a balance is a level already net of what was
+spent before it was reported. A key that has stopped working reports an *error*,
+never a balance of `0`, so the dead-credential case lands in the second row and
+not in a refusal. A balance at or below the floor is a `429` — see `T-57` for
+what that `429` currently says.
+
 ### Contributor status — the poll is also the check-in
 
 `T-35`. The same request carries three optional fields *up*, and
@@ -285,8 +301,11 @@ else. A number the worker could act on is a number it could disagree about, and
 **Every fact has its own timestamp, and that is not symmetry.** A check-in moves
 hourly; a quota and an error move only when there is one to report. Reading the
 check-in time as the time a balance was reported would make a week-old balance
-look freshly confirmed once an hour — and `T-54` is filed to build a reserve
-floor on exactly that number's age.
+look freshly confirmed once an hour — and `T-54` built the reserve floor on
+exactly that number's age, so the separate column is now load-bearing rather
+than merely tidy: a worker whose SerpApi key has died keeps checking in every
+hour and reports a balance never, and it is `quota_reported_at` alone that stops
+the floor binding against a number nothing has confirmed since.
 
 **A check-in is not a claim.** No `submission_log` row, nothing `claims_today()`
 counts. An honest idle poll would otherwise exhaust a daily cron's allowance on

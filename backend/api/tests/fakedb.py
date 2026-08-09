@@ -65,7 +65,8 @@ class FakeConn:
 
     def __init__(self, *, contributor="c_test", revoked=None, claim_rows_today=0,
                  claim_state=None, last_success=None, claim_wins=True,
-                 watermarks=None, settings=(None, None, None)):
+                 watermarks=None, settings=(None, None, None),
+                 quota=(None, None)):
         self.contributor = contributor
         self.revoked = revoked
         self.claim_rows_today = claim_rows_today
@@ -75,6 +76,12 @@ class FakeConn:
         #: tests keep asserting the behaviour of a contributor the operator has
         #: expressed no policy for. Pass None for a MISSING contributors row.
         self.settings = settings
+        #: (quota_remaining, quota_reported_at) as reported_quota() reads them --
+        #: what is STORED, which on a real poll may be what this very request
+        #: reported. Pass None for a missing contributor_status row, which is a
+        #: different fact from a row whose quota columns are NULL only to a test
+        #: that cares, and the same fact to reported_quota().
+        self.quota = quota
         #: (claimed_by, claimed_at, claim_granted_at), as holds_claim reads it.
         self.claim_state = claim_state
         self.last_success = last_success
@@ -132,6 +139,9 @@ class FakeConn:
             return FakeResult([(counted,)])
         if flat.startswith("SELECT paused, daily_cap, reserve_floor FROM contributors"):
             return FakeResult([self.settings] if self.settings is not None else [])
+        if flat.startswith("SELECT quota_remaining, quota_reported_at "
+                           "FROM contributor_status"):
+            return FakeResult([self.quota] if self.quota is not None else [])
         if flat.startswith("SELECT claimed_by, claimed_at, claim_granted_at"):
             return FakeResult([self.claim_state] if self.claim_state else [])
         if flat.startswith("SELECT last_success_at FROM job_ingest_state"):
@@ -147,7 +157,22 @@ class FakeConn:
             # Recorded as a dict rather than a tuple because the interesting
             # assertions are about WHICH facts a poll carried, and three of the
             # seven bound values are None on an ordinary check-in.
-            self.check_ins.append(dict(zip(self.CHECK_IN_COLUMNS, params)))
+            row = dict(zip(self.CHECK_IN_COLUMNS, params))
+            self.check_ins.append(row)
+            # THE ONE PIECE OF SQL SEMANTICS THIS FAKE MODELS, and it is here
+            # because leaving it out would make the fake actively wrong about
+            # ORDER rather than merely silent about SQL. record_check_in()
+            # COMMITS, and `claim` calls it before it reads the balance back --
+            # so on a real poll that reported one, the read below returns what
+            # this statement just wrote. A fake that kept returning the
+            # constructor's value could only ever exercise the stale path, which
+            # is the half of T-54 that does NOT bind. The COALESCE is mirrored
+            # rather than assumed away: an unreported quota leaves the stored one
+            # and its timestamp alone, which is the statement's own behaviour.
+            # That the real UPSERT does this is pinned against Postgres by
+            # test_contributor_status.py's TestAgainstARealDatabase.
+            if row["quota_remaining"] is not None:
+                self.quota = (row["quota_remaining"], row["quota_reported_at"])
             return FakeResult()
         if "RETURNING dataset" in flat:                      # try_claim_query
             if self.claim_wins:

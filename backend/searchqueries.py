@@ -113,7 +113,7 @@ CONTRIBUTOR_DATASET_PREFIX = "search_query:"
 #: reason is that the inference is not available. api/app.py writes a `submit`
 #: row on the success path AND on both refusal paths, and `reason` does not
 #: separate them -- the success path sets a reason too when records failed to
-#: write (api/app.py:617). Counting a refused submit as a run is exactly defect
+#: write (api/app.py:640). Counting a refused submit as a run is exactly defect
 #: D08 (an empty submission advancing a watermark) rebuilt one table over, so
 #: the signal is written explicitly by the side that knows, on the same branch
 #: mark_success sits on in the other mode.

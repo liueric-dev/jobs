@@ -216,7 +216,7 @@ CONTRIBUTOR_SETTINGS = tuple(name for name, _ in CONTRIBUTOR_SETTING_COLUMNS)
 #: not, because a worker reports them only when it has one to report. Reading
 #: the check-in time as the time a balance was reported would make every stale
 #: balance look freshly confirmed once an hour, which is precisely the reading
-#: T-54 is filed to build a floor on top of.
+#: T-54 built its reserve floor on top of.
 CONTRIBUTOR_STATUS_COLUMNS = ("last_check_in_at", "worker_version",
                               "quota_remaining", "quota_reported_at",
                               "last_error", "last_error_at")
@@ -685,16 +685,15 @@ def contributor_settings(conn, contributor_id):
     )
 
 
-def claim_allowance(settings, default_cap):
+def claim_allowance(settings, default_cap, used=0, headroom=None):
     """How many queries this contributor may be granted today, in total.
 
-    Pure arithmetic over a settings tuple and a number, so the boundary the row
-    that built this is specified on can be tested without a database, a request
-    or a query bank -- the same reason ../score.py's score_job() takes no I/O.
+    Pure arithmetic over a settings tuple and three numbers, so the boundary the
+    row that built this is specified on can be tested without a database, a
+    request or a query bank -- the same reason ../score.py's score_job() takes
+    no I/O.
 
-    TWO NUMBERS, ONE SUBTRACTION, AND THE SECOND IS NOT REDUNDANT. `cap - floor`
-    collapses arithmetically into a single smaller cap, and if the two had one
-    owner it should be one column. They do not. The cap is the OPERATOR's: how
+    TWO NUMBERS, AND THE SECOND IS NOT REDUNDANT. The cap is the OPERATOR's: how
     much of a contributor's day this service is willing to schedule. The floor
     is the BUILDER's: how many of their own SerpApi credits they keep back. Held
     as one number, an operator raising a cap from 8 to 12 silently spends a
@@ -703,22 +702,116 @@ def claim_allowance(settings, default_cap):
     own number without knowing the other's, which is the property worth a
     column.
 
-    THE FLOOR IS DENOMINATED IN A DAY'S CREDITS, not in a balance. `0007`
-    decision 4's pacing divides credits remaining by days left, and a floor
-    against a REPORTED remaining balance would be the more natural reading of
-    the word -- but the balance is contributor-reported and nothing reports it
-    yet: T-35 owns "remaining quota", and building a floor against a number that
-    does not arrive would be a setting that silently never binds. See TASKS.md's
-    T-54, filed against this line, for the version that reads a balance.
+    THE FLOOR IS A LEVEL, AND IT IS READ AGAINST A BALANCE (T-54). `0007`
+    decision 4 is about credits remaining, and "stop claiming when my SerpApi
+    credits would drop below N" is what a Builder reads the setting to mean.
+    T-34 could not build that: nothing reported a balance, so the floor came off
+    the cap instead and `cap - floor` collapsed into one smaller cap -- two
+    columns justified by having two owners rather than by measuring two things.
+    T-35 made the balance reportable, so `headroom` is what the floor permits
+    against the contributor's own last reported credits, and WHEN IT IS PRESENT
+    THE FLOOR DOES NOT COME OFF THE CAP AS WELL. Subtracting it in both places
+    would charge a Builder their reserve twice, which is the drift the row that
+    asked for this exists to avoid.
+
+    `used` PARTICIPATES ONLY IN THE BALANCE READING, AND IT IS NOT
+    DOUBLE-COUNTING. What this returns is a TOTAL for the day -- app.py tests
+    `used >= allowance` and spends `allowance - used` -- while a reported balance
+    is a LEVEL as of the moment it was reported, already net of everything spent
+    before it. So the day-total the floor permits is what has been used plus what
+    the balance still holds above the floor, and `allowance - used` lands back on
+    `headroom` exactly. Claims made AFTER a report are in `used` and not yet in
+    the balance, which would count them twice in the contributor's favour -- but
+    a worker reports its balance on the poll FOLLOWING a run, so a poll carrying
+    no fresh balance is one after which nothing was spent either, and `used` has
+    not moved. The staleness window bounds whatever is left of that.
+
+    NO USABLE REPORT FALLS BACK TO T-34's READING, NOT TO ZERO. A contributor who
+    has not finished a run yet, and one whose SerpApi key has died -- which
+    reports an ERROR, never a balance of zero -- both arrive here with
+    `headroom=None`, and a floor that answered 0 for them would stop the work on
+    the strength of a number that never came. `cap - floor` is conservative in
+    the Builder's favour and is exactly the behaviour every one of those
+    contributors already had.
 
     NEVER BELOW ZERO. A floor larger than the cap is an operator and a Builder
     who disagree, and the resolution is that nothing is scheduled -- not a
     negative allowance, which `used >= allowance` would read as "already over"
     correctly but `min(req.max, allowance - used)` would read as a negative
-    max_queries and hand to a query bank that has no opinion about one.
+    max_queries and hand to a query bank that has no opinion about one. The same
+    holds one line up for a balance already at or under the floor.
     """
     cap = default_cap if settings.daily_cap is None else settings.daily_cap
-    return max(0, cap - settings.reserve_floor)
+    if headroom is None:
+        return max(0, cap - settings.reserve_floor)
+    return max(0, min(cap, used + headroom))
+
+
+#: How many missed reports make a balance unusable (T-54). A worker reports its
+#: remaining credits on the poll after a run finishes, so a present balance is at
+#: most one poll interval old while the machine is working -- two intervals is
+#: the first age that ordinary cadence cannot explain. It is denominated in
+#: POLL_INTERVAL_SECONDS rather than in minutes of its own because the cadence
+#: this service ASKS for and the age at which it stops believing an answer are
+#: one edit, not two that can drift; app.py owns that number (docs/adr/0007
+#: decision 3) and passes it in, for the reason DEFAULT_RESERVE_FLOOR above is
+#: annotated with. NOT ONE INTERVAL: a poll a second late would then be stale on
+#: the strength of the jitter every cron has.
+QUOTA_STALE_AFTER_POLLS = 2
+
+
+def quota_fresh_since(poll_interval_seconds, now_dt):
+    """The oldest `quota_reported_at` still worth believing, as a timestamp.
+
+    A STRING, AND THE COMPARISON AGAINST IT IS LEXICOGRAPHIC. utc_now_str()'s
+    format is fixed-width, UTC and offset-free precisely so these compare as text
+    (lib/timeparse.py:113-122), which is how CLAIM_TTL_MINUTES is already applied
+    by try_claim_query() below. Parsing the stored timestamp back into a datetime
+    to compare it would be a second reading of a format every other site in this
+    file compares directly.
+
+    `now_dt` IS PASSED, NOT READ, so one poll has one clock. A cutoff taken from
+    a different instant than the check-in that may have just written the row
+    could call a balance stale that this very request reported.
+    """
+    cutoff = now_dt - timedelta(
+        seconds=poll_interval_seconds * QUOTA_STALE_AFTER_POLLS)
+    return cutoff.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def quota_headroom(quota, reserve_floor, fresh_since):
+    """How many more queries the floor permits, or None if nothing usable.
+
+    Pure, for the reason claim_allowance() is: the staleness edge is the half of
+    T-54 that a request-path test cannot put a clock on.
+
+    NONE AND ZERO ARE DIFFERENT ANSWERS, and keeping them apart is the whole job
+    of this function. None is "this contributor has told us nothing we can act
+    on", which claim_allowance() answers by falling back to the cap. Zero is "we
+    know, and the answer is that they are at their floor". Collapsing them would
+    make a machine that has never finished a run indistinguishable from one whose
+    credits have run out -- and one of those two should keep receiving work.
+
+    THREE WAYS TO HAVE NOTHING, AND ALL THREE ARE ORDINARY. No balance (no run
+    has completed since this contributor was minted); no timestamp (a row this
+    service did not write, since record_check_in() binds the two together); and a
+    balance older than the cadence a working machine would have refreshed it at.
+    The third is why `quota_reported_at` is a column of its own rather than
+    `last_check_in_at` reused -- a worker that polls faithfully while its SerpApi
+    key is dead moves its check-in every hour and its balance never, and reading
+    the check-in here would make that stale number look confirmed on every poll.
+
+    A NEGATIVE OR ZERO BALANCE IS BELIEVED, not discarded. record_check_in()
+    stores what was reported including a number that makes no sense, on the
+    argument that it is evidence about that worker; here the same number simply
+    means there is nothing above the floor left to spend, which is the correct
+    reading of it whether it is honest or broken.
+    """
+    if quota.remaining is None or quota.reported_at is None:
+        return None
+    if quota.reported_at < fresh_since:
+        return None
+    return max(0, quota.remaining - reserve_floor)
 
 
 # --------------------------------------------------------------------------
@@ -827,6 +920,52 @@ def record_check_in(conn, contributor_id, worker_version=None,
          None if quota is None else now, error, None if error is None else now),
     )
     conn.commit()
+
+
+class ReportedQuota(NamedTuple):
+    """What a contributor's machine last said it had left, and when it said so.
+
+    BOTH OR NEITHER. record_check_in() binds the balance and its timestamp in one
+    statement and never writes one without the other, so a row carrying a balance
+    with no timestamp is a row this service did not write. quota_headroom()
+    refuses that pair rather than dating it, because the only two candidates for
+    a missing timestamp are the check-in's -- which is the reading the separate
+    column exists to prevent -- and `now`, which would make an unknown age look
+    like the freshest one possible.
+    """
+    remaining: int | None
+    reported_at: str | None
+
+
+def reported_quota(conn, contributor_id):
+    """The last SerpApi balance this contributor reported. Missing row -> none.
+
+    A MISSING ROW IS ORDINARY HERE, and that is the opposite of
+    contributor_settings() one section up, where the same shape is unreachable.
+    There the row is guaranteed by a foreign key; here `claim` has just called
+    record_check_in(), which commits, so in the request path a row exists by
+    construction -- but its quota columns stay NULL until a run has finished and
+    given the worker something to report. "No row" and "a row with nothing in it"
+    are one fact to the only caller, and neither is an error: it is the state
+    every contributor is in between minting and their first completed run.
+
+    WHY THIS IS A SECOND SELECT AND NOT A JOIN onto contributor_settings(). What
+    that function returns is DESIRED STATE, all of it operator-set and none of it
+    reported; folding a contributor-reported number into the same tuple would put
+    a fact nobody chose beside three that were chosen, and TestTheColumnsAgree
+    pins that tuple against the `contributors` DDL precisely so the two cannot
+    drift apart. Two reads on a route that already writes twice is not the cost
+    worth optimising here.
+    """
+    row = conn.execute(
+        "SELECT quota_remaining, quota_reported_at FROM contributor_status "
+        "WHERE contributor_id = %s",
+        (contributor_id,),
+    ).fetchone()
+    if row is None:
+        return ReportedQuota(None, None)
+    remaining, reported_at = row
+    return ReportedQuota(remaining, reported_at)
 
 
 # --------------------------------------------------------------------------

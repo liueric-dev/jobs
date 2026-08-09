@@ -7,7 +7,7 @@ truth that a paused contributor's machine will disagree with. So every assertion
 below is about what `claim` decides, not about what a worker does with the
 answer.
 
-THE TWO EDGES THIS FILE EXISTS FOR:
+THE THREE EDGES THIS FILE EXISTS FOR:
 
   1. PAUSE IS A 200. A paused contributor is granted nothing and is told so on
      an ordinary reply carrying an ordinary poll interval. Refusing the request
@@ -23,6 +23,16 @@ THE TWO EDGES THIS FILE EXISTS FOR:
      would produce keeps 1 credit of a 2-credit reserve, which is the failure
      that looks most like working.
 
+  3. THE FLOOR IS READ AGAINST A BALANCE, AND ONLY AGAINST ONE IT BELIEVES
+     (T-54). A cap of 5 with a floor of 2 and a freshly reported balance of 10
+     is an allowance of 5, not 3: the floor binds against the credits, so
+     subtracting it from the cap as well would charge the Builder their reserve
+     twice. The same contributor with a balance nothing has confirmed for days
+     is back to 3 -- the fallback is T-34's reading and not zero, because a
+     machine that has never finished a run has reported nothing, and stopping
+     its work on the strength of a number that never came is the failure this
+     edge is here to prevent.
+
 WHY A FAKE AND NOT A DATABASE: see fakedb's own docstring. Every claim here is
 about which branch the endpoint takes, and none is about SQL semantics -- except
 the two in TestTheColumnsAgree, which check that the names in the SELECT, in the
@@ -36,6 +46,7 @@ import os
 import re
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -70,10 +81,17 @@ def bank_of(n):
     }
 
 
-def run_claim(conn, max_queries=1):
+def run_claim(conn, max_queries=1, **reported):
+    """One claim against `conn`. `**reported` is what the worker sent with it.
+
+    Deliberately the same shape as test_contributor_status's, and for the same
+    reason bank_of() is: two files that assert different things about one
+    endpoint, each holding its own two-line helper, rather than one shared
+    helper tying them together.
+    """
     restore = patch_db(app, conn)
     try:
-        return app.claim(app.ClaimRequest(max=max_queries),
+        return app.claim(app.ClaimRequest(max=max_queries, **reported),
                          authorization="Bearer key")
     finally:
         restore()
@@ -288,6 +306,265 @@ class TestTheAllowanceArithmetic(unittest.TestCase):
     def test_it_never_returns_a_negative(self):
         self.assertEqual(
             qc.claim_allowance(qc.ContributorSettings(False, 2, 9), 50), 0)
+
+
+class TestTheAllowanceAgainstAReportedBalance(unittest.TestCase):
+    """claim_allowance() once a balance is in play (T-54). Still no I/O.
+
+    `headroom` is what quota_headroom() decided the floor leaves of the
+    contributor's own credits; None means it decided nothing usable had been
+    reported, which is the case every test in the class above is in.
+    """
+
+    def test_a_reported_balance_replaces_the_cap_as_the_binding_number(self):
+        # 4 credits above the floor, a cap of 8: the balance is what runs out
+        # first and the allowance says so.
+        settings = qc.ContributorSettings(False, 8, 2)
+        self.assertEqual(qc.claim_allowance(settings, 50, headroom=4), 4)
+
+    def test_the_cap_still_binds_when_the_balance_is_the_larger_number(self):
+        # The operator's ceiling does not go away because a Builder is rich.
+        settings = qc.ContributorSettings(False, 8, 2)
+        self.assertEqual(qc.claim_allowance(settings, 50, headroom=400), 8)
+
+    def test_the_floor_does_not_come_off_the_cap_as_well(self):
+        # THE HEADLINE OF THIS ROW. The same settings that read as an allowance
+        # of 6 with no balance read as the full cap once the floor has credits
+        # of its own to bind against -- subtracting it in both places is the
+        # double charge T-54 exists to remove, and it is invisible in every
+        # test that does not compare the two readings directly.
+        settings = qc.ContributorSettings(False, 8, 2)
+        self.assertEqual(qc.claim_allowance(settings, 50), 6)
+        self.assertEqual(qc.claim_allowance(settings, 50, headroom=400), 8)
+
+    def test_what_is_already_spent_is_added_back_because_the_answer_is_a_total(self):
+        # A balance is a level as of the moment it was reported and is already
+        # net of what was spent before it; the allowance is a day TOTAL that
+        # app.py subtracts `used` from again. So the two have to be added here
+        # for `allowance - used` to land back on the headroom -- and that
+        # subtraction is asserted, not just the sum, because dropping `used`
+        # from this line passes every test that leaves it at 0.
+        settings = qc.ContributorSettings(False, 50, 2)
+        allowance = qc.claim_allowance(settings, 50, used=7, headroom=4)
+        self.assertEqual(allowance, 11)
+        self.assertEqual(allowance - 7, 4)
+
+    def test_a_headroom_of_zero_is_an_allowance_of_what_is_already_spent(self):
+        # Which app.py reads as `used >= allowance` and refuses. Not a negative
+        # and not the cap: the contributor is AT their floor, and the day-total
+        # they are allowed is exactly what they have already had.
+        settings = qc.ContributorSettings(False, 50, 2)
+        self.assertEqual(qc.claim_allowance(settings, 50, used=3, headroom=0), 3)
+
+    def test_a_headroom_of_none_is_not_a_headroom_of_zero(self):
+        # The distinction the fallback rests on. Nothing reported must not read
+        # as nothing left, or a contributor whose first run has not finished is
+        # refused on evidence that never arrived.
+        settings = qc.ContributorSettings(False, 8, 2)
+        self.assertEqual(qc.claim_allowance(settings, 50, headroom=0), 0)
+        self.assertEqual(qc.claim_allowance(settings, 50, headroom=None), 6)
+
+
+class TestTheHeadroomAReportedBalanceLeaves(unittest.TestCase):
+    """quota_headroom() alone: what the floor permits, and what it disbelieves.
+
+    Pure, and that is what lets the staleness edge be tested at all -- a request
+    path test cannot put a clock on a report it did not write.
+    """
+
+    #: One clock for every case in this class. Two `datetime.now()` calls a few
+    #: microseconds apart would not fail these, which is exactly the problem:
+    #: the bug that shape hides is the one where a cutoff and a report come from
+    #: different instants, and a test that cannot express it cannot pin it.
+    NOW = datetime(2026, 8, 9, 12, 0, 0, tzinfo=timezone.utc)
+    INTERVAL = 3600
+
+    def _fresh_since(self):
+        return qc.quota_fresh_since(self.INTERVAL, self.NOW)
+
+    def _reported(self, remaining, ago_seconds=0):
+        at = (self.NOW - timedelta(seconds=ago_seconds)).strftime(
+            "%Y-%m-%dT%H:%M:%S")
+        return qc.ReportedQuota(remaining, at)
+
+    def test_the_floor_comes_off_the_reported_balance(self):
+        self.assertEqual(
+            qc.quota_headroom(self._reported(10), 2, self._fresh_since()), 8)
+
+    def test_a_balance_exactly_at_the_floor_leaves_nothing(self):
+        # The boundary, and it is the reserve's whole point: the credit that
+        # would take them below the floor is not granted, not granted-and-then
+        # -refused.
+        self.assertEqual(
+            qc.quota_headroom(self._reported(2), 2, self._fresh_since()), 0)
+
+    def test_a_balance_under_the_floor_is_zero_and_not_a_negative(self):
+        # Reachable without anything being wrong: a floor raised after the
+        # credits were already spent.
+        self.assertEqual(
+            qc.quota_headroom(self._reported(1), 2, self._fresh_since()), 0)
+
+    def test_a_negative_balance_is_believed_and_bottoms_out_at_zero(self):
+        # record_check_in stores a nonsensical number rather than dropping it,
+        # on the argument that it is evidence about that worker. Here it simply
+        # means there is nothing above the floor, which is the right reading of
+        # it whether the worker is honest or broken.
+        self.assertEqual(
+            qc.quota_headroom(self._reported(-5), 2, self._fresh_since()), 0)
+
+    def test_no_floor_leaves_the_whole_balance(self):
+        self.assertEqual(
+            qc.quota_headroom(self._reported(10), 0, self._fresh_since()), 10)
+
+    def test_nothing_reported_is_none_and_not_zero(self):
+        self.assertIsNone(
+            qc.quota_headroom(qc.ReportedQuota(None, None), 2,
+                              self._fresh_since()))
+
+    def test_a_balance_with_no_timestamp_is_refused_rather_than_dated(self):
+        # record_check_in binds the two together, so this pair is a row this
+        # service did not write. The two candidate readings are both wrong:
+        # the check-in's time is what the separate column exists to avoid, and
+        # `now` would make an unknown age look like the freshest possible.
+        self.assertIsNone(
+            qc.quota_headroom(qc.ReportedQuota(10, None), 2,
+                              self._fresh_since()))
+
+    def test_a_timestamp_with_no_balance_reports_nothing(self):
+        self.assertIsNone(
+            qc.quota_headroom(qc.ReportedQuota(None, "2026-08-09T11:59:00"), 2,
+                              self._fresh_since()))
+
+    def test_a_balance_from_one_interval_ago_is_still_believed(self):
+        # The ordinary case for a working machine: it reports on the poll after
+        # a run finishes, so the freshest a balance is ever seen is one interval
+        # old. A window that excluded this would never bind on anybody.
+        self.assertEqual(
+            qc.quota_headroom(self._reported(10, ago_seconds=self.INTERVAL), 2,
+                              self._fresh_since()), 8)
+
+    def test_a_balance_older_than_the_window_is_not_read_at_all(self):
+        # A worker whose SerpApi key died reports an ERROR on every poll and a
+        # balance never, so its check-in stays current while this number rots.
+        # Reading it anyway is what makes a floor bind against a week-old level.
+        self.assertIsNone(
+            qc.quota_headroom(
+                self._reported(10, ago_seconds=self.INTERVAL * 3), 2,
+                self._fresh_since()))
+
+    def test_the_window_is_more_than_a_single_interval(self):
+        # Not the number, the property: at exactly one interval every cron's
+        # ordinary jitter would put half the fleet on the stale side of the
+        # line, and staleness would then be a report about scheduling noise.
+        self.assertGreater(qc.QUOTA_STALE_AFTER_POLLS, 1)
+
+    def test_the_cutoff_is_written_in_the_format_the_column_holds(self):
+        # The comparison is `<` on TEXT. It is only meaningful if both sides
+        # are the same fixed-width, offset-free shape -- a cutoff carrying
+        # microseconds or a `+00:00` would sort against the stored value in
+        # ways that have nothing to do with time.
+        cutoff = qc.quota_fresh_since(self.INTERVAL, self.NOW)
+        self.assertRegex(cutoff, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
+        self.assertEqual(len(cutoff), len(qc.utc_now_str()))
+        self.assertLess(cutoff, qc.utc_now_str())
+
+
+class TestTheFloorAgainstAReportedBalance(_SettingsCase):
+    """The whole path, through `claim`: settings, a stored report, one answer.
+
+    THE FIXTURE IS CHOSEN SO THE TWO READINGS DIFFER. A cap of 5, a floor of 2
+    and a balance of 10 is an allowance of 5 under the balance reading and 3
+    under the fallback, so every test below can only pass under one of them --
+    numbers where they coincide would let a wiring mistake through silently.
+    """
+
+    CAP, FLOOR, BALANCE = 5, 2, 10
+    FALLBACK = 3
+
+    def _conn(self, quota=(None, None), used=0):
+        return FakeConn(settings=(None, self.CAP, self.FLOOR),
+                        claim_rows_today=used, quota=quota)
+
+    def _stored(self, remaining, ago_seconds=0):
+        """A balance already in contributor_status, aged off THIS test's clock.
+
+        Not a frozen literal: the request under test compares against
+        `datetime.now()`, so a fixture with a hardcoded date would drift from
+        fresh to stale as the calendar moved and would pass for years first.
+        """
+        at = (datetime.now(timezone.utc) - timedelta(seconds=ago_seconds)
+              ).strftime("%Y-%m-%dT%H:%M:%S")
+        return (remaining, at)
+
+    def test_a_fresh_balance_leaves_the_cap_whole(self):
+        result = run_claim(self._conn(self._stored(self.BALANCE)),
+                           max_queries=self.CAP)
+        self.assertEqual(len(result["queries"]), self.CAP)
+
+    def test_the_same_contributor_falls_back_when_the_report_is_old(self):
+        stale = self._stored(self.BALANCE,
+                             ago_seconds=app.POLL_INTERVAL_SECONDS
+                             * (qc.QUOTA_STALE_AFTER_POLLS + 1))
+        result = run_claim(self._conn(stale), max_queries=self.CAP)
+        self.assertEqual(len(result["queries"]), self.FALLBACK)
+
+    def test_a_contributor_who_has_never_reported_falls_back(self):
+        # The state every Builder is in between opting in and their first
+        # completed run, and the one that must not be answered with a refusal.
+        result = run_claim(self._conn(), max_queries=self.CAP)
+        self.assertEqual(len(result["queries"]), self.FALLBACK)
+
+    def test_a_missing_status_row_falls_back_rather_than_raising(self):
+        # Unreachable through `claim`, which checks in first -- but reported_
+        # quota() is what makes it unreachable-and-harmless rather than a 500.
+        result = run_claim(self._conn(quota=None), max_queries=self.CAP)
+        self.assertEqual(len(result["queries"]), self.FALLBACK)
+
+    def test_a_balance_at_the_floor_is_refused(self):
+        with self.assertRaises(HTTPException) as caught:
+            run_claim(self._conn(self._stored(self.FLOOR)))
+        self.assertEqual(caught.exception.status_code, 429)
+
+    def test_the_last_credit_above_the_floor_is_granted(self):
+        # One either side of the boundary, so a `<` for `<=` in the headroom
+        # cannot pass both this and the case above.
+        result = run_claim(self._conn(self._stored(self.FLOOR + 1)),
+                           max_queries=self.CAP)
+        self.assertEqual(len(result["queries"]), 1)
+
+    def test_the_balance_reported_by_this_very_poll_is_the_one_that_binds(self):
+        # The real sequence, and the reason record_check_in() commits before
+        # anything reads it back: the worker reports its credits on the poll,
+        # and the floor binds against THAT number rather than against whatever
+        # was stored an hour ago. Here the stored balance would have granted
+        # the full cap and the reported one grants nothing.
+        conn = self._conn(self._stored(self.BALANCE))
+        with self.assertRaises(HTTPException) as caught:
+            run_claim(conn, max_queries=self.CAP, quota_remaining=self.FLOOR)
+        self.assertEqual(caught.exception.status_code, 429)
+        self.assertEqual(conn.check_ins[0]["quota_remaining"], self.FLOOR)
+
+    def test_a_poll_reporting_no_balance_leaves_the_stored_one_binding(self):
+        # The COALESCE half of the same sequence: a run that produced nothing
+        # to report must not blank the balance the floor is reading.
+        conn = self._conn(self._stored(self.BALANCE))
+        result = run_claim(conn, max_queries=self.CAP, worker_version="w/1.1")
+        self.assertEqual(len(result["queries"]), self.CAP)
+
+    def test_what_is_already_spent_still_counts_against_the_cap(self):
+        # A rich balance does not un-spend the day. Four of the cap of 5 are
+        # gone, so one is left however many credits the Builder has.
+        result = run_claim(
+            self._conn(self._stored(self.BALANCE), used=self.CAP - 1),
+            max_queries=self.CAP)
+        self.assertEqual(len(result["queries"]), 1)
+
+    def test_a_refusal_on_the_floor_locks_nothing_and_logs_nothing(self):
+        conn = self._conn(self._stored(self.FLOOR))
+        with self.assertRaises(HTTPException):
+            run_claim(conn)
+        self.assertEqual(conn.log, [])
+        self.assertEqual(conn.claimed, [])
 
 
 class TestReadingTheSettings(unittest.TestCase):
@@ -579,6 +856,72 @@ class TestAgainstARealDatabase(unittest.TestCase):
             conn.commit()
             self.assertEqual(qc.contributor_settings(conn, cid),
                              qc.ContributorSettings(True, 8, 2))
+
+    def test_a_contributor_who_has_never_polled_has_reported_no_balance(self):
+        # The missing-row branch, against a real table rather than a fake that
+        # was told to return nothing.
+        with self.schema() as (conn, _):
+            cid, _key, _hash, _at = qc.mint_credential(conn, "Dave")
+            conn.commit()
+            self.assertEqual(qc.reported_quota(conn, cid),
+                             qc.ReportedQuota(None, None))
+
+    def test_a_check_in_that_reported_nothing_leaves_the_balance_unreported(self):
+        # A row EXISTS and its quota columns are NULL, which the fake upstairs
+        # cannot distinguish from no row at all and Postgres can.
+        with self.schema() as (conn, _):
+            cid, _key, _hash, _at = qc.mint_credential(conn, "Dave")
+            conn.commit()
+            qc.record_check_in(conn, cid, worker_version="w/1.1")
+            self.assertEqual(qc.reported_quota(conn, cid),
+                             qc.ReportedQuota(None, None))
+
+    def test_the_balance_reads_back_as_an_int_beside_its_own_timestamp(self):
+        # What record_check_in() wrote, read by the function the floor calls.
+        # The INTEGER round-trip is the part a TEXT column would also have
+        # passed and quota_headroom()'s subtraction would then have failed on.
+        with self.schema() as (conn, _):
+            cid, _key, _hash, _at = qc.mint_credential(conn, "Dave")
+            conn.commit()
+            qc.record_check_in(conn, cid, quota_remaining=40)
+            quota = qc.reported_quota(conn, cid)
+            self.assertEqual(quota.remaining, 40)
+            self.assertIsInstance(quota.remaining, int)
+            self.assertEqual(qc.quota_headroom(quota, 2, "1970-01-01T00:00:00"),
+                             38)
+
+    def test_the_timestamp_read_back_is_comparable_to_the_cutoff(self):
+        # THE CLAIM THE WHOLE STALENESS BRANCH RESTS ON, and the only one a
+        # fake cannot make: what Postgres hands back for this column is a
+        # string in utc_now_str()'s format, so `<` against quota_fresh_since()
+        # is a comparison about time. A column that came back as a datetime, or
+        # with an offset appended, would compare -- just not meaningfully.
+        with self.schema() as (conn, _):
+            cid, _key, _hash, _at = qc.mint_credential(conn, "Dave")
+            conn.commit()
+            qc.record_check_in(conn, cid, quota_remaining=40)
+            reported_at = qc.reported_quota(conn, cid).reported_at
+            self.assertIsInstance(reported_at, str)
+            self.assertRegex(reported_at,
+                             r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
+            now = datetime.now(timezone.utc)
+            self.assertGreater(
+                reported_at, qc.quota_fresh_since(3600, now),
+                "a balance written moments ago must read as fresh")
+            self.assertLess(
+                reported_at,
+                qc.quota_fresh_since(3600, now + timedelta(days=1)),
+                "and as stale once the cutoff has moved past it")
+
+    def test_a_later_report_is_what_the_floor_reads(self):
+        # The UPSERT in place, from the floor's end: two runs, and the second
+        # balance is the one the reserve binds against.
+        with self.schema() as (conn, _):
+            cid, _key, _hash, _at = qc.mint_credential(conn, "Dave")
+            conn.commit()
+            qc.record_check_in(conn, cid, quota_remaining=40)
+            qc.record_check_in(conn, cid, quota_remaining=3)
+            self.assertEqual(qc.reported_quota(conn, cid).remaining, 3)
 
     # NO verify_schema() TEST HERE, AND THE REASON IS NOT "IT IS AWKWARD".
     # Its column loop is hardcoded to `public` (query_claims.py:550, :555),

@@ -431,12 +431,35 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
             return {"poll_interval_seconds": POLL_INTERVAL_SECONDS,
                     "paused": True, "queries": []}
 
+        used = claims_today(conn, contributor_id)
+
+        # THE BUILDER'S RESERVE, READ AGAINST THE BALANCE THEY REPORTED (T-54).
+        # `reserve_floor` is a level their SerpApi credits must not drop below,
+        # so the number it is subtracted from is the balance their own machine
+        # last reported -- not the daily cap, which made it arithmetically a
+        # second cap. quota_headroom() answers None when there is no report worth
+        # acting on (none yet, or one too old for a working machine to have left
+        # standing), and claim_allowance() then falls back to the cap reading
+        # rather than to zero.
+        #
+        # ONE CLOCK FOR THE POLL. The cutoff is derived from this request's
+        # `now_dt`, and the balance it is compared against may have been written
+        # seconds ago by the check-in above -- a cutoff read from a second clock
+        # could judge THIS poll's own report stale.
+        now_dt = datetime.now(timezone.utc)
+        headroom = qc.quota_headroom(
+            qc.reported_quota(conn, contributor_id),
+            settings.reserve_floor,
+            qc.quota_fresh_since(POLL_INTERVAL_SECONDS, now_dt),
+        )
+
         # The operator's cap and the Builder's reserve, resolved into the one
         # number the rest of this function spends. See qc.claim_allowance() for
-        # why they are two settings and not one.
-        allowance = qc.claim_allowance(settings, MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY)
-
-        used = claims_today(conn, contributor_id)
+        # why they are two settings and not one, and why `used` belongs inside
+        # the arithmetic rather than only outside it.
+        allowance = qc.claim_allowance(
+            settings, MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY,
+            used=used, headroom=headroom)
         # >=, AND THE BOUNDARY IS THE POINT. `used == allowance` is a
         # contributor who has spent exactly what they are allowed, and it must
         # refuse: with `>` they would be handed one more, so a reserve floor of

@@ -238,7 +238,9 @@ def main():
     s.add_argument("--daily-cap", dest="daily_cap", default=None,
                    help="queries per day, or 'clear' for the service default")
     s.add_argument("--reserve-floor", dest="reserve_floor", default=None,
-                   help="credits per day to keep unspent, or 'clear' for 0")
+                   help="SerpApi credits to keep unspent -- claiming stops when "
+                        "the balance this contributor reports would drop below "
+                        "it -- or 'clear' for 0")
     s.set_defaults(func=cmd_settings)
 
     r = sub.add_parser("revoke", help="revoke an API key by key_hash prefix")

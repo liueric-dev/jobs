@@ -666,7 +666,7 @@ SERPAPI_ACCOUNT_URL = "https://serpapi.com/account"
 #: What --check offers to release when it asks the server whether the
 #: credential works. NOTHING CAN EVER HOLD A CLAIM ON IT: every real dataset
 #: name is built server-side as "google_jobs:query:<slug>" out of the server's
-#: own query bank (api/app.py:486), and no slug is spelled like this.
+#: own query bank (api/app.py:509), and no slug is spelled like this.
 CHECK_PROBE_DATASET = "google_jobs:query:__check__"
 
 
@@ -755,12 +755,12 @@ def check_credential(base_url_ok, send=probe):
     THE PROBE IS A RELEASE OF A DATASET NOBODY CAN HOLD, AND THE 409 IS THE
     PASS. Every authenticated route on that server does something. /v1/queries/
     claim locks rows out of the pool for CLAIM_TTL_MINUTES apiece and meters
-    the caller against a daily cap (query_claims.py:1085, api/app.py:437-451), so
+    the caller against a daily cap (query_claims.py:1224, api/app.py:434-474), so
     checking a credential with it would spend the allowance being checked, and
     on a day when the bank is stale it would leave real queries claimed by a
     worker that was only asking a question. Release is the one authenticated
     route that can be made to change nothing: it authenticates FIRST and asks
-    whether the caller holds the claim SECOND (api/app.py:635, :637), so a
+    whether the caller holds the claim SECOND (api/app.py:658, :660), so a
     dataset the query bank cannot produce reaches the credential check, writes
     no submission_log row, commits nothing, and comes back 409.
 
@@ -868,8 +868,9 @@ def remember_quota(send=None):
     without running a search, so a machine that polls hourly reports its balance
     hourly and is charged for none of it. `0007` decision 4 asks for allowance
     to be "recomputed per run from the contributor's own plan data" -- this is
-    the run reading its own plan data, and TASKS.md's T-54 is what will read the
-    number at the far end.
+    the run reading its own plan data, and T-54 is what reads the number at the
+    far end: the reserve floor binds against this balance, so a run that stops
+    reporting one stops the floor binding rather than pinning it at zero.
 
     IT REPORTS NOTHING RATHER THAN GUESSING. A refused key, an unreachable
     serpapi.com, an answer that is not JSON and a plan with no remaining count

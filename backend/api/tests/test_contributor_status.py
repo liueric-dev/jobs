@@ -216,8 +216,8 @@ class TestWhatAPollReports(_ClaimCase):
     def test_a_quota_gets_a_timestamp_and_an_absent_one_does_not(self):
         # WHY THE TIMESTAMP IS NOT last_check_in_at. If it were, a balance
         # reported once and never again would read as freshly confirmed every
-        # hour -- and T-54 is filed to build a floor on top of exactly this
-        # number's age.
+        # hour -- and T-54 built its reserve floor on exactly this number's
+        # age, so this timestamp is now load-bearing rather than tidy.
         conn = FakeConn()
         run_claim(conn, quota_remaining=7)
         self.assertIsNotNone(conn.check_ins[0]["quota_reported_at"])
@@ -251,8 +251,19 @@ class TestWhatAPollReports(_ClaimCase):
         # 0 searches left is the single most actionable value this field can
         # hold -- a working install that will do no work. A falsiness check
         # would drop it and leave yesterday's number in place.
+        #
+        # SINCE T-54 THIS POLL IS ALSO REFUSED, and the two facts are the point
+        # of asserting them together. The reserve floor now reads a reported
+        # balance, so a contributor with 0 credits has nothing above any floor
+        # to spend and is granted nothing -- while the report that said so is
+        # still recorded, because T-35 puts the check-in above every branch that
+        # can decide against the poll and commits it. If a future edit moves the
+        # check-in back below the refusal, this test goes red on the write
+        # rather than on the status code.
         conn = FakeConn()
-        run_claim(conn, quota_remaining=0)
+        with self.assertRaises(HTTPException) as caught:
+            run_claim(conn, quota_remaining=0)
+        self.assertEqual(caught.exception.status_code, 429)
         self.assertEqual(conn.check_ins[0]["quota_remaining"], 0)
         self.assertIsNotNone(conn.check_ins[0]["quota_reported_at"])
 

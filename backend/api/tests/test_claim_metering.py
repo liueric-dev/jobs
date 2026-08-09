@@ -313,7 +313,7 @@ class TestTheCitationInThisModulesDocstring(unittest.TestCase):
         # "exits 0" is the other half of the claim and the half a nearby
         # sys.exit(1) would quietly falsify -- main() has three of those above
         # this branch. A bare return is what cli() turns into exit 0
-        # (`contributor-worker/google-serpapi-worker.py:996-997`, reached from
+        # (`contributor-worker/google-serpapi-worker.py:997-998`, reached from
         # `:836`), and this asserts the branch leaves that way and not another.
         cited = self.cited_lines()
         self.assertNotIn("sys.exit", "\n".join(cited))
