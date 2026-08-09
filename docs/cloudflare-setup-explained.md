@@ -102,7 +102,7 @@ Three placeholders got filled in with real values:
   [`backend/api/README.md:66`](../backend/api/README.md)
 
 There's also a required catch-all rule, `- service: http_status:404`
-([`deploy/cloudflared/config.yml:89`](../deploy/cloudflared/config.yml)) — `cloudflared` refuses to
+([`deploy/cloudflared/config.yml:97`](../deploy/cloudflared/config.yml)) — `cloudflared` refuses to
 start without one, and it's a deliberate 404 rather than a default backend: if you ever add a
 hostname in the Cloudflare dashboard but forget to add it here, it should fail loudly, not silently
 land on whichever service happens to be listed first.

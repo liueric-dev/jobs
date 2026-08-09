@@ -648,33 +648,6 @@ contributor ever runs against the pipeline's own key**, which is a fact about de
 default is confirmed correct for this account and said so in writing), and one of the three is
 chosen — in an ADR if it changes which file owns pacing, in a comment if it only sets a number.
 
-### OQ-35 — A citation into a sibling repo is unrepresentable, and it is red in your working tree now
-
-Filed by `T-51`, 2026-08-09, from your own uncommitted change — untouched, because it is yours.
-
-**Why it is yours:** decision, and the evidence is a repo a session cannot see.
-
-**What:** `deploy/cloudflared/config.yml:87` cites a systemd unit under a sibling `bankan` checkout
-for the port the new `bankan.etotheric.com` ingress points at. (The path is not repeated here: it
-would make this row unresolvable too, which is the defect.) That file is in a *different* repo on
-the same machine, so `tools/audit-citations.py` — which resolves every path against this repo root —
-reports it unresolvable, and `tests/test_citations.py`'s
-`test_no_citation_broke_that_was_not_already_broken` is a **red test in the working tree right
-now**. `T-51`'s own numbers were verified against a copy with this file restored to `HEAD`: `0 new`,
-suite `1462` OK. Commit it as-is and CI's `suites` job goes red on `main`.
-
-**Three ways out, and they are not equivalent.** (1) **Drop the `file:line`** and name the port in
-prose — cheapest, and it loses the one pointer that says where 3011 comes from. (2) **Add the
-sibling-repo form to `audit-citations.py`**, the way `git show <ref>:<path>` was added for the
-2026-08-02 deletions — it makes cross-repo cites checkable-looking while validating nothing, which
-is the blindspot [`audit-citations.py`'s tag-line form](.claude/CLAUDE.md) already has once. (3)
-**Accept it in `config/citation-baseline.json`** — which `.claude/CLAUDE.md` forbids ("never add to
-that file to silence a finding"), so taking it is an exception only you can grant.
-
-**Done when:** one is chosen, the suite is green with `config.yml` as committed, and if the answer
-is (2) or (3) it is written down where the citation rule is — an ADR, since it changes what that
-rule covers.
-
 ### OQ-38 — A request body ceiling at the edge, which the middleware cannot be
 
 Filed by `T-56`, 2026-08-09, which built the other half deliberately and stopped at this line.
@@ -741,6 +714,7 @@ answer makes its budget.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~OQ-35~~ | A `file:line` into a sibling `bankan` checkout was unrepresentable, and red in the working tree | **Closed 2026-08-09, option 1: drop the `file:line`.** The citation was **true** — the unit exists in the sibling checkout, its `Description` names `localhost:3011`, the unit is active and 3011 answers 200 — and unrepresentable by construction: `_resolve()` tries each of `SEARCH_ROOTS` (`backend/tools/audit-citations.py:188`), then the citing file's own directory, and discards any candidate escaping the repo root at both guards. Option 2 was rejected as the worse of two builds, not as extra work: resolve nothing and it validates nothing, reproducing the tag-form blindspot that let `T-18`'s citations to a 144-line file pass at line numbers as high as 1047; resolve `../` genuinely and the check passes on the owner's machine and fails in CI, which runs a bare `actions/checkout@v4` on this repo alone (`.github/workflows/ci.yml:107`). Option 3 was rejected because the three entries in `config/citation-baseline.json` are all genuinely-gone targets and that file's own `_comment` says it is meant to shrink — this target is checkable, just not from here. `config.yml`'s comment now names the port in prose **and records why it carries no `file:line`**, so a later session does not helpfully add one back; same line count, so nothing downstream shifted. No ADR, deliberately: option 1 complies with the citation rule rather than changing what it covers. **The red was in two CI jobs, not the one this row named** — `suites` via `tests/test_citations.py`, and `checkers`, which runs the tool directly (`.github/workflows/ci.yml:124`). Verified after: `3 known-drifted, 0 new`; pipeline suite 1509 OK, nothing skipped. **A second citation of `6945e41`'s was wrong and was corrected in the same commit:** `docs/cloudflare-setup-explained.md:105` cited `config.yml:89` for the catch-all terminator, which that commit's 8-line block pushed to `:97` — correct before it, wrong since, and invisible to the checker because `:89` stayed in range. The other four citations in that document name lines below the insertion point and did not move. **This is `OQ-33`'s class, found the way that row predicts** — by reading, not by the checker |
 | ~~OQ-1~~ | `backend/api/` stays; who issues a contributor credential was still open | **Closed 2026-08-05 — direction chosen, not yet built.** Auto-mint a credential server-to-server (`DEC-84` option 2) the moment a Builder logs in or hits a "Contribute" affordance, rather than `manage_users.py create` run by hand. The worker itself becomes a long-running local daemon (start once, poll on an interval) instead of a script re-invoked daily — the thing that actually kept `OQ-12`'s contributor count at zero. SerpApi stays called from the contributor's own machine on their own key, never proxied server-side: SerpApi blocks browser-origin calls outright (confirmed), and there is no confirmed SerpApi policy on many accounts sharing one server IP, a pattern that risks real accounts getting banned. A paid SerpApi tier was checked and set aside on purpose — cheaper today, but a fixed ceiling, where crowdsourcing scales with cohort headcount at near-zero marginal cost. Full reasoning in `docs/adr/0006-contributor-credential-auto-minted-local-daemon.md`. Implementation (mint endpoint, daemon script, packaging) is unscoped — follow-up `T-`/`OQ-` rows, next session |
 | ~~OQ-15~~ | Is the `ingest/google-*.py` ↔ `serp/providers/*` SerpApi duplication temporary or permanent? | **Closed 2026-08-05, option A: permanent, documented, not merged.** Checked against the live database before deciding — the row's own premise ("an on-demand search path that is dead code in production") was stale: `serp.dispatch.SearchQueryProvider` has been dispatched nightly from `searchqueries.py` since `tranche_four/23` (2026-08-02), one day before the row calling it dead code was written, and `search_query_results` held 253 dispatched rows as of this closure, most recently that same morning. Both implementations spend real SerpApi credit every night — the risk calculus the row was written against (merge a live path into a dead one) no longer holds, since a merge now would mean changing two live nightly paths at once. `_comment`s recording why the split stays permanent are at `ingest/google-serpapi.py:348-363` and `serp/providers/serpapi.py`'s module docstring; the two files were not otherwise touched |
 | ~~OQ-22~~ | `score.TRACKS` values are now live in `job_scores.primary_track`; does `derive_tracks()` need to exclude `Re-Entry & Growth` too, or should `score.TRACKS` be replaced for `pursuit` outright? | **Closed 2026-08-05.** Owner picked option 1, after option 3 (revisit the enum outright) was researched and rejected: `primary_track` is never rendered to Builders — `frontend/js/tracks.mjs` explicitly rejects it in favor of `extract.ROLE_TRACK`, the nine-slug vocabulary that *is* displayed (`frontend/fixtures/shipped/MANIFEST.json`). Its only live consequence was the one this row named. A full replacement would drop `primary_track` from the narrative prompt schema, bumping `SCORE_PROMPT_VERSION` — one of the three `_STALE_ANY` arms — and stale the entire `job_scores` backlog (1,231+ rows) for re-scoring, for no additional visible benefit. `webapp/onboarding.py`'s `derive_tracks()` now excludes `'Re-Entry & Growth'` alongside `'Poor Fit'` (`onboarding.py:409-410`), its docstring updated to match, and `webapp/tests/test_builder_profiles.py`'s `test_re_entry_and_growth_is_never_subscribed_to` covers it. Full webapp suite (368 tests) green |
