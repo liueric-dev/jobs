@@ -2,7 +2,7 @@
   "_comment": "What each fixture in this directory is, and the file:line it was derived from. It is a sidecar rather than a `_comment` key inside each fixture because these bodies are meant to be byte-faithful: a client that parses one must see exactly what the API sends, and an extra key would be a lie in the shape of documentation. `python3 frontend/verify_fixtures.py` re-derives every claim below from the source and fails if one has gone stale.",
   "_derived_from": "backend/webapp/jobs.py, backend/webapp/auth.py, backend/webapp/schema_web.py, backend/webapp/onboarding.py, backend/webapp/search.py, backend/searchnorm.py, backend/schema.py. The job/event/me fixtures were derived from the working tree at 2026-08-01, one commit past da47503; the four onboarding fixtures were derived on 2026-08-02, at 43f95c0; the eleven search fixtures on 2026-08-02, at aa1d837.",
   "_two_of_the_sources_are_not_under_webapp": "backend/searchnorm.py and backend/schema.py are TOP-LEVEL pipeline modules and are read here on purpose. searchnorm.py owns the InvalidQuery codes a client can receive from POST /v1/searches -- search.py re-raises them as `ContractError(bad.code, str(bad))`, so four of the five search error codes appear as a literal nowhere in backend/webapp/. schema.py owns SEARCH_MIN_WATCHERS and SEARCH_WATCHER_BUCKETS, beside their cohort_signal equivalents, because it generates the CHECK constraint from the same tuple the writer reads. verify_fixtures.py reads both rather than restating four codes and three labels.",
-  "_line_numbers": "READ THE CODE, NOT THE CITE -- git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md's own instruction, and it applies here for a concrete reason: jobs.py moved ~26 lines while these fixtures were being written (the D66/D67 fix). The line numbers below were re-derived after that landed and are correct as of then. verify_fixtures.py resolves everything by NAME and never by line, so it stays right when these drift; it is the authority, this is the map.",
+  "_line_numbers": "READ THE CODE, NOT THE CITE -- git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md's own instruction, and it applies here for a concrete reason: jobs.py moved ~26 lines while these fixtures were being written (the D66/D67 fix). The line numbers below were re-derived after that landed, and again at HEAD on 2026-08-08 (T-49, then T-50), each read at its target rather than mapped forward by an offset -- jobs.py is 1039 lines now and did not move by a constant. verify_fixtures.py resolves everything by NAME and never by line, so it stays right when these drift; it is the authority, this is the map.",
   "_status": "REAL. Every endpoint here has a route today. These are what the API returns, not what it should return.",
 
   "GET_v1_jobs.json": {
@@ -38,9 +38,9 @@
   "GET_v1_jobs.page2.json": {
     "endpoint": "GET /v1/jobs?cursor=...",
     "derived_from": [
-      "jobs.py:193-215 -- encode_cursor; request_id and next_rank ride inside the cursor",
-      "jobs.py:346-347 -- a call with a cursor CONTINUES the render the cursor names",
-      "jobs.py:190 -- CURSOR_VERSION = 2; a v1 cursor is a 400, not an upgrade"
+      "jobs.py:210-232 -- encode_cursor; request_id and next_rank ride inside the cursor",
+      "jobs.py:467-468 -- a call with a cursor CONTINUES the render the cursor names",
+      "jobs.py:207 -- CURSOR_VERSION = 2; a v1 cursor is a 400, not an upgrade"
     ],
     "notes": [
       "Same request_id as page 1 and rank starts at 5, not 1. This is the property the whole cursor design exists for.",
@@ -50,7 +50,7 @@
 
   "GET_v1_jobs.empty.json": {
     "endpoint": "GET /v1/jobs",
-    "derived_from": ["jobs.py:399-406 -- next_cursor stays None when items is empty"],
+    "derived_from": ["jobs.py:567-568 -- next_cursor stays None when items is empty"],
     "notes": ["A new render id is still minted for an empty page. There is no 204 and no error."]
   },
 
@@ -70,9 +70,9 @@
 
   "GET_v1_jobs_by_id.dismissed.json": {
     "endpoint": "GET /v1/jobs/{id}",
-    "derived_from": ["jobs.py:440-448 -- the detail endpoint deliberately does NOT hide a dismissed posting"],
+    "derived_from": ["jobs.py:583-588 -- the detail endpoint deliberately does NOT hide a dismissed posting"],
     "notes": [
-      "dismiss_reason is non-null here and null everywhere else. It comes from builder_job_state, per-Builder (jobs.py:313-317).",
+      "dismiss_reason is non-null here and null everywhere else. It comes from builder_job_state, per-Builder (jobs.py:332-335, :344).",
       "This is the state the undo flow renders from: the list hides it, the detail page still serves it."
     ]
   },
@@ -81,11 +81,11 @@
     "endpoint": "POST /v1/events (request body)",
     "derived_from": [
       "jobs.py:52-53 -- CLIENT_EVENT_NAMES: impression, open, save, unsave, dismiss, undismiss, applied",
-      "jobs.py:90 -- RANK_REQUIRED_EVENTS = ('impression', 'open'); everything else may omit rank",
-      "jobs.py:477-501 -- the Event and EventBatch models; events is capped at 200"
+      "jobs.py:91 -- RANK_REQUIRED_EVENTS = ('impression', 'open'); everything else may omit rank",
+      "jobs.py:630-648 -- the Event and EventBatch models; events is capped at 200"
     ],
     "notes": [
-      "The 'applied' event carries no rank, which is legal: it was raised from a detail page, which has no position in any render (jobs.py:82-90).",
+      "The 'applied' event carries no rank, which is legal: it was raised from a detail page, which has no position in any render (jobs.py:83-91).",
       "'apply' is not a valid event name and never was in shipped code. See errors/400_unknown_event.json."
     ]
   },
@@ -93,20 +93,20 @@
   "POST_v1_events.response.json": {
     "endpoint": "POST /v1/events (response)",
     "derived_from": [
-      "jobs.py:792-793 -- {recorded, deduped, skipped, derived_skips}",
-      "jobs.py:619-665 -- derive_skips runs on an open, after the open's own row"
+      "jobs.py:1038-1039 -- {recorded, deduped, skipped, derived_skips}",
+      "jobs.py:1019-1027 -- derive_skips runs on an open, after the open's own row"
     ],
     "notes": [
       "derived_skips is 2 because the open is at rank 3 and ranks 1 and 2 were impressed in this render with no other event on them yet. An open at rank 1 would derive 0.",
       "recorded counts client events only; the 2 derived skip rows are reported separately.",
-      "skipped = len(events) - recorded - deduped, and counts events for jobs not in this profile's job_matches (jobs.py:789)."
+      "skipped = len(events) - recorded - deduped, and counts events for jobs not in this profile's job_matches (jobs.py:986-987, :1035)."
     ]
   },
 
   "POST_v1_events.response.empty_batch.json": {
     "endpoint": "POST /v1/events (response)",
-    "derived_from": ["jobs.py:724-725 -- an empty events list short-circuits, after validation"],
-    "notes": ["request_id is still required: validate_batch runs first (jobs.py:722)."]
+    "derived_from": ["jobs.py:967-968 -- an empty events list short-circuits, after validation"],
+    "notes": ["request_id is still required: validate_batch runs first (jobs.py:965)."]
   },
 
   "GET_v1_me.json": {

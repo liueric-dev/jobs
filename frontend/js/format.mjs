@@ -30,7 +30,7 @@ export function esc(value) {
  *
  * TWO DIFFERENT DATES, LABELLED DIFFERENTLY. `posted_at_ts` is when the
  * employer says it went up and is null on plenty of rows -- Con Edison in the
- * fixtures is one (backend/schema.py:791, and jobs.py:123 coalesces it to
+ * fixtures is one (backend/schema.py:696, and jobs.py:140 coalesces it to
  * -infinity purely to sort). `first_seen` is when this pipeline first saw it,
  * which is an upper bound on the age and never the employer's claim. Showing
  * the second under the first's label would be a small lie in the one place
@@ -183,9 +183,9 @@ function humanWords(slug) {
 // -- the dismiss vocabulary ------------------------------------------------
 
 /**
- * schema_web.DISMISS_REASONS (backend/webapp/schema_web.py:169-170), in that
+ * schema_web.DISMISS_REASONS (backend/webapp/schema_web.py:272-273), in that
  * order, with the words a person would use. The slug is what goes on the wire;
- * an unknown one is a 400 with code `unknown_reason` (jobs.py:547-552).
+ * an unknown one is a 400 with code `unknown_reason` (jobs.py:700-705).
  */
 export const DISMISS_REASONS = [
   ["wrong_level", "Wrong level for me"],

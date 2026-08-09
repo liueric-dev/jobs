@@ -230,7 +230,7 @@ async function signOut() {
 /**
  * A refused event batch.
  *
- * Every contract violation fails the WHOLE batch (jobs.py:503-512), so this is
+ * Every contract violation fails the WHOLE batch (jobs.py:659-664), so this is
  * loud rather than swallowed: silence is this system's documented failure mode
  * and a client that drops its own telemetry quietly is the same bug in a new
  * place. The codes worth naming to a person are the two that mean the client

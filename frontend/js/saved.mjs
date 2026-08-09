@@ -2,9 +2,9 @@
 //
 // THERE IS NO ENDPOINT FOR THIS AND THAT IS THE WHOLE STORY OF THIS FILE.
 // GET /v1/jobs takes eight query parameters -- limit, cursor, q, remote, nyc,
-// min_score, since, include_dismissed (backend/webapp/jobs.py:337-348) -- and
+// min_score, since, include_dismissed (backend/webapp/jobs.py:412-420) -- and
 // not one of them filters on state. `saved` is a per-row boolean resolved from
-// builder_job_state at read time (jobs.py:313-326), so the only way to ask
+// builder_job_state at read time (jobs.py:332-343), so the only way to ask
 // "what did I save" is to read every row and filter here. Recorded in
 // frontend/README.md; it is a one-parameter backend change and this client
 // does not own that file.
@@ -21,7 +21,7 @@
 // impression means "this row was examined", and the Builder never saw the rows
 // this crawl filtered out. Emitting none also keeps derive_skips inert here:
 // it reads impressions belonging to the render being opened from
-// (jobs.py:723-750), finds none, and writes no skip rows -- so browsing Saved
+// (jobs.py:895-899), finds none, and writes no skip rows -- so browsing Saved
 // cannot fabricate negatives for postings nobody was shown.
 
 import { sendAction } from "./events.mjs";

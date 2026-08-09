@@ -125,7 +125,7 @@ export function loginUrl(nextPath = "/") {
  *
  * A call WITHOUT a cursor starts a render and mints a request_id; a call WITH
  * one continues the render the cursor names, and `rank` resumes rather than
- * restarting at 1 (jobs.py:370-374, encode_cursor at :193-215). Both facts are
+ * restarting at 1 (jobs.py:464-468, encode_cursor at :210-232). Both facts are
  * the caller's problem, which is why this returns the whole envelope.
  */
 export async function listJobs({ limit = 25, cursor = null } = {}) {
@@ -137,7 +137,7 @@ export async function listJobs({ limit = 25, cursor = null } = {}) {
 }
 
 /** GET /v1/jobs/{id}. Deliberately still serves a posting this Builder has
- *  dismissed (jobs.py:440-448) -- the undo has to be reachable. */
+ *  dismissed (jobs.py:583-588) -- the undo has to be reachable. */
 export async function getJob(jobId) {
   return parseJobRow(await request(`/v1/jobs/${encodeURIComponent(jobId)}`));
 }
@@ -298,7 +298,7 @@ export async function searchResults(queryId, { limit = 25, cursor = null } = {})
 /**
  * POST /v1/events. One request_id per batch, which is why events.js groups.
  *
- * EVERY VALIDATION FAILURE FAILS THE WHOLE BATCH (jobs.py:503-512), so a
+ * EVERY VALIDATION FAILURE FAILS THE WHOLE BATCH (jobs.py:659-664), so a
  * caller must not mix a speculative event into a batch of real ones.
  *
  * `keepalive` is for the unload path in events.mjs and is the ONLY thing that

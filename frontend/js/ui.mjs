@@ -137,7 +137,7 @@ export function hideToast() {
  * SKIPPABLE ON PURPOSE. 32-frontend.md: "A dismiss with `other` is still worth
  * more than a dismiss the Builder abandoned because the form was tedious." The
  * skip resolves to null, and the caller sends a `dismiss` with no reason at
- * all -- which is legal (jobs.py:541, reason is only validated when present)
+ * all -- which is legal (jobs.py:694, reason is only validated when present)
  * and honest, where a silently substituted `other` would be a made-up answer.
  */
 export function askReason() {

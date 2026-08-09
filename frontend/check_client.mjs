@@ -445,7 +445,7 @@ it("one posting cannot have two answers", () => {
 it("a null cohort_signal renders NOTHING -- never a zero, never a count", async () => {
   // THE FAILURE THIS PREVENTS. null is a privacy suppression, not "no data":
   // the count is withheld below three Builders, so null covers both "nobody
-  // saved this" and "one or two did" (jobs.py:370). Rendering "0 saves", a
+  // saved this" and "one or two did" (jobs.py:389). Rendering "0 saves", a
   // greyed zero, or any "fewer than three" copy would make absence readable as
   // *exactly* one or two, in a thirty-person cohort who see each other in a
   // classroom. At today's size EVERY value is null, so this is the main path.

@@ -5,9 +5,9 @@
   "_status_correction_2026_08_02": "28 and 32 have landed and 25 landed alongside them, so 'the shipped shapes' are now the only shapes a client sees for everything except `bucket` and `tracks[]`, which remain task 30's and remain blocked. Three files in this directory describe an endpoint that ships and describes it WRONGLY -- the three ASPIRATIONAL_*searches* ones -- and their differences are enumerated in _searches_deviations rather than resolved. Do not build a parser against them; ../shipped/ has eleven files for the same feature.",
 
   "_endpoint_reality": {
-    "GET /v1/jobs": "route exists (jobs.py:310), shape differs",
-    "GET /v1/jobs/{id}": "route exists (jobs.py:413), shape differs",
-    "POST /v1/events": "route exists (jobs.py:641), request shape agrees, response is undocumented in the contract",
+    "GET /v1/jobs": "route exists (jobs.py:409), shape differs",
+    "GET /v1/jobs/{id}": "route exists (jobs.py:581), shape differs",
+    "POST /v1/events": "route exists (jobs.py:916), request shape agrees, response is undocumented in the contract",
     "GET /v1/me": "route exists (auth.py:450); the onboarding block is aspirational",
     "GET /v1/searches": "WAS 'NO ROUTE, NO TABLE … re-grepped 2026-08-02, still zero hits across backend/' AND THAT WENT FALSE IN e3abd6e, ON THE DAY IT WAS RE-GREPPED. Task 25 landed four tables (search_queries, search_query_watchers, search_query_signal, search_query_results) and six routes in backend/webapp/search.py. This one and the four below it are real. Shape differs -- see _searches_deviations.",
     "POST /v1/searches": "ROUTE AND TABLE, same commit. Shape differs -- see _searches_deviations.",
@@ -41,7 +41,7 @@
     "shows": "all seven client event names in one batch, including undismiss and applied.",
     "notes": [
       "This body is VALID against the shipped validator today -- it is the one place the contract and the code already agree, after DEC-73 moved the contract from `apply` to `applied`.",
-      "undismiss carries no rank and no reason; a reason here is a 400 with code reason_not_allowed (jobs.py:514-519)."
+      "undismiss carries no rank and no reason; a reason here is a 400 with code reason_not_allowed (jobs.py:694-699)."
     ]
   },
 
@@ -91,7 +91,7 @@
   },
 
   "errors/error_envelope.json": {
-    "shows": "the contract's envelope, which IS shipped for ContractError (jobs.py:151-157).",
+    "shows": "the contract's envelope, which IS shipped for ContractError (jobs.py:168-174).",
     "notes": ["It is not shipped for 401/403/404/malformed-cursor. See ../shipped/errors/NOT-ENVELOPED-*.json."]
   },
 

@@ -8,8 +8,8 @@
 // other side.
 //
 // A RENDER SPANS PAGES. GET /v1/jobs mints a request_id on an un-cursored call
-// and carries it inside the cursor thereafter (backend/webapp/jobs.py:193-215,
-// :370-374), so page two of the same render continues both the id and the rank
+// and carries it inside the cursor thereafter (backend/webapp/jobs.py:210-232,
+// :464-468), so page two of the same render continues both the id and the rank
 // sequence. This module therefore keys everything on request_id and never
 // assumes there is only one live render: Today and a Saved crawl are two, and
 // a queued event from the first must not be posted under the second's id.
@@ -19,7 +19,7 @@
 // an IntersectionObserver with a dwell timer; a row that scrolled past in 80ms
 // was not examined. Recording it would poison the skip derivation, which reads
 // impressions and treats everything above an `open` as passed over
-// (jobs.py:619-750).
+// (jobs.py:772-781).
 //
 // ORDER MATTERS AT THE SERVER. derive_skips runs inside the `open`'s own
 // transaction and looks for impressions ALREADY IN THE TABLE for that render.
@@ -32,7 +32,7 @@ import { postEvents, ApiError } from "./api.mjs";
 /** Batched impressions go out at least this often. */
 const FLUSH_INTERVAL_MS = 3000;
 /** ...or as soon as this many are waiting. The server caps a batch at 200
- *  (EventBatch.events, jobs.py:493); staying well under it keeps a page of
+ *  (EventBatch.events, jobs.py:646); staying well under it keeps a page of
  *  impressions plus the actions raised from it inside one request. */
 const FLUSH_AT = 40;
 /** How long a row must stay visible before it counts as examined. */
@@ -43,8 +43,8 @@ export const IMPRESSION_RATIO = 0.5;
 /** Queued events, in the order they happened, each tagged with its render. */
 const queue = [];
 /** (requestId, jobId) pairs already reported, so a re-scroll is not a second
- *  impression. The server also dedups, by (profile, job_id) for 24 hours
- *  (jobs.py:95, :831-834) -- this is about not sending, not about correctness. */
+ *  impression. The server also dedups, by (app_user_id, job_id) for 24 hours
+ *  (jobs.py:104, :1000-1003) -- this is about not sending, not correctness. */
 const impressed = new Set();
 
 let timer = null;
@@ -75,7 +75,7 @@ function schedule() {
 function enqueue(requestId, event) {
   if (!requestId) {
     // Not recoverable by inventing one: request_id is minted server-side
-    // precisely so two clients cannot collide (jobs.py:164-179).
+    // precisely so two clients cannot collide (jobs.py:181-196).
     console.warn("dropping event with no request_id", event);
     return;
   }
@@ -84,7 +84,7 @@ function enqueue(requestId, event) {
 
 /** Strip undefined/null so the body carries only fields that mean something.
  *  An explicit null rank reads as a claim; omitting it is what the contract's
- *  rank-less `save` and `applied` actually are (jobs.py:82-90). */
+ *  rank-less `save` and `applied` actually are (jobs.py:83-91). */
 function clean(event) {
   const out = {};
   for (const [k, v] of Object.entries(event)) {

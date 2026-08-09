@@ -2,7 +2,7 @@
 //
 // WHY THIS IS A MODULE AND NOT A LOCAL IN today.js. An `open` is raised from
 // the DETAIL page, and `open` is one of the two events the server refuses
-// without a rank (RANK_REQUIRED_EVENTS, backend/webapp/jobs.py:90). The rank
+// without a rank (RANK_REQUIRED_EVENTS, backend/webapp/jobs.py:91). The rank
 // belongs to the list the Builder tapped from, which by then has been torn
 // down. So the list records it on the way past and the detail page reads it.
 //
@@ -12,7 +12,7 @@
 //
 // A COLD DEEP LINK HAS NO CONTEXT. Reloading on #/job/<id>, or pasting the
 // URL, finds nothing here -- and POST /v1/events refuses a batch with no
-// request_id at all (`missing_request_id`, backend/webapp/jobs.py:529-532), so
+// request_id at all (`missing_request_id`, backend/webapp/jobs.py:682-685), so
 // without one the detail page could record nothing, not even a save. resolve()
 // below renders a real list to obtain a real render id rather than fabricating
 // a string. If that render also contains the posting, its real rank comes with

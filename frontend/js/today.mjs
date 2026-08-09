@@ -2,12 +2,12 @@
 //
 // ONE RENDER, MANY PAGES. The first call has no cursor and starts a render;
 // "Show more" passes next_cursor, which carries the same request_id and the
-// next rank (backend/webapp/jobs.py:193-215). So `state.requestId` is set once
+// next rank (backend/webapp/jobs.py:210-232). So `state.requestId` is set once
 // and every event from this screen echoes it, including events raised from
 // rows that arrived on page three.
 //
 // ORDER IS THE SERVER'S. The rows come back in match_score order
-// (jobs.py:124) and nothing here re-sorts them by fit_score -- that would put
+// (jobs.py:141) and nothing here re-sorts them by fit_score -- that would put
 // an LLM call on the critical path for every posting, which .claude/CLAUDE.md
 // states as an invariant in three separate files. Grouping changes which
 // heading a row sits under; it never changes which row is above which.
@@ -150,7 +150,7 @@ async function onClick(event, root) {
 }
 
 /** save / unsave. Optimistic: the state row is written server-side in the same
- *  transaction as the event (jobs.py:846-849), so the only way this diverges
+ *  transaction as the event (jobs.py:1017-1018), so the only way this diverges
  *  is a refused batch, which surfaces as a toast from app.js's error handler. */
 async function toggleSave(job, root) {
   job.saved = !job.saved;
@@ -167,9 +167,9 @@ async function toggleSave(job, root) {
  * Dismiss, with a reason, with an undo.
  *
  * The card leaves the list because the list hides dismissals by default
- * (jobs.py:364-365) and a card that stayed put would be lying about what a
+ * (jobs.py:458-459) and a card that stayed put would be lying about what a
  * refresh will show. The undo sends `undismiss`, which takes NO reason -- one
- * there is a 400 with code `reason_not_allowed` (jobs.py:541-546), because the
+ * there is a 400 with code `reason_not_allowed` (jobs.py:694-699), because the
  * reason belongs to the dismissal being reversed and is already on that row.
  */
 async function dismiss(job, root) {

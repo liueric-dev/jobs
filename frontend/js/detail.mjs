@@ -4,14 +4,14 @@
 // and nothing server-side writes one). What it emits is `open`, with `dwell_ms`,
 // ON EXIT -- which is also what makes the skip derivation work: the server
 // treats every un-actioned impression above this rank in the same render as
-// passed over (backend/webapp/jobs.py:619-750).
+// passed over (backend/webapp/jobs.py:772-781).
 //
-// `open` REQUIRES A RANK (RANK_REQUIRED_EVENTS, jobs.py:90), so a detail page
+// `open` REQUIRES A RANK (RANK_REQUIRED_EVENTS, jobs.py:91), so a detail page
 // reached with no render context -- a reload on #/job/<id>, a pasted link --
 // emits NOTHING. See renders.js for why inventing a rank is the worse of the
 // two options.
 //
-// A DISMISSED POSTING IS SERVED HERE ON PURPOSE (jobs.py:440-448). The list
+// A DISMISSED POSTING IS SERVED HERE ON PURPOSE (jobs.py:583-588). The list
 // hides it; this does not, because the undo has to be reachable. That is what
 // the banner at the top of a dismissed posting is for.
 
@@ -51,7 +51,7 @@ export async function show(root, jobId) {
   function sendOpen() {
     if (openSent) return;
     openSent = true;
-    // `open` is one of the two events refused without a rank (jobs.py:90). No
+    // `open` is one of the two events refused without a rank (jobs.py:91). No
     // rank means no position in any render, and a fabricated one is worse in
     // the training data than a missing open, which is merely absent.
     if (!ctx.value || ctx.value.rank == null) {
@@ -209,7 +209,7 @@ async function onClick(event, root, job, ctx) {
   const requestId = ctx.value ? ctx.value.requestId : null;
   // undefined, not null: events.js strips absent fields, and a save or an
   // applied raised from a detail page legitimately has no position
-  // (jobs.py:82-90). A null here would read as a claim about rank 0.
+  // (jobs.py:83-91). A null here would read as a claim about rank 0.
   const rank = ctx.value && ctx.value.rank != null ? ctx.value.rank : undefined;
 
   if (act === "apply") {
@@ -231,7 +231,7 @@ async function onClick(event, root, job, ctx) {
     target.setAttribute("aria-pressed", job.saved ? "true" : "false");
     target.textContent = job.saved ? "Saved" : "Save";
     // Rank is optional on a save and is omitted when this page was opened
-    // cold: a detail page has no position in any render (jobs.py:82-90).
+    // cold: a detail page has no position in any render (jobs.py:83-91).
     await sendAction(requestId, {
       event: job.saved ? "save" : "unsave", job_id: job.id, rank,
     });

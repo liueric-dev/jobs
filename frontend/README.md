@@ -58,9 +58,9 @@ against `shipped/`, because that is what the server sends.
 
 | endpoint | route today | fixture set |
 |---|---|---|
-| `GET /v1/jobs` | yes, `jobs.py:336` | both — shapes differ |
-| `GET /v1/jobs/{id}` | yes, `jobs.py:440` | both — shapes differ |
-| `POST /v1/events` | yes, `jobs.py:753` | both — **request shapes agree** |
+| `GET /v1/jobs` | yes, `jobs.py:409` | both — shapes differ |
+| `GET /v1/jobs/{id}` | yes, `jobs.py:581` | both — shapes differ |
+| `POST /v1/events` | yes, `jobs.py:916` | both — **request shapes agree** |
 | `GET /v1/me` | yes, `auth.py:450` | both — contract adds an onboarding block |
 | `GET /v1/searches` | ~~**no route, no table**~~ **yes, `search.py`** | **both — shapes differ** |
 | `POST /v1/searches` | ~~**no route, no table**~~ **yes, `search.py`** | **both — shapes differ** |
@@ -242,7 +242,7 @@ counted one person's three saves as three people's — a privacy control
 returning a wrong answer, which is worse than returning `null`. Defects **D66**
 and **D67** in `git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md` were the same missing column surfacing
 in `state.seen` and `state.applied`, and both are now **fixed**: the join
-resolves by `app_user_id` (`jobs.py:286-291`), `POST /v1/events` writes it, and
+resolves by `app_user_id` (`jobs.py:305-310`), `POST /v1/events` writes it, and
 pre-column rows carry NULL and resolve to `false` for everyone rather than
 `true` for everyone. ~~**Task 28 itself is still unbuilt** — nothing computes the
 `3-5` / `6-10` buckets or enforces the below-three suppression, so
@@ -251,10 +251,10 @@ exist at all, not because the count was low.~~
 
 > **TASK 28 LANDED 2026-08-02 and the struck sentence is wrong in both halves.**
 > Something computes the buckets and the field exists. `cohort_signal` is a real
-> table (`backend/schema.py:144`, `COHORT_SIGNAL_TABLE`, with a
-> `cohort_signal_bucket` CHECK at `:567`), and `backend/webapp/jobs.py` sets
-> `item["cohort_signal"]` on **both** the list rows (`jobs.py:500`) and the
-> detail row (`jobs.py:564`), via `COHORT_FIELDS` (`jobs.py:367`) and a
+> table (`backend/schema.py:147`, `COHORT_SIGNAL_TABLE`, with a
+> `cohort_signal_bucket` CHECK at `:657`), and `backend/webapp/jobs.py` sets
+> `item["cohort_signal"]` on **both** the list rows (`jobs.py:558`) and the
+> detail row (`jobs.py:622`), via `COHORT_FIELDS` (`jobs.py:386`) and a
 > `cohort_signal(save_bucket)` helper that returns `{"save_bucket": …}` or
 > `null`. Read from the working tree at this commit and reported as such; the
 > cohort stream owns whether that is its final shape.
@@ -331,7 +331,7 @@ Everything else the contract adds — `tracks[]`, `posting_age_days`,
 - **A null `cohort_signal` is a privacy suppression, not "no data".** The count
   is withheld below three Builders, so `null` is the answer for *both* "nobody
   saved this" and "one or two did" — the row does not exist and the endpoint
-  cannot tell them apart either (`jobs.py:370`, and `backend/schema.py` explains
+  cannot tell them apart either (`jobs.py:389`, and `backend/schema.py` explains
   why a NULL-bucket row would publish the fact the threshold exists to
   withhold). In a thirty-person cohort who see each other in a classroom, a
   count of one is close to an identifier. **Never render it as "0 saves", a
@@ -437,14 +437,14 @@ values present.** Re-measure before quoting — `git show refactor-freeze-2026-0
 that a corpus statistic here has a shelf life of one night.
 
 **2. There is no way to ask for saved postings.** `GET /v1/jobs` takes eight
-query parameters (`jobs.py:337-348`) and not one filters on state, so Saved is
+query parameters (`jobs.py:412-420`) and not one filters on state, so Saved is
 implemented as a crawl: read every page of one render and filter `saved` client
 side (`js/crawl.mjs`). It is two requests at today's 166 rows for `pursuit` and
 it does not scale. A `saved=true` parameter beside `include_dismissed` is the fix.
 
 **3. A client that has not rendered a list can record nothing at all.**
 `POST /v1/events` refuses a batch with no `request_id` (`missing_request_id`,
-`jobs.py:529-532`), and the only source of one is a list render (`jobs.py:370`).
+`jobs.py:682-685`), and the only source of one is a list render (`jobs.py:464`).
 So a detail page reached cold — a reload on `#/job/<id>`, a pasted link — cannot
 send a `save`, an `applied` or an `undismiss` until it has fetched a list purely
 to obtain an id. `js/renders.mjs` does exactly that and it is a workaround, not
@@ -470,8 +470,8 @@ becomes wrong the day a predicting source lands without the column.
 **5. `verify_fixtures.py` could not see a third key group — defect `D70`, now
 fixed.** It built the expected row as `LIST_COLUMNS + STATE_FIELDS + ("rank",)`
 and hardcoded the tail. Task 28 inserted `cohort_signal` between the state
-fields and `rank` via its own `COHORT_FIELDS` tuple (`jobs.py:367`, applied at
-`:500` and `:564`), which that line did not read — so the fixtures omitted the
+fields and `rank` via its own `COHORT_FIELDS` tuple (`jobs.py:386`, applied at
+`:558` and `:622`), which that line did not read — so the fixtures omitted the
 key, the verifier's expectation omitted it too, **the two agreed with each
 other and both disagreed with the source**, and the check exited 0. That is
 precisely the confidently-wrong fixture the verifier's own docstring exists to
@@ -501,7 +501,7 @@ prose on every card.
 
 Two smaller ones, recorded without ceremony: `GET /v1/jobs/{id}` returns no
 `rank` and cannot, so a detail page has no position of its own; and the `open`
-event needs one (`RANK_REQUIRED_EVENTS`, `jobs.py:90`), which is why the client
+event needs one (`RANK_REQUIRED_EVENTS`, `jobs.py:91`), which is why the client
 skips `open` rather than inventing a position when it has none.
 
 ### And four more, from building the search screen (2026-08-02)
@@ -641,6 +641,6 @@ with no manifest is CommonJS to node, which would have meant adding a
 outside API-CONTRACT-v1.md. The eight `GET /v1/jobs` query parameters — `limit`,
 `cursor`, `q`, `remote`, `nyc`, `min_score`, `since`, `include_dismissed` — are
 implemented and undocumented in the contract; `include_dismissed` is for
-debugging and is not part of the client contract (`jobs.py:346`, `:362-364`).
+debugging and is not part of the client contract (`jobs.py:419-420`, `:456-457`).
 `Accept: application/vnd.jobs.v1+json` is in the contract and is not read
 anywhere in `webapp/`.

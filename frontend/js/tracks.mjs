@@ -146,7 +146,7 @@ export function trackOf(job) {
  * ordering claim, and today it holds every row.
  *
  * `rank` on each row is the server's and is never recomputed here. It is
- * global across the render (jobs.py:423-424) and it is what every event echoes.
+ * global across the render (jobs.py:564-565) and it is what every event echoes.
  */
 export function groupByTrack(jobs) {
   const groups = new Map();
