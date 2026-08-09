@@ -458,6 +458,106 @@ class TestDaysLeftInCycle(unittest.TestCase):
             searchnorm.days_left_in_cycle("2026-04-10T00:00:00", 31), 20)
 
 
+class TestDaysInCycle(unittest.TestCase):
+    """searchnorm.days_in_cycle() -- the DENOMINATOR, not the remainder. The
+    two are one letter apart in the source and mean opposite things."""
+
+    def test_it_is_the_whole_length_and_does_not_move_within_a_cycle(self):
+        # This is the property watch_cap() needs and days_left_in_cycle()
+        # cannot provide: every day of August answers 31, where days_left
+        # walks 31 down to 1 over the same days.
+        lengths = {searchnorm.days_in_cycle(f"2026-08-{d:02d}T12:00:00")
+                   for d in range(1, 32)}
+        self.assertEqual(lengths, {31})
+        self.assertEqual(
+            len({searchnorm.days_left_in_cycle(f"2026-08-{d:02d}T12:00:00")
+                 for d in range(1, 32)}), 31)
+
+    def test_it_is_the_calendar_month_length_on_the_default_anchor(self):
+        self.assertEqual(searchnorm.days_in_cycle("2026-02-10T12:00:00"), 28)
+        self.assertEqual(searchnorm.days_in_cycle("2026-04-10T12:00:00"), 30)
+        self.assertEqual(searchnorm.days_in_cycle("2026-08-10T12:00:00"), 31)
+
+    def test_a_late_signup_anchor_spans_two_calendar_months(self):
+        # Anchored on the 12th, the cycle containing 2 August runs 12 July to
+        # 12 August -- 31 days, and neither month's own length.
+        self.assertEqual(searchnorm.days_in_cycle("2026-08-02T00:00:00", 12), 31)
+        # And on the anchor day itself the NEW cycle has started, matching
+        # days_left_in_cycle()'s reading of the same instant (31 above).
+        self.assertEqual(searchnorm.days_in_cycle("2026-08-12T00:00:00", 12), 31)
+
+    def test_it_agrees_with_days_left_at_the_start_of_every_cycle(self):
+        # The two functions share one anchor rule, and this is what says so:
+        # on the first day of a cycle, "how much is left" and "how long is it"
+        # are the same number. Drift between them shows up here first.
+        for month, day in ((1, 1), (2, 1), (4, 1), (12, 1)):
+            stamp = f"2026-{month:02d}-{day:02d}T00:00:00"
+            with self.subTest(stamp):
+                self.assertEqual(searchnorm.days_in_cycle(stamp),
+                                 searchnorm.days_left_in_cycle(stamp))
+
+    def test_it_crosses_the_year_boundary(self):
+        # December's next anchor is in the following year, which is the one
+        # month where the month arithmetic can go wrong in both directions.
+        self.assertEqual(searchnorm.days_in_cycle("2026-12-15T00:00:00"), 31)
+        self.assertEqual(searchnorm.days_in_cycle("2026-01-15T00:00:00"), 31)
+        self.assertEqual(searchnorm.days_in_cycle("2026-01-15T00:00:00", 31), 31)
+
+
+class TestWatchCap(unittest.TestCase):
+    """searchnorm.watch_cap() -- T-33's replacement for
+    MAX_QUERIES_PER_BUILDER, which was 20 and is now derived."""
+
+    def test_the_free_tier_supports_far_fewer_than_the_twenty_it_replaced(self):
+        # docs/adr/0007: "a promise the free tier cannot keep". 250 searches a
+        # month is 8 a night, and the constant said 20 -- so this number IS the
+        # finding, not an implementation detail of it.
+        self.assertEqual(searchnorm.watch_cap(250, "2026-08-08T00:00:00"), 8)
+        self.assertLess(searchnorm.watch_cap(250, "2026-08-08T00:00:00"), 20)
+
+    def test_it_does_not_move_across_the_cycle(self):
+        # THE REASON IT IS NOT pacing_allowance(). Pacing divides what is LEFT
+        # by the days LEFT, so it climbs all month and returns the whole
+        # remainder on the last day; a standing cap that did the same would
+        # tell a Builder on the 31st that they may watch 250 searches and on
+        # the 1st that they may watch 8.
+        caps = {searchnorm.watch_cap(250, f"2026-08-{d:02d}T12:00:00")
+                for d in range(1, 32)}
+        self.assertEqual(caps, {8})
+        # The contrast, so the claim above is measured and not asserted.
+        self.assertEqual(searchnorm.run_allowance(250, 1), 250)
+
+    def test_a_bigger_plan_is_a_bigger_cap(self):
+        self.assertGreater(searchnorm.watch_cap(5000, "2026-08-08T00:00:00"),
+                           searchnorm.watch_cap(250, "2026-08-08T00:00:00"))
+
+    def test_an_unknown_plan_is_no_cap_rather_than_a_cap_of_zero(self):
+        # Inherited from run_allowance() and not re-decided. None here means
+        # the caller warns about nothing; 0 would mean warning about
+        # everything, including the Builder's very first saved keyword.
+        self.assertIsNone(searchnorm.watch_cap(None, "2026-08-08T00:00:00"))
+
+    def test_a_reserve_that_covers_the_plan_caps_at_zero_not_one(self):
+        # The one place 0 is right: an operator who reserved the whole account
+        # said this pipeline may spend none of it, and the floor of 1 must not
+        # quietly hand back a search -- run_allowance() checks the reserve
+        # before the floor and this is that rule reaching the cap.
+        self.assertEqual(
+            searchnorm.watch_cap(250, "2026-08-08T00:00:00", reserve=250), 0)
+        self.assertEqual(
+            searchnorm.watch_cap(250, "2026-08-08T00:00:00", reserve=200), 1)
+
+    def test_it_does_no_io(self):
+        # Same purity clause as run_allowance(): searchqueries and webapp are
+        # the impure readers, and a cap that opened a socket would put a vendor
+        # between a Builder and the save button.
+        import socket
+        with unittest.mock.patch.object(
+                socket, "socket",
+                side_effect=AssertionError("watch_cap opened a socket")):
+            self.assertEqual(searchnorm.watch_cap(250, "2026-08-08T00:00:00"), 8)
+
+
 class TestDecay(unittest.TestCase):
 
     NOW = "2026-08-02T00:00:00"

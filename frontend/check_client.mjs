@@ -1090,8 +1090,14 @@ it("every refusal a Builder can cause has copy, derived from Python", () => {
   // written for a log line and not for a person -- "query text normalises to
   // nothing" is a sentence about a normaliser. Both files are read because
   // search.py re-raises searchnorm.InvalidQuery as a ContractError carrying the
-  // exception's own code, so four of the five appear as a literal only in the
+  // exception's own code, so all four appear as a literal only in the
   // top-level pipeline module.
+  //
+  // FOUR, AND IT WAS FIVE UNTIL T-33. The fifth was `too_many_searches`, the
+  // only one search.py raised itself, and it is now a `warning` on a 2xx
+  // rather than a refusal -- see planWarningText in search.mjs, which is the
+  // separate check below. Lowering this floor is the whole point: raising it
+  // back would demand copy for a refusal the server can no longer issue.
   const codes = new Set();
   for (const relative of ["backend/webapp/search.py", "backend/searchnorm.py"]) {
     const source = fs.readFileSync(path.join(REPO, relative), "utf8");
@@ -1099,13 +1105,45 @@ it("every refusal a Builder can cause has copy, derived from Python", () => {
       codes.add(m[1]);
     }
   }
-  assert.ok(codes.size >= 5, `only found ${codes.size} search error codes`);
+  assert.ok(codes.size >= 4, `only found ${codes.size} search error codes`);
+  assert.ok(!codes.has("too_many_searches"),
+            "search.py raises too_many_searches again -- T-33 made the plan "
+            + "cap advisory, and a 4xx here is the block back under a new name");
   const source = fileText("js", "search.mjs");
   const map = source.match(/function searchErrorText[\s\S]*?\n}/);
   assert.ok(map, "searchErrorText is no longer a function in search.mjs");
   for (const code of codes) {
     assert.ok(new RegExp(`^\\s*${code}:`, "m").test(map[0]),
               `'${code}' is a refusal this client can cause and has no copy`);
+  }
+});
+
+it("the plan warning reads as a notice on a save that worked", () => {
+  // T-33's replacement for the `too_many_searches` 400, and the copy is the
+  // whole risk: the server stopped refusing, so the only thing that can put
+  // the refusal back in front of a Builder is this sentence.
+  const warned = fixture("POST_v1_searches.response.warned.json");
+  const text = searchView._planWarningText(warned);
+  assert.ok(text, "the warned fixture produces no copy at all");
+  assert.match(text, /^Saved\./,
+               "the notice must open by confirming the save, not by refusing");
+  assert.ok(!/can't|cannot|couldn't|stop watching|limit|too many/i.test(text),
+            `the notice reads as a refusal: ${text}`);
+
+  // THE PLAN'S NUMBERS DO NOT REACH THE SCREEN. docs/adr/0007 decision 5:
+  // nothing in this UI names claims, cadence or watchers -- and a SerpApi
+  // nightly figure is all three at once. The server's message carries it for
+  // an operator reading a log; the client writes its own sentence.
+  assert.ok(!text.includes(String(warned.warning.message.match(/\d+/)[0])),
+            "the client echoed the server's plan figure at the Builder");
+
+  // And silence is the default: every other search fixture must produce none.
+  for (const name of ["POST_v1_searches.response.json",
+                      "POST_v1_searches_watch.json",
+                      "POST_v1_searches_unwatch.json",
+                      "GET_v1_searches_by_id.json"]) {
+    assert.equal(searchView._planWarningText(fixture(name)), null,
+                 `${name} produced a warning nobody asked for`);
   }
 });
 

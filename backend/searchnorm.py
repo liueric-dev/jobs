@@ -71,11 +71,15 @@ MAX_LOCATION_CHARS = 120
 #: default is the cohort's city rather than a wildcard.
 DEFAULT_LOCATION = "New York, NY"
 
-#: How many queries one Builder may watch at once. The cap the task file asks
-#: for -- "so one enthusiastic person cannot consume the pool". 20 against
-#: ~280 renewable searches/day and ~30 Builders is not a real ceiling for
-#: anyone using the product; it is a ceiling on a script.
-MAX_QUERIES_PER_BUILDER = 20
+#: THERE IS NO MAX_QUERIES_PER_BUILDER, AND ITS ABSENCE IS THE DECISION.
+#: It was 20 here, and docs/adr/0007's consequences call it "a promise the free
+#: tier cannot keep": 20 was measured against ~280 renewable searches/day, which
+#: is the whole cohort's aggregate under full contribution, while one free
+#: SerpApi plan supplies 250 a MONTH. The replacement is watch_cap() below --
+#: derived from the plan rather than declared here, and advisory rather than
+#: enforced, because a watch row is a saved keyword and a discovery surface
+#: (0007 decision 5) and refusing to save one over a vendor's plan is the wrong
+#: coupling.
 
 
 # --------------------------------------------------------------------------
@@ -236,6 +240,44 @@ def days_left_in_cycle(now, reset_day=1):
     and the whole remainder is spendable in that run, which is the "credits
     that expire at cycle end" half of docs/adr/0007 decision 4.
     """
+    _started, today, nxt = _cycle_bounds(now, reset_day)
+    return (nxt - today).days
+
+
+def days_in_cycle(now, reset_day=1):
+    """The WHOLE length of the cycle `now` falls in, in days. 28 to 31.
+
+    days_left_in_cycle()'s denominator counterpart, and the two are not
+    interchangeable. That one is how much of the cycle remains and it shrinks
+    to 1; this one is how long the cycle is and it does not move within a
+    cycle. A per-night RATE wants the second -- see watch_cap(), which would
+    otherwise quadruple over a month and collapse the next morning.
+
+    The same clamping applies for the same reason: a cycle anchored on the 31st
+    runs from the 31st of January to the 28th of February, which is 28 days,
+    not a month of some other length.
+
+    THE SAME GUESS SITS UNDER IT. `reset_day` is the parameter
+    days_left_in_cycle() documents above and `OQ-36` is open against, so the
+    length derived here is only as good as the boundary, and on a late-signup
+    account the boundary is wrong.
+    """
+    started, _today, nxt = _cycle_bounds(now, reset_day)
+    return (nxt - started).days
+
+
+def _cycle_bounds(now, reset_day):
+    """(this cycle's first day, today, the next reset), as dates.
+
+    ONE PARSE AND ONE ANCHOR RULE for both public functions above, so the two
+    cannot come to disagree about where a cycle starts -- and so adding
+    days_in_cycle() added no second naive-strptime site. The one below is
+    `DTZ007` and is deliberately NOT suppressed, the same way _hours_between
+    carries the identical construct twice: these predicates are pure
+    string-parsers over this pipeline's own TEXT timestamps, and pyproject.toml
+    is emphatic that a directive nobody checked is worse than a finding
+    everybody can see.
+    """
     from calendar import monthrange
     from datetime import date, datetime
     today = datetime.strptime(now, "%Y-%m-%dT%H:%M:%S").date()
@@ -244,12 +286,21 @@ def days_left_in_cycle(now, reset_day=1):
     # 30th of a 30-day month, the same way every monthly-billing system does.
     def _anchor(year, month):
         return date(year, month, min(reset_day, monthrange(year, month)[1]))
+    def _shift(year, month, delta):
+        month += delta
+        if month > 12:
+            return year + 1, 1
+        if month < 1:
+            return year - 1, 12
+        return year, month
     nxt = _anchor(today.year, today.month)
     if nxt <= today:
-        year, month = (today.year + 1, 1) if today.month == 12 else (today.year,
-                                                                    today.month + 1)
-        nxt = _anchor(year, month)
-    return (nxt - today).days
+        # The anchor for this month has already passed, so it is this cycle's
+        # START and the next reset is next month's.
+        started, nxt = nxt, _anchor(*_shift(today.year, today.month, 1))
+    else:
+        started = _anchor(*_shift(today.year, today.month, -1))
+    return started, today, nxt
 
 
 def run_allowance(left, days_left, reserve=0):
@@ -276,6 +327,41 @@ def run_allowance(left, days_left, reserve=0):
     if spendable <= 0:
         return 0
     return max(1, spendable // max(1, int(days_left)))
+
+
+def watch_cap(plan, now, reset_day=1, reserve=0):
+    """How many watched queries a plan can keep running nightly. None = no cap.
+
+    THE REPLACEMENT FOR MAX_QUERIES_PER_BUILDER, and derived rather than
+    declared. A watched query is re-asked at most once per RERUN_HOURS, so a
+    list of N watched queries wants about N searches a night, and how many
+    searches a night the plan supplies is a question run_allowance() already
+    answers. This is that function with different inputs, not a second piece of
+    arithmetic -- the floor of 1, the reserve and the None are all inherited,
+    so the cap and the pacing cannot come to disagree about the same account.
+
+    THE PLAN, NOT THE BALANCE, and that is the difference from
+    searchqueries.pacing_allowance(). Pacing asks what TONIGHT may spend, so it
+    divides credits LEFT by days LEFT and rises as the cycle empties -- on the
+    last day it returns the whole remainder. A standing cap computed that way
+    would climb all month and collapse at the reset, and a Builder would be
+    told to prune a list that was fine yesterday. `plan` is the cycle's full
+    allowance and days_in_cycle() is its full length, so the answer is what a
+    TYPICAL night of this plan supports and it holds for the whole cycle.
+
+    ADVISORY, AND THE CALLER MUST KEEP IT THAT WAY. Nothing here refuses
+    anything; the number is an input to a warning. docs/adr/0007 decision 5
+    makes a watch row a saved keyword and a discovery surface, and a Builder
+    who cannot save a keyword because a vendor's plan is small has lost the
+    feature to protect a budget the saving did not spend.
+
+    None -- NO CAP -- whenever the plan is unknown, which is run_allowance()'s
+    own disposition and is not re-decided here. It is the right direction twice
+    over: the cost of allowing is a list longer than the account can refresh,
+    and the cost of refusing is a Builder who cannot save a keyword because a
+    config entry was missing.
+    """
+    return run_allowance(plan, days_in_cycle(now, reset_day), reserve)
 
 
 def is_due(now, last_run_at, active_watchers, source, retired_at=None,
@@ -417,7 +503,10 @@ UNWATCH_SQL = """
     WHERE query_id = %s AND app_user_id = %s AND removed_at IS NULL
 """
 
-#: How many queries this Builder currently watches, for MAX_QUERIES_PER_BUILDER.
+#: How many queries this Builder currently watches -- the figure watch_cap() is
+#: compared against. Counted over WATCHES rather than over rows created: a
+#: Builder watching twenty searches other people typed asks the provider for the
+#: same twenty a night as one who typed them.
 COUNT_WATCHED_SQL = """
     SELECT count(*) FROM search_query_watchers
     WHERE app_user_id = %s AND removed_at IS NULL

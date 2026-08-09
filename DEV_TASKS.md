@@ -501,13 +501,20 @@ so explicitly** — an unrecorded status quo is what let this run for five days.
 
 Filed by `T-32`, 2026-08-09, which built `0007` decision 4's pacing and could not settle either half.
 
+**`T-33` widened the first half the same day.** The guessed anchor now has a second consumer —
+`searchnorm.watch_cap()` divides the plan's full allowance by the cycle's full *length* where pacing
+divides what is left by what is left of it. Both read the same `cycle_reset_day`, so one right
+number still fixes both; a wrong one is now wrong twice, and the second is **visible to a Builder**
+as a sentence about how many keywords their plan can keep fresh. Untested on both paths, for the
+reason below.
+
 **Why it is yours:** the first half is a fact about an account only you can log into; the second is a
 decision about which of two schedulers is the authority.
 
 **What, first half.** Decision 4 divides credits remaining by *days left in the cycle*, and **the
 vendor never says when the cycle ends**. `serp/providers/serpapi.py:150`'s `account()` returns
 `used`, `left` and `allowance` and no reset date — so `searchnorm.days_left_in_cycle()`
-(`backend/searchnorm.py:219`) derives the boundary, defaulting to the **1st of the calendar month**
+(`backend/searchnorm.py:223`) derives the boundary, defaulting to the **1st of the calendar month**
 because that is the vendor's own framing (`this_month_usage`, `searches_per_month`). SerpApi bills
 from the **signup date**, so an account opened on the 12th turns over on the 12th and the default is
 wrong for it by up to a month — pacing too slow for three weeks, then stranding the remainder. The

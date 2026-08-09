@@ -236,7 +236,7 @@ forward commit, so a mechanical revert scan under-reports what was undone.
 - ~~`renders.forgetAll()` is exported and called by nothing~~ **Fixed 2026-08-03.** `signOut()`
   now flushes first — the outgoing Builder's events are theirs — then calls `stopObserving()`,
   `forgetAll()` and a new `events.forgetImpressions()` (`frontend/js/app.mjs:17,221-222`;
-  `events.mjs:68`). Three checks in `frontend/check_client.mjs:1222-1257` cover the
+  `events.mjs:68`). Three checks in `frontend/check_client.mjs:1273-1315` cover the
   sign-out/sign-in cycle that nothing covered before, and they were verified to fail with the fix
   reverted.
 - ~~`POST /v1/events` is spelled twice~~ **Fixed 2026-08-03.** The unload flush goes through
@@ -290,7 +290,7 @@ forward commit, so a mechanical revert scan under-reports what was undone.
   `score.py`, `urllib.request` in `ingest/hn-hiring.py` and `ingest/google-apify.py` were removed
   (`urllib.error` on the following line of each is live — do not remove that). **`schema` in
   `webapp/search.py` stays:** nothing in the module references `schema.`, but
-  `webapp/tests/test_search_signal.py:97` asserts `search.schema is schema`, pinning that the
+  `webapp/tests/test_search_signal.py:100` asserts `search.schema is schema`, pinning that the
   route and the nightly fold read one `SEARCH_MIN_WATCHERS` rather than two that can drift. It is
   now commented as such. A grep-only audit calls this dead; the suite does not.
 
@@ -382,7 +382,7 @@ The ones that cost something. `.claude/CLAUDE.md` owns the short list; this is t
 - **SQL fragments are spliced ahead of the WHERE clause and their parameters must lead the params
   list.** Getting the order wrong does not raise — it compares a user id against a profile name,
   matches nothing, and reports every Builder as having no state
-  (`backend/webapp/jobs.py:303-324`; `search.py:94-102`).
+  (`backend/webapp/jobs.py:303-324`; `search.py:102-110`).
 - **`api/query_claims.py:494` defines a function named `upsert` returning an `UpsertResult`**, whose
   docstring says "It still unpacks to (new, updated, unchanged)". It is safe today, but it is the
   exact shape of the historical defect and a `grep` audit hits it first.

@@ -50,12 +50,21 @@ import { esc } from "./format.mjs";
 /** One page of results. Same size Today uses, for the same reason. */
 const PAGE = 25;
 
-/** How many rows to ask for from each catalogue scope. The endpoint's own
- *  MAX_LIMIT is 100 and a Builder may watch at most MAX_QUERIES_PER_BUILDER =
- *  20 (searchnorm.py), so `mine` cannot exceed 20 and `suggested` is one row
- *  per role_track, which is nine. 50 clears both without paginating a screen
- *  that has no pagination. */
-const CATALOGUE_LIMIT = 50;
+/** How many rows to ask for from each catalogue scope, and it is the
+ *  endpoint's own MAX_LIMIT because nothing smaller is provably enough any
+ *  more. This was 50, justified by "a Builder may watch at most
+ *  MAX_QUERIES_PER_BUILDER = 20" -- T-33 removed that ceiling, so `mine` is now
+ *  bounded by nothing but the Builder's patience and a smaller number here
+ *  would silently drop the tail of a long list on a screen that has no
+ *  pagination to reach it with. `suggested` is one row per role_track, which is
+ *  nine, and is unaffected either way.
+ *
+ *  100 IS STILL A CEILING AND NOT A PROOF. A Builder watching more than a
+ *  hundred searches loses the overflow, quietly, which is the failure mode this
+ *  project's CLAUDE.md names first. The derived cap is 8 on the free tier, so
+ *  it is a hundredfold off the realistic case -- but pagination here, not a
+ *  bigger constant, is the actual fix if anyone ever gets near it. */
+const CATALOGUE_LIMIT = 100;
 
 const state = {
   queryId: null,
@@ -435,6 +444,11 @@ async function onSubmit(event) {
   if (button) { button.disabled = true; button.textContent = "Starting…"; }
   try {
     const query = await createSearch({ text, location: location || null });
+    // The notice goes out BEFORE the navigation, because goTo() triggers a
+    // hashchange that repaints the screen, and a toast raised after it would
+    // be attached to a view that is already being replaced.
+    const notice = planWarningText(query);
+    if (notice) toast(notice);
     // Idempotent on the normalised key, so this may be a row somebody else
     // created — same id, their spelling, their run history. Going to it is
     // right either way and the results screen tells the truth about which.
@@ -456,18 +470,39 @@ function goTo(hash) {
 }
 
 /**
- * The two refusals a Builder can actually cause, in words.
+ * The refusals a Builder can actually cause, in words.
  *
- * `too_many_searches` is the cap searchnorm.MAX_QUERIES_PER_BUILDER = 20
- * enforces, and it is counted over WATCHES rather than over rows created --
- * so the fix is to stop watching one, which is what the message says. The
- * normalisation codes all mean "there were no usable words in that".
+ * THERE IS NO too_many_searches ENTRY AND THERE MUST NOT BE ONE. It was here,
+ * and T-33 deleted it with the 400 it described: watching past the plan is a
+ * warning carried on a 2xx now (see planWarningText), not a refusal. Copy for
+ * a refusal the server cannot issue is copy no one can ever check.
+ *
+ * The normalisation codes all mean "there were no usable words in that".
  */
+/**
+ * The soft warning create/watch may carry on a SUCCESSFUL response, in words,
+ * or null when there is nothing to say.
+ *
+ * A NOTICE AND NOT AN ERROR, and the copy has to hold that line. The save
+ * worked; the Builder keeps the keyword; what changed is only how often it
+ * will be re-asked. Anything that reads as "we didn't do that" would put the
+ * refusal back in the Builder's head after T-33 took it out of the server.
+ *
+ * The server's own `message` is not shown. It names the plan's nightly figure,
+ * which is a fact about a SerpApi invoice, and docs/adr/0007 decision 5 keeps
+ * claims, cadence and quota out of this UI entirely.
+ */
+function planWarningText(query) {
+  if (!query || !query.warning) return null;
+  return query.warning.code === "watching_past_plan"
+    ? "Saved. You're watching more searches than we can refresh every night, "
+      + "so some will update less often."
+    : null;
+}
+
 function searchErrorText(error) {
   if (!(error instanceof ApiError)) return "Couldn't start that search.";
   return {
-    too_many_searches:
-      "You're watching as many searches as we allow. Stop watching one first.",
     empty_query: "Type a few words about the work you want.",
     empty_location: "That location didn't come through. Try a city name.",
     query_too_long: "That's too long — a few words works better than a sentence.",
@@ -534,8 +569,12 @@ async function toggleWatch(button, root, act) {
                                     : await unwatchSearch(queryId);
     applyQuery(updated);
     paint(root);
-    toast(updated.watching ? "Watching. New postings will turn up here."
-                           : "Stopped watching.");
+    // The warning REPLACES the plain confirmation rather than following it:
+    // its copy already opens with "Saved.", and two toasts for one tap reads
+    // as two things having happened.
+    toast(planWarningText(updated)
+          || (updated.watching ? "Watching. New postings will turn up here."
+                               : "Stopped watching."));
   } catch (e) {
     button.disabled = false;
     toast(searchErrorText(e));
@@ -620,7 +659,8 @@ async function dismiss(job, root) {
 // from the two scopes rather than merged, and that the query-track copy is
 // keyed off the same vocabulary tracks.mjs holds.
 
-export { badge as _badge, queryRow as _queryRow, lastRunLabel as _lastRunLabel };
+export { badge as _badge, queryRow as _queryRow, lastRunLabel as _lastRunLabel,
+         planWarningText as _planWarningText };
 
 /** The track vocabulary a query's `role_track` is drawn from. Re-exported so
  *  the checker can assert this screen reads the SAME closed set the posting

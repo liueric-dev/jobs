@@ -1,6 +1,6 @@
 {
-  "id": 57,
-  "text": "grants operations automation",
+  "id": 58,
+  "text": "bilingual community outreach",
   "location": "New York, NY",
   "chips": null,
   "source": "builder",
@@ -11,5 +11,8 @@
   "retired_at": null,
   "watcher_bucket": null,
   "watching": true,
-  "warning": null
+  "warning": {
+    "code": "watching_past_plan",
+    "message": "you are watching 8 searches and this plan refreshes about 8 a night, so they will not all run every night"
+  }
 }

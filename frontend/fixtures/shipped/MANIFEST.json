@@ -176,7 +176,7 @@
   },
 
   "_searches": {
-    "_comment": "Task 25's six routes, frozen 2026-08-02. Eleven files: two list scopes plus an empty one, a request and a response for POST, one by-id, a watch/unwatch pair, and three results pages. They replace nothing -- fixtures/contract/ASPIRATIONAL_*_searches.* stay where they are, because they describe a shape that was never built and the deviation list between the two is an artifact somebody has to be able to read. See ../contract/MANIFEST.json and ../../README.md § 'Where the search contract and the shipped API differ'.",
+    "_comment": "Task 25's six routes, frozen 2026-08-02. Twelve files -- eleven then, plus the warned POST response T-33 added when it turned the per-Builder cap from a 400 into advice: two list scopes plus an empty one, a request and TWO responses for POST, one by-id, a watch/unwatch pair, and three results pages. They replace nothing -- fixtures/contract/ASPIRATIONAL_*_searches.* stay where they are, because they describe a shape that was never built and the deviation list between the two is an artifact somebody has to be able to read. See ../contract/MANIFEST.json and ../../README.md § 'Where the search contract and the shipped API differ'.",
 
     "_role_track_means_two_different_things_in_this_feature": "AND THIS IS THE NOTE TO READ BEFORE WRITING ANY COPY. On a JOB row (GET_v1_searches_results.json, GET_v1_jobs.json) `role_track` is job_facts.role_track -- the posting's family, the axis tracks.mjs groups Today by, one of extract.ROLE_TRACK's nine. On a QUERY object (every other search fixture here) `role_track` is search_queries.role_track -- the track a SEEDED suggestion was generated from, i.e. why that row exists at all. Same closed vocabulary, two different subjects, and they NEVER share a JSON object: a query object carries no posting fields and a job row carries no query fields. Nothing structural stops the two being conflated -- only the copy does, which is why the client says 'For roles like: …' on a suggestion and renders no track heading at all over search results.",
 
@@ -240,7 +240,18 @@
       "200 AND THE QUERY OBJECT, NOT THE CONTRACT'S 202 WITH A QUEUE POSITION. The contract fixture invents `status`, `queue_position` and `estimated_ready_at`; none has a column and nothing computes a queue depth. The shipped answer to 'when will this run' is `last_run_at` being null, which is honest and is what the client renders.",
       "ASYNCHRONOUS, AND THE BODY SAYS SO WITHOUT A STATUS FIELD: run_count 0, last_run_at null, result_count_last_run null. No provider is called on this request. A client that rendered this as a result list would be showing an empty list as though it were an answer.",
       "IDEMPOTENT ON THE NORMALISED KEY, so this may be somebody else's row coming back -- same id, THEIR display_text spelling (first-writer-wins, searchnorm.REGISTER_QUERY_SQL), and whatever run history it already has. That is the cache working, and the copy on the screen has to survive it.",
-      "watching is true: the submitter becomes a watcher in the same request, which is half of why the watcher floor is 4 rather than 3 (DEC-85)."
+      "watching is true: the submitter becomes a watcher in the same request, which is half of why the watcher floor is 4 rather than 3 (DEC-85).",
+      "`warning` IS THE ONE KEY THAT IS NOT A COLUMN, and it is always present and usually null. T-33 replaced the too_many_searches 400 with it: watching past what the plan can refresh nightly is advice, not a refusal, because docs/adr/0007 decision 5 makes a watch row a saved keyword and a discovery surface. Only the two routes that WRITE a watch carry it -- create and watch. get_search, both list scopes and unwatch do not, and verify_fixtures.py asserts that split: a warning on a read route would have been attached in _row_to_query(), where it would warn a Builder for scrolling the catalogue."
+    ]
+  },
+
+  "POST_v1_searches.response.warned.json": {
+    "endpoint": "POST /v1/searches (response, past the derived cap)",
+    "derived_from": ["search.py -- create_search, _cap_warning: searchnorm.watch_cap() against COUNT_WATCHED_SQL"],
+    "notes": [
+      "THE FIXTURE THAT REPLACES THE OLD 400 too_many_searches ENVELOPE, which T-33 deleted from errors/ in the same commit. It is named here WITHOUT its filename on purpose: a live path to a file this commit removed is precisely what tools/audit-citations.py reports, and the `git show refactor-freeze-2026-08-02:` escape does not apply to something deleted in 2026-08 rather than on the 2nd. Read it out of git by name under errors/ in the parent commit. The replacement is the whole point: this is a 200 carrying a real query -- an id, watching true -- with the advice beside it, where the old file was an error envelope and no query at all. A client author reading only the old one would build the refusal screen T-33 removed.",
+      "The number in the message is DERIVED and is not 20 or any other figure written down anywhere: searchnorm.watch_cap() divides config/serp-quota.json's allowance (250) by the cycle's full length, which is 8 a night on the free tier. Edit that config and this sentence changes -- so do not read 8 here as a constant to match against.",
+      "The message names the plan's nightly figure because an operator reads it in a log. THE CLIENT MUST NOT: 0007 decision 5 keeps claims, cadence and quota out of this UI, and check_client.mjs asserts search.mjs writes its own sentence rather than echoing this one."
     ]
   },
 
@@ -258,7 +269,8 @@
     "derived_from": ["search.py -- watch_search: REGISTER_WATCHER_SQL, then the same _select_queries re-read"],
     "notes": [
       "Query 9 after watching it: `watching` true and NOTHING ELSE MOVED. In particular watcher_bucket is still null -- the bucket is computed by the nightly fold, the service holds SELECT ONLY on search_query_signal, and a client that incremented a count locally would be writing a suppression rule into a renderer.",
-      "This pair and POST_v1_searches_unwatch.json differ in exactly one key, and verify_fixtures.py asserts that. Anything else moving between them would mean a fixture invented a side effect the route has not got."
+      "This pair and POST_v1_searches_unwatch.json differ in exactly one key, and verify_fixtures.py asserts that. Anything else moving between them would mean a fixture invented a side effect the route has not got.",
+      "Carries `warning` on the same footing as POST_v1_searches.response.json, and must: the cap is counted over WATCHES, so taking a query out of the catalogue puts exactly the same query into the night as typing it. Unwatch does not carry one -- it only ever shortens the list."
     ]
   },
 
@@ -316,9 +328,8 @@
     "notes": [
       "Every message is the exact string the code produces, including Python list repr inside the f-strings (jobs.py:679, 704).",
       "Files prefixed NOT-ENVELOPED- are NOT in the contract's envelope. They are bare HTTPExceptions and FastAPI's default handler wraps them as {'detail': ...}: malformed cursor (jobs.py:252), 404 (jobs.py:619), 401 (auth.py:92, 107), 403 (auth.py:117). This inconsistency is real and a client must handle both shapes.",
-      "THE THREE SEARCH ERRORS WERE ADDED 2026-08-02 AND ONE OF THEM COMES FROM OUTSIDE webapp/. search.py raises ContractError('too_many_searches', …) directly, and re-raises searchnorm.InvalidQuery as `ContractError(bad.code, str(bad))` -- so empty_query, empty_location, query_too_long and location_too_long are codes a client receives that appear as a literal only in backend/searchnorm.py. verify_fixtures.py's `raised` set now reads all three files; a reader that only looked under webapp/ would have reported a correct fixture as 'raised nowhere'.",
-      "request_id is null on both search envelopes, and that is what the code produces rather than an omission: ContractError's third argument defaults to None and search.py passes two. The events validator threads a real one through because it has a batch to name; a rejected search submission belongs to no render.",
-      "too_many_searches is the cap searchnorm.MAX_QUERIES_PER_BUILDER = 20 enforces, counted over WATCHES rather than over rows created -- a Builder watching twenty searches other people created spends the same nightly quota as one who typed twenty. So the remedy in the message is 'stop watching one', not 'delete one'."
+      "EVERY SEARCH ERROR NOW COMES FROM OUTSIDE webapp/, AND THAT IS NEW SINCE T-33. There were three, added 2026-08-02, and one of them -- too_many_searches -- was the only search code search.py raised itself; T-33 replaced it with an advisory `warning` on the 2xx, so its fixture is gone and POST_v1_searches.response.warned.json is what took its place. What is left is searchnorm.InvalidQuery re-raised as `ContractError(bad.code, str(bad))`, so empty_query, empty_location, query_too_long and location_too_long are codes a client receives that appear as a literal only in backend/searchnorm.py. verify_fixtures.py's `raised` set still reads all three files; a reader that only looked under webapp/ would now find NO search code at all and would report every correct fixture as 'raised nowhere'.",
+      "request_id is null on the search envelope, and that is what the code produces rather than an omission: ContractError's third argument defaults to None and search.py passes two. The events validator threads a real one through because it has a batch to name; a rejected search submission belongs to no render."
     ]
   }
 }

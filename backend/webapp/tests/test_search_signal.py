@@ -30,6 +30,7 @@ import contextlib
 import os
 import sys
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 #: This directory too, so `test_event_replay` below imports under BOTH
@@ -174,28 +175,86 @@ class TestTwoBuildersOneRow(unittest.TestCase):
                     self.submit("!!! ???", USER)
         self.assertEqual(caught.exception.code, "empty_query")
 
-    def test_the_per_builder_cap_is_enforced(self):
-        # "Cap total queries per Builder so one enthusiastic person cannot
-        # consume the pool" -- and counted over WATCHES, so watching twenty
-        # searches somebody else created costs the same as typing twenty.
+    def test_the_per_builder_cap_warns_and_does_not_refuse(self):
+        # T-33, and the assertion that used to be here was the opposite one:
+        # this raised ContractError("too_many_searches") at a constant 20.
+        # docs/adr/0007 decision 5 makes a watch row a saved keyword and a
+        # discovery surface, so the plan advises and never refuses -- if this
+        # ever goes back to raising, the block has returned under a new name.
+        cap = search.plan_cap()
+        self.assertIsNotNone(cap, "config/serp-quota.json must yield a cap")
         with web_scratch_schema() as (conn, _name):
             seed_users(conn, USER)
             with redirect_db(conn):
-                for i in range(searchnorm.MAX_QUERIES_PER_BUILDER):
-                    self.submit(f"search number {i}", USER)
-                with self.assertRaises(search.ContractError) as caught:
-                    self.submit("one too many", USER)
-        self.assertEqual(caught.exception.code, "too_many_searches")
+                for i in range(cap):
+                    row = self.submit(f"search number {i}", USER)
+                    # Not one warning on the way UP to the cap.
+                    self.assertIsNone(row["warning"], f"warned at {i}")
+                past = self.submit("one past the cap", USER)
+        # It SUCCEEDED -- there is a row, the Builder watches it -- and the
+        # warning rides along beside it rather than replacing it.
+        self.assertTrue(past["watching"])
+        self.assertIsNotNone(past["id"])
+        self.assertEqual(past["warning"]["code"], "watching_past_plan")
+        self.assertIn(str(cap), past["warning"]["message"])
 
-    def test_resubmitting_a_watched_search_is_not_capped(self):
-        # The cap must not make a Builder's own existing search unreachable.
+    def test_the_cap_is_read_from_the_plan_rather_than_written_down(self):
+        # The whole of T-33 in one assertion: change the plan, the cap moves.
+        # A constant restored anywhere on this path passes every test above
+        # this one and fails this one.
+        small = self._with_plan({"serpapi": {"allowance": 31, "reserve": 0}})
+        large = self._with_plan({"serpapi": {"allowance": 3100, "reserve": 0}})
+        self.assertLess(small, large)
+        # And an account the pipeline cannot see paces nothing rather than
+        # capping at zero -- searchnorm.run_allowance()'s direction, inherited.
+        self.assertIsNone(self._with_plan({"serpapi": {"allowance": None}}))
+        self.assertIsNone(self._with_plan({}))
+
+    def _with_plan(self, providers):
+        # `providers` and not `config` -- this module imports a module by that
+        # name at the top and shadowing it is an F811 ruff can see.
+        with unittest.mock.patch.object(search.quota, "load_config",
+                                        return_value=providers):
+            return search.plan_cap()
+
+    def test_an_unknown_plan_warns_about_nothing(self):
+        # No cap is not a cap of zero. A vendor config this process cannot read
+        # must not turn every save into a warning a Builder cannot act on.
+        with web_scratch_schema() as (conn, _name):
+            seed_users(conn, USER)
+            with redirect_db(conn), unittest.mock.patch.object(
+                    search.quota, "load_config", return_value={}):
+                rows = [self.submit(f"unpaced {i}", USER) for i in range(3)]
+        self.assertEqual([r["warning"] for r in rows], [None, None, None])
+
+    def test_resubmitting_a_watched_search_is_not_warned(self):
+        # The cap must not make a Builder's own existing search unreachable --
+        # and must not nag about it either. Re-submitting something already
+        # watched adds nothing to the night, so there is nothing to warn about.
+        cap = search.plan_cap()
         with web_scratch_schema() as (conn, _name):
             seed_users(conn, USER)
             with redirect_db(conn):
-                for i in range(searchnorm.MAX_QUERIES_PER_BUILDER):
+                for i in range(cap):
                     self.submit(f"search number {i}", USER)
                 again = self.submit("search number 0", USER)
         self.assertTrue(again["watching"])
+        self.assertIsNone(again["warning"])
+
+    def test_the_watch_route_warns_on_the_same_footing(self):
+        # Counted over WATCHES, so the catalogue is not a way around the
+        # advice: watching a query somebody else typed puts the same query
+        # into the night as typing it.
+        cap = search.plan_cap()
+        with web_scratch_schema() as (conn, _name):
+            seed_users(conn, USER, USER_B)
+            with redirect_db(conn):
+                theirs = self.submit("somebody else's search", USER_B)
+                for i in range(cap):
+                    self.submit(f"search number {i}", USER)
+                taken = search.watch_search(theirs["id"], user=USER)
+        self.assertTrue(taken["watching"])
+        self.assertEqual(taken["warning"]["code"], "watching_past_plan")
 
 
 @requires_db

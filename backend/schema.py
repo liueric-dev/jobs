@@ -1086,7 +1086,7 @@ def ensure_search_query_schema(conn: psycopg.Connection) -> None:
     # holder -- cleared on release, on success and on expiry -- and it holds a
     # CONTRIBUTOR id (`c_<hex>`, minted in api/), not the app_user_id that
     # identifies a Builder to the webapp. It is also absent from
-    # backend/webapp/search.py:73's QUERY_COLUMNS allowlist, so nothing renders
+    # backend/webapp/search.py:81's QUERY_COLUMNS allowlist, so nothing renders
     # it; that allowlist exists precisely so a column added here cannot ship to
     # a client by default, and this is the case it was written for.
     dbconn.add_missing_columns(conn, SEARCH_QUERIES_TABLE, [

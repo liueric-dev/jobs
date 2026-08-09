@@ -575,8 +575,23 @@ def check(problems):
     sources = _tuples(SCHEMA_PY)["SEARCH_SOURCES"]
     buckets = tuple(label for _, label in _literal(SCHEMA_PY, "SEARCH_WATCHER_BUCKETS"))
 
-    def check_query(where, item):
-        keyset(where, item, query_row)
+    # THE ONE KEY THAT IS NOT A COLUMN. T-33 replaced the `too_many_searches`
+    # 400 with an advisory `warning` carried on the SUCCESSFUL response, so the
+    # two routes that write a watch answer with the query row plus this. It is
+    # deliberately NOT in RESPONSE_NAMES: that tuple is zipped positionally
+    # against QUERY_COLUMNS and the check above requires them to stay the same
+    # length, so a non-column name in it would shift every field by one.
+    #
+    # WHICH ROUTES CARRY IT IS PART OF THE CONTRACT, hence a parameter rather
+    # than "allow it anywhere". get_search and the list routes are reads and
+    # have no Builder action to advise on; unwatch only ever shortens the list.
+    # A `warning` appearing on one of those means somebody attached it in
+    # _row_to_query() or _select_queries(), where it would leak into the
+    # catalogue and warn a Builder for scrolling.
+    def check_query(where, item, warns=False):
+        keyset(where, item, query_row + (("warning",) if warns else ()))
+        if warns and item["warning"] is not None:
+            keyset(f"{where} .warning", item["warning"], ("code", "message"))
         # THE TWO FIELDS THAT MUST NEVER APPEAR, and their absence is the whole
         # privacy argument rather than an oversight. `first_requested_at` is the
         # moment one identifiable person typed something, and timing is the
@@ -641,9 +656,23 @@ def check(problems):
             problems.append(f"GET_v1_searches.suggested.json searches[{i}]: "
                             f"retired_at is set; the scope filters those out")
 
-    for name in ("POST_v1_searches.response.json", "GET_v1_searches_by_id.json",
-                 "POST_v1_searches_watch.json", "POST_v1_searches_unwatch.json"):
+    for name in ("GET_v1_searches_by_id.json", "POST_v1_searches_unwatch.json"):
         check_query(name, _load(name))
+    for name in ("POST_v1_searches.response.json", "POST_v1_searches_watch.json",
+                 "POST_v1_searches.response.warned.json"):
+        check_query(name, _load(name), warns=True)
+
+    # THE WARNING FIXTURE IS THE 400 FIXTURE'S REPLACEMENT and has to prove the
+    # thing that changed: this is a SUCCESS, so it carries a real query -- an
+    # id, the Builder's own watch -- and not an error envelope. A fixture that
+    # showed the warning on an otherwise empty body would let a client author
+    # write the refusal screen T-33 removed.
+    warned = _load("POST_v1_searches.response.warned.json")
+    if warned["warning"] is None or not warned.get("watching") or not warned["id"]:
+        problems.append(
+            "POST_v1_searches.response.warned.json: the point of this fixture is "
+            "that the save SUCCEEDED and the warning rode along beside it -- it "
+            "needs a warning, an id and watching=true, all three.")
 
     keyset("POST_v1_searches.request.json", _load("POST_v1_searches.request.json"),
            _model_fields(SEARCH_PY, "SearchRequest"))

@@ -67,6 +67,14 @@ from jobs import (COHORT_FIELDS, DEFAULT_LIMIT, LIST_COLUMNS, MAX_LIMIT,
                   _EVENT_STATE_JOIN, _STATE_COLUMNS, STATE_FIELDS,
                   cohort_signal, decode_cursor, encode_cursor, new_request_id)
 from lib.timeparse import utc_now_str
+#: The plan figures behind the watch cap, read from config/serp-quota.json.
+#: A FILE READ AND NEVER A VENDOR CALL on a request path -- quota.load_config()
+#: parses JSON, where quota.Ledger.account() would open a socket to SerpApi.
+#: The pipeline's rule that no LLM call may sit between a user and an ordering
+#: (.claude/CLAUDE.md) is the same rule: a Builder pressing "search" must not
+#: wait on a third party to be told how many keywords they may save, and a
+#: vendor that is down must not turn saving a keyword into an error.
+from serp import quota
 
 router = APIRouter()
 
@@ -128,6 +136,72 @@ def _row_to_query(row):
     return item
 
 
+#: Whose plan the cap is read from. A literal, because there is exactly one
+#: account that runs watched queries today: `apify` is the other entry in
+#: config/serp-quota.json and it bills per RESULT out of a dollar balance, so
+#: its `allowance` is null and dividing it by days would be a unit error rather
+#: than a smaller number.
+#:
+#: THIS IS THE PIPELINE'S ACCOUNT, NOT THE BUILDER'S, AND docs/adr/0007 WANTS
+#: THE BUILDER'S. Decision 4 paces "from the contributor's own plan data", and
+#: `T-35` is the row that stores a contributor's reported quota server-side --
+#: until it lands there is no per-Builder plan to read, and the shared account
+#: is not a placeholder for one but the account that actually dispatches every
+#: watched query today. When `T-35` lands, the change is the argument passed to
+#: searchnorm.watch_cap(), not the function and not the warning.
+CAP_PROVIDER = "serpapi"
+
+
+def plan_cap():
+    """The derived cap, or None when the plan is not known. Advisory.
+
+    NOT CACHED, DELIBERATELY. config/serp-quota.json is a small file in the
+    page cache and this runs twice on the two routes that write a watch, so the
+    read costs less than the invalidation would: a cached cap would go on
+    quoting the old plan after an operator edited the file, and the symptom --
+    a warning naming a number that is no longer anywhere in the repo -- is the
+    silent kind this project's CLAUDE.md names as its failure mode.
+    """
+    entry = (quota.load_config().get(CAP_PROVIDER) or {})
+    return searchnorm.watch_cap(entry.get("allowance"), utc_now_str(),
+                                entry.get("cycle_reset_day", 1),
+                                entry.get("reserve") or 0)
+
+
+def _cap_warning(watched, already):
+    """The soft warning for a Builder whose list has outgrown the plan, or None.
+
+    A WARNING AND NEVER A REFUSAL -- this is what `T-33` changed, and the two
+    routes below used to raise a `too_many_searches` ContractError here.
+    (Spelled that way round on purpose: frontend/check_client.mjs derives the
+    client's refusal copy by scanning this file for the call form, so writing
+    the dead code as one would resurrect a refusal in the checker's eyes.)
+    docs/adr/0007 decision 5: a watch row is a Builder's saved keyword and the
+    list is a discovery surface, which filters and pins the existing corpus
+    whether or not anything dispatches it. Refusing to save one because a
+    SerpApi plan is small couples a UI affordance to a vendor invoice, and the
+    save it refused would not have spent a credit.
+
+    So the shape of the answer matters: callers ATTACH this, they do not branch
+    on it. A caller that turned a non-None return into a 4xx would have
+    reimplemented the block this row removed.
+
+    `already` suppresses it for the same reason the old cap did: re-submitting
+    or re-watching something a Builder already watches adds no query to the
+    night, so warning about the list length would be a warning they cannot act
+    on by not doing what they just did.
+    """
+    cap = plan_cap()
+    if cap is None or already or watched < cap:
+        return None
+    return {
+        "code": "watching_past_plan",
+        "message": (f"you are watching {watched} searches and this plan "
+                    f"refreshes about {cap} a night, so they will not all run "
+                    f"every night"),
+    }
+
+
 def _select_queries(conn, user, where, params, limit):
     columns = ", ".join(f"q.{c}" for c in QUERY_COLUMNS)
     sql = f"""
@@ -173,6 +247,13 @@ def create_search(body: SearchRequest, user: User = Depends(require_user)):
     watchers, one provider call. The find-or-create is one statement
     (searchnorm.REGISTER_QUERY_SQL) so that two simultaneous submissions cannot
     race into a unique violation that reads to a Builder as a failed search.
+
+    `warning` IS ALWAYS IN THE RESPONSE AND IS USUALLY NULL. It is the one key
+    here that is not a column of `search_queries` -- see _cap_warning() for why
+    the plan cap advises rather than refuses. Always present rather than only
+    when it fires, because a key that appears only on the bad day is a key
+    every renderer forgets, and the Builder it was written for is exactly the
+    one who would then be told nothing.
     """
     try:
         normalized_text, normalized_location = searchnorm.validate(
@@ -183,11 +264,12 @@ def create_search(body: SearchRequest, user: User = Depends(require_user)):
     now = utc_now_str()
 
     with db() as conn:
-        # The cap the task file asks for: "so one enthusiastic person cannot
-        # consume the pool". Counted BEFORE the insert, and counted over
-        # WATCHES rather than over rows created -- a Builder who watches
-        # twenty searches other people created is spending the same nightly
-        # quota as one who typed twenty.
+        # Counted BEFORE the insert, so the warning describes the list the
+        # Builder had when they asked rather than the one they are about to
+        # have. That is a real choice and this is the softer of the two: on the
+        # submission that crosses the cap, `watched` is the cap and the
+        # comparison below is `>=`, so the warning arrives ON the crossing
+        # rather than one search after it.
         watched = conn.execute(searchnorm.COUNT_WATCHED_SQL, (user.id,)).fetchone()[0]
         already = conn.execute(
             """
@@ -197,11 +279,7 @@ def create_search(body: SearchRequest, user: User = Depends(require_user)):
               AND q.normalized_text = %s AND q.normalized_location = %s
             """,
             (user.id, normalized_text, normalized_location)).fetchone()
-        if watched >= searchnorm.MAX_QUERIES_PER_BUILDER and not already:
-            raise ContractError(
-                "too_many_searches",
-                f"you are watching {watched} searches, the cap is "
-                f"{searchnorm.MAX_QUERIES_PER_BUILDER}; stop watching one first")
+        warning = _cap_warning(watched, already)
 
         query_id = conn.execute(
             searchnorm.REGISTER_QUERY_SQL,
@@ -212,7 +290,7 @@ def create_search(body: SearchRequest, user: User = Depends(require_user)):
                      (query_id, user.id, user.profile, now))
         items = _select_queries(conn, user, ["q.id = %s"], [query_id], 1)
 
-    return items[0]
+    return {**items[0], "warning": warning}
 
 
 @router.get("/v1/searches")
@@ -257,7 +335,14 @@ def get_search(query_id: int, user: User = Depends(require_user)):
 
 @router.post("/v1/searches/{query_id}/watch")
 def watch_search(query_id: int, user: User = Depends(require_user)):
-    """Watch an existing search -- typically one from the suggested catalogue."""
+    """Watch an existing search -- typically one from the suggested catalogue.
+
+    Carries the same `warning` key as create_search, and must: watching a
+    query somebody else typed puts exactly the same query into the night as
+    typing it, which is why the count behind the cap is over WATCHES. A cap
+    that only noticed the submit route would be advice a Builder could walk
+    straight past by picking from the catalogue instead.
+    """
     now = utc_now_str()
     with db() as conn:
         exists = conn.execute("SELECT 1 FROM search_queries WHERE id = %s",
@@ -269,15 +354,11 @@ def watch_search(query_id: int, user: User = Depends(require_user)):
             "SELECT 1 FROM search_query_watchers WHERE query_id = %s "
             "AND app_user_id = %s AND removed_at IS NULL",
             (query_id, user.id)).fetchone()
-        if watched >= searchnorm.MAX_QUERIES_PER_BUILDER and not already:
-            raise ContractError(
-                "too_many_searches",
-                f"you are watching {watched} searches, the cap is "
-                f"{searchnorm.MAX_QUERIES_PER_BUILDER}; stop watching one first")
+        warning = _cap_warning(watched, already)
         conn.execute(searchnorm.REGISTER_WATCHER_SQL,
                      (query_id, user.id, user.profile, now))
         items = _select_queries(conn, user, ["q.id = %s"], [query_id], 1)
-    return items[0]
+    return {**items[0], "warning": warning}
 
 
 @router.post("/v1/searches/{query_id}/unwatch")

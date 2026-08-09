@@ -10,5 +10,6 @@
   "result_count_last_run": null,
   "retired_at": null,
   "watcher_bucket": null,
-  "watching": true
+  "watching": true,
+  "warning": null
 }

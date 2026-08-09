@@ -1,7 +1,0 @@
-{
-  "error": {
-    "code": "too_many_searches",
-    "message": "you are watching 20 searches, the cap is 20; stop watching one first",
-    "request_id": null
-  }
-}
