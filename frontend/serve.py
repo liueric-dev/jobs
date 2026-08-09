@@ -15,7 +15,7 @@ exactly as before.
 WHY ONE ORIGIN AND NOT TWO. The session cookie is the client's only credential.
 `backend/webapp/.env` sets both FRONTEND_ORIGIN and ALLOWED_ORIGINS to
 http://localhost:8421 -- the first is where the OAuth callback sends the
-browser (auth.py:359-360), the second is the CORS allowlist (app.py:78-84) --
+browser (auth.py:359-360), the second is the CORS allowlist (app.py:79-85) --
 so serving the page from that same origin means there is no cross-origin
 request to get wrong. A separate static server on :5173 or :8000 would be a
 third origin that neither variable names, and the browser's failure mode for

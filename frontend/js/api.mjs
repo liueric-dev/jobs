@@ -7,14 +7,14 @@
 //   1. FOUR FIELDS ARRIVE AS JSON STRINGS, NOT ARRAYS. match_reasons,
 //      tech_stack, risk_factors and key_technologies are TEXT columns holding
 //      json.dumps(...) output and backend/webapp/jobs.py parses none of them
-//      (LIST_COLUMNS, jobs.py:102-111 -- the handler does dict(zip(names, row))
-//      at jobs.py:417 and returns it). Every one is JSON.parse'd on the way in,
+//      (LIST_COLUMNS, jobs.py:119-128 -- the handler does dict(zip(names, r))
+//      at jobs.py:552 and returns it). Every one is JSON.parse'd on the way in,
 //      once, here, so no view ever sees the string form.
 //
-//   2. THERE ARE TWO ERROR SHAPES, NOT ONE. app.py:93 registers the contract's
+//   2. THERE ARE TWO ERROR SHAPES, NOT ONE. app.py:101 registers the contract's
 //      {"error": {code, message, request_id}} envelope for jobs.ContractError
-//      ALONE. A 401 (auth.py:92), a 403 (auth.py:117), a 404 (jobs.py:468) and
-//      a malformed cursor (jobs.py:235) are bare HTTPExceptions and come back
+//      ALONE. A 401 (auth.py:92), a 403 (auth.py:117), a 404 (jobs.py:619) and
+//      a malformed cursor (jobs.py:252) are bare HTTPExceptions and come back
 //      as FastAPI's {"detail": "..."}. Both are normalised into ApiError below.
 //
 // SAME ORIGIN, SO NO CORS. backend/webapp/.env sets FRONTEND_ORIGIN and

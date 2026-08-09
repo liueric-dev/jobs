@@ -8,19 +8,19 @@
   "GET_v1_jobs.json": {
     "endpoint": "GET /v1/jobs",
     "derived_from": [
-      "jobs.py:432-433 -- the return statement: {request_id, jobs, next_cursor, profile}",
-      "jobs.py:102-111 -- LIST_COLUMNS, the 34 view columns in each row, in this order",
-      "jobs.py:320-329 -- _STATE_COLUMNS / STATE_FIELDS: seen, applied, dismissed, saved, dismiss_reason",
-      "jobs.py:416-417 -- names = list(LIST_COLUMNS) + list(STATE_FIELDS); dict(zip(...)) fixes key order",
-      "jobs.py:493, :500 -- the zip names end with the raw save_bucket, which is then popped and re-assigned as the nested `cohort_signal`; because that re-assignment APPENDS, the key lands after dismiss_reason",
-      "jobs.py:367 -- COHORT_FIELDS = ('cohort_signal',), the third response-key group",
-      "jobs.py:370 -- cohort_signal(save_bucket) returns {'save_bucket': ...} or None",
-      "jobs.py:423-424 -- rank is appended last, 1-based, first_rank + offset",
-      "jobs.py:370 / 164-179 -- request_id is 'req_' + uuid4().hex, minted server-side",
-      "jobs.py:124 -- ORDER BY v.match_score DESC, coalesce(posted_at_ts,'-infinity') DESC, v.id ASC",
-      "jobs.py:364-365 -- dismissed rows are hidden by default, so no row here has dismissed=true",
-      "schema.py:726-774 -- the jobs_app view: which table each column comes from",
-      "schema.py:742-743 -- salary is coalesce(salary_text, currency || ' ' || min-max); Con Edison shows the derived form"
+      "jobs.py:573-574 -- the return statement: {request_id, jobs, next_cursor, profile}",
+      "jobs.py:119-128 -- LIST_COLUMNS, the 35 view columns in each row, in this order",
+      "jobs.py:339-348 -- _STATE_COLUMNS / STATE_FIELDS: seen, applied, dismissed, saved, dismiss_reason",
+      "jobs.py:551-552 -- names = list(LIST_COLUMNS) + list(STATE_FIELDS); dict(zip(...)) fixes key order",
+      "jobs.py:551, :558 -- the zip names end with the raw save_bucket, which is then popped and re-assigned as the nested `cohort_signal`; because that re-assignment APPENDS, the key lands after dismiss_reason",
+      "jobs.py:386 -- COHORT_FIELDS = ('cohort_signal',), the third response-key group",
+      "jobs.py:389 -- cohort_signal(save_bucket) returns {'save_bucket': ...} or None",
+      "jobs.py:564-565 -- rank is appended last, 1-based, first_rank + offset",
+      "jobs.py:464 / 181-196 -- request_id is 'req_' + uuid4().hex, minted server-side",
+      "jobs.py:141 -- ORDER BY v.match_score DESC, coalesce(posted_at_ts,'-infinity') DESC, v.id ASC",
+      "jobs.py:458-459 -- dismissed rows are hidden by default, so no row here has dismissed=true",
+      "schema.py:1196-1253 -- the jobs_app view: which table each column comes from",
+      "schema.py:1212-1213 -- salary is coalesce(salary_text, currency || ' ' || min-max); Con Edison shows the derived form"
     ],
     "notes": [
       "match_reasons, tech_stack, risk_factors and key_technologies are TEXT columns holding json.dumps(...) output (match.py:526, extract.py:755, score.py:851-853). They arrive as JSON *strings*; the endpoint does not parse them. The client must json.parse each one.",
@@ -28,9 +28,9 @@
       "Rent the Runway has fit_score, primary_track, gap_bridging_angle, risk_factors and key_technologies all null: jobs_app LEFT JOINs job_scores (schema.py:768) and scoring is budget-limited, so an unscored posting is normal, not an error.",
       "Con Edison has posted_at_ts null and still ranks above Rent the Runway, because match_score leads the sort and only the tie-break coalesces to -infinity.",
       "primary_track values are Title Case from score.TRACKS (score.py:281-282). They are NOT the contract's track slugs.",
-      "seen and applied became PER-BUILDER on 2026-08-01 (defects D66 and D67, git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md). They are resolved from job_events by app_user_id (jobs.py:286-291), not by profile. The response SHAPE did not change -- only which rows the join matches -- so these fixtures were unaffected. An event written before job_events.app_user_id existed carries NULL and resolves both to false for everyone, which is the safe direction.",
+      "seen and applied became PER-BUILDER on 2026-08-01 (defects D66 and D67, git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md). They are resolved from job_events by app_user_id (jobs.py:305-310), not by profile. The response SHAPE did not change -- only which rows the join matches -- so these fixtures were unaffected. An event written before job_events.app_user_id existed carries NULL and resolves both to false for everyone, which is the safe direction.",
       "cohort_signal LANDED 2026-08-02 (task 28) and these fixtures were re-frozen for it. Key ORDER is load-bearing and is asserted: LIST_COLUMNS, STATE_FIELDS, cohort_signal, rank. Mount Sinai carries {'save_bucket': '3-5'} so a client author sees the populated shape once; every other row is null.",
-      "null IS A SUPPRESSION, NOT 'NO DATA', and this is the single most misreadable field in the payload. The count is withheld below three Builders, so null is the answer for BOTH 'nobody saved this' and 'one or two did' -- the row does not exist and the endpoint cannot tell them apart either (jobs.py:370). In a thirty-person cohort who see each other in a classroom, a count of one is close to an identifier. A client must NEVER render it as '0 saves' or a greyed zero: absence of a badge must not be readable as 'exactly one or two'. At today's cohort size EVERY value is null, so null is the case the UI has to handle well, not the edge case.",
+      "null IS A SUPPRESSION, NOT 'NO DATA', and this is the single most misreadable field in the payload. The count is withheld below three Builders, so null is the answer for BOTH 'nobody saved this' and 'one or two did' -- the row does not exist and the endpoint cannot tell them apart either (jobs.py:389). In a thirty-person cohort who see each other in a classroom, a count of one is close to an identifier. A client must NEVER render it as '0 saves' or a greyed zero: absence of a badge must not be readable as 'exactly one or two'. At today's cohort size EVERY value is null, so null is the case the UI has to handle well, not the edge case.",
       "save_bucket is one of '3-5', '6-10', '10+' -- schema.py:564 (NOT NULL on the table) and the cohort_signal_bucket CHECK at schema.py:567."
     ]
   },
@@ -57,11 +57,11 @@
   "GET_v1_jobs_by_id.json": {
     "endpoint": "GET /v1/jobs/{id}",
     "derived_from": [
-      "jobs.py:113 -- DETAIL_COLUMNS = LIST_COLUMNS + ('description_text',)",
-      "jobs.py:562, :564 -- names = DETAIL_COLUMNS + STATE_FIELDS + the raw save_bucket, then the same pop-and-re-assign the list does"
+      "jobs.py:130 -- DETAIL_COLUMNS = LIST_COLUMNS + ('description_text',)",
+      "jobs.py:620, :622 -- names = DETAIL_COLUMNS + STATE_FIELDS + the raw save_bucket, then the same pop-and-re-assign the list does"
     ],
     "notes": [
-      "NO rank key. Rank is a property of a render and a detail request is not one (jobs.py:423 adds it only in the list handler).",
+      "NO rank key. Rank is a property of a render and a detail request is not one (jobs.py:565 adds it only in the list handler).",
       "cohort_signal IS here and lands LAST, because there is no rank after it to displace it. Same posting as GET_v1_jobs.json jobs[0], so it carries the same {'save_bucket': '3-5'} -- one posting cannot have two answers.",
       "description_text is plain text, not HTML. The contract's description_html does not exist.",
       "Requesting this is not an impression -- the contract's client rule, and nothing here writes one."
@@ -309,13 +309,13 @@
 
   "errors/": {
     "derived_from": [
-      "jobs.py:131-157 -- ContractError and contract_error_handler: {'error': {code, message, request_id}}",
-      "app.py:93 -- registered for ContractError alone",
-      "jobs.py:503-556 -- validate_batch, which is where all seven codes are raised"
+      "jobs.py:148-174 -- ContractError and contract_error_handler: {'error': {code, message, request_id}}",
+      "app.py:101 -- registered for ContractError alone",
+      "jobs.py:656-709 -- validate_batch, which is where all seven codes are raised"
     ],
     "notes": [
-      "Every message is the exact string the code produces, including Python list repr inside the f-strings (jobs.py:526, 551).",
-      "Files prefixed NOT-ENVELOPED- are NOT in the contract's envelope. They are bare HTTPExceptions and FastAPI's default handler wraps them as {'detail': ...}: malformed cursor (jobs.py:235), 404 (jobs.py:468), 401 (auth.py:92, 107), 403 (auth.py:117). This inconsistency is real and a client must handle both shapes.",
+      "Every message is the exact string the code produces, including Python list repr inside the f-strings (jobs.py:679, 704).",
+      "Files prefixed NOT-ENVELOPED- are NOT in the contract's envelope. They are bare HTTPExceptions and FastAPI's default handler wraps them as {'detail': ...}: malformed cursor (jobs.py:252), 404 (jobs.py:619), 401 (auth.py:92, 107), 403 (auth.py:117). This inconsistency is real and a client must handle both shapes.",
       "THE THREE SEARCH ERRORS WERE ADDED 2026-08-02 AND ONE OF THEM COMES FROM OUTSIDE webapp/. search.py raises ContractError('too_many_searches', …) directly, and re-raises searchnorm.InvalidQuery as `ContractError(bad.code, str(bad))` -- so empty_query, empty_location, query_too_long and location_too_long are codes a client receives that appear as a literal only in backend/searchnorm.py. verify_fixtures.py's `raised` set now reads all three files; a reader that only looked under webapp/ would have reported a correct fixture as 'raised nowhere'.",
       "request_id is null on both search envelopes, and that is what the code produces rather than an omission: ContractError's third argument defaults to None and search.py passes two. The events validator threads a real one through because it has a batch to name; a rejected search submission belongs to no render.",
       "too_many_searches is the cap searchnorm.MAX_QUERIES_PER_BUILDER = 20 enforces, counted over WATCHES rather than over rows created -- a Builder watching twenty searches other people created spends the same nightly quota as one who typed twenty. So the remedy in the message is 'stop watching one', not 'delete one'."

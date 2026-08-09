@@ -440,7 +440,7 @@ def check(problems):
     #
     # THESE TWO FIXTURES WERE `contract/ASPIRATIONAL_POST_v1_onboarding.*` AND
     # THE PREFIX HAD GONE FALSE. Task 26 gave the endpoint a route
-    # (onboarding.py:534, mounted at app.py:99) while frontend/README.md was
+    # (onboarding.py:540, mounted at app.py:106) while frontend/README.md was
     # being written, so two files describing a live route sat in the directory
     # this script deliberately does not read, and NOTHING checked them against
     # the code they described. They are in shipped/ now and this block is the

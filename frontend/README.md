@@ -95,12 +95,12 @@ are not "unimplemented endpoints", they are a feature with no storage.~~
 >
 > **`builder_profiles` has storage.** It is a real table in
 > `backend/webapp/schema_web.py`, declared `("SELECT", "INSERT", "UPDATE")` in
-> `REQUIRED_TABLES` (`schema_web.py:93`), with a composite foreign key to
+> `REQUIRED_TABLES` (`schema_web.py:100`), with a composite foreign key to
 > `app_users(id, profile)` — which is what `_ensure_app_users_profile_key`
-> (`schema_web.py:360`) exists to make possible.
+> (`schema_web.py:428`) exists to make possible.
 >
 > **And `POST /v1/onboarding` has a route**, in a new
-> `backend/webapp/onboarding.py`, included at `app.py:99`. **There is also a
+> `backend/webapp/onboarding.py`, included at `app.py:106`. **There is also a
 > `GET /v1/onboarding`, which this document never listed and for which no
 > fixture exists in either directory.**
 >
@@ -302,7 +302,7 @@ Everything else the contract adds — `tracks[]`, `posting_age_days`,
   `server_derived_event`, deliberately not `unknown_event`: the mistake is a
   category error, not a typo.
 - **`request_id` and `rank` already ship.** Several documents say they do not;
-  they landed with task 27 (`jobs.py:370`, `:424`, `:432`). `rank` is 1-based and global
+  they landed with task 27 (`jobs.py:464`, `:565`, `:571`). `rank` is 1-based and global
   across the render, and it *continues across pages* — the render id and the
   next rank ride inside the opaque cursor, so page two starts at 5, not 1.
   A cursor issued before task 27 is a 400, not an upgrade.
@@ -312,7 +312,7 @@ Everything else the contract adds — `tracks[]`, `posting_age_days`,
   each one. The contract's `why.risk_factors` is a real array; the shipped
   `risk_factors` is `"[\"…\"]"`.
 - **Two error shapes, not one.** The contract's `{"error": {code, message,
-  request_id}}` envelope is registered for `ContractError` alone (`app.py:93`).
+  request_id}}` envelope is registered for `ContractError` alone (`app.py:101`).
   A 401, a 403, a 404 and a malformed cursor come back as FastAPI's
   `{"detail": "…"}`. Both are in `shipped/errors/`; the second group is
   prefixed `NOT-ENVELOPED-`.
