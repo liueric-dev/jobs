@@ -26,7 +26,7 @@ than trim. OQ-34 carries the three ways out. Everything cut is in git at 9a05925
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-38`.** Numbers are
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-39`.** Numbers are
 never reused and never renumbered; `OQ-7` is closed and stays in the table so citations resolve.
 
 **Every row here needs you.** A session cannot start any of them: each needs a machine, an account,
@@ -672,6 +672,35 @@ that file to silence a finding"), so taking it is an exception only you can gran
 **Done when:** one is chosen, the suite is green with `config.yml` as committed, and if the answer
 is (2) or (3) it is written down where the citation rule is — an ADR, since it changes what that
 rule covers.
+
+### OQ-38 — A request body ceiling at the edge, which the middleware cannot be
+
+Filed by `T-56`, 2026-08-09, which built the other half deliberately and stopped at this line.
+
+**Why it is yours:** machine — a line in the deployed reverse proxy's config, plus a Cloudflare
+setting nobody in this repo can read. **Do it in the same sitting as `OQ-30`'s item 3**: same file,
+same host, same "check with `curl` from outside rather than infer". It is a separate row because it
+is a separate question — the mint's controls and a body ceiling share a config file, not a subject.
+
+**What:** `T-56` put `MAX_BODY_BYTES` on every route as an ASGI middleware
+(`backend/api/app.py:854`). That bounds what the process **holds**: an oversized `Content-Length` is
+refused before the app is entered, and an undeclared or under-declared body is refused by counting
+chunks. It does **not** bound what crosses the network — the bytes still arrive and are still paid
+for. That is the same split `claim`'s docstring already draws for request rate ("a request-rate
+concern for whatever terminates TLS, not something this cap can express"), and the same trade D73
+made: a property here, a rule there.
+
+**Check before adding anything, because the answer may be "already handled".** `api/` is
+internet-facing behind the Cloudflare Tunnel, and Cloudflare imposes its own request body limit that
+varies by plan. If that limit is already at or below `MAX_BODY_BYTES` (`2097152`), this row closes by
+**recording the number and where it came from** — a ceiling that exists is worth writing down, and an
+assumed one is what this repo keeps finding. If it is far above, the proxy config is where to lower
+it.
+
+**Done when:** the effective body limit in front of this service is known and written down rather
+than assumed, a body larger than it is refused from outside (checked with `curl`, not inferred), and
+either the proxy config carries the line or the row records why Cloudflare's own limit makes it
+unnecessary.
 
 ### OQ-34 — This file cannot reach its own 450-line budget, and the three ways out are all yours
 

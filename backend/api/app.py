@@ -513,7 +513,7 @@ async def submit(
     """
     raw = await request.body()
     if len(raw) > MAX_BODY_BYTES:
-        raise HTTPException(status_code=413, detail="payload too large")
+        raise HTTPException(status_code=413, detail=TOO_LARGE_DETAIL)
     try:
         payload = SubmitRequest.model_validate_json(raw)
     except Exception as e:
@@ -803,3 +803,158 @@ def _validation_detail(exc):
     if len(found) > MAX_REPORTED_ERRORS:
         parts.append(f"and {len(found) - MAX_REPORTED_ERRORS} more")
     return "malformed body (" + "; ".join(parts) + ")"
+
+
+# --------------------------------------------------------------------------
+# The body ceiling on every route that takes one -- T-56
+# --------------------------------------------------------------------------
+#
+# AT THE BOTTOM FOR THE REASON THE SECTION ABOVE GIVES, and the placement is
+# what decides the shape of the refusal below. `from starlette.responses import
+# JSONResponse` would be the obvious way to write it and would have to go at the
+# top of this file, which moves every one of the ~45 `backend/api/app.py:NNN`
+# citations listed above to save five lines. So the 413 is sent as raw ASGI
+# messages instead. That is a hand-built copy of what the framework would render,
+# so it is pinned as one: tests/test_body_size_limit.py renders
+# HTTPException(413, TOO_LARGE_DETAIL) through the handler `app` is actually
+# configured with and asserts the bytes are identical. Nothing here is read at
+# import time, so the placement costs nothing at runtime.
+
+#: The one refusal wording, shared by the middleware below and by submit()'s own
+#: pre-parse check. A caller must not be able to tell which of the two refused
+#: it -- they are the same policy at two depths, and a client that could
+#: distinguish them could map where the ceiling is enforced.
+TOO_LARGE_DETAIL = "payload too large"
+
+
+def _declared_length(scope):
+    """The request's own claim about its size, or None if it makes none.
+
+    Returns the LARGEST parseable Content-Length when a request carries more
+    than one. A duplicate header is malformed and a real server will usually
+    reject it before this runs; if one ever reaches here, believing the smallest
+    value is the reading that lets a caller under-declare, and this check exists
+    to be the pessimistic one. Anything unparseable or negative is treated as
+    absent rather than as zero -- the counter below is what covers those, and a
+    garbled header must not be able to switch the ceiling off.
+    """
+    declared = []
+    for name, value in scope.get("headers") or ():
+        if name != b"content-length":
+            continue
+        try:
+            length = int(value)
+        except (TypeError, ValueError):
+            continue
+        if length >= 0:
+            declared.append(length)
+    return max(declared) if declared else None
+
+
+class BodySizeLimit:
+    """MAX_BODY_BYTES on every route, rather than on the one that hand-reads.
+
+    WHAT WAS WRONG (T-56). `submit` reads `await request.body()` itself and
+    measures it before parsing, so the cap was a property of that function
+    rather than of this service. `claim`, `release` and the mint route take a
+    Pydantic body parameter instead, which means Starlette reads the whole body
+    into memory before any code in this file runs, and uvicorn sets no ceiling
+    below it. The exposure is authenticated and predates T-35; what T-35 changed
+    is that `claim` now has an inviting shape, because a worker legitimately
+    posts a version, a count and an error string to it every hour.
+
+    WHY A MIDDLEWARE AND NOT THREE MORE COPIES OF submit()'s CHECK. Reading the
+    body by hand costs a route its Pydantic parsing, which is why `submit` also
+    hand-rolls _validation_detail; three more of those is three more places
+    defect D73 can come back. A middleware is also the only shape that covers a
+    route nobody has written yet, which is the actual defect -- the ceiling was
+    per-function, so every new endpoint started without one.
+
+    WHY NOT ONLY AT THE PROXY. A body limit belongs in whatever terminates TLS
+    as well, and that is where request-rate already lives (see `claim`'s
+    docstring on what this service's caps cannot express). It is not a
+    substitute: it is a line in a config file on a machine this repo does not
+    contain, added later by someone who will not have read this. That is the
+    same trade D73 made -- a property here, a rule there -- and the reasoning is
+    in _validation_detail's docstring rather than repeated.
+
+    TWO CHECKS, AND THE SECOND IS NOT REDUNDANT. A declared Content-Length over
+    the cap is refused without the app being entered at all, so the body is
+    never pulled off the wire by this process. A request that declares nothing
+    (HTTP/1.1 chunked) or declares less than it sends is refused by counting the
+    chunks as they are handed over, which is a ceiling on what is HELD rather
+    than on what is announced. With only the first check, `Transfer-Encoding:
+    chunked` is a one-header bypass.
+
+    WHAT THIS DOES NOT DO, STATED RATHER THAN IMPLIED: it does not stop the
+    bytes ARRIVING. The refusal is before this process buffers them, not before
+    the kernel receives them, so it bounds memory and not bandwidth. Bandwidth
+    is the proxy's, and that is the half of this that is a deployment decision.
+
+    THE OVERSIZE RAISES HTTPException RATHER THAN SENDING ITS OWN RESPONSE, and
+    that is deliberate rather than inconsistent with the Content-Length branch
+    above it. Raising from inside `receive` is the documented path: FastAPI's
+    request handler re-raises an HTTPException from the body read untouched
+    ("If a middleware raises an HTTPException, it should be raised again") while
+    converting anything else into a 400 "There was an error parsing the body" --
+    so a custom exception class here would arrive at the client as a 400 about
+    parsing. The Content-Length branch cannot use it: nothing downstream is
+    running yet to catch it.
+    """
+
+    def __init__(self, app, max_bytes=None):
+        self.app = app
+        self._max_bytes = max_bytes
+
+    @property
+    def max_bytes(self):
+        """The cap, resolved per request and not frozen at construction.
+
+        MAX_BODY_BYTES is read from the environment at import, and a test that
+        patches the module attribute must move this too -- otherwise the
+        registered instance keeps a copy nothing can reach and the two ceilings
+        drift. An explicit max_bytes is for constructing this class directly in
+        a test, which is the only caller that passes one.
+        """
+        return MAX_BODY_BYTES if self._max_bytes is None else self._max_bytes
+
+    async def __call__(self, scope, receive, send):
+        # Lifespan and websocket scopes have no request body and no
+        # Content-Length; passing them through untouched is what keeps this
+        # middleware out of the startup path, where verify_schema() runs.
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        cap = self.max_bytes
+
+        declared = _declared_length(scope)
+        if declared is not None and declared > cap:
+            body = b'{"detail":"' + TOO_LARGE_DETAIL.encode() + b'"}'
+            await send({
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [(b"content-type", b"application/json"),
+                            (b"content-length", str(len(body)).encode())],
+            })
+            await send({"type": "http.response.body", "body": body})
+            return
+
+        seen = 0
+
+        async def counting_receive():
+            nonlocal seen
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body") or b"")
+                if seen > cap:
+                    raise HTTPException(status_code=413, detail=TOO_LARGE_DETAIL)
+            return message
+
+        await self.app(scope, counting_receive, send)
+
+
+# Registered here, at the bottom, for the placement reason above -- and it is
+# the last statement in the module because add_middleware() must run before the
+# first request builds the stack, which import time always is.
+app.add_middleware(BodySizeLimit)

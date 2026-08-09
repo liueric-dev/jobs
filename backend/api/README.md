@@ -371,10 +371,25 @@ doesn't control, and keys can leak.
   those from a client would let anyone overwrite arbitrary postings.
 - **Claim ownership is enforced on submit** (`holds_claim`): you may only
   submit against a live, unexpired claim you hold. Returns 409 otherwise.
-- **Caps**: request body size (`MAX_BODY_BYTES`, pre-parse), jobs per submit
-  (`MAX_JOBS_PER_SUBMIT`), queries per claim (`MAX_QUERIES_PER_CLAIM`), and
-  per-contributor daily volume (`MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY`, counted
-  from `submission_log`).
+- **Caps**: request body size (`MAX_BODY_BYTES`, on every route), jobs per
+  submit (`MAX_JOBS_PER_SUBMIT`), queries per claim (`MAX_QUERIES_PER_CLAIM`),
+  and per-contributor daily volume (`MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY`,
+  counted from `submission_log`).
+- **The body ceiling is a middleware, and it was not always** (`T-56`, closed
+  2026-08-09). Until then `MAX_BODY_BYTES` was enforced only inside `submit`,
+  which reads its body by hand; `claim`, `release` and the mint route take a
+  Pydantic body, so Starlette buffered the whole request before any code in
+  `app.py` ran and uvicorn set no ceiling below it. `BodySizeLimit` now refuses
+  an oversized `Content-Length` before the app is entered at all, and counts
+  chunks for a request that declares nothing or declares less than it sends —
+  without which `Transfer-Encoding: chunked` is a one-header bypass. The
+  refusal is a **413 before authentication**: an unauthenticated caller must
+  not be able to make this service buffer an arbitrary body.
+- **What that middleware does not do**: stop the bytes *arriving*. It bounds
+  what this process holds, not what crosses the network. A body limit at
+  whatever terminates TLS is the other half and is a deployment decision —
+  see **Deployment** below, where the same argument already applies to
+  request rate and to `/v1/internal/`.
 - **Keys are stored hashed**, and revoked rows are kept rather than deleted.
 - **The mint route holds a different credential from every other route.**
   `JOBS_MINT_SHARED_SECRET` identifies another of the operator's own processes,
@@ -583,5 +598,5 @@ Two of these are still open, and both are real once strangers can call it:
 | `MAX_JOBS_PER_SUBMIT` | `50` | per-submit posting cap |
 | `MAX_QUERIES_PER_CLAIM` | `5` | per-request query cap |
 | `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` | `50` | daily per-contributor cap |
-| `MAX_BODY_BYTES` | `2097152` | request body ceiling, enforced pre-parse |
+| `MAX_BODY_BYTES` | `2097152` | request body ceiling, on every route (`BodySizeLimit`), and pre-parse again inside `submit` |
 | `JOBS_MINT_SHARED_SECRET` | *(none — `/v1/internal/contributors` 503s without it)* | server-to-server secret; **the same value and the same name in `../webapp/.env`** |
