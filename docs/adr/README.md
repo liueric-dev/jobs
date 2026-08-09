@@ -67,3 +67,4 @@ next to the number they explain. Do not migrate them here.
 | [0006](0006-contributor-credential-auto-minted-local-daemon.md) | Contributor credentials auto-mint on login; the SerpApi worker stays local and long-running, never proxied server-side |
 | [0007](0007-contributor-credential-opt-in-scheduled-worker.md) | Credentials mint at opt-in instead; the worker is OS-scheduled rather than resident, and the server dictates interval, pause and budget — superseding `0006` 1, 2 and 4 |
 | [0008](0008-the-freeze-covers-the-argument-not-the-citations.md) | The freeze protects the claim, not the bookkeeping: a citation may be corrected in place, and a frozen file may not carry a line number into a task file |
+| [0009](0009-run-statistics-are-reconciled-not-granted.md) | `search_queries`' run statistics stay the pipeline's; a contributor's run reaches them as a `submission_log` row the nightly step reconciles, not as a widened GRANT |

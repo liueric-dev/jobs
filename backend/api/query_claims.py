@@ -70,6 +70,7 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema  # noqa: E402  (../schema.py -- the pipeline owns the jobs DDL)
+import searchqueries  # noqa: E402  (../searchqueries.py -- owns the run statistics)
 from google_jobs import normalize_job  # noqa: E402,F401  (re-exported; app.py calls it)
 from lib import dbconn  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
@@ -128,7 +129,19 @@ REQUIRED_TABLES = {
 #: result_count_last_run and last_result_at are ../searchqueries.py's, whose
 #: record_run() is their only writer by design -- a table-wide grant would let a
 #: contributor's submit forge a run history and silence a query for everyone by
-#: writing a future last_run_at. NO INSERT either: registering a query is the
+#: writing a future last_run_at.
+#:
+#: THAT IS NOW A DECISION AND NOT ONLY A DEFAULT (docs/adr/0009). The narrowness
+#: was written here before anything needed the wider grant; T-38 asked for the
+#: run statistics to be advanced after a contributor's submit, which is the
+#: first thing that did, and the answer is that they are advanced on the OTHER
+#: side of this line rather than by widening it. A "narrow writer in api/ that
+#: only sets them from server-side values" was considered and refused: it needs
+#: this identical GRANT, so it buys the same exposure and pays for it with a
+#: convention rather than a privilege -- and the sentence above says outright
+#: that the split is enforced by GRANT and not by comment.
+#:
+#: NO INSERT either: registering a query is the
 #: webapp's act (../schema.py:993), and a service that could insert one could
 #: dispatch a Builder's SerpApi credit at a keyword nobody asked for.
 #:
@@ -209,7 +222,24 @@ REQUIRED_COLUMNS = {
 #: "log rows written today". Counting every row would meter a submit and a
 #: release against a cap whose name says claims, and would have made the cap
 #: tighten as an honest worker did more work (defect D41).
-SUBMISSION_ACTIONS = ("claim", "submit", "release")
+#:
+#: THE FOURTH IS NOT A LITERAL HERE, DELIBERATELY. `run` is read by
+#: ../searchqueries.py's reconcile_contributor_runs(), which is what turns a row
+#: with that action into an advance of the five run statistics this service may
+#: not write (docs/adr/0009). Spelling it out on both sides would be two
+#: constants that agree until the day they do not, with nothing to report the
+#: divergence -- the failure T-31 built clamp_poll_interval to avoid, one table
+#: over. backend/api/tests/test_run_statistics_boundary.py asserts this tuple's
+#: fourth entry comes from that module and is not a second spelling of the word.
+SUBMISSION_ACTIONS = ("claim", "submit", "release",
+                      searchqueries.CONTRIBUTOR_RUN_ACTION)
+
+#: The submission_log.dataset form naming one `search_queries` row, re-exported
+#: from its owner exactly as normalize_job is above. The dispatch endpoint
+#: docs/adr/0007 still owes calls this; nothing in app.py does yet, and the
+#: reconciler on the other side is written against this same function rather
+#: than against a string it hopes matches.
+dataset_for_query = searchqueries.dataset_for_query
 
 #: One level up, because the query bank is shared with the pipeline's
 #: ingest/google-serpapi.py. Until slice D this file had its own byte-identical
@@ -695,17 +725,30 @@ def release_search_query_claim(conn, query_id):
     also after a successful submit, which is where this mode differs from the
     first one and the difference is not an oversight.
 
-    THERE IS NO mark_success TWIN HERE. On job_ingest_state the watermark and
-    the claim are columns of one row, so one statement advances the first and
-    clears the second. This table's watermark half is last_run_at, run_count,
-    provider_last_used, result_count_last_run and last_result_at -- and
-    ../searchqueries.py's record_run() says in its own docstring that it is THE
-    ONLY WRITER of those. It is also the only one that can be: this service's
-    role holds no UPDATE on them (../schema.py:993), which is the grant that
-    stops a submitted result from forging a run history. So a submit against a
-    search_queries row releases the claim here and the run statistics are
-    advanced by whoever owns them -- and nothing in this repo does that yet.
-    That gap is T-38 in ../../TASKS.md, filed rather than folded in.
+    THERE IS NO mark_success TWIN HERE, AND THERE IS NOT GOING TO BE. On
+    job_ingest_state the watermark and the claim are columns of one row, so one
+    statement advances the first and clears the second. This table's watermark
+    half is last_run_at, run_count, provider_last_used, result_count_last_run
+    and last_result_at -- and ../searchqueries.py's record_run() says in its own
+    docstring that it is THE ONLY WRITER of those. It is also the only one that
+    can be: this service's role holds no UPDATE on them (../schema.py:993),
+    which is the grant that stops a submitted result from forging a run history.
+
+    WHAT ADVANCES THEM, since docs/adr/0009 settled it: the pipeline does,
+    asynchronously, from a submission_log row this service writes with
+    action=`run` on the same branch mark_success sits on in the other mode.
+    ../searchqueries.py's reconcile_contributor_runs() reads those rows on the
+    next nightly cycle and calls record_run() for each. So the fact crosses the
+    boundary as data rather than as a privilege, no grant moves in either
+    direction, and record_run stays the one writer.
+
+    THE COST IS A LAG, AND IT IS REAL: between the submit and the next cycle the
+    row is released with last_run_at untouched, so a second contributor can
+    claim it and spend a credit on a search that already happened. That was
+    weighed against handing this service UPDATE on the five columns and taken
+    deliberately -- one duplicated search inside one cycle, against a grant that
+    would let any bug on this side silence a query for every Builder by writing
+    a future last_run_at. 0009 records the argument and the two rejected shapes.
 
     Releasing is still enough to consume a claim: it clears all three columns,
     so a second submit against the same claim finds nothing held, which is the

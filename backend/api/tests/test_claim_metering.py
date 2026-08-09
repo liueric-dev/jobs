@@ -49,6 +49,8 @@ import app                                          # noqa: E402
 import query_claims as qc                           # noqa: E402
 from fastapi import HTTPException                   # noqa: E402
 
+import searchqueries                                # noqa: E402
+
 #: This module's own docstring, captured because inside a class body `__doc__`
 #: means the class's and the test at the foot of this file wants this one. It
 #: sits BELOW the imports deliberately: a plain assignment above them makes
@@ -153,9 +155,28 @@ class TestTheSubmissionLogVocabulary(unittest.TestCase):
     keeping the column analysable -- the same argument webapp/jobs.py's
     EVENT_NAMES carries."""
 
+    #: The one action app.py does not write, and the ONLY reason an entry may
+    #: go unwritten. docs/adr/0009 decided how a contributor's run reaches the
+    #: `search_queries` run statistics -- as a `run` row this service writes and
+    #: ../../searchqueries.py reconciles -- and decided it BEFORE 0007's
+    #: per-query dispatch endpoint exists, on T-26's stated argument that a
+    #: guard added after the writer is a guard added after the corruption.
+    #:
+    #: THIS IS NOT "NOTHING EMITS IT", WHICH IS WHAT THE TEST BELOW FORBIDS.
+    #: log_submission accepts it and reconcile_contributor_runs() selects on it,
+    #: so the entry is live at both ends; what is missing is only the route in
+    #: between. The two tests after the exemption assert exactly that, so this
+    #: is a narrowed guard rather than a hole in one -- T-45's shape, where a
+    #: legitimately-undeclared column is exempted with its justification
+    #: attached and the justification is itself checked.
+    UNWRITTEN_PENDING_THE_DISPATCH_ENDPOINT = (
+        searchqueries.CONTRIBUTOR_RUN_ACTION,)
+
     def test_the_closed_set(self):
-        self.assertEqual(set(qc.SUBMISSION_ACTIONS),
-                         {"claim", "submit", "release"})
+        self.assertEqual(
+            set(qc.SUBMISSION_ACTIONS),
+            {"claim", "submit", "release",
+             searchqueries.CONTRIBUTOR_RUN_ACTION})
 
     def test_an_unknown_action_is_refused_at_the_writer(self):
         conn = FakeConn()
@@ -169,8 +190,47 @@ class TestTheSubmissionLogVocabulary(unittest.TestCase):
         with open(app.__file__, encoding="utf-8") as fh:
             source = fh.read()
         for action in qc.SUBMISSION_ACTIONS:
+            if action in self.UNWRITTEN_PENDING_THE_DISPATCH_ENDPOINT:
+                continue
             self.assertIn(f'log_submission(conn, "{action}"', source,
                           f"nothing in app.py writes action={action!r}")
+
+    def test_the_exemption_covers_exactly_one_action(self):
+        """So a second unwritten entry cannot arrive beside the first.
+
+        The exemption above is a real narrowing of the guard and is priced as
+        one: adding to that tuple is a deliberate edit that turns this red, not
+        something a new action inherits by sitting next to `run`.
+        """
+        self.assertEqual(len(self.UNWRITTEN_PENDING_THE_DISPATCH_ENDPOINT), 1)
+        self.assertEqual(self.UNWRITTEN_PENDING_THE_DISPATCH_ENDPOINT,
+                         (searchqueries.CONTRIBUTOR_RUN_ACTION,))
+
+    def test_the_exempt_action_is_read_even_though_it_is_not_yet_written(self):
+        """The exemption's justification, asserted rather than trusted.
+
+        `run` is allowed to have no writer ONLY because the far end is already
+        built and selects on it. If reconcile_contributor_runs() ever stopped
+        reading the action -- or started reading a different one -- the
+        exemption would be covering a genuinely dead vocabulary entry, which is
+        the thing the test above exists to prevent.
+        """
+        with open(searchqueries.__file__, encoding="utf-8") as fh:
+            source = fh.read()
+        body = source.split("def reconcile_contributor_runs", 1)
+        self.assertEqual(len(body), 2, "the reader named in 0009 is gone")
+        self.assertIn("CONTRIBUTOR_RUN_ACTION", body[1].split("\ndef ", 1)[0],
+                      "reconcile_contributor_runs no longer selects on the "
+                      "action this exemption is granted for")
+
+    def test_the_exempt_action_still_passes_the_writer(self):
+        """The other end of "live at both ends": log_submission accepts it, so
+        the dispatch endpoint will not have to widen the vocabulary to use it.
+        """
+        conn = FakeConn()
+        qc.log_submission(conn, searchqueries.CONTRIBUTOR_RUN_ACTION,
+                          "c_test", searchqueries.dataset_for_query(1))
+        self.assertEqual(len(conn.log), 1)
 
     def test_there_is_exactly_one_writer_of_the_table(self):
         # Four hand-written INSERTs that must agree on a column list is how a

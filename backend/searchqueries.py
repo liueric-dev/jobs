@@ -1,22 +1,29 @@
-"""The nightly search-query step: seed, fold, decay, dispatch.
+"""The nightly search-query step: seed, reconcile, fold, decay, dispatch.
 
-Four things, in that order, and the order is not arbitrary:
+Five things, in that order, and the order is not arbitrary:
 
   1. SEED    config/search-queries.json into `search_queries`, one row per
              extract.ROLE_TRACK. First, so a track added since the last run is
              visible to everything below on the same night.
-  2. FOLD    current watcher counts into `search_query_signal`, per cohort --
+  2. RECON   advance the run statistics of queries a CONTRIBUTOR ran, from the
+             submission_log rows api/ wrote (docs/adr/0009). Before the decay,
+             because should_retire() reads last_result_at and a query a
+             contributor is actively feeding must not retire on a figure that
+             has not been posted yet; before the dispatch, because the whole
+             point is that a query somebody already spent a credit on is not
+             due again tonight.
+  3. FOLD    current watcher counts into `search_query_signal`, per cohort --
              suppressed below schema.SEARCH_MIN_WATCHERS and bucketed above it.
              This is the ONLY writer of that table, and the service role holds
              SELECT on it and nothing else. See ensure_search_query_schema()'s
              docstring in schema.py.
-  3. DECAY   mark abandoned queries retired so they stop consuming quota.
+  4. DECAY   mark abandoned queries retired so they stop consuming quota.
              After the fold, so a query retiring tonight still had its badge
              computed from the watchers it had; before dispatch, so a retired
              query is not run one last time on the night it retires.
-  4. RUN     dispatch the due queries to a provider.
+  5. RUN     dispatch the due queries to a provider.
 
-~~WHAT STEP 4 DOES NOT DO YET, AND THE BLOCKER BY NAME.~~ STEP 4 DISPATCHES, as
+~~WHAT STEP 5 DOES NOT DO YET, AND THE BLOCKER BY NAME.~~ STEP 5 DISPATCHES, as
 of 2026-08-02. tranche_four/23 landed `backend/serp/`, and build_provider()
 below hands run_due() a serp.dispatch.SearchQueryProvider -- the callable this
 docstring used to describe as missing, which it named correctly: it takes a due
@@ -29,7 +36,7 @@ not decoration. ".claude/CLAUDE.md" says silence is this system's failure mode
 raising -- and a search runner that quietly did nothing is indistinguishable
 from one whose provider had been cut off.
 
-STEP 4 NOW SPENDS METERED CREDIT, WHICH CHANGES WHAT --dry-run IS FOR. It was a
+STEP 5 NOW SPENDS METERED CREDIT, WHICH CHANGES WHAT --dry-run IS FOR. It was a
 report; it is now also an estimate of what the next real run will cost, one
 provider call per due query. That is why seed() takes a dry_run flag rather
 than being skipped: an unseeded catalogue is nine never-run queries, is_due()
@@ -69,6 +76,52 @@ SEED_FILE = os.environ.get(
     os.path.join(os.path.dirname(os.path.abspath(__file__)),
                  "config", "search-queries.json"),
 )
+
+#: The five columns record_run() owns, named once so the boundary docs/adr/0009
+#: draws can be ASSERTED rather than described.
+#: backend/api/tests/test_run_statistics_boundary.py reads this tuple and fails
+#: if any of these names turns up in a statement on the service side; a second
+#: test parses record_run's own UPDATE and fails if this tuple and that SET
+#: clause stop agreeing, so the guard cannot end up covering nothing (T-39's
+#: lesson).
+RUN_STATISTICS = ("last_run_at", "run_count", "provider_last_used",
+                  "result_count_last_run", "last_result_at")
+
+#: `submission_log.dataset`, for a `search_queries` row.
+#:
+#: WHY A PREFIX AND NOT AN ID COLUMN. submission_log's dataset is TEXT and
+#: already carries "google_jobs:query:<slug>" for the other claim mode, so the
+#: two modes are told apart by the prefix and nothing else. A `query_id` column
+#: would be the tidier shape and is not available: the service holds no DDL
+#: rights (api/query_claims.py:267), so adding one is an admin command on a
+#: deployed database, and the prefix costs nothing that a column would buy.
+#:
+#: DEFINED HERE, ON THE PIPELINE SIDE, AND IMPORTED BY api/. That is the only
+#: direction available -- .claude/CLAUDE.md's layout rule is that no pipeline
+#: module imports api/ or webapp/, while api/ already imports google_jobs and
+#: schema. It is also the right way round on the merits: the reader of these
+#: rows is the reconciler below, and a convention owned by its writer is one
+#: the reader has to keep guessing at.
+CONTRIBUTOR_DATASET_PREFIX = "search_query:"
+
+#: submission_log.action for "this contributor's submit advanced the watermark".
+#:
+#: A FOURTH ACTION RATHER THAN AN INFERENCE FROM THE `submit` ROW, and the
+#: reason is that the inference is not available. api/app.py writes a `submit`
+#: row on the success path AND on both refusal paths, and `reason` does not
+#: separate them -- the success path sets a reason too when records failed to
+#: write (api/app.py:493). Counting a refused submit as a run is exactly defect
+#: D08 (an empty submission advancing a watermark) rebuilt one table over, so
+#: the signal is written explicitly by the side that knows, on the same branch
+#: mark_success sits on in the other mode.
+CONTRIBUTOR_RUN_ACTION = "run"
+
+#: provider_last_used, for a run performed on a contributor's own SerpApi key.
+#: Distinct from the pipeline's own provider names on purpose: "who ran this"
+#: is the question an operator asks of a query bank shared between one nightly
+#: pipeline and ~30 Builders' machines, and provider_last_used is the only
+#: column that can answer it.
+CONTRIBUTOR_PROVIDER = "contributor:serpapi"
 
 
 
@@ -348,6 +401,15 @@ def due_queries(conn, now=None):
 def record_run(conn, query_id, provider, result_count, now=None):
     """Mark one query as run. THE ONLY WRITER OF THE RUN STATISTICS.
 
+    STILL THE ONLY ONE, AFTER docs/adr/0009 GAVE CONTRIBUTORS A SECOND WAY TO
+    RUN A QUERY. reconcile_contributor_runs() below advances the statistics for
+    a run a contributor performed, and it does so BY CALLING THIS FUNCTION --
+    it holds no UPDATE of its own. That is not tidiness: the five columns are
+    written in one place, so the last_result_at rule in the next paragraph
+    applies to a contributor's run without anybody having to remember to copy
+    it, and the GRANT that keeps api/ off these columns has exactly one
+    function to be true about.
+
     `last_result_at` moves only when the run actually returned something,
     which is what makes searchnorm.should_retire()'s "no results in 14 days"
     mean what it says. A run that returned zero rows advances last_run_at (so
@@ -372,6 +434,106 @@ def record_run(conn, query_id, provider, result_count, now=None):
         """,
         (now, provider, result_count, result_count, now, query_id))
     conn.commit()
+
+
+def dataset_for_query(query_id):
+    """The submission_log.dataset string naming one `search_queries` row."""
+    return f"{CONTRIBUTOR_DATASET_PREFIX}{query_id}"
+
+
+def query_id_from_dataset(dataset):
+    """The id `dataset` names, or None if it does not name one of these rows.
+
+    None rather than a raise, because this parses a TEXT column that the other
+    claim mode also writes to and that predates both -- "google_jobs:query:x"
+    and a row written before this convention existed are both ordinary things
+    to meet here, not corruption.
+    """
+    if not dataset or not dataset.startswith(CONTRIBUTOR_DATASET_PREFIX):
+        return None
+    try:
+        return int(dataset[len(CONTRIBUTOR_DATASET_PREFIX):])
+    except ValueError:
+        return None
+
+
+def reconcile_contributor_runs(conn):
+    """Advance the run statistics for queries a CONTRIBUTOR ran. docs/adr/0009.
+
+    THE PROBLEM THIS SOLVES, in one line: api/ can free a claim on a
+    `search_queries` row but cannot record that the row was run, so without
+    this the row is due again the moment it is released and the next cycle
+    spends a second contributor's credit on a search that already happened.
+
+    WHY THE PIPELINE DOES IT AND NOT api/. The five columns are the pipeline's
+    and the split is enforced by GRANT rather than by comment (schema.py:992).
+    Handing api/ UPDATE on them would let a submit forge a run history and
+    silence a query for every Builder by writing a future last_run_at -- and a
+    "narrow writer in api/ that only sets them from server-side values" buys
+    the identical privilege and pays for it with a rule a person has to
+    remember. So the fact crosses the boundary as a row in submission_log,
+    which api/ already holds INSERT on and the pipeline already owns, and no
+    grant changes in either direction. The full argument is docs/adr/0009.
+
+    IDEMPOTENT WITH NO NEW STATE, which is why there is no watermark table
+    here. A run row counts only if it is newer than the last_run_at it would
+    advance, and advancing sets last_run_at TO THAT ROW'S OWN submitted_at --
+    so the same row cannot count twice, a re-run reconciles nothing, and two
+    submits since the last cycle are two runs rather than one. That also keeps
+    ONE CLOCK: every timestamp written here comes off the log row, never off
+    this process's wall clock, so nothing in this path can rot the way two
+    tests in this repo already have by pairing a real clock with a frozen one.
+
+    RETURNS (reconciled, skipped, table_present). `table_present` is False when
+    submission_log does not exist, which is an ordinary state and not an error:
+    api/query_claims.ensure_schema() creates that table and a database
+    provisioned before T-39 -- or any scratch schema built from schema.py
+    alone -- will not have it. main() prints all three every run rather than
+    swallowing the third, because a reconciler that silently did nothing is
+    indistinguishable from one with nothing to do.
+    """
+    present = conn.execute(
+        "SELECT to_regclass('submission_log') IS NOT NULL").fetchone()[0]
+    if not present:
+        return 0, 0, False
+
+    rows = conn.execute(
+        """
+        SELECT l.dataset, l.submitted_at, l.accepted_count
+        FROM submission_log l
+        WHERE l.action = %s
+          AND l.dataset LIKE %s
+        ORDER BY l.submitted_at, l.id
+        """,
+        (CONTRIBUTOR_RUN_ACTION, CONTRIBUTOR_DATASET_PREFIX + "%"),
+    ).fetchall()
+
+    reconciled, skipped = 0, 0
+    for dataset, submitted_at, accepted_count in rows:
+        query_id = query_id_from_dataset(dataset)
+        if query_id is None or not submitted_at:
+            skipped += 1
+            continue
+        # The comparison the docstring calls the watermark, done here rather
+        # than in the SELECT's WHERE: last_run_at moves as this loop runs, so a
+        # predicate evaluated once against the pre-loop value would let two run
+        # rows for one query both pass and then write them in an order the
+        # ORDER BY no longer guarantees anything about.
+        current = conn.execute(
+            "SELECT last_run_at FROM search_queries WHERE id = %s",
+            (query_id,)).fetchone()
+        if current is None:
+            # A log row naming a query that is gone. Not corruption: the row
+            # is an audit trail and outlives what it names.
+            skipped += 1
+            continue
+        if current[0] and submitted_at <= current[0]:
+            skipped += 1
+            continue
+        record_run(conn, query_id, CONTRIBUTOR_PROVIDER,
+                   accepted_count or 0, now=submitted_at)
+        reconciled += 1
+    return reconciled, skipped, True
 
 
 def attach_results(conn, query_id, job_ids, provider=None, now=None):
@@ -488,6 +650,15 @@ def main():
     now = utc_now_str()
     seeded = seed(conn, now=now, dry_run=args.dry_run)
 
+    # STEP 2, AND ITS PLACE IN THE ORDER IS LOAD-BEARING -- see the module
+    # docstring. --dry-run skips it for seed()'s reason inverted: this one
+    # WRITES, and a report must not advance a watermark. The cost is stated in
+    # the printed line rather than hidden, because a dry run that silently
+    # under-counted `due` is the failure mode this file already carries a
+    # paragraph about.
+    reconciled, recon_skipped, log_present = (
+        (0, 0, True) if args.dry_run else reconcile_contributor_runs(conn))
+
     parts = []
     for prof in active:
         rows, removed = refresh(conn, prof.profile, now=now, dry_run=args.dry_run)
@@ -513,7 +684,8 @@ def main():
     # each. Printing the sum is the difference between a report and an estimate.
     would_be_due = f" (+{seeded} once seeded)" if args.dry_run and seeded else ""
     print(f"search-queries{' [dry run]' if args.dry_run else ''}: "
-          f"seeded={seeded} retired={len(retired)} due={due}{would_be_due} "
+          f"seeded={seeded} reconciled={reconciled} "
+          f"retired={len(retired)} due={due}{would_be_due} "
           f"dispatched={dispatched}"
           + (f" via {provider.name}" if provider else "")
           + ("; " + "; ".join(parts) if parts else "; no active profiles"))
@@ -535,6 +707,19 @@ def main():
         print(f"search-queries: {due} queries are due and NOTHING WAS "
               f"DISPATCHED -- {why_not}. This is a deferral, not a failure.",
               file=sys.stderr)
+    if not log_present:
+        # LOUD, ON STDERR, for the reason the deferral line above is loud.
+        # "reconciled=0" is what a night with no contributor runs prints and
+        # also what a database missing the table prints, and the second is a
+        # contributor's spent credit going unrecorded every night until
+        # somebody notices. The two must not look the same.
+        print("search-queries: submission_log is ABSENT, so no contributor "
+              "run was reconciled -- run tools/provision-database.py (step 6) "
+              "against this database. This is a deferral, not a failure.",
+              file=sys.stderr)
+    if DEBUG_PRINT_KEYS and recon_skipped:
+        print(f"[debug] contributor run rows already reconciled or "
+              f"unresolvable: {recon_skipped}", file=sys.stderr)
     if DEBUG_PRINT_KEYS and retired:
         print(f"[debug] retired query ids: {retired}", file=sys.stderr)
     conn.close()

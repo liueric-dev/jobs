@@ -136,6 +136,14 @@ ignore = [
 known-first-party = [
     "lib", "evals", "ingest", "serp", "tools", "migrations",
     "config", "schema", "schema_web", "profiles", "searchnorm",
+    # `searchqueries` joined this list when docs/adr/0009 gave api/ a reason to
+    # import it. It is the exact sibling of `schema`, `profiles` and
+    # `searchnorm` above -- a top-level pipeline module reached by the same
+    # sys.path insert -- and had simply never been imported from another
+    # package before. Left off, isort reads it as third-party and proposes
+    # splitting it into its own block below `query_claims`, which is the same
+    # wrong reorder the paragraph above records for `config`.
+    "searchqueries",
 ]
 
 [tool.ruff.format]

@@ -932,5 +932,77 @@ class TestTheNightlyStepIsWired(unittest.TestCase):
         self.assertLess(names.index("searchqueries.py"), names.index("extract.py"))
 
 
+class TestTheContributorDatasetString(unittest.TestCase):
+    """docs/adr/0009's wire format. Parsed on this side, written on api/'s."""
+
+    def test_it_round_trips(self):
+        for query_id in (1, 42, 9999999):
+            self.assertEqual(
+                searchqueries.query_id_from_dataset(
+                    searchqueries.dataset_for_query(query_id)),
+                query_id)
+
+    def test_the_other_claim_modes_datasets_are_not_ours(self):
+        """Both modes write submission_log.dataset, so this is the only thing
+        telling them apart. A false positive here would advance a
+        `search_queries` row from a `job_ingest_state` submit."""
+        self.assertIsNone(
+            searchqueries.query_id_from_dataset("google_jobs:query:ai-eng"))
+
+    def test_nonsense_is_none_rather_than_a_raise(self):
+        """This parses a free-TEXT column that predates the convention, so a
+        row it cannot read is an ordinary thing to meet -- and a reconciler
+        that raised on one would stop the whole nightly step."""
+        for bad in (None, "", "search_query:", "search_query:x",
+                    "search_query:1.5", "searchquery:1"):
+            self.assertIsNone(searchqueries.query_id_from_dataset(bad), bad)
+
+
+class TestTheReconcileStepSitsWhereTheDocstringSaysItDoes(unittest.TestCase):
+    """The module docstring calls the five-step order load-bearing and gives
+    two reasons for this one's place. Both are silent failures if it moves:
+    after the decay, a query a contributor is actively feeding can retire on a
+    last_result_at that had not been posted yet; after the dispatch, the
+    pipeline re-runs tonight the query somebody already paid for.
+
+    SOURCE ORDER RATHER THAN A RUN, because the alternative is standing up a
+    database, a profile and a provider to observe the ordering of three calls.
+    T-31 pinned "the read is above the early exit" the same way and for the
+    same reason.
+    """
+
+    def _main_source(self):
+        import inspect
+        return inspect.getsource(searchqueries.main)
+
+    def test_reconcile_runs_before_the_decay_and_before_the_dispatch(self):
+        src = self._main_source()
+        recon = src.index("reconcile_contributor_runs(conn)")
+        self.assertLess(recon, src.index("apply_decay(conn"),
+                        "reconcile must precede the decay: should_retire reads "
+                        "last_result_at")
+        self.assertLess(recon, src.index("run_due(conn"),
+                        "reconcile must precede the dispatch: that is the "
+                        "whole point of it")
+
+    def test_reconcile_runs_after_the_seed(self):
+        src = self._main_source()
+        self.assertLess(src.index("seed(conn"),
+                        src.index("reconcile_contributor_runs(conn)"))
+
+    def test_the_count_is_printed_every_run(self):
+        """Alert on volume, not errors: `reconciled=0` every night is how a
+        wire that came loose is visible at all."""
+        self.assertIn("reconciled={reconciled}", self._main_source())
+
+    def test_a_dry_run_reconciles_nothing(self):
+        """It WRITES, and --dry-run is a report. seed() takes a dry_run flag
+        for the inverse reason and the docstring says so."""
+        src = self._main_source()
+        recon_line = next(ln for ln in src.splitlines()
+                          if "reconcile_contributor_runs(conn)" in ln)
+        self.assertIn("args.dry_run", recon_line)
+
+
 if __name__ == "__main__":
     unittest.main()
