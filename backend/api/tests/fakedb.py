@@ -54,6 +54,15 @@ class FakeConn:
     LOG_COLUMNS = ("contributor_id", "dataset", "submitted_at", "fetched_count",
                    "accepted_count", "rejected_count", "reason", "action")
 
+    #: contributor_status', in the order record_check_in binds them. Spelled out
+    #: here rather than derived from qc.CONTRIBUTOR_STATUS_COLUMNS because that
+    #: tuple is the TABLE's column order and this is the INSERT's -- they agree
+    #: today, and a fake that assumed they always would could not fail when they
+    #: stopped.
+    CHECK_IN_COLUMNS = ("contributor_id", "last_check_in_at", "worker_version",
+                        "quota_remaining", "quota_reported_at", "last_error",
+                        "last_error_at")
+
     def __init__(self, *, contributor="c_test", revoked=None, claim_rows_today=0,
                  claim_state=None, last_success=None, claim_wins=True,
                  watermarks=None, settings=(None, None, None)):
@@ -72,6 +81,12 @@ class FakeConn:
         self.claim_wins = claim_wins
         #: {dataset: last_success_at} for pick_stale_queries_by_bucket.
         self.watermarks = watermarks or {}
+
+        #: One dict per record_check_in() call, keyed by the column names it
+        #: binds. A list and not a single value: "every poll checks in" is a
+        #: claim about how MANY times it happened as well as with what, and a
+        #: last-write-wins attribute could not tell one call from three.
+        self.check_ins = []
 
         self.log = []
         self.marked = []
@@ -127,6 +142,12 @@ class FakeConn:
         # ---- writes ---------------------------------------------------
         if flat.startswith("INSERT INTO submission_log"):
             self.log.append(tuple(params))
+            return FakeResult()
+        if flat.startswith("INSERT INTO contributor_status"):
+            # Recorded as a dict rather than a tuple because the interesting
+            # assertions are about WHICH facts a poll carried, and three of the
+            # seven bound values are None on an ordinary check-in.
+            self.check_ins.append(dict(zip(self.CHECK_IN_COLUMNS, params)))
             return FakeResult()
         if "RETURNING dataset" in flat:                      # try_claim_query
             if self.claim_wins:

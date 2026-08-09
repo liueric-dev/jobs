@@ -108,11 +108,25 @@ DATABASE_URL = os.environ.get(
 #: SELECT on the conflict target to evaluate the arbiter index. Granting INSERT
 #: alone fails at runtime with "permission denied", not at deploy time -- which
 #: is exactly why verify_schema() checks privileges and not just existence.
+#:
+#: contributor_status is the eighth, added by T-35, and it is the reason
+#: `contributors` still reads SELECT/INSERT one line above. The four facts that
+#: row reports -- last check-in, worker version, remaining quota, last error --
+#: are written by the REQUEST PATH, on every poll, and `contributors` now holds
+#: the operator's policy over that same machine. Putting them on `contributors`
+#: would therefore have meant granting this role UPDATE on the row that says
+#: whether it may grant anything at all: either table-wide, which T-34 refused
+#: outright, or column-wise like search_queries below -- and
+#: has_table_privilege() answers TRUE on both, so verify_schema() could not tell
+#: a narrow grant from a wide one and the safety property would rest on a GRANT
+#: nothing checks. A separate table needs no UPDATE on `contributors` at all,
+#: which is a property a startup check CAN hold.
 REQUIRED_TABLES = {
     "jobs": ("SELECT", "INSERT", "UPDATE"),
     "job_ingest_state": ("SELECT", "INSERT", "UPDATE"),
     "google_jobs_query_stats": ("SELECT", "INSERT"),
     "contributors": ("SELECT", "INSERT"),
+    "contributor_status": ("SELECT", "INSERT", "UPDATE"),
     "api_keys": ("SELECT", "INSERT", "UPDATE"),
     "submission_log": ("SELECT", "INSERT"),
     "search_queries": ("SELECT", "UPDATE"),
@@ -192,6 +206,20 @@ CONTRIBUTOR_SETTING_COLUMNS = (
     ("reserve_floor", "INTEGER"),
 )
 CONTRIBUTOR_SETTINGS = tuple(name for name, _ in CONTRIBUTOR_SETTING_COLUMNS)
+
+#: TASKS.md's T-35: the four facts that tell a stalled worker from an idle one,
+#: in the order contributor_status declares them. One literal, read by the
+#: report's SELECT and by the tests that check the DDL spells the same names.
+#:
+#: EACH REPORTED FACT CARRIES ITS OWN TIMESTAMP, AND THAT IS NOT SYMMETRY FOR
+#: ITS OWN SAKE. `last_check_in_at` moves on every poll; a quota and an error do
+#: not, because a worker reports them only when it has one to report. Reading
+#: the check-in time as the time a balance was reported would make every stale
+#: balance look freshly confirmed once an hour, which is precisely the reading
+#: T-54 is filed to build a floor on top of.
+CONTRIBUTOR_STATUS_COLUMNS = ("last_check_in_at", "worker_version",
+                              "quota_remaining", "quota_reported_at",
+                              "last_error", "last_error_at")
 
 #: Columns this service WRITES that were not in submission_log's original
 #: CREATE TABLE, and which therefore exist only where `manage_users.py
@@ -368,6 +396,31 @@ def ensure_schema(conn):
     # fact and the one an operator would later be unable to distinguish.
     dbconn.add_missing_columns(conn, "contributors",
                                CONTRIBUTOR_SETTING_COLUMNS)
+    # T-35's four facts. A SEPARATE TABLE, and every column in the CREATE rather
+    # than added afterwards -- which is what keeps it out of REQUIRED_COLUMNS:
+    # the criterion that map states is "can the column go missing on its own",
+    # and a column of a table this statement creates cannot. REQUIRED_TABLES
+    # covers the table, which is the whole of what can be absent here.
+    #
+    # THE FOREIGN KEY IS THE DIFFERENCE FROM submission_log, and it is
+    # deliberate. That table's contributor_id is plain TEXT precisely so a log
+    # row whose contributor row is missing is still representable -- it is
+    # evidence, and the rows most worth seeing are the anomalous ones. This is
+    # not evidence; it is one row of current state per contributor, written only
+    # after authenticate() resolved an api_keys row whose own foreign key
+    # already reached `contributors`. A status row for a contributor that does
+    # not exist would be a fact about nobody.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contributor_status (
+            contributor_id TEXT PRIMARY KEY REFERENCES contributors(id),
+            last_check_in_at TEXT NOT NULL,
+            worker_version TEXT,
+            quota_remaining INTEGER,
+            quota_reported_at TEXT,
+            last_error TEXT,
+            last_error_at TEXT
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS api_keys (
             key_hash TEXT PRIMARY KEY,
@@ -666,6 +719,114 @@ def claim_allowance(settings, default_cap):
     """
     cap = default_cap if settings.daily_cap is None else settings.daily_cap
     return max(0, cap - settings.reserve_floor)
+
+
+# --------------------------------------------------------------------------
+# Contributor status -- TASKS.md's T-35, "tell a stalled worker from an idle
+# one"
+# --------------------------------------------------------------------------
+
+#: How much of a reported string is kept. Both are bounds on text a contributor's
+#: machine composed, so both are bounds on something this service does not
+#: control: a version is a token and 100 characters is room for a long one, and
+#: 500 matches what `release` already keeps of a reason, which is the same kind
+#: of string from the same worker.
+MAX_WORKER_VERSION_CHARS = 100
+MAX_REPORTED_ERROR_CHARS = 500
+
+
+def _reported_text(value, limit):
+    """A string a contributor's machine sent, made safe to store and to print.
+
+    TWO THINGS HAPPEN HERE AND NEITHER IS A REFUSAL. The check-in must never be
+    able to fail the poll it rides on -- a worker whose error message was too
+    long, or whose traceback carried a newline, would otherwise be refused the
+    queries it called for, and status reporting would have broken the work it
+    exists to report on. So an unusable string is trimmed rather than rejected.
+
+    NON-PRINTABLE CHARACTERS BECOME SPACES, which is not tidiness. The one
+    consumer of these strings is contribution_report.py, printing a fixed-width
+    table on an operator's terminal, and an ANSI escape sequence in a
+    contributor-supplied field is a field that can move the cursor, repaint the
+    row above it, or hide itself. It is the same argument app._validation_detail
+    makes one file over about the response body: make the output independent of
+    the input by construction rather than by trusting the reader.
+
+    A string that is empty once cleaned reports nothing, and None is what
+    "nothing reported" means everywhere below -- so a worker sending `""` and a
+    worker sending no field at all are one case, not two.
+    """
+    if value is None:
+        return None
+    cleaned = "".join(ch if ch.isprintable() else " " for ch in str(value))
+    return cleaned.strip()[:limit].strip() or None
+
+
+def record_check_in(conn, contributor_id, worker_version=None,
+                    quota_remaining=None, last_error=None):
+    """Move this contributor's check-in forward, and store what it reported.
+
+    WHY THIS IS NOT A submission_log ROW, which is the cheaper-looking answer
+    and the one T-55 reaches for on the settings side. That table is an
+    append-only record of WORK, and claims_today() meters a daily cap off it. A
+    heartbeat is neither: thirty machines polling hourly write seven hundred
+    rows a day that record nothing anybody wants a history of, every one of them
+    landing in the report's `other` bucket unless the vocabulary grows a fifth
+    entry -- and the totals line under a report about contribution would then be
+    dominated by machines saying nothing happened. Last-check-in is CURRENT
+    STATE: only the latest value is ever read, so it is one row per contributor,
+    updated in place.
+
+    IT COMMITS, AND THE COMMIT IS THE POINT. `claim` refuses a contributor over
+    their daily cap by raising, and `db()`'s `with conn:` rolls back on the way
+    out -- so a check-in left to the caller's transaction would be erased for
+    exactly the contributors an operator most needs to see polling. The fact
+    that a machine called home is true whatever this service decides to do next,
+    including refusing it, so it is committed before anything that can raise.
+
+    UNREPORTED IS UNTOUCHED, WHICH IS WHAT THE COALESCEs ARE FOR. A worker sends
+    a quota or an error only when it has one; a poll that carries neither must
+    leave the last known values AND their timestamps exactly as they were,
+    because overwriting them with NULL would erase the error an operator is
+    reading and re-stamping them with `now` would make a week-old balance look
+    freshly confirmed. That distinction is why each fact has a timestamp of its
+    own rather than sharing the check-in's.
+
+    ONE CLOCK. Every timestamp this writes is the same `now`, so a row can never
+    say it was checked in before the value it was checked in with was reported.
+    """
+    now = utc_now_str()
+    version = _reported_text(worker_version, MAX_WORKER_VERSION_CHARS)
+    error = _reported_text(last_error, MAX_REPORTED_ERROR_CHARS)
+    #: Stored as reported, INCLUDING a number that makes no sense. The row that
+    #: asked for this says the quota is contributor-reported and never
+    #: authoritative, and a negative balance on an operator's screen is a
+    #: finding about that worker -- dropping it silently would hide the one
+    #: thing it was evidence of.
+    quota = None if quota_remaining is None else int(quota_remaining)
+    conn.execute(
+        """
+        INSERT INTO contributor_status (contributor_id, last_check_in_at,
+            worker_version, quota_remaining, quota_reported_at, last_error,
+            last_error_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (contributor_id) DO UPDATE SET
+            last_check_in_at  = EXCLUDED.last_check_in_at,
+            worker_version    = COALESCE(EXCLUDED.worker_version,
+                                         contributor_status.worker_version),
+            quota_remaining   = COALESCE(EXCLUDED.quota_remaining,
+                                         contributor_status.quota_remaining),
+            quota_reported_at = COALESCE(EXCLUDED.quota_reported_at,
+                                         contributor_status.quota_reported_at),
+            last_error        = COALESCE(EXCLUDED.last_error,
+                                         contributor_status.last_error),
+            last_error_at     = COALESCE(EXCLUDED.last_error_at,
+                                         contributor_status.last_error_at)
+        """,
+        (contributor_id, now, version, quota,
+         None if quota is None else now, error, None if error is None else now),
+    )
+    conn.commit()
 
 
 # --------------------------------------------------------------------------

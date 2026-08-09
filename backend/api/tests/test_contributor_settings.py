@@ -11,7 +11,7 @@ THE TWO EDGES THIS FILE EXISTS FOR:
 
   1. PAUSE IS A 200. A paused contributor is granted nothing and is told so on
      an ordinary reply carrying an ordinary poll interval. Refusing the request
-     instead would exit the worker non-zero (`google-serpapi-worker.py:315-318`
+     instead would exit the worker non-zero (`google-serpapi-worker.py:407-412`
      exits 1 on any HTTPError from this route), which makes a deliberately quiet
      machine report itself broken -- and would leave T-35's check-in, which
      0007's dormancy consequence says must keep happening while spending stops,
@@ -581,7 +581,7 @@ class TestAgainstARealDatabase(unittest.TestCase):
                              qc.ContributorSettings(True, 8, 2))
 
     # NO verify_schema() TEST HERE, AND THE REASON IS NOT "IT IS AWKWARD".
-    # Its column loop is hardcoded to `public` (query_claims.py:497, :502),
+    # Its column loop is hardcoded to `public` (query_claims.py:550, :555),
     # deliberately -- this service only ever runs there -- so under a scratch
     # schema it answers about `public.contributors` no matter which connection
     # it is handed. Both directions are therefore untestable from this fixture,

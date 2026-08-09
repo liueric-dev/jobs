@@ -21,7 +21,7 @@ they talk over exactly one route in one direction on a shared secret. The
 property worth stating plainly, because it is what makes this cheaper than the
 alternative rather than merely different: NO GRANT CROSSES THE TWO ROLES.
 `jobs_api` already holds INSERT on `contributors` and `api_keys`
-(../api/query_claims.py:114-115); `jobs_web` gains nothing it did not have.
+(../api/query_claims.py:127-128); `jobs_web` gains nothing it did not have.
 The only new privilege anywhere is on this service's OWN app_users, which it
 already writes.
 

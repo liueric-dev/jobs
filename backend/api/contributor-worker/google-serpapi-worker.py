@@ -82,6 +82,16 @@ IF A SEARCH FAILS: the script tells the server to release that query so
 somebody else can pick it up right away, rather than leaving it locked. That
 also means a failed run costs you nothing but the credit SerpApi already
 charged.
+
+WHAT THIS SENDS ABOUT YOU, AND WHAT IT DOES NOT: each poll reports this
+script's version, how many SerpApi searches your account says are left, and
+whatever went wrong on the last run -- so the operator can tell a machine that
+is quietly up to date from one that has stopped working, without having to ask
+you. That is all. Your SerpApi key never leaves this machine, no search result
+is attributed to you beyond the counts already in the submission log, and
+nothing here is read back to decide what you are given. The three facts wait
+in `worker-state.json` beside this script between runs; delete it any time --
+it holds no credential and the next run rebuilds what it needs.
 """
 
 import argparse
@@ -99,6 +109,21 @@ import urllib.error
 #: worker by hand from this directory and miss it on every scheduled run,
 #: which is the one that matters and the one nobody watches.
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+
+#: Beside the script too, and NOT a second config.json: nothing a Builder types
+#: goes in here and deleting it loses nothing but one run's worth of report.
+#: It is an OUTBOX -- facts this machine learned during a run, waiting for the
+#: next poll to carry them.
+#:
+#: WHY THERE HAS TO BE ONE. A poll happens at the START of a run and the facts
+#: worth reporting are produced by the END of it: what went wrong, and what the
+#: SerpApi account had left afterwards. Nothing can be both discovered and
+#: reported in one run without a second call to the server, so a run writes and
+#: the next poll sends. That is also why each fact is sent ONCE and then
+#: cleared: a value re-sent every hour would be re-stamped by the server every
+#: hour, and a week-old balance would read as freshly confirmed forever.
+STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "worker-state.json")
 
 
 def load_config(path=CONFIG_PATH):
@@ -181,9 +206,64 @@ LAUNCH_AGENT_LABEL = "com.github.liueric-dev.jobs.contributor-worker"
 MIN_POLL_INTERVAL_SECONDS = 3600
 
 
+#: What this machine says it is running, on every request and in every poll's
+#: check-in. ONE CONSTANT AND NOT TWO SPELLINGS: the User-Agent on the wire and
+#: the version the server stores are the same string, so an operator reading
+#: `contribution_report.py` and an operator reading a proxy's access log are
+#: reading the same fact. 1.1 is 1.0 plus T-35's check-in -- the protocol a
+#: worker speaks changed, which is the only thing this number is for.
+WORKER_VERSION = "1.1"
+USER_AGENT = f"jobs-contributor-worker/{WORKER_VERSION}"
+
+
 def log(msg):
     if DEBUG:
         print(f"[debug] {msg}", file=sys.stderr)
+
+
+def read_outbox():
+    """What the last run left for this poll to report. {} if there is nothing.
+
+    EVERY FAILURE HERE IS AN EMPTY OUTBOX AND NEVER AN EXIT. This file is a
+    convenience for the operator's report; a corrupted or unreadable one must
+    not stop a machine collecting job postings, which is the thing it is for.
+    Unlike config.json -- which is a Builder's own typing and gets a message
+    naming the file -- nobody typed this, so there is nothing to send anyone to
+    look at.
+    """
+    try:
+        with open(STATE_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError) as e:
+        log(f"could not read {STATE_PATH}: {e}")
+        return {}
+
+
+def remember(**facts):
+    """Merge facts into the outbox for the next poll to carry.
+
+    Merged rather than replaced, because a run can produce an error AND a
+    reading, and the two arrive at different moments. Swallows its own failures
+    for read_outbox()'s reason: a read-only directory is a machine that cannot
+    report, not a machine that cannot work.
+    """
+    state = read_outbox()
+    state.update(facts)
+    try:
+        with open(STATE_PATH, "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+    except OSError as e:
+        log(f"could not write {STATE_PATH}: {e}")
+
+
+def forget_outbox():
+    """Drop what has just been delivered. Called only after the server took it."""
+    try:
+        os.remove(STATE_PATH)
+    except OSError as e:
+        if os.path.exists(STATE_PATH):
+            log(f"could not clear {STATE_PATH}: {e}")
 
 
 def api_post(path, body):
@@ -195,7 +275,7 @@ def api_post(path, body):
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {JOBS_API_KEY}",
-            "User-Agent": "jobs-contributor-worker/1.0",
+            "User-Agent": USER_AGENT,
         },
     )
     with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
@@ -220,7 +300,7 @@ def serpapi_search(query, location, date_chip):
     if date_chip:
         params["chips"] = f"date_posted:{date_chip}"
     url = "https://serpapi.com/search.json?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"User-Agent": "jobs-contributor-worker/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
         data = json.loads(resp.read().decode())
     if "error" in data:
@@ -310,15 +390,40 @@ def main():
               f"(see this file's header)")
         sys.exit(1)
 
+    # THE POLL IS ALSO THE CHECK-IN (T-35). The three reported fields ride on
+    # the request the worker already makes, so a machine that is up says so by
+    # doing its ordinary work and nothing has to be told to phone home
+    # separately. Two of them come out of the outbox the last run left; the
+    # version is known now. All three are optional on the server, so an older
+    # server ignores them rather than refusing this.
+    outbox = read_outbox()
     try:
-        claimed = api_post("/v1/queries/claim", {"max": MAX_QUERIES})
+        claimed = api_post("/v1/queries/claim", {
+            "max": MAX_QUERIES,
+            "worker_version": USER_AGENT,
+            "quota_remaining": outbox.get("quota_remaining"),
+            "last_error": outbox.get("last_error"),
+        })
     except urllib.error.HTTPError as e:
         detail = e.read().decode()[:300]
-        print(f"worker FAILED: could not claim queries (HTTP {e.code}): {detail}")
+        message = f"could not claim queries (HTTP {e.code}): {detail}"
+        # Remembered for the NEXT poll, which is the only one that can carry it
+        # -- this one is the request that just failed. A server that is down
+        # for a day therefore learns about the day when it comes back, rather
+        # than about nothing.
+        remember(last_error=message)
+        print(f"worker FAILED: {message}")
         sys.exit(1)
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
-        print(f"worker FAILED: could not reach {JOBS_API_BASE_URL}: {e}")
+        message = f"could not reach {JOBS_API_BASE_URL}: {e}"
+        remember(last_error=message)
+        print(f"worker FAILED: {message}")
         sys.exit(1)
+
+    # Delivered. Cleared HERE and not before the request, so a poll that never
+    # arrived leaves the facts waiting for the next one instead of dropping
+    # them into a failed HTTP call.
+    forget_outbox()
 
     # BEFORE the nothing-to-do exit below, deliberately. The interval rides on
     # every claim reply including the empty one, and the empty one is the
@@ -345,6 +450,10 @@ def main():
               "SerpApi credit was spent. Nothing is wrong with this machine, "
               "and it will pick up again on its own when the operator resumes "
               "it; the schedule keeps running so that it can.")
+        # A paused machine keeps REPORTING (0007's dormancy consequence), and a
+        # balance is part of what it reports -- the reading costs no credit, so
+        # a pause has no reason to stop taking it.
+        remember_quota()
         return
 
     queries = claimed.get("queries", [])
@@ -352,6 +461,7 @@ def main():
         # Not an error: it means everything is already up to date. Exiting 0
         # keeps cron quiet on the (common) days there's nothing to do.
         print("worker: nothing to do -- no stale queries available right now.")
+        remember_quota()
         return
 
     submitted = failed = 0
@@ -363,6 +473,7 @@ def main():
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
                 json.JSONDecodeError, RuntimeError, OSError) as e:
             print(f"worker: search failed for {q['slug']}: {e}", file=sys.stderr)
+            remember(last_error=f"search failed for {q['slug']}: {e}")
             try:
                 api_post(f"/v1/queries/{urllib.parse.quote(dataset)}/release",
                          {"reason": str(e)[:200]})
@@ -379,14 +490,22 @@ def main():
             submitted += 1
             log(f"submitted {len(results)} results for {q['slug']}: {resp}")
         except urllib.error.HTTPError as e:
-            print(f"worker: submit failed for {q['slug']} (HTTP {e.code}): "
-                  f"{e.read().decode()[:200]}", file=sys.stderr)
+            message = (f"submit failed for {q['slug']} (HTTP {e.code}): "
+                       f"{e.read().decode()[:200]}")
+            print(f"worker: {message}", file=sys.stderr)
+            remember(last_error=message)
             failed += 1
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
             print(f"worker: submit failed for {q['slug']}: {e}", file=sys.stderr)
+            remember(last_error=f"submit failed for {q['slug']}: {e}")
             failed += 1
 
     print(f"worker: {submitted} submitted, {failed} failed, {len(queries)} claimed.")
+    # AFTER the searches, not before them, so the balance reported next poll is
+    # the one this run left behind. Taken even on the failure path below: a run
+    # that spent credits and then could not submit them has still spent them,
+    # and that is the run whose balance an operator most wants to see.
+    remember_quota()
     if failed and not submitted:
         sys.exit(1)
 
@@ -547,7 +666,7 @@ SERPAPI_ACCOUNT_URL = "https://serpapi.com/account"
 #: What --check offers to release when it asks the server whether the
 #: credential works. NOTHING CAN EVER HOLD A CLAIM ON IT: every real dataset
 #: name is built server-side as "google_jobs:query:<slug>" out of the server's
-#: own query bank (api/app.py:420), and no slug is spelled like this.
+#: own query bank (api/app.py:486), and no slug is spelled like this.
 CHECK_PROBE_DATASET = "google_jobs:query:__check__"
 
 
@@ -597,7 +716,7 @@ def probe(request, timeout=None):
 def check_base_url(send=probe):
     """Is JOBS_API_BASE_URL an address where this service answers?
 
-    /v1/health (api/app.py:221) needs no credential, so this separates "your
+    /v1/health (api/app.py:254) needs no credential, so this separates "your
     address is wrong" from "your key is wrong" -- which the next check depends
     on, and which the row requires be distinguishable in the output.
     """
@@ -606,7 +725,7 @@ def check_base_url(send=probe):
                                    "(see this file's header).")
     url = f"{JOBS_API_BASE_URL}/v1/health"
     request = urllib.request.Request(
-        url, headers={"User-Agent": "jobs-contributor-worker/1.0"})
+        url, headers={"User-Agent": USER_AGENT})
     try:
         status, body = send(request)
     except (urllib.error.URLError, TimeoutError, OSError) as e:
@@ -636,12 +755,12 @@ def check_credential(base_url_ok, send=probe):
     THE PROBE IS A RELEASE OF A DATASET NOBODY CAN HOLD, AND THE 409 IS THE
     PASS. Every authenticated route on that server does something. /v1/queries/
     claim locks rows out of the pool for CLAIM_TTL_MINUTES apiece and meters
-    the caller against a daily cap (query_claims.py:924, api/app.py:371-385), so
+    the caller against a daily cap (query_claims.py:1085, api/app.py:437-451), so
     checking a credential with it would spend the allowance being checked, and
     on a day when the bank is stale it would leave real queries claimed by a
     worker that was only asking a question. Release is the one authenticated
     route that can be made to change nothing: it authenticates FIRST and asks
-    whether the caller holds the claim SECOND (api/app.py:569, :571), so a
+    whether the caller holds the claim SECOND (api/app.py:635, :637), so a
     dataset the query bank cannot produce reaches the credential check, writes
     no submission_log row, commits nothing, and comes back 409.
 
@@ -668,7 +787,7 @@ def check_credential(base_url_ok, send=probe):
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {JOBS_API_KEY}",
-            "User-Agent": "jobs-contributor-worker/1.0",
+            "User-Agent": USER_AGENT,
         },
     )
     try:
@@ -712,7 +831,7 @@ def check_serpapi(send=probe):
     url = (f"{SERPAPI_ACCOUNT_URL}?"
            + urllib.parse.urlencode({"api_key": SERPAPI_API_KEY}))
     request = urllib.request.Request(
-        url, headers={"User-Agent": "jobs-contributor-worker/1.0"})
+        url, headers={"User-Agent": USER_AGENT})
     try:
         status, body = send(request)
     except (urllib.error.URLError, TimeoutError, OSError) as e:
@@ -740,6 +859,52 @@ def check_serpapi(send=probe):
     return True, "SerpApi key", (f"accepted by SerpApi -- {left} searches left "
                                  f"on {plan} this cycle.")
 
+
+def remember_quota(send=None):
+    """Read what SerpApi says is left, into the outbox for the next poll.
+
+    THE SAME UNMETERED ENDPOINT --check ALREADY USES, and the reason this can
+    run on every scheduled run at all: the account route reports plan state
+    without running a search, so a machine that polls hourly reports its balance
+    hourly and is charged for none of it. `0007` decision 4 asks for allowance
+    to be "recomputed per run from the contributor's own plan data" -- this is
+    the run reading its own plan data, and TASKS.md's T-54 is what will read the
+    number at the far end.
+
+    IT REPORTS NOTHING RATHER THAN GUESSING. A refused key, an unreachable
+    serpapi.com, an answer that is not JSON and a plan with no remaining count
+    all leave the quota unreported, so the server keeps whatever it last heard
+    together with the time it heard it -- an old number that says it is old
+    beats a fresh zero that was never measured. The failure is remembered as an
+    error instead, which is the honest thing to report about a machine whose
+    SerpApi key has stopped working: it is the same fact --check would print,
+    reaching the operator without anyone having to run --check.
+
+    RAISES NOTHING. Every caller is at the end of a run that has already done
+    its work; a report that could fail the run it reports on would be worse than
+    no report.
+    """
+    if not SERPAPI_API_KEY:
+        return
+    url = (f"{SERPAPI_ACCOUNT_URL}?"
+           + urllib.parse.urlencode({"api_key": SERPAPI_API_KEY}))
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        status, body = (send or probe)(request)
+        if status != 200:
+            remember(last_error=f"serpapi.com answered HTTP {status} to the "
+                                f"account check: {redacted(body)[:160]}")
+            return
+        left = json.loads(body).get("total_searches_left")
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError,
+            AttributeError) as e:
+        remember(last_error=f"could not read the SerpApi account: "
+                            f"{redacted(str(e))}")
+        return
+    if isinstance(left, int) and not isinstance(left, bool):
+        remember(quota_remaining=left)
+    else:
+        log(f"SerpApi reported no usable remaining count ({left!r})")
 
 def run_checks(send=probe):
     """Every check, in the order in which one failure makes the next

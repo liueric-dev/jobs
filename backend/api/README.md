@@ -10,9 +10,10 @@ the only thing that talks to Postgres.
 
 ```
 contributor machine                    this server        Postgres db `jobs`
-  worker script  ──claim──────────────▶  app.py    ──────────▶  public.jobs
+  worker script  ──claim + check-in───▶  app.py    ──────────▶  public.jobs
        │                                   │                    job_ingest_state
        ├─ SerpApi (their own key)          │                    submission_log
+       │                                   │                    contributor_status
        └──submit raw results─────────────▶ │ normalizes
                                              server-side
 ```
@@ -133,10 +134,51 @@ appears.
 label printed beside it and nothing else. Nothing in the service reads them, no
 request is refused because of them, and no row is written.
 
+**Since `T-35` it also shows four facts per contributor**, and they answer a
+different question from the counts beside them: `check-in`, `worker`, `quota`,
+and — under the table, because an error is a sentence and not a cell — the last
+error. `submission_log` says what somebody has *done*; these say whether their
+machine is *still there*.
+
+```
+contributor     name             check-in             worker                       quota  claims  submits  finding
+c_1297ba1faca5  Alex Yu          2026-08-09T15:21:20  jobs-contributor-worker/1.0  0      3       0        no-submits
+c_16eceda10e2e  Dana Okonkwo     2026-08-09T15:21:20  jobs-contributor-worker/1.1  173    4       4
+c_56bcfcc98bfc  Never Installed  -                    -                            -      0       0
+c_e6ace310750a  Sam Reyes        2026-08-09T15:21:20  jobs-contributor-worker/1.1  250    0       0
+
+reported by the contributors' own machines, not observed here:
+  c_1297ba1faca5  last error 2026-08-09T15:21:20 -- search failed: SerpApi rejected this key (HTTP 401)
+```
+
+Read the last two rows together, because they are the reason this exists.
+**Sam and "Never Installed" have identical counts** — zero of everything — and
+before `T-35` they were the same row in this report and in every other record
+this service kept. Sam is a healthy machine polling hourly on a bank that has
+nothing stale; the other is somebody who opted in and never ran the worker. The
+check-in column is the only thing that tells them apart, and `claim` writes no
+`submission_log` row when it grants nothing, so nothing else ever could.
+
+**A contributor now appears here whether or not they have ever written a log
+row.** The key set is the union of `contributors` and the ids in
+`submission_log` — the second half kept because `contributor_id` has no foreign
+key, so a log row with no contributor row (a leaked or hand-crafted key) is
+representable and is the last row that should be dropped.
+
+**`--since` bounds the log and not the status.** The buckets are counts of
+events in a window; the four facts are current state. A reader asking "who has
+done nothing since Monday" needs the check-in that answers "because they
+stopped polling on Tuesday".
+
+**The quota and the error came off a contributor's machine and are never
+presented as this service's own observations.** Nothing here can see a
+Builder's SerpApi plan or verify that an error happened, so each is stored with
+the time it arrived and printed under a heading that says so.
+
 This runs on the same restricted `DATABASE_URL` the service uses — it needs
-`SELECT` on `submission_log` and `contributors` and nothing more. That is also
-why it lives here rather than in `backend/tools/`, which runs as
-`jobs_pipeline` and holds nothing on `submission_log`.
+`SELECT` on `submission_log`, `contributors` and `contributor_status` and
+nothing more. That is also why it lives here rather than in `backend/tools/`,
+which runs as `jobs_pipeline` and holds nothing on `submission_log`.
 
 ## Tests
 
@@ -228,6 +270,50 @@ arrive on.
 else. A number the worker could act on is a number it could disagree about, and
 `0007` decision 3 gives it no policy beyond its poll-interval floor.
 
+### Contributor status — the poll is also the check-in
+
+`T-35`. The same request carries three optional fields *up*, and
+`contributor_status` keeps one row per contributor with what they said and when:
+
+| Field | Where it comes from |
+|---|---|
+| `last_check_in_at` | this server's clock, on **every** authenticated poll — granted, granted-nothing, paused, and refused at the cap |
+| `worker_version` | the worker's own `USER_AGENT`, so the string here and the one in a proxy's access log cannot disagree |
+| `quota_remaining` / `quota_reported_at` | SerpApi's unmetered account endpoint, read by the worker at the end of a run and reported on the next poll |
+| `last_error` / `last_error_at` | whatever failed on that machine since its last poll, reported **once** and then forgotten |
+
+**Every fact has its own timestamp, and that is not symmetry.** A check-in moves
+hourly; a quota and an error move only when there is one to report. Reading the
+check-in time as the time a balance was reported would make a week-old balance
+look freshly confirmed once an hour — and `T-54` is filed to build a reserve
+floor on exactly that number's age.
+
+**A check-in is not a claim.** No `submission_log` row, nothing `claims_today()`
+counts. An honest idle poll would otherwise exhaust a daily cron's allowance on
+precisely the days there was no work — which is the same argument `claim`'s
+granted-nothing case already rests on.
+
+**It is committed before anything can refuse the poll.** `claim` refuses a
+contributor over their cap by raising, and the request's transaction rolls back
+on the way out; a check-in inside it would be erased for exactly the
+contributors an operator is trying to see.
+
+**A reported field can never fail the poll it rides on.** All three are
+optional (an older worker sends none and keeps working), and an over-long or
+control-character-laden string is trimmed and cleaned rather than refused — a
+machine must not be denied the queries it called for because its traceback had
+a newline in it. Wrong *types* are still a `422`: that is broken code, not a
+broken machine.
+
+**Why `contributor_status` is its own table and not three more columns on
+`contributors`.** This is written by the request path, and `contributors` holds
+the policy that governs the request path. Sharing a table would mean granting
+`jobs_api` UPDATE on the row that says whether it may grant anything at all —
+table-wide, which the section above refuses outright, or column-wise, which
+`has_table_privilege()` cannot tell apart from the wide form, so the safety
+property would rest on a GRANT nothing checks. A separate table keeps
+`contributors` at SELECT/INSERT, which a startup check *can* hold.
+
 **`submit` with an empty `jobs` array does not advance the watermark**
 (defect D08, fixed 2026-08-02). It releases the claim, logs the submission and
 returns `watermark_advanced: false`. The pipeline's own
@@ -302,8 +388,10 @@ doesn't control, and keys can leak.
 
 ## Database privileges
 
-This service connects as `jobs_api`, a role that can do exactly six things and
-nothing else. It is **not** the database owner, and deliberately not a
+This service connects as `jobs_api`, a role granted a short, enumerated list
+and nothing else. **Read the table, not a count in this sentence** — it said
+"exactly six things" while the list below held seven, and `T-35` made it
+eight. It is **not** the database owner, and deliberately not a
 superuser — before 2026-07-26 it shared the instance's only role, `nyc_events`,
 which is a superuser, so a leaked bearer token or an injection bug would have
 yielded `COPY ... FROM PROGRAM` and full access to the unrelated
@@ -319,6 +407,7 @@ all. Verified by connecting as the role and being refused at the door.
 | `job_ingest_state` | SELECT, INSERT, UPDATE |
 | `google_jobs_query_stats` | SELECT, INSERT |
 | `contributors` | SELECT, INSERT |
+| `contributor_status` | SELECT, INSERT, UPDATE |
 | `api_keys` | SELECT, INSERT, UPDATE |
 | `submission_log` | SELECT, INSERT |
 | `submission_log_id_seq` | USAGE, SELECT |
@@ -347,11 +436,16 @@ contributor's first submit rather than as a refusal to start; slice D added
 every SQL literal out of `app.py`, `query_claims.py` and `manage_users.py` and
 asserts that no table is queried without being declared, **and** that no table is
 declared without being queried. A privilege held for no reason is a hole in a
-security posture whose whole claim is "this role can do exactly six things."
+security posture whose whole claim is that this role can do a short, listed set
+of things.
 
 `contributors` keeps SELECT/INSERT and gains no UPDATE despite growing three
 mutable settings columns, because the only writer is `manage_users.py settings`
-on the admin credential — see "Contributor settings" above.
+on the admin credential — see "Contributor settings" above. **`T-35` is what
+tested that line rather than restating it**: the four status facts are written
+by the request path on every poll, so putting them on `contributors` would have
+required the UPDATE this paragraph refuses. They went to `contributor_status`
+instead, which is why that row is the only new grant in the table above.
 
 ### Required columns
 
@@ -368,7 +462,10 @@ count claims rather than log rows — defect D41); `T-45` widened it to seven
 across three tables, and `T-34` added `contributors`' three settings. What
 qualifies an entry is not how the column is accessed but whether it can go
 missing on its own: every one arrives via `dbconn.add_missing_columns` on a table
-that already exists, rather than in a `CREATE TABLE`. `T-34`'s three are the
+that already exists, rather than in a `CREATE TABLE`. **`T-35` added a table and
+no entry here, and that is the same rule rather than an exception** —
+`contributor_status`' columns are in its `CREATE TABLE`, so they exist if it
+does, and `REQUIRED_TABLES` already covers the only thing that can be absent. `T-34`'s three are the
 first this service only ever **reads** — losing one is a 500 on every claim from
 a service that started cleanly, which is the same failure the written case gives.
 

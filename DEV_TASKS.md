@@ -54,6 +54,17 @@ system that already works, not one waiting to be unblocked.
 
 ### OQ-37 — `jobs-api` will not restart until `init-schema` runs, and it is running now
 
+**WIDENED 2026-08-09 BY `T-35`, AND THE SECOND HALF IS NOT THE SAME KIND OF THING AS THE FIRST.**
+`T-34` added three columns; `T-35` added a whole table, `public.contributor_status`, and put it in
+`qc.REQUIRED_TABLES` — so the next restart now checks for a table as well as for three columns, and
+`verify_schema()` checks **privileges** on a table, not just its existence. `init-schema` creates it
+and **issues no GRANT** — that is
+[`0004`](docs/adr/0004-provision-database-issues-no-grants.md), stated in
+`tools/provision-database.py`'s own "WHAT IT DOES NOT DO: GRANTS". So route (a) alone leaves the
+service refusing to start with `public.contributor_status: no SELECT, INSERT, UPDATE`, which reads
+like a bug and is the documented behaviour. **The GRANT is a separate statement somebody has to
+run**, and it is the first new one this service has needed since `search_queries`.
+
 **Why it is yours:** a DDL run against the live database while `jobs-api` is serving it, not a
 missing credential. **The first version of this row said the credential was missing and that was
 under-checked:** `JOBS_ADMIN_DATABASE_URL` is indeed absent from `backend/api/.env`, so
@@ -70,6 +81,20 @@ the access.
 **currently running** `jobs-api.service` — active on `127.0.0.1:8420`, `/v1/health` answering, and
 started before this change — keeps working, and **the next restart of it fails to start**.
 
+**THE UNIT IS USER-SCOPED AND THIS ROW SAID `sudo`, CORRECTED 2026-08-09 WHILE CLOSING `T-35`.**
+There is no system-level `jobs-api.service` at all — `systemctl cat jobs-api.service` answers "No
+files found", while `systemctl --user show` gives
+`/home/eric/.config/systemd/user/jobs-api.service`, active since **2026-08-04 01:49:51 EDT** and
+serving `127.0.0.1:8420` from `backend/api/.venv/bin/uvicorn`. `deploy/README.md:92` had it right
+(`systemctl --user enable --now`); this row was the one place in the tree that did not, and
+`sudo systemctl restart jobs-api` fails with "Unit jobs-api.service not found" — at the one moment
+the service is refusing to start, which is the worst moment to be debugging the wrong command.
+
+**The live schema was re-read on the pipeline credential 2026-08-09, and both halves still hold:**
+`public.contributors` has `id`/`name`/`created_at`/`notes` and **0 rows**;
+`public.contributor_status` **does not exist**; `jobs_api` holds `SELECT, INSERT` on `contributors`
+and no UPDATE. So nothing has drifted since `T-34` wrote this, and the restart is still blocked.
+
 **This is `OQ-7` again, and that row is the reason to file this rather than mention it.** There, the
 whole webapp was down for a day because `verify_schema()` raised in the lifespan, the process
 exited, and nobody had started it. The refusal is the designed behaviour — the alternative is a
@@ -78,7 +103,7 @@ nobody performed is what `OQ-7` cost.
 
 **Two routes, and they are not equivalent — pick deliberately.** `init-schema` runs
 `qc.ensure_schema()`, which calls `schema.ensure_schema()` and therefore also brings the app view
-and the foreign-key cascade repair (`backend/api/query_claims.py:326-330` says so outright). That is
+and the foreign-key cascade repair (`backend/api/query_claims.py:354-358` says so outright). That is
 the documented, idempotent path and the one the docstring intends; it is also more than three
 columns, against a database a live webapp reads, and `.claude/CLAUDE.md`'s standing warning about
 view-DROP-and-GRANT-loss is next door to it ([`docs/adr/0004`](docs/adr/0004-provision-database-issues-no-grants.md)).
@@ -94,14 +119,35 @@ JOBS_ADMIN_DATABASE_URL="$(grep ^DATABASE_URL= ../.env | cut -d= -f2-)" \
 #   ALTER TABLE contributors ADD COLUMN IF NOT EXISTS paused BOOLEAN;
 #   ALTER TABLE contributors ADD COLUMN IF NOT EXISTS daily_cap INTEGER;
 #   ALTER TABLE contributors ADD COLUMN IF NOT EXISTS reserve_floor INTEGER;
+#   -- and T-35's table, which `ensure_schema` creates on either route:
+#   CREATE TABLE IF NOT EXISTS contributor_status (
+#       contributor_id TEXT PRIMARY KEY REFERENCES contributors(id),
+#       last_check_in_at TEXT NOT NULL, worker_version TEXT,
+#       quota_remaining INTEGER, quota_reported_at TEXT,
+#       last_error TEXT, last_error_at TEXT);
 
-sudo systemctl restart jobs-api && curl -s localhost:8420/v1/health
+# EITHER ROUTE THEN NEEDS THIS, and neither issues it (docs/adr/0004).
+# On the owner role, not on jobs_api -- a role cannot grant itself anything.
+#   GRANT SELECT, INSERT, UPDATE ON contributor_status TO jobs_api;
+
+# Read back what the service will check, BEFORE restarting it. This is the
+# same list verify_schema() reads, run against the live database from a
+# process that is not the service:
+cd backend/api && .venv/bin/python -c "
+import psycopg, query_claims as qc
+with psycopg.connect(qc.DATABASE_URL) as c:
+    c.execute('SET search_path TO public'); qc.verify_schema(c); print('ready')"
+
+systemctl --user restart jobs-api && curl -s localhost:8420/v1/health
 ```
 
 **Done when:** `paused`, `daily_cap` and `reserve_floor` exist on `public.contributors`,
+`public.contributor_status` exists **and `jobs_api` holds SELECT/INSERT/UPDATE on it**, the
+`verify_schema()` read-back above prints `ready` **before** anything is restarted,
 `jobs-api.service` has been restarted deliberately rather than discovered down, and `/v1/health`
-answers after it. **No GRANT changes** — the new columns are read on the existing SELECT and written
-only by `manage_users.py settings`, which runs on the admin credential.
+answers after it. **One GRANT changes, and only one** — `contributors` still gains no UPDATE, which
+is the property `T-34` refused to give up and the reason `T-35` built a second table rather than
+three more columns.
 
 ---
 
@@ -422,7 +468,7 @@ host no session can reach — `OQ-30` first, and that is the only reason for the
 **What:** `T-30` shipped `--check`, and one of its three checks is unverified against anything real.
 The credential check asks the deployed `api/` to release a claim nobody holds and reads the **409** as
 "your key is good" and the **401** as "your key is not" — an ordering inside `release`
-(`backend/api/app.py:569`, `:513`) that `api/tests/test_worker_check.py` pins with a fake connection.
+(`backend/api/app.py:635`, `:513`) that `api/tests/test_worker_check.py` pins with a fake connection.
 **The 401 branch has been run against a real HTTP server; the 409 branch never has.** A fake that
 agrees with the code it stands in for cannot tell you the deployed service agrees too.
 
@@ -479,13 +525,13 @@ machine can reach, and the `JOBS_ADMIN_DATABASE_URL` question has an answer eith
 cannot be delegated to a session that would otherwise just pick one.
 
 **What:** `install_agent` takes its interval from `MIN_POLL_INTERVAL_SECONDS` and from nowhere else
-(`backend/api/contributor-worker/google-serpapi-worker.py:470`), so an operator who sets
+(`backend/api/contributor-worker/google-serpapi-worker.py:589`), so an operator who sets
 `POLL_INTERVAL_SECONDS` to six hours gets thirty machines that report the ask and keep polling
 hourly. `TASKS.md`'s `T-41` is the implementation and is **blocked on this row**. The two routes
 differ on one property, and it is the one no test in this tree can observe:
 
 - **(a) `--install` asks the server once.** Costs no SerpApi credit — only a claimed *search* does —
-  but `claim` is the only route returning `poll_interval_seconds` (`backend/api/app.py:410`), and
+  but `claim` is the only route returning `poll_interval_seconds` (`backend/api/app.py:476`), and
   claiming leases queries the installing process will not run, so (a) is either a leak of live claims
   at install time or a server change to carry the interval somewhere cheaper. It also reverses
   `T-30`'s split, which specified `--install` to talk to nothing and `--check` to be the thing that
@@ -526,7 +572,7 @@ Filed by `T-40`, 2026-08-08, which spent its session rewriting fourteen and expe
 **The evidence is not a projection.** `T-28`/`T-29`/`T-30` closed with correct citations into
 `google-serpapi-worker.py` and `T-30`/`T-31` broke all twelve; `T-42` corrected six into `api/app.py`
 and `T-39` broke them the next commit (`T-46` has both lists). Every one still resolves, so nothing
-reported it. `api/app.py:638-645` already carries a mitigation — two constants parked at the bottom
+reported it. `api/app.py:704-711` already carries a mitigation — two constants parked at the bottom
 so nothing is inserted above `submit()` — and `T-39` inserted above `submit()` anyway.
 
 **Three options, not equivalent.** (1) Keep rewriting: every row pays forever and a row that forgets

@@ -71,7 +71,7 @@ MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY = int(
 #: THE WORKER FLOORS THIS, AND CANNOT BE TALKED BELOW ITS FLOOR. Setting it to
 #: 10 does not make thirty machines hammer this endpoint -- each raises it to
 #: its own MIN_POLL_INTERVAL_SECONDS (contributor-worker/
-#: google-serpapi-worker.py:181). Raising it is honoured; lowering it past the
+#: google-serpapi-worker.py:206). Raising it is honoured; lowering it past the
 #: floor is not, deliberately, and this end may not assume otherwise.
 POLL_INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL_SECONDS", "3600"))
 # Hard ceiling on request body size. SerpApi returns ~10 postings per query and
@@ -188,7 +188,40 @@ def claims_today(conn, contributor_id):
 # --------------------------------------------------------------------------
 
 class ClaimRequest(BaseModel):
+    """A poll, and since T-35 the worker's check-in as well.
+
+    THE THREE REPORTED FIELDS ARE ALL OPTIONAL AND NONE OF THEM CAN REFUSE THE
+    REQUEST. A worker that predates T-35 sends `{"max": N}` and keeps working,
+    exactly as one that predates 0007's poll interval does -- either end may be
+    deployed first, which is the property this service has held since T-31 and
+    is not giving up for a status field. Nothing here carries a `max_length`
+    either: an over-long version string or a traceback with a newline in it
+    would then be a 422, the worker would exit 1 (google-serpapi-worker.py:407-
+    412), and reporting a machine's health would be the thing that broke it.
+    Both are bounded and cleaned where they are stored instead
+    (qc._reported_text).
+
+    The types ARE enforced, and that is not the same trade. A worker sending a
+    string where a count belongs is broken code rather than a broken machine,
+    and a 422 naming the field is the most useful thing this end can say about
+    it.
+    """
     max: int = Field(default=1, ge=1, le=MAX_QUERIES_PER_CLAIM)
+    #: What this machine is running. Operator-facing only, never checked
+    #: against anything, and never used to decide what a worker is offered --
+    #: this service has no notion of a supported version and must not grow one
+    #: on the strength of a string the caller composes.
+    worker_version: str | None = None
+    #: SerpApi searches the contributor's own account says are left in the
+    #: cycle. CONTRIBUTOR-REPORTED AND NEVER AUTHORITATIVE: this service cannot
+    #: see a Builder's plan, has no way to check the number, and stores it with
+    #: the time it arrived so that whatever reads it later can tell how old it
+    #: is. `0007` decision 4 is the consumer this is for.
+    quota_remaining: int | None = None
+    #: Whatever went wrong on this machine since its last poll -- the worker
+    #: reports it once and then forgets it, so a repeated error is repeatedly
+    #: reported and a fixed one stops being.
+    last_error: str | None = None
 
 
 class SubmitRequest(BaseModel):
@@ -313,12 +346,21 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
     nightly pipeline -- README's own "known gaps" section said so, and nothing
     checked it.
 
-    A request that is granted NOTHING writes nothing, deliberately. There is no
-    row to meter: it locked no query and cost no contributor anything, so
-    charging for it would make "the bank is fully fresh today" indistinguishable
-    from abuse and would exhaust an honest cron's daily allowance on the
-    (common) days there is no work. Polling volume is a request-rate concern for
-    whatever terminates TLS, not something this cap can express.
+    A request that is granted NOTHING writes no submission_log row,
+    deliberately. There is nothing to meter: it locked no query and cost no
+    contributor anything, so charging for it would make "the bank is fully fresh
+    today" indistinguishable from abuse and would exhaust an honest cron's daily
+    allowance on the (common) days there is no work. Polling volume is a
+    request-rate concern for whatever terminates TLS, not something this cap can
+    express.
+
+    THAT SENTENCE IS ABOUT submission_log AND NOT ABOUT THE POLL (T-35). Every
+    authenticated poll now moves a check-in forward in `contributor_status`,
+    including the ones that grant nothing, which is what makes an idle worker
+    distinguishable from a stopped one at all. The two facts do not compete: a
+    heartbeat is not work, so it is not in the table that records work and not
+    in the count that meters it. See the check-in below, and
+    qc.record_check_in().
 
     THE REPLY CARRIES THE NEXT INTERVAL (POLL_INTERVAL_SECONDS, docs/adr/0007
     decision 3). It is an ASK, not an enforcement: the worker floors it and this
@@ -341,18 +383,42 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
     """
     with db() as conn:
         contributor_id = authenticate(conn, authorization)
+
+        # THE CHECK-IN, BEFORE ANYTHING THAT CAN DECIDE AGAINST THIS POLL
+        # (T-35). Every authenticated poll moves it forward -- the paused one,
+        # the one granted nothing, and the one refused at the daily cap -- and
+        # it is written HERE, immediately after the credential is accepted, so
+        # that no branch added below this line can be one a check-in skips. That
+        # ordering is the whole distinction the row is built on: last check-in
+        # is not last submission, a healthy worker submits nothing on most days,
+        # and `0007`'s dormancy consequence turns on being able to tell those
+        # apart from a machine that has stopped calling home.
+        #
+        # It writes NO submission_log row and is not metered as a claim: it
+        # locked nothing and cost the contributor nothing, and charging for an
+        # honest idle poll is the failure the paragraph above already refuses
+        # for the granted-nothing case. record_check_in() commits, for the
+        # reason its own docstring gives -- the 429 below raises, and a
+        # rolled-back check-in would blind this report to exactly the
+        # contributors an operator is looking for.
+        qc.record_check_in(conn, contributor_id,
+                           worker_version=req.worker_version,
+                           quota_remaining=req.quota_remaining,
+                           last_error=req.last_error)
+
         settings = qc.contributor_settings(conn, contributor_id)
 
         # PAUSE IS A NORMAL REPLY, NOT AN ERROR, AND THAT IS THE WHOLE DESIGN.
         # A 4xx here would be wrong three times over: the worker exits 1 on any
         # HTTPError from this route (contributor-worker/
-        # google-serpapi-worker.py:315-318), so a deliberately quiet machine
+        # google-serpapi-worker.py:407-412), so a deliberately quiet machine
         # would report itself broken; a Builder reading their own logs could not
         # tell "the operator paused me" from "my credential died"; and T-35's
         # check-in has to be recorded for a paused contributor above all others
         # -- 0007's dormancy consequence is precisely that pausing stops
-        # SPENDING and not REPORTING, so a paused worker still has to reach the
-        # same place in this function that an idle one does.
+        # SPENDING and not REPORTING. T-35 built that check-in above this
+        # branch rather than inside it, so the property holds by position: a
+        # paused poll cannot skip a write it has already made.
         #
         # It returns BEFORE claims_today() and before the query bank is opened,
         # and that ordering is deliberate rather than an optimisation: a paused

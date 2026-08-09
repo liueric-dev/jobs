@@ -25,6 +25,11 @@ secrets.json
 # holds a minted API key. Not a .env, so the rules above miss it; scoped to the
 # one directory because config.json is an ordinary name elsewhere.
 backend/api/contributor-worker/config.json
+# T-35: the outbox beside the same script -- what a run learned, waiting for the
+# next poll to report it. It holds NO credential, so this is not the rule above
+# repeated: it is a per-machine working file, and a committed one would ship one
+# Builder's last error to every other Builder's checkout.
+backend/api/contributor-worker/worker-state.json
 credentials.json
 
 # cloudflared. `cloudflared tunnel create` writes ~/.cloudflared/<UUID>.json,

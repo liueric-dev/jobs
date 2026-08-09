@@ -220,10 +220,10 @@ forward commit, so a mechanical revert scan under-reports what was undone.
 - **`api/` may not start — but nothing in the code says so, and this entry was wrong twice.**
   Re-checked 2026-08-03; line numbers re-checked 2026-08-08 (`T-46`), after `T-39` moved the check
   itself out of this file. `app.verify_schema()` is still at `backend/api/app.py:104` but is now only
-  the connection half; the list it runs is `qc.verify_schema()` (`backend/api/query_claims.py:380`),
+  the connection half; the list it runs is `qc.verify_schema()` (`backend/api/query_claims.py:433`),
   whose column loop is `:399-410` and whose raise is `:412-419`, and it requires
-  `submission_log.action` (`query_claims.py:196-197`). **There is no mismatch between the two
-  definitions:** `qc.ensure_schema` creates the table *with* `action TEXT` (`query_claims.py:304`) *and*
+  `submission_log.action` (`query_claims.py:224-225`). **There is no mismatch between the two
+  definitions:** `qc.ensure_schema` creates the table *with* `action TEXT` (`query_claims.py:332`) *and*
   backfills it via `dbconn.add_missing_columns` (`:315`), so `manage_users.py init-schema`
   satisfies the check on a fresh or an existing database. What remains is a claim about **live
   database state** — that init-schema has not been run against the deployed DB — which this repo
@@ -383,12 +383,12 @@ The ones that cost something. `.claude/CLAUDE.md` owns the short list; this is t
   list.** Getting the order wrong does not raise — it compares a user id against a profile name,
   matches nothing, and reports every Builder as having no state
   (`backend/webapp/jobs.py:303-324`; `search.py:102-110`).
-- **`api/query_claims.py:561` defines a function named `upsert` returning an `UpsertResult`**, whose
+- **`api/query_claims.py:614` defines a function named `upsert` returning an `UpsertResult`**, whose
   docstring says "It still unpacks to (new, updated, unchanged)". It is safe today, but it is the
   exact shape of the historical defect and a `grep` audit hits it first.
 - **`daily_budget` in `config/google-queries.json` is enforced per request, not per day.** What
   actually limits a slug to one fetch a day is `MIN_HOURS_BETWEEN_RUNS=20`
-  (`backend/api/query_claims.py:441-452`).
+  (`backend/api/query_claims.py:494-505`).
 - **`config/criteria.json`'s `unknown_penalty` block is inert.** `jobs.profiles.criteria_json` is
   authoritative; editing the file changes nothing observable until `migrate_profiles.py --apply`.
 - **Ten migrations exist and nothing records which have been applied.** No `schema_migrations`

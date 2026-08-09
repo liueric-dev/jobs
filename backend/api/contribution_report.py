@@ -27,6 +27,15 @@ DATABASE_URL, run by hand on the box.
     .venv/bin/python contribution_report.py --by-dataset     # per query slug
     .venv/bin/python contribution_report.py --since 2026-08-01 --json
 
+AND SINCE T-35 IT IS ALSO THE STATUS SURFACE, WHICH IS A SECOND SUBJECT IN ONE
+REPORT AND WAS WEIGHED AS ONE. `submission_log` answers "what has this
+contributor DONE"; `contributor_status` answers "is this contributor's machine
+STILL THERE". They are joined here rather than split into two commands because
+neither is readable without the other: no submits and no check-in is a machine
+that stopped, no submits and an hourly check-in is a machine with nothing to do,
+and those are opposite findings off the same empty row. The `--by-dataset` view
+takes none of it -- a query slug has no worker, no version and no quota.
+
 THE VOCABULARY HAS FOUR VALUES, NOT THREE, AND NULL IS THE FOURTH.
 `qc.SUBMISSION_ACTIONS` is ('claim', 'submit', 'release'). The column is
 nullable with no default, and query_claims.py says what a NULL means: "written
@@ -186,13 +195,56 @@ _ROW_KEYS = ("rows_total", "claims", "submits", "empty_submits", "releases",
              "first_at", "last_at")
 
 
-def fetch_contributors(conn, since=None):
-    """One row per contributor that has ever written to submission_log.
+#: The four facts T-35 reports, joined onto every contributor. `contributors`
+#: is the outer table and contributor_status the LEFT JOIN, because a
+#: contributor who has never polled has no status row and that absence is the
+#: single most useful thing this report can say about them -- an operator
+#: reading "never" against a Builder who opted in a week ago has found the
+#: problem. Dropping them to an inner join would report only the machines that
+#: work.
+_STATUS_SQL = """
+        SELECT c.id, c.name, s.last_check_in_at, s.worker_version,
+               s.quota_remaining, s.quota_reported_at, s.last_error,
+               s.last_error_at
+        FROM contributors c
+        LEFT JOIN contributor_status s ON s.contributor_id = c.id
+"""
 
-    LEFT JOIN, not JOIN: submission_log.contributor_id is plain TEXT with no
-    foreign key to contributors, so a log row whose contributor row is absent
-    is representable -- and dropping it would hide exactly the rows most worth
-    seeing. A missing name prints as a dash.
+_STATUS_KEYS = ("last_check_in", "worker_version", "quota_remaining",
+                "quota_reported_at", "last_error", "last_error_at")
+
+#: What a contributor with no status row reads as. Every key present and every
+#: value None, so a row is the same shape whether or not a worker has ever
+#: called home -- the formatter prints None as a dash, and a KeyError on a
+#: never-polled contributor would take out the whole report rather than the one
+#: cell.
+_NO_STATUS = dict.fromkeys(_STATUS_KEYS)
+
+
+def fetch_contributors(conn, since=None):
+    """One row per contributor known to this service OR present in the log.
+
+    THE KEY SET IS THE UNION OF TWO, AND IT WAS ONE UNTIL T-35. This grouped
+    `submission_log` and joined names onto it, so a contributor appeared only
+    once they had written a row -- which meant the report could not see the
+    worker that polls faithfully and is granted nothing, and that worker is
+    exactly what T-35 exists to make visible. `claim` writes no log row when it
+    grants nothing (app.py), so on a quiet week an entire cohort of healthy
+    machines was indistinguishable from thirty people who never installed
+    anything.
+
+    BOTH DIRECTIONS OF THE MISMATCH ARE KEPT. A contributor with no log rows
+    reports with every bucket at zero and whatever status they have. A log row
+    whose contributor row is absent still reports too -- submission_log.
+    contributor_id is plain TEXT with no foreign key, so that is representable,
+    it is the shape a leaked or hand-crafted key would take, and it is the last
+    row that should be dropped. A missing name prints as a dash.
+
+    `since` BOUNDS THE LOG AND NOT THE STATUS, deliberately. The buckets are
+    counts of events in a window; the four status facts are current state, and
+    the last thing a reader asking "who has done nothing since Monday" wants is
+    for the check-in that answers "because they stopped polling on Tuesday" to
+    be filtered out with the work.
     """
     where, params = _since_clause(since)
     # An f-string rather than concatenation, so `FROM submission_log` survives
@@ -210,13 +262,32 @@ def fetch_contributors(conn, since=None):
         [list(qc.SUBMISSION_ACTIONS)] + params,
     ).fetchall()
 
-    names = dict(conn.execute(
-        "SELECT id, name FROM contributors").fetchall())
+    known = {r[0]: (r[1], dict(zip(_STATUS_KEYS, r[2:])))
+             for r in conn.execute(_STATUS_SQL).fetchall()}
+
     out = []
+    seen = set()
     for row in rows:
         record = dict(zip(("contributor_id",) + _ROW_KEYS, row))
-        record["name"] = names.get(record["contributor_id"])
+        name, status = known.get(record["contributor_id"], (None, _NO_STATUS))
+        record["name"] = name
+        record.update(status)
+        seen.add(record["contributor_id"])
         out.append(summarize(record))
+
+    # The contributors with nothing in the log at all -- the ones this report
+    # could not see before T-35. Zero-filled rather than given a shape of their
+    # own: summarize()'s reconciliation is over the five buckets, and five
+    # zeroes against a rows_total of zero is a true partition of no rows.
+    for contributor_id, (name, status) in sorted(known.items()):
+        if contributor_id in seen:
+            continue
+        record = dict.fromkeys(_ROW_KEYS, 0)
+        record.update({"contributor_id": contributor_id, "name": name,
+                       "first_at": None, "last_at": None}, **status)
+        out.append(summarize(record))
+
+    out.sort(key=lambda r: r["contributor_id"])
     return out
 
 
@@ -331,6 +402,37 @@ def format_table(records, key, key_header, extra=()):
     return "\n".join(lines)
 
 
+def status_notes(records):
+    """The two reported facts that do not belong in a fixed-width column.
+
+    WHY THESE TWO ARE BELOW THE TABLE AND THE OTHER TWO ARE IN IT. A check-in
+    and a worker version are short tokens. An error is a sentence -- a
+    truncated one in a column is unreadable and an untruncated one makes every
+    other column unreachable -- and a balance is meaningless without the time it
+    was reported, which would be a second column to carry a first one's caveat.
+
+    THE HEADING IS THE CAVEAT AND IT IS PRINTED EVERY TIME THERE IS A LINE
+    UNDER IT. Both of these came off a contributor's machine: this service
+    cannot see a Builder's SerpApi plan and cannot verify that an error
+    happened, so it stores what it was told with the time it was told, and says
+    so where the number is read rather than only where it is written.
+    """
+    lines = []
+    for record in records:
+        who = record["contributor_id"]
+        if record.get("quota_remaining") is not None:
+            lines.append(f"  {who}  quota {record['quota_remaining']} "
+                         f"reported {record.get('quota_reported_at') or '-'}")
+        if record.get("last_error"):
+            lines.append(f"  {who}  last error "
+                         f"{record.get('last_error_at') or '-'} -- "
+                         f"{record['last_error']}")
+    if not lines:
+        return ""
+    return ("\nreported by the contributors' own machines, not observed here:\n"
+            + "\n".join(lines))
+
+
 def totals_line(records):
     """One line under the table, and the NULL caveat when there is one.
 
@@ -376,7 +478,12 @@ def cmd_report(args):
         else:
             records = fetch_contributors(conn, args.since)
             key, header = "contributor_id", "contributor"
-            extra = (("name", "name"),)
+            # T-35's four facts, two of them here. The check-in comes first
+            # after the name because it is the one an operator reads first: a
+            # dash in that column is a contributor whose worker has never
+            # spoken to this service, and no other column can say that.
+            extra = (("name", "name"), ("check-in", "last_check_in"),
+                     ("worker", "worker_version"), ("quota", "quota_remaining"))
 
     apply_findings(records, args.min_submits, args.empty_rate)
     shown = ([r for r in records if r["finding"]] if args.empty_workers
@@ -392,6 +499,10 @@ def cmd_report(args):
     print(format_table(shown, key, header, extra))
     print()
     print(totals_line(shown))
+    if not args.by_dataset:
+        notes = status_notes(shown)
+        if notes:
+            print(notes)
 
 
 def main(argv=None):
