@@ -8,7 +8,7 @@ budget: 500
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-58`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-59`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -184,12 +184,18 @@ nothing can move.
 
 ## Filed on the way out of a closed row, 2026-08-09
 
-**Two rows still open here of the four filed, with three parents between them, and the heading says
+**Three rows still open here of the five filed, with four parents between them, and the heading says
 so because it stopped being true silently once already.** It read "Filed by `T-37` — the retarget it
 could not finish" and "Two rows" when `T-34` added `T-54` and `T-55` beneath it, so a reader counting
 rows against the sentence above them got the wrong number and the wrong author. `T-52` and `T-57`
-closed 2026-08-09 and are in the table below; `T-53` and `T-55` are what is left, and the parentage
-below is kept for all four because it is what the numbers still resolve against. `T-52` and `T-53`
+closed 2026-08-09 and are in the table below; `T-53`, `T-55` and `T-58` are what is left, and the
+parentage below is kept for all five because it is what the numbers still resolve against.
+
+**`T-58` is the only one here whose parent is not a `T-` row at all**, and that is worth the
+sentence rather than a silent fifth entry: it was filed while closing `OQ-29` and `OQ-37`, which are
+`DEV_TASKS.md`'s. Work does not move between the two files, but a finding turned up by an owner
+action can be session-doable, and this is what that looks like — the owner ran the GRANT, the GRANT
+did not do what three places said it would, and what is left of that is a session's job. `T-52` and `T-53`
 are `T-37`'s: it rewrote the five `_comment` fields in
 `config/google-queries.json` for the cohort, was scoped to that one file, and both are what reading
 the file's consumers turned up — only `T-53` is about the product. `T-55` is `T-34`'s, and is the
@@ -279,6 +285,52 @@ grep -n "SUBMISSION_ACTIONS" query_claims.py    # today: 2 lines; the set has 4 
 **Done when:** a settings change leaves a record naming the contributor, the setting, the new value
 and the time, the credential that writes it is decided in the commit message rather than defaulted
 into, the vocabulary guard is satisfied rather than exempted, and the api suite prints `OK`.
+
+---
+
+### T-58 — The narrow GRANT is now checkable, and the check only asks whether it is wide enough
+
+**Filed by `OQ-29`/`OQ-37`, 2026-08-09, out of the measurement that closed them.** `verify_schema()`
+now reads `REQUIRED_COLUMN_PRIVILEGES` with `has_column_privilege()`
+(`backend/api/query_claims.py:581-595`), because `has_table_privilege()` cannot see a column-scoped
+grant at all. That fixed the refusal-to-start. It did not use the second half of what the same
+measurement showed.
+
+**The second half:** under the correct narrow grant, `has_column_privilege(jobs_api,
+'search_queries', 'last_run_at', 'UPDATE')` answers **FALSE**; under a table-wide `GRANT UPDATE` it
+answers **TRUE**. So the narrow and wide forms *are* distinguishable from inside the service — the
+thing `query_claims.py`'s commentary said for two tranches was impossible and the reason `OQ-29` was
+written as "the only place the distinction is enforced".
+`backend/api/tests/test_column_grants.py`'s
+`test_the_wide_grant_is_distinguishable_from_the_narrow_one` measures it against a real server, so
+this row rests on a green test rather than on prose.
+
+**What is unbuilt is the assertion, and it is a refusal this service has never had.** Every existing
+check refuses to start on a privilege that is *missing*; this one would refuse on a privilege that is
+*present and too broad*. That is a different kind of statement and the reason it was not folded into
+the closing commit: `score.py`'s deferral/tombstone split is the local precedent for not collapsing
+two failure modes because one line of code could serve both.
+
+**The shape is small — one negative column per table** — but the vocabulary is the decision. A
+`FORBIDDEN_COLUMN_PRIVILEGES` map naming `last_run_at` reads as a canary and breaks silently if the
+run statistics grow a sixth column; deriving "every column not in the granted list" from
+`information_schema.columns` is exact and makes any new column on a pipeline-owned table a startup
+concern of this service, which is a coupling `search_queries` was specifically kept free of. Pick
+deliberately; they fail differently on the day the pipeline adds a column.
+
+**Do not reach for `has_any_column_privilege()` here.** It answers TRUE for both forms — it is the
+function that would have papered over the original bug, and it cannot express this at all.
+
+```bash
+cd backend/api
+grep -n "REQUIRED_COLUMN_PRIVILEGES" query_claims.py    # today: 4 lines
+.venv/bin/python -m unittest tests.test_column_grants
+```
+
+**Done when:** a table-wide `GRANT UPDATE ON search_queries TO jobs_api` makes the service refuse to
+start naming the over-broad grant, the narrow pair still starts clean, the choice between the canary
+and the derived form is argued in the commit message rather than defaulted into, the paragraph in
+`README.md` that now says the distinction is unenforced is corrected, and the api suite prints `OK`.
 
 ---
 

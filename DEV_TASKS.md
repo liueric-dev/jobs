@@ -52,105 +52,6 @@ system that already works, not one waiting to be unblocked.
 
 ## Open
 
-### OQ-37 — `jobs-api` will not restart until `init-schema` runs, and it is running now
-
-**WIDENED 2026-08-09 BY `T-35`, AND THE SECOND HALF IS NOT THE SAME KIND OF THING AS THE FIRST.**
-`T-34` added three columns; `T-35` added a whole table, `public.contributor_status`, and put it in
-`qc.REQUIRED_TABLES` — so the next restart now checks for a table as well as for three columns, and
-`verify_schema()` checks **privileges** on a table, not just its existence. `init-schema` creates it
-and **issues no GRANT** — that is
-[`0004`](docs/adr/0004-provision-database-issues-no-grants.md), stated in
-`tools/provision-database.py`'s own "WHAT IT DOES NOT DO: GRANTS". So route (a) alone leaves the
-service refusing to start with `public.contributor_status: no SELECT, INSERT, UPDATE`, which reads
-like a bug and is the documented behaviour. **The GRANT is a separate statement somebody has to
-run**, and it is the first new one this service has needed since `search_queries`.
-
-**Why it is yours:** a DDL run against the live database while `jobs-api` is serving it, not a
-missing credential. **The first version of this row said the credential was missing and that was
-under-checked:** `JOBS_ADMIN_DATABASE_URL` is indeed absent from `backend/api/.env`, so
-`manage_users.py` falls back to the restricted `jobs_api` URL and the ALTER fails with permission
-denied — but `public.contributors` is owned by **`jobs_pipeline`**, which is the role in
-`backend/.env`'s own `DATABASE_URL`. The exact `ADD COLUMN` was dry-run on that credential against
-the live database on 2026-08-09 and rolled back; it succeeds. So what is yours is the decision, not
-the access.
-
-**What:** `T-34` added three columns to `contributors` and to
-`query_claims.REQUIRED_COLUMNS`, and `verify_schema()` runs in the FastAPI lifespan. The live
-`public.contributors` has `id`/`name`/`created_at`/`notes` and nothing else (read off the deployed
-`jobs` database on the pipeline credential, 2026-08-09; the table is empty, 0 rows). So the
-**currently running** `jobs-api.service` — active on `127.0.0.1:8420`, `/v1/health` answering, and
-started before this change — keeps working, and **the next restart of it fails to start**.
-
-**THE UNIT IS USER-SCOPED AND THIS ROW SAID `sudo`, CORRECTED 2026-08-09 WHILE CLOSING `T-35`.**
-There is no system-level `jobs-api.service` at all — `systemctl cat jobs-api.service` answers "No
-files found", while `systemctl --user show` gives
-`/home/eric/.config/systemd/user/jobs-api.service`, active since **2026-08-04 01:49:51 EDT** and
-serving `127.0.0.1:8420` from `backend/api/.venv/bin/uvicorn`. `deploy/README.md:92` had it right
-(`systemctl --user enable --now`); this row was the one place in the tree that did not, and
-`sudo systemctl restart jobs-api` fails with "Unit jobs-api.service not found" — at the one moment
-the service is refusing to start, which is the worst moment to be debugging the wrong command.
-
-**The live schema was re-read on the pipeline credential 2026-08-09, and both halves still hold:**
-`public.contributors` has `id`/`name`/`created_at`/`notes` and **0 rows**;
-`public.contributor_status` **does not exist**; `jobs_api` holds `SELECT, INSERT` on `contributors`
-and no UPDATE. So nothing has drifted since `T-34` wrote this, and the restart is still blocked.
-
-**This is `OQ-7` again, and that row is the reason to file this rather than mention it.** There, the
-whole webapp was down for a day because `verify_schema()` raised in the lifespan, the process
-exited, and nobody had started it. The refusal is the designed behaviour — the alternative is a
-service that starts cleanly and 500s on every claim — but it is a deploy step, and a deploy step
-nobody performed is what `OQ-7` cost.
-
-**Two routes, and they are not equivalent — pick deliberately.** `init-schema` runs
-`qc.ensure_schema()`, which calls `schema.ensure_schema()` and therefore also brings the app view
-and the foreign-key cascade repair (`backend/api/query_claims.py:354-358` says so outright). That is
-the documented, idempotent path and the one the docstring intends; it is also more than three
-columns, against a database a live webapp reads, and `.claude/CLAUDE.md`'s standing warning about
-view-DROP-and-GRANT-loss is next door to it ([`docs/adr/0004`](docs/adr/0004-provision-database-issues-no-grants.md)).
-The narrow route issues only what `T-34` added and touches nothing else.
-
-```bash
-# route (a) -- the documented one, and more than these three columns
-cd backend/api
-JOBS_ADMIN_DATABASE_URL="$(grep ^DATABASE_URL= ../.env | cut -d= -f2-)" \
-  .venv/bin/python manage_users.py init-schema
-
-# route (b) -- only what T-34 added; same statements add_missing_columns issues
-#   ALTER TABLE contributors ADD COLUMN IF NOT EXISTS paused BOOLEAN;
-#   ALTER TABLE contributors ADD COLUMN IF NOT EXISTS daily_cap INTEGER;
-#   ALTER TABLE contributors ADD COLUMN IF NOT EXISTS reserve_floor INTEGER;
-#   -- and T-35's table, which `ensure_schema` creates on either route:
-#   CREATE TABLE IF NOT EXISTS contributor_status (
-#       contributor_id TEXT PRIMARY KEY REFERENCES contributors(id),
-#       last_check_in_at TEXT NOT NULL, worker_version TEXT,
-#       quota_remaining INTEGER, quota_reported_at TEXT,
-#       last_error TEXT, last_error_at TEXT);
-
-# EITHER ROUTE THEN NEEDS THIS, and neither issues it (docs/adr/0004).
-# On the owner role, not on jobs_api -- a role cannot grant itself anything.
-#   GRANT SELECT, INSERT, UPDATE ON contributor_status TO jobs_api;
-
-# Read back what the service will check, BEFORE restarting it. This is the
-# same list verify_schema() reads, run against the live database from a
-# process that is not the service:
-cd backend/api && .venv/bin/python -c "
-import psycopg, query_claims as qc
-with psycopg.connect(qc.DATABASE_URL) as c:
-    c.execute('SET search_path TO public'); qc.verify_schema(c); print('ready')"
-
-systemctl --user restart jobs-api && curl -s localhost:8420/v1/health
-```
-
-**Done when:** `paused`, `daily_cap` and `reserve_floor` exist on `public.contributors`,
-`public.contributor_status` exists **and `jobs_api` holds SELECT/INSERT/UPDATE on it**, the
-`verify_schema()` read-back above prints `ready` **before** anything is restarted,
-`jobs-api.service` has been restarted deliberately rather than discovered down, and `/v1/health`
-answers after it. **One GRANT changes, and only one** — `contributors` still gains no UPDATE, which
-is the property `T-34` refused to give up and the reason `T-35` built a second table rather than
-three more columns.
-
----
-
 ### OQ-3 — More labellers on the same ten overlap rows, and round 2
 
 **Why it is yours:** people. Longest lead time here; start it today even though it finishes last.
@@ -434,34 +335,6 @@ already spending 8/day leaves very little reserve to allocate, which may settle 
 **Done when:** one of the two is chosen and written into an ADR, since it constrains `T-32` and
 `T-34` and touches `OQ-15`'s documented split.
 
-### OQ-29 — Two GRANTs on `search_queries`, or the contributor API stops starting
-
-**Why it is yours:** machine — a statement issued as the database owner against the deployed
-database, which no session may touch.
-
-**What:** `T-26` gave `api/query_claims.py` a claim mode over `search_queries`, so that table is now
-the seventh entry in `REQUIRED_TABLES` (`backend/api/query_claims.py:105`) and `verify_schema()`
-checks it at startup like the other six. Until these run, the service refuses to start and names the
-missing grant:
-
-```sql
-GRANT SELECT ON search_queries TO jobs_api;
-GRANT UPDATE (claimed_at, claimed_by, claim_granted_at) ON search_queries TO jobs_api;
-```
-
-**The second is column-scoped and must stay that way.** A table-wide `GRANT UPDATE` would hand
-`jobs_api` the run statistics too, and a contributor's submit could then forge a run history —
-writing a future `last_run_at` silences that query for every Builder. `has_table_privilege(...,
-'UPDATE')` answers TRUE for either form, so `verify_schema()` cannot tell them apart and this row is
-the only place the distinction is enforced. **Refusing to start is designed, not a regression**;
-`OQ-7` is the precedent for how that reads when nobody notices. **Neither `provision-database.py` nor
-`init-schema` will do this for you** — no tool here issues GRANTs, per
-[`docs/adr/0004`](docs/adr/0004-provision-database-issues-no-grants.md).
-
-**Done when:** both statements have run as owner against the deployed database, `jobs-api` starts
-clean (`systemctl status`, not inference), and `backend/api/README.md`'s privilege table names
-`search_queries` with the column list rather than a bare UPDATE.
-
 ### OQ-31 — Run `--check`'s credential branch against the deployed api, once
 
 **Why it is yours:** account and machine. It needs a credential the mint has not issued yet, on a
@@ -714,6 +587,8 @@ answer makes its budget.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~OQ-29~~ | Two GRANTs on `search_queries`, or the contributor API stops starting | **Closed 2026-08-09 — both statements ran as owner, and the row's own premise about Postgres was false.** Issued on `jobs_pipeline` (which owns the table) against the deployed database, exactly as written and column-scoped: `GRANT SELECT`, then `GRANT UPDATE (claimed_at, claimed_by, claim_granted_at)`. **The service then still refused to start**, naming `public.search_queries: no UPDATE`. This row and `backend/api/query_claims.py`'s commentary both said `has_table_privilege(..., 'UPDATE')` "answers TRUE for either form"; it does not — it considers TABLE-level grants only. Measured as `jobs_api` with both grants in place: `has_table_privilege(...,'UPDATE')` **False**, `has_any_column_privilege(...,'UPDATE')` **True**, `has_column_privilege(...,'claimed_at','UPDATE')` **True**, `has_column_privilege(...,'last_run_at','UPDATE')` **False**. So the documented narrow grant was *unreachable*: the only GRANT satisfying the old check was the table-wide one the design refuses. **Fixed by changing the check, not the grant** — `REQUIRED_COLUMN_PRIVILEGES` carries the UPDATE half and is verified with `has_column_privilege()`; `REQUIRED_TABLES["search_queries"]` now reads `("SELECT",)`. `backend/api/tests/test_column_grants.py` is 7 new tests measuring both privilege functions against a real server rather than restating the claim, and `README.md`'s privilege table now names `search_queries` with the column list and the two statements. The last measurement above is a second finding — narrow and wide **are** distinguishable — filed as `T-58` rather than folded in, because refusing to start on a privilege that is present and too broad is a kind of refusal this service has never had. **A fourth place carries the false premise and was deliberately left alone:** `TASKS.md`'s closed `T-35` row cites `query_claims.py:163` for it, and rewriting a closed row's prose is `OQ-33`'s open question, not a session's call. Its *conclusion* survives the correction intact — a separate `contributor_status` table was right, and more clearly so, since a column-wise grant on `contributors` would not merely have been unverifiable but would have refused to start. api suite 509 OK, no skips |
+| ~~OQ-37~~ | `jobs-api` will not restart until `init-schema` runs, and it is running now | **Closed 2026-08-09, route (a).** The row's "pick deliberately" was decided on a fact it did not have: route (a)'s extra scope is `schema.ensure_schema()`, which **every pipeline script already calls on this same database on this same credential** (12 call sites), and `schema.py`'s DDL was unchanged since `4d79654` (2026-08-07) while the pipeline last ran 2026-08-08 05:21 — so that half had already run, unchanged, the day before. `ed97c4c` touched `schema.py` after it, but only a comment line. `init-schema` on `JOBS_ADMIN_DATABASE_URL=`the pipeline URL reported `8/8 tables present`; `contributors` gained `paused`/`daily_cap`/`reserve_floor` and `contributor_status` was created. `jobs_app` still carries its `jobs_web` SELECT, checked after — the DROP fallback never fired and `T-13`'s re-grant was not needed. Then `GRANT SELECT, INSERT, UPDATE ON contributor_status TO jobs_api`, the one GRANT this row allowed, with `contributors` still holding SELECT/INSERT and **no UPDATE** — the property `T-34` refused to give up, verified after. **The read-back command in this row was wrong and is worth keeping**: `query_claims` reads `DATABASE_URL` from the environment only, and the service gets it from the unit's `EnvironmentFile` (`/home/eric/.config/systemd/user/jobs-api.service:26`), not from any in-process dotenv load — so the command as written connected with no password. Run with the variable supplied, it printed `ready` **before** the restart, once `OQ-29`'s code fix landed; the two rows could not close independently. `systemctl --user restart jobs-api` (user-scoped, as this row was corrected to say), `Active: active (running)`, `/v1/health` → `{"ok":true}`, and `verify_schema()` passed in the lifespan rather than being inferred |
 | ~~OQ-35~~ | A `file:line` into a sibling `bankan` checkout was unrepresentable, and red in the working tree | **Closed 2026-08-09, option 1: drop the `file:line`.** The citation was **true** — the unit exists in the sibling checkout, its `Description` names `localhost:3011`, the unit is active and 3011 answers 200 — and unrepresentable by construction: `_resolve()` tries each of `SEARCH_ROOTS` (`backend/tools/audit-citations.py:188`), then the citing file's own directory, and discards any candidate escaping the repo root at both guards. Option 2 was rejected as the worse of two builds, not as extra work: resolve nothing and it validates nothing, reproducing the tag-form blindspot that let `T-18`'s citations to a 144-line file pass at line numbers as high as 1047; resolve `../` genuinely and the check passes on the owner's machine and fails in CI, which runs a bare `actions/checkout@v4` on this repo alone (`.github/workflows/ci.yml:107`). Option 3 was rejected because the three entries in `config/citation-baseline.json` are all genuinely-gone targets and that file's own `_comment` says it is meant to shrink — this target is checkable, just not from here. `config.yml`'s comment now names the port in prose **and records why it carries no `file:line`**, so a later session does not helpfully add one back; same line count, so nothing downstream shifted. No ADR, deliberately: option 1 complies with the citation rule rather than changing what it covers. **The red was in two CI jobs, not the one this row named** — `suites` via `tests/test_citations.py`, and `checkers`, which runs the tool directly (`.github/workflows/ci.yml:124`). Verified after: `3 known-drifted, 0 new`; pipeline suite 1509 OK, nothing skipped. **A second citation of `6945e41`'s was wrong and was corrected in the same commit:** `docs/cloudflare-setup-explained.md:105` cited `config.yml:89` for the catch-all terminator, which that commit's 8-line block pushed to `:97` — correct before it, wrong since, and invisible to the checker because `:89` stayed in range. The other four citations in that document name lines below the insertion point and did not move. **This is `OQ-33`'s class, found the way that row predicts** — by reading, not by the checker |
 | ~~OQ-1~~ | `backend/api/` stays; who issues a contributor credential was still open | **Closed 2026-08-05 — direction chosen, not yet built.** Auto-mint a credential server-to-server (`DEC-84` option 2) the moment a Builder logs in or hits a "Contribute" affordance, rather than `manage_users.py create` run by hand. The worker itself becomes a long-running local daemon (start once, poll on an interval) instead of a script re-invoked daily — the thing that actually kept `OQ-12`'s contributor count at zero. SerpApi stays called from the contributor's own machine on their own key, never proxied server-side: SerpApi blocks browser-origin calls outright (confirmed), and there is no confirmed SerpApi policy on many accounts sharing one server IP, a pattern that risks real accounts getting banned. A paid SerpApi tier was checked and set aside on purpose — cheaper today, but a fixed ceiling, where crowdsourcing scales with cohort headcount at near-zero marginal cost. Full reasoning in `docs/adr/0006-contributor-credential-auto-minted-local-daemon.md`. Implementation (mint endpoint, daemon script, packaging) is unscoped — follow-up `T-`/`OQ-` rows, next session |
 | ~~OQ-15~~ | Is the `ingest/google-*.py` ↔ `serp/providers/*` SerpApi duplication temporary or permanent? | **Closed 2026-08-05, option A: permanent, documented, not merged.** Checked against the live database before deciding — the row's own premise ("an on-demand search path that is dead code in production") was stale: `serp.dispatch.SearchQueryProvider` has been dispatched nightly from `searchqueries.py` since `tranche_four/23` (2026-08-02), one day before the row calling it dead code was written, and `search_query_results` held 253 dispatched rows as of this closure, most recently that same morning. Both implementations spend real SerpApi credit every night — the risk calculus the row was written against (merge a live path into a dead one) no longer holds, since a merge now would mean changing two live nightly paths at once. `_comment`s recording why the split stays permanent are at `ingest/google-serpapi.py:348-363` and `serp/providers/serpapi.py`'s module docstring; the two files were not otherwise touched |

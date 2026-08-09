@@ -129,7 +129,42 @@ REQUIRED_TABLES = {
     "contributor_status": ("SELECT", "INSERT", "UPDATE"),
     "api_keys": ("SELECT", "INSERT", "UPDATE"),
     "submission_log": ("SELECT", "INSERT"),
-    "search_queries": ("SELECT", "UPDATE"),
+    "search_queries": ("SELECT",),
+}
+
+#: Privileges this service holds on COLUMNS rather than on a whole table, and
+#: therefore the ones has_table_privilege() cannot see. Checked at startup by
+#: the same verify_schema(), against has_column_privilege().
+#:
+#: THIS MAP EXISTS BECAUSE THE PARAGRAPH BELOW USED TO BE WRONG ABOUT POSTGRES,
+#: and it was wrong in the direction that refuses to start. It said
+#: has_table_privilege(current_user, 'search_queries', 'UPDATE') "answers TRUE
+#: on a column-level grant, so verify_schema() accepts the narrow form". It does
+#: not: has_table_privilege() considers TABLE-level grants only, so with exactly
+#: the two statements OQ-29 specifies in place, it answers FALSE and the service
+#: refuses to start naming an UPDATE that is deliberately absent. Measured on
+#: the deployed database on 2026-08-09, as `jobs_api`, with both grants issued:
+#:
+#:     has_table_privilege(..., 'search_queries', 'UPDATE')            -> False
+#:     has_any_column_privilege(..., 'search_queries', 'UPDATE')       -> True
+#:     has_column_privilege(..., 'claimed_at', 'UPDATE')               -> True
+#:     has_column_privilege(..., 'last_run_at', 'UPDATE')              -> False
+#:
+#: So the narrow grant was unreachable: the only GRANT that satisfied the old
+#: check was the table-wide one the design refuses. The startup check moved to
+#: the function that can see a column grant rather than the grant moving to the
+#: form the check could see.
+#:
+#: THE LAST LINE ABOVE IS THE OTHER HALF, and it falsifies a second claim: with
+#: has_column_privilege() the narrow and wide forms ARE distinguishable, since a
+#: table-wide UPDATE answers TRUE for last_run_at and the column grant answers
+#: FALSE. Enforcing that -- refusing to start on a grant that is too WIDE -- is
+#: a new safety property this map makes possible and does not yet assert; it is
+#: `T-58`, and DEV_TASKS.md's OQ-29 records why it was not folded in here.
+REQUIRED_COLUMN_PRIVILEGES = {
+    "search_queries": {
+        "UPDATE": ("claimed_at", "claimed_by", "claim_granted_at"),
+    },
 }
 
 #: search_queries is the seventh table and the only PIPELINE-owned one this
@@ -160,17 +195,20 @@ REQUIRED_TABLES = {
 #: webapp's act (../schema.py:993), and a service that could insert one could
 #: dispatch a Builder's SerpApi credit at a keyword nobody asked for.
 #:
-#: has_table_privilege(current_user, 'search_queries', 'UPDATE') answers TRUE on
-#: a column-level grant, so verify_schema() accepts the narrow form -- what it
-#: cannot do is tell the two apart, which is why the columns are written out
-#: here and in README rather than left to the reader.
+#: THE COLUMN LIST IS CHECKED AT STARTUP, not merely written down here. It used
+#: to be the latter, on a false premise about has_table_privilege() -- see
+#: REQUIRED_COLUMN_PRIVILEGES above, which is where the UPDATE half of this
+#: table's requirement now lives and why "search_queries" reads SELECT alone in
+#: the map above.
 #:
-#: THIS IS A NEW STARTUP REQUIREMENT ON AN ALREADY-DEPLOYED SERVICE. Until the
-#: two statements above have run, verify_schema() refuses to start and names the
-#: missing grant. That is the designed behaviour and the reason this map exists
-#: -- the alternative is a service that starts cleanly and 500s on the first
-#: claim -- but it is an action on a deployed database, so it is DEV_TASKS.md's
-#: `OQ-29` rather than something a session can close.
+#: THIS WAS A NEW STARTUP REQUIREMENT ON AN ALREADY-DEPLOYED SERVICE, AND BOTH
+#: STATEMENTS HAVE NOW RUN (OQ-29, closed 2026-08-09). Until they had,
+#: verify_schema() refused to start and named the missing grant. That is the
+#: designed behaviour and the reason this map exists -- the alternative is a
+#: service that starts cleanly and 500s on the first claim. What closing it
+#: found is the paragraph above: the narrow GRANT and the check that was meant
+#: to accept it never agreed, so the refusal outlived the deploy step it was
+#: describing and had to be fixed in code rather than at the psql prompt.
 
 #: submission_log.id is BIGSERIAL, so INSERT on the table is not enough on its
 #: own -- the nextval() needs USAGE on the sequence. README's privilege table
@@ -495,6 +533,14 @@ def verify_schema(conn):
     provision-database.py gets existence checking out of this and no more --
     see that file's 'WHAT IT DOES NOT DO: GRANTS'.
 
+    AND ON COLUMNS, WHICH IS A DIFFERENT FUNCTION AND NOT AN ALIAS FOR THE ONE
+    ABOVE. has_table_privilege() sees TABLE-level grants only, so the
+    column-scoped UPDATE this role holds on search_queries -- the one grant here
+    that is deliberately narrower than a table -- is invisible to it and read as
+    absent. REQUIRED_COLUMN_PRIVILEGES carries that half and is checked with
+    has_column_privilege(); see that map for the measurement, and for why the
+    fix was to change the check rather than to widen the GRANT.
+
     The sequence is checked too. submission_log.id is BIGSERIAL, so an INSERT
     needs USAGE on submission_log_id_seq as well as INSERT on the table. That
     grant was in README's privilege table and in nothing that ran, which made
@@ -531,6 +577,22 @@ def verify_schema(conn):
         ]
         if lacking:
             problems.append(f"{qualified}: no {', '.join(lacking)}")
+
+    for table, by_privilege in REQUIRED_COLUMN_PRIVILEGES.items():
+        qualified = f"public.{table}"
+        if conn.execute("SELECT to_regclass(%s)", (qualified,)).fetchone()[0] is None:
+            continue        # already reported as missing above
+        for privilege, columns in by_privilege.items():
+            lacking = [
+                c for c in columns
+                if not conn.execute(
+                    "SELECT has_column_privilege(current_user, %s, %s, %s)",
+                    (qualified, c, privilege)
+                ).fetchone()[0]
+            ]
+            if lacking:
+                problems.append(
+                    f"{qualified}: no {privilege} on {', '.join(lacking)}")
 
     for sequence, privileges in REQUIRED_SEQUENCES.items():
         qualified = f"public.{sequence}"

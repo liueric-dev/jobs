@@ -4,11 +4,20 @@ WHAT THIS PINS, AND WHY A TEST RATHER THAN THE GRANT ALONE
     The privilege is the real enforcement -- `GRANT UPDATE (claimed_at,
     claimed_by, claim_granted_at)` and no more, spelled out above
     REQUIRED_TABLES in ../query_claims.py. But a GRANT lives on a database, and
-    the two statements that issue it are `OQ-29` in ../../../DEV_TASKS.md: an
-    action on a deployed machine, not something this repo runs. So between a
-    commit that widens a statement here and the day somebody notices the 500,
-    there is nothing that reports it. This file is that report, and it runs in
-    CI where no database exists.
+    the two statements that issue it were `OQ-29` in ../../../DEV_TASKS.md
+    (closed 2026-08-09, both run on the deployed database): an action on a
+    machine, not something this repo runs. So between a commit that widens a
+    statement here and the day somebody notices the 500, there is nothing that
+    reports it. This file is that report, and it runs in CI where no database
+    exists.
+
+    THE STARTUP CHECK STILL DOES NOT REPORT A GRANT THAT IS TOO WIDE, which is
+    why "the privilege is the real enforcement" is not the whole story and this
+    file is not redundant. verify_schema() reads
+    REQUIRED_COLUMN_PRIVILEGES with has_column_privilege() as of OQ-29's
+    closure, so it now SEES the column-scoped grant it previously could not --
+    but every check it makes asks whether a privilege is present, never whether
+    it is broader than declared. Making it ask the second question is `T-58`.
 
     It is also the only check that survives the wrong fix. 0009 refused a
     "narrow writer in api/ that only sets the columns from server-side values"

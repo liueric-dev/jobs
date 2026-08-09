@@ -444,6 +444,7 @@ all. Verified by connecting as the role and being refused at the door.
 | `contributor_status` | SELECT, INSERT, UPDATE |
 | `api_keys` | SELECT, INSERT, UPDATE |
 | `submission_log` | SELECT, INSERT |
+| `search_queries` | SELECT, and UPDATE **on `claimed_at`, `claimed_by`, `claim_granted_at` only** |
 | `submission_log_id_seq` | USAGE, SELECT |
 
 No `DELETE` on anything — the code never issues one. No `CREATE`, so the
@@ -459,9 +460,33 @@ Granting INSERT alone fails at *runtime*, not at deploy time — which is why
 `verify_schema()` checks privileges with `has_table_privilege()` rather than
 just checking that tables exist.
 
-The grants are re-creatable from `query_claims.REQUIRED_TABLES` and
-`REQUIRED_SEQUENCES`, which are the source of truth for both the startup check
-and this table. The sequence row used to appear here and nowhere in the code,
+`search_queries` is the one row here that is **narrower than a table**, and the
+two statements are not interchangeable with a single table-wide one:
+
+```sql
+GRANT SELECT ON search_queries TO jobs_api;
+GRANT UPDATE (claimed_at, claimed_by, claim_granted_at) ON search_queries TO jobs_api;
+```
+
+A table-wide `GRANT UPDATE` would hand this role the five run statistics as
+well — `last_run_at`, `run_count`, `provider_last_used`,
+`result_count_last_run`, `last_result_at` — whose only writer by design is
+`../searchqueries.py`'s `record_run()`. A contributor's submit could then forge
+a run history, and writing a future `last_run_at` silences that query for every
+Builder. See [`docs/adr/0009`](../../docs/adr/0009-run-statistics-are-reconciled-not-granted.md).
+
+**`has_table_privilege()` cannot see that grant, and believing otherwise cost a
+deploy.** It considers table-level grants only, so it answers FALSE on the
+column-scoped UPDATE above — meaning the only GRANT that satisfied the startup
+check was the wide one this section refuses, and issuing the correct pair left
+the service refusing to start. `query_claims.REQUIRED_COLUMN_PRIVILEGES` carries
+that half of the requirement and is checked with `has_column_privilege()`;
+`tests/test_column_grants.py` measures both functions against a real server
+rather than restating this paragraph.
+
+The grants are re-creatable from `query_claims.REQUIRED_TABLES`,
+`REQUIRED_COLUMN_PRIVILEGES` and `REQUIRED_SEQUENCES`, which are the source of
+truth for both the startup check and this table. The sequence row used to appear here and nowhere in the code,
 which made it the one documented grant whose absence surfaced as a 500 on a
 contributor's first submit rather than as a refusal to start; slice D added
 `REQUIRED_SEQUENCES` and a `has_sequence_privilege()` check to close that.
