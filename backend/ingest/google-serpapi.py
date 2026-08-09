@@ -23,19 +23,19 @@ broad query set exhaustively every day, and re-running the SAME query
 daily mostly re-fetches the same top-ranked results without a date filter
 (Google's default ranking is relevance-based, not chronological). So:
 config/google-queries.json holds ~32 queries split into 4 strategic buckets
-(core_swe, ai_integration, bridge_solutions, reentry_growth -- weighted to
-Eric's actual positioning: 5 YOE full-stack SWE, 2.5yr career break,
-currently 5mo into a prompt/agent engineering program). Each bucket has
-its own daily_budget (summing to 8 on the free tier), and
-pick_stale_queries_by_bucket() picks that many least-recently-run queries
-FROM EACH BUCKET SEPARATELY -- not globally -- so ai_integration and
-bridge_solutions (the highest-priority, best-fit buckets) get
-proportionally more daily coverage than reentry_growth, regardless of how
-many total queries live in each bucket. This is a deliberate change from
-the original flat-list design: a global least-recently-run pick would
-naturally equalize coverage across all queries over time, which doesn't
-respect the fact that some buckets matter more than others for this
-specific candidate.
+(core_swe, ai_integration, bridge_solutions, reentry_growth). The buckets
+were weighted for one software engineer's job search; T-37 retargeted that
+RATIONALE -- not the weights and not the query text, which need OQ-24 and
+OQ-26 -- to the Pursuit AI-Native cohort: ~30 Builders, entry-level,
+AI-adjacent, all industries, NYC. Each bucket has its own daily_budget
+(summing to 8 on the free tier), and pick_stale_queries_by_bucket() picks
+that many least-recently-run queries FROM EACH BUCKET SEPARATELY -- not
+globally -- so ai_integration and bridge_solutions (the two closest to
+what the cohort is training for) get proportionally more daily coverage
+than reentry_growth, regardless of how many total queries live in each
+bucket. This is a deliberate change from the original flat-list design: a
+global least-recently-run pick would naturally equalize coverage across
+all queries over time, which doesn't respect that unequal weighting.
 
 Queries still use job_ingest_state for watermarks -- the SAME
 table/dataset-key scheme ingest/google-apify.py uses, keyed

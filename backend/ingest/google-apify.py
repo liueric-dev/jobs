@@ -13,8 +13,8 @@ SerpApi's script it can't narrow to "what's new since last run". Given
 that limitation AND that Apify is by far the scarcer/more expensive
 resource (APIFY_DAILY_QUERY_BUDGET=1 vs SerpApi's 8), its single daily
 slot is drawn ONLY from the ai_integration and bridge_solutions buckets in
-config/google-queries.json -- the two highest-priority buckets for this
-candidate's actual positioning -- rather than the full bank. core_swe and
+config/google-queries.json -- the two highest-priority buckets for the
+Pursuit AI-Native cohort -- rather than the full bank. core_swe and
 reentry_growth get zero Apify coverage; they're already served adequately
 by SerpApi's own per-bucket budget.
 
