@@ -467,6 +467,37 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
         # from `allowance` and not from MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY --
         # subtracting the floor here and then forgetting it there would let a
         # single request walk straight through the reserve it just checked.
+        # OUT OF CREDITS IS NOT A RATE LIMIT, AND UNTIL T-57 IT WAS TOLD AS ONE.
+        # `headroom == 0` is a contributor whose own last reported SerpApi
+        # balance sits at or below the floor THEY set. They are refused -- but
+        # not by anything that clears at midnight the way claims_today() does.
+        # It clears when they buy credits, and `daily limit reached (0/0)` says
+        # neither of those things: it names a cap of zero the operator never set.
+        #
+        # So it is answered the way `paused` is, and for that branch's own three
+        # reasons, every one of which applies here unchanged: the worker exits 1
+        # on any HTTPError from this route, so a Builder doing exactly the right
+        # thing gets a machine reporting itself broken hourly and indefinitely;
+        # a Builder reading their own logs cannot tell a 429 from a dead
+        # credential; and nothing about this machine is wrong. `0007` decision 3
+        # bounds what may ride along -- a flag the worker PRINTS is inside it, a
+        # number the worker would ENFORCE is not -- so this carries the fact and
+        # not the floor, the balance or a retry time.
+        #
+        # NONE IS NOT THIS CASE, and quota_headroom() is where that distinction
+        # is made rather than here: None is "nothing usable was reported", which
+        # claim_allowance() answers with the cap reading, so a Builder who has
+        # never finished a run is never told they are out of credits. `== 0`
+        # inherits that instead of re-deriving it.
+        #
+        # ABOVE THE 429, AND IT CANNOT SWALLOW A GRANT: headroom of 0 makes the
+        # allowance min(cap, used), so `used >= allowance` was already certain to
+        # refuse. Where both refusals apply at once, this is the one worth
+        # saying, because the other one expires tonight and this one does not.
+        if headroom == 0:
+            return {"poll_interval_seconds": POLL_INTERVAL_SECONDS,
+                    "paused": False, "reserve_reached": True, "queries": []}
+
         if used >= allowance:
             raise HTTPException(
                 status_code=429,
@@ -504,6 +535,12 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
             # to a client that had not been updated -- which is the one
             # distinction this flag exists to carry.
             "paused": False,
+            # ON EVERY REPLY AND FALSE RATHER THAN ABSENT, for the reason one
+            # line up: "at the reserve floor" and "nothing stale right now" are
+            # both an empty list, so a key present only when true would leave
+            # the two reading identically to a worker that had not been updated
+            # -- which is the one distinction it exists to carry.
+            "reserve_reached": False,
             "queries": [
                 {
                     "dataset": f"google_jobs:query:{q['slug']}",

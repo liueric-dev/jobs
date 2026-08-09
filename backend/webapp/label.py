@@ -81,7 +81,7 @@ _DETAIL_COLUMNS = ("id", "title", "company_name", "location_raw", "platform",
 
 #: Hard cap on the request body. The form is six short fields and two ids, so
 #: a legitimate submit is a few hundred bytes. Enforced BEFORE parsing, the
-#: same argument api/app.py:515 makes: a hostile body should be rejected on
+#: same argument api/app.py:570-572 makes: a hostile body should be rejected on
 #: sight, not after being deserialized into memory.
 MAX_FORM_BYTES = 64 * 1024
 

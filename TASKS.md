@@ -141,7 +141,7 @@ it. No test in this tree can observe that. The only `launchctl` any test sees is
 `api/tests/test_worker_install.py`'s `Recorder`, whose docstring says answering 0 to everything "is
 not a claim that launchctl would" (`:76-78`) and whose `test_what_it_asks_launchctl_to_do` says no
 test on this machine can assert launchd accepts anything (`:250-252`); `cli()` refuses `--install`
-off Darwin (`backend/api/contributor-worker/google-serpapi-worker.py:965-974`) besides. **Route (b)
+off Darwin (`backend/api/contributor-worker/google-serpapi-worker.py:995-1004`) besides. **Route (b)
 built here would be green by construction** — the fake returns from `unload` instantly and never
 stops its caller, the precise opposite of the hazard — and its failure mode is thirty volunteers'
 machines silently unscheduled with no run left to report it. `OQ-32` carries the analysis, the
@@ -151,10 +151,10 @@ pick a route from this row.**
 `T-31` closed with the server's interval read, floored and reported, and with the honest limit
 printed rather than hidden: the OS owns the schedule (`0007` decision 2), so the cadence that
 actually fires is the `StartInterval` written into the plist at `--install`
-(`backend/api/contributor-worker/google-serpapi-worker.py:546`). **What `T-31` could not do, and
+(`backend/api/contributor-worker/google-serpapi-worker.py:576`). **What `T-31` could not do, and
 said so instead of faking, is make a changed interval take effect.** `install_agent` takes its
 interval from `MIN_POLL_INTERVAL_SECONDS` and from nowhere else
-(`backend/api/contributor-worker/google-serpapi-worker.py:569`), so an operator who sets
+(`backend/api/contributor-worker/google-serpapi-worker.py:599`), so an operator who sets
 `POLL_INTERVAL_SECONDS` to six hours gets thirty machines that *report* the ask and keep polling
 hourly — and re-running `--install`, which is what a Builder would try, writes the floor again.
 
@@ -253,7 +253,7 @@ below the bucket count no way to reach every bucket at all.
 `min(req.max, allowance - used)`, and `allowance` has two readings: `min(cap, used + headroom)`
 where `headroom` is what the reserve floor leaves of the contributor's last reported SerpApi
 balance, and `max(0, cap − reserve_floor)` when no fresh balance has been reported
-(`backend/api/app.py:481-484`, `backend/api/query_claims.py:744-747`) — two more things that make it
+(`backend/api/app.py:512-515`, `backend/api/query_claims.py:744-747`) — two more things that make it
 small, both per contributor, and the first of them moves between polls rather than only when an
 operator edits a row. A test here that hardcodes 8 will pass today and mislead the moment an
 operator sets either setting or a worker reports a balance.
@@ -307,46 +307,6 @@ into, the vocabulary guard is satisfied rather than exempted, and the api suite 
 
 ---
 
-### T-57 — A Builder out of credits is told "daily limit reached", and that one does not clear at midnight
-
-**Filed by `T-54`, which turned a possible case into the ordinary one.** `claim` refuses an
-over-allowance poll with `429 daily limit reached ({used}/{allowance})`
-(`backend/api/app.py:470-474`). Until `T-54` that string was nearly always true: the only way a
-reserve floor could produce it was `floor >= cap` — an operator and a Builder who disagree — and
-every other refusal cleared at midnight when `claims_today()` started again from zero. **A floor
-that binds against a balance does not clear at midnight.** It clears when the Builder buys more
-SerpApi credits, and nothing in the refusal says so.
-
-**Two things that costs, and neither is the arithmetic.** The worker exits 1 on any `HTTPError`
-from this route (`backend/api/contributor-worker/google-serpapi-worker.py:407-416`), so a Builder
-who is doing everything right gets a machine reporting itself broken, hourly, indefinitely — which
-is the exact failure `T-34` refused to accept for `paused` and answered with a `200`. And an
-operator reading `contribution_report.py` cannot separate the two either: in the floor case `used`
-and `allowance` are both `0`, which reads as a cap of zero rather than as a reserve doing its job.
-The information needed is already in the row — `quota_remaining` next to `reserve_floor` — and no
-reader joins them.
-
-**Do not fix it by dropping the refusal**: granting queries a worker has no credits to run spends
-the claim TTL on rows nobody will submit, which is the pool-starvation half of defect `D41`. The
-open question is the shape, and it is worth deciding before writing: a distinct `detail` on the same
-`429`, or the `paused`-shaped answer — a `200` with an empty list and a reason the worker prints.
-The second is the one a Builder can act on and the one `T-34` already argued for on this endpoint;
-it is also a wire-format change, so `docs/adr/0007` decision 3 bounds it — a reason the worker
-PRINTS is inside that decision, a number it would ENFORCE is not.
-
-```bash
-cd backend
-grep -rn "daily limit reached" api/            # today: the raise and the tests that pin it
-cd api && .venv/bin/python -m unittest discover -s tests
-```
-
-**Done when:** a contributor refused for want of credits is distinguishable from one refused at the
-operator's daily cap, both at the worker and in the report; the worker's exit status for the
-credits case is chosen deliberately and the choice is stated; `T-34`'s pause tests and `T-54`'s
-floor tests both still pass unchanged; and the api suite prints `OK`.
-
----
-
 ## Closed — kept so citations resolve
 
 **Compacted 2026-08-07, and this is a compaction, not a deletion.** These rows were ~940 of this
@@ -368,6 +328,7 @@ ADR, or a rules file — checked row by row, not assumed.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~T-57~~ | `T-54` made a reserve floor bind against a reported balance, which turned `429 daily limit reached (0/0)` from a rare operator/Builder disagreement into what an ordinary Builder out of SerpApi credits is told — a cap nobody set, refusing for a reason that does not clear at midnight, on a route whose worker exits 1 on any `HTTPError` | **Closed 2026-08-09, as the `paused`-shaped 200 rather than a distinct `detail`.** `headroom == 0` — a balance at or below the Builder's own floor — now returns `{"reserve_reached": true, "queries": []}` with a 200, and the operator's daily cap keeps the 429 it always had, so the two refusals are told apart by shape rather than by parsing a string. The `paused` branch above it already argued this exact case for a different cause: a 4xx makes a correctly-quiet machine report itself broken hourly, and a Builder reading their own logs cannot tell a refusal from a dead credential. **The worker exits 0 on this path, deliberately** — cron mail is a signal and a machine that cries hourly about a state it is correctly in spends it. **`0007` decision 3 bounds what rides along**: a flag the worker PRINTS, never the floor, the balance or a retry time, so the worker still holds no policy — the flag is named `reserve_reached` and not `at_reserve_floor` precisely so it does not smuggle a setting name past `test_the_worker_never_reads_the_two_numbers`, which greps the worker source for `reserve_floor`. **`remember_quota()` on the new branch is load-bearing, not symmetry**: the floor reads a balance that goes stale after two polls and then falls back to the cap reading, so a worker that stopped reporting here would be handed work again within hours having bought nothing. **In the report**, `contribution_report.py` now selects `c.reserve_floor` beside the reported balance and annotates only the binding case — both numbers were already on the row and nothing joined them, which is the half no wire change could fix. **`None` is still not zero**: a Builder who has never completed a run falls back to the cap and is never told they are out of credits. Seven deliberate breaks, each red: `None` collapsed into the zero case (26), the branch moved below the 429 (5), `remember_quota()` dropped (3), the worker exiting 1 (1), the flag omitted from the ordinary reply (1), the annotation dropped (2), `<=` weakened to `<` (1). Suites 1509/500/400, api +9 and nothing skipped; ruff 1036 unchanged, mypy clean. |
 | ~~T-52~~ | `T-37` retargeted `config/google-queries.json`'s comments and nothing else, so two `ingest/` docstrings still explained the query buckets by one engineer's positioning, and two scoring configs named the same rationale | **Closed 2026-08-09, and only two of the three places were drift.** `ingest/google-serpapi.py` and `ingest/google-apify.py` now describe the Pursuit AI-Native cohort and send re-weighting to `OQ-24`/`OQ-26`, matching what `T-37` wrote into the query bank they both read. **The two scoring configs were read and deliberately left.** `config/persona.json` declares `"profile": "tech"` and `config/criteria.json` is that same profile's seed weights — and `tech` is INACTIVE, which `backend/tests/test_profiles_migration.py:105-110` pins by preserving `active=False`; the live cohort profile is `pursuit`, seeded from `config/pursuit-persona.json`. Personas and weights are per-profile by construction (`docs/adr/0005`), so a dormant profile describing its single user is not drift — retargeting it would corrupt a seed and, in `criteria.json`'s case, describe weights the file does not contain. Each now carries a note saying which profile it serves and why. **Every edit preserved its file's line count exactly**, because ~40 live citations land in these four files past the edit points; the docstrings were rewritten to the same line counts and the config notes appended to existing single-line `_comment` strings rather than added as new keys. One deliberate break, and it went red: the note's `backend/score.py:305-314` set to an impossible line took the checker from 1 unresolvable to 2, confirming the new citations are actually checked — they are path-qualified because a bare `score.py:NNN` is AMBIGUOUS (`backend/score.py` and `backend/evals/tasks/score.py`) and silently skipped. Suite 1509, `tests.test_search_queries` 111 `OK`; the only red is `OQ-35`'s pre-existing `bankan` citation. |
 | ~~T-54~~ | `T-34` built `reserve_floor` as a day's claims coming off the daily cap (`cap − floor`, arithmetically one smaller cap), because nothing yet reported a balance for a floor to be a level above | **Closed 2026-08-09. The floor is now read against the balance the contributor's own worker last reported**, with that report's own timestamp — `T-35`'s `quota_reported_at`, which is what makes staleness expressible at all. `quota_headroom()` is what the floor leaves of `contributor_status.quota_remaining`; `claim_allowance()` spends `min(cap, used + headroom)` and does **not** also subtract the floor from the cap, since charging a Builder their reserve in both places is the double-count this row existed to remove. **`used` is added back because the answer is a day TOTAL** and a balance is a level already net of what was spent before it, so `allowance - used` lands back on the headroom exactly — an identity that holds only while the report is fresh, which is what the staleness window protects. **No usable report falls back to `T-34`'s reading, never to zero**: never-reported and dead-credential (which reports an *error*, never a balance of `0`) must not stop work on the strength of a number that never came. **No fourth column.** Six deliberate breakages, each red: nothing-reported collapsed to zero (35), staleness disabled (2), the floor not subtracted from the balance (9), `used` dropped from the total (2), the floor taken off the cap as well (5), and the balance read before the check-in commits it (2). Suites 1509/400/**491** (api +33, none skipped, 5 against a real scratch schema on `pg-main`), mypy clean, ruff **1036** (+4, all `UP017` on `datetime.now(timezone.utc)` — the construction already beside them, and part of the 69 that rule already carries). Nothing added to `config/citation-baseline.json`; the pipeline suite's one failure is `test_citations` on `OQ-35`, red at `HEAD` and confirmed by stashing. **17 citations this row's own insertions drifted were corrected content-verified** — `app.py` and `query_claims.py` are cited from both task files, the worker and `searchqueries.py`, and the checker cannot see any of them: a bare `app.py:NNN` resolves to more than one file in this tree, so `audit-citations.py` calls it AMBIGUOUS and skips it. One finding filed: `T-57` |
 | ~~T-56~~ | `MAX_BODY_BYTES` was enforced in exactly one place — `submit`, which reads its body by hand. `claim`, `release` and the mint route take a Pydantic body, so Starlette buffered the whole request before any code in `app.py` ran, and uvicorn sets no ceiling below it | **Closed 2026-08-09. A `BodySizeLimit` ASGI middleware (`backend/api/app.py:877`), registered app-wide (`:960`), so the ceiling is the service's rather than one function's.** **The row's real defect was that the cap was per-function**, so every route written after `submit` started without one — which is why the test walks `app.app.routes` and refuses every POST route it finds rather than naming today's four: a fifth route added without a ceiling arrives as a failure. **TWO CHECKS, AND THE SECOND IS NOT DECORATION.** An oversized `Content-Length` is refused without the app being entered, so no chunk is pulled into the process; a request that declares nothing (HTTP/1.1 chunked) or declares *less than it sends* is refused by counting chunks as they are handed over. With only the first, `Transfer-Encoding: chunked` is a one-header bypass — pinned by a test, as is the lying-`Content-Length` case. **THE OVERSIZE RAISES `HTTPException` AND THAT IS LOAD-BEARING, NOT STYLE.** FastAPI re-raises an `HTTPException` from the body read untouched but converts anything else into a 400 "There was an error parsing the body", so a custom exception class reaches the client as a misleading 400 — swapping it for a `RuntimeError` turns the end-to-end test red with `400 != 413`, which is how that claim is held rather than asserted in a docstring. **THE REFUSAL PRECEDES AUTHENTICATION**, deliberately: if auth ran first the body would already have been read to get there, so an unauthenticated caller could make this service buffer anything. **`submit`'s own check stays** — unreachable over HTTP now, but it does not depend on middleware registration and `test_malformed_body.py` calls `submit()` directly — with its literal replaced by the shared `TOO_LARGE_DETAIL` so the two cannot drift into refusing in different words. **THE 413 IS HAND-BUILT ASGI RATHER THAN A `JSONResponse`**, because that import belongs at the top of `app.py` and would move all ~45 external `backend/api/app.py:NNN` citations to save five lines — the same argument the D73 section above it already makes. Safe only because it is pinned: the test renders the same `HTTPException` through the handler `app.app` is actually configured with and asserts the bytes are identical. **WHAT IT DOES NOT DO, STATED:** it bounds what this process *holds*, not what crosses the network. Bandwidth is the proxy's, and that half is `DEV_TASKS.md`'s `OQ-38`. Six deliberate breakages, each red: counter removed (4 tests), middleware unregistered (14), cap frozen at construction (1), boundary `>=` for `>` (1), header branch dead (16), non-`HTTPException` raised (4). Suites 1509/400/458 (api +24), no skips, and the pipeline suite's one failure is `test_citations` on `OQ-35` — red at HEAD, confirmed by stashing this change and re-running, same message byte for byte. Nothing added to `config/citation-baseline.json`. mypy clean. ruff 1032 (+6 over `T-35`'s 1026, and the composition is the whole increase: one `I001` and five `RUF100` on the new test file, which is the shape every file in `api/tests/` already has — a seventh, `RUF059`, was found and fixed rather than counted) |

@@ -470,7 +470,7 @@ host no session can reach — `OQ-30` first, and that is the only reason for the
 **What:** `T-30` shipped `--check`, and one of its three checks is unverified against anything real.
 The credential check asks the deployed `api/` to release a claim nobody holds and reads the **409** as
 "your key is good" and the **401** as "your key is not" — an ordering inside `release`
-(`backend/api/app.py:658`, `:536`) that `api/tests/test_worker_check.py` pins with a fake connection.
+(`backend/api/app.py:695`, `:699`) that `api/tests/test_worker_check.py` pins with a fake connection.
 **The 401 branch has been run against a real HTTP server; the 409 branch never has.** A fake that
 agrees with the code it stands in for cannot tell you the deployed service agrees too.
 
@@ -527,13 +527,13 @@ machine can reach, and the `JOBS_ADMIN_DATABASE_URL` question has an answer eith
 cannot be delegated to a session that would otherwise just pick one.
 
 **What:** `install_agent` takes its interval from `MIN_POLL_INTERVAL_SECONDS` and from nowhere else
-(`backend/api/contributor-worker/google-serpapi-worker.py:589`), so an operator who sets
+(`backend/api/contributor-worker/google-serpapi-worker.py:619`), so an operator who sets
 `POLL_INTERVAL_SECONDS` to six hours gets thirty machines that report the ask and keep polling
 hourly. `TASKS.md`'s `T-41` is the implementation and is **blocked on this row**. The two routes
 differ on one property, and it is the one no test in this tree can observe:
 
 - **(a) `--install` asks the server once.** Costs no SerpApi credit — only a claimed *search* does —
-  but `claim` is the only route returning `poll_interval_seconds` (`backend/api/app.py:499`), and
+  but `claim` is the only route returning `poll_interval_seconds` (`backend/api/app.py:530`), and
   claiming leases queries the installing process will not run, so (a) is either a leak of live claims
   at install time or a server change to carry the interval somewhere cheaper. It also reverses
   `T-30`'s split, which specified `--install` to talk to nothing and `--check` to be the thing that
@@ -574,7 +574,7 @@ Filed by `T-40`, 2026-08-08, which spent its session rewriting fourteen and expe
 **The evidence is not a projection.** `T-28`/`T-29`/`T-30` closed with correct citations into
 `google-serpapi-worker.py` and `T-30`/`T-31` broke all twelve; `T-42` corrected six into `api/app.py`
 and `T-39` broke them the next commit (`T-46` has both lists). Every one still resolves, so nothing
-reported it. `api/app.py:727-734` already carries a mitigation — two constants parked at the bottom
+reported it. `api/app.py:764-771` already carries a mitigation — two constants parked at the bottom
 so nothing is inserted above `submit()` — and `T-39` inserted above `submit()` anyway.
 
 **Three options, not equivalent.** (1) Keep rewriting: every row pays forever and a row that forgets
@@ -685,7 +685,7 @@ same host, same "check with `curl` from outside rather than infer". It is a sepa
 is a separate question — the mint's controls and a body ceiling share a config file, not a subject.
 
 **What:** `T-56` put `MAX_BODY_BYTES` on every route as an ASGI middleware
-(`backend/api/app.py:877`). That bounds what the process **holds**: an oversized `Content-Length` is
+(`backend/api/app.py:914`). That bounds what the process **holds**: an oversized `Content-Length` is
 refused before the app is entered, and an undeclared or under-declared body is refused by counting
 chunks. It does **not** bound what crosses the network — the bytes still arrive and are still paid
 for. That is the same split `claim`'s docstring already draws for request rate ("a request-rate

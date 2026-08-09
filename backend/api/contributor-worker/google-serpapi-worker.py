@@ -456,6 +456,36 @@ def main():
         remember_quota()
         return
 
+    # THE OTHER GRANTED-NOTHING ANSWER, AND IT EXITS 0 DELIBERATELY (T-57). The
+    # server refused because this machine's own reported SerpApi balance is at
+    # or below the reserve floor set for this contributor. That used to arrive
+    # as `429 daily limit reached (0/0)` and take the HTTPError path above,
+    # which exits 1 -- so a Builder who had simply spent their credits got an
+    # hourly failure naming a cap nobody set, forever. Exit 0 is the same
+    # judgment the pause above makes: cron mail is a signal, and a machine that
+    # cries every hour about a state it is correctly in spends the signal, so
+    # that the one time something IS broken nobody reads it.
+    #
+    # `.get`, and truthy rather than `is True`, for the reason the pause is: a
+    # server predating this sends no key and either end may deploy first.
+    if claimed.get("reserve_reached"):
+        print("worker: no queries were claimed and no SerpApi credit was "
+              "spent -- the balance this worker last reported is at or below "
+              "the reserve floor set for this contributor. THIS DOES NOT "
+              "CLEAR AT MIDNIGHT the way a daily cap does; it clears when the "
+              "balance rises back above the floor, either by topping up "
+              "SerpApi credits or by the operator lowering the floor. Nothing "
+              "is wrong with this machine and the schedule keeps running, so "
+              "it will pick up again on its own.")
+        # THE STATE IS SELF-CLEARING ONLY BECAUSE OF THIS LINE. The server reads
+        # a floor against a balance that goes STALE after a couple of polls, and
+        # a stale balance falls back to the cap reading -- so a worker that
+        # stopped reporting here would be handed work again a few hours later
+        # having bought nothing, and the floor would silently stop binding. The
+        # reading costs no credit, which is why a pause takes it too.
+        remember_quota()
+        return
+
     queries = claimed.get("queries", [])
     if not queries:
         # Not an error: it means everything is already up to date. Exiting 0
@@ -666,7 +696,7 @@ SERPAPI_ACCOUNT_URL = "https://serpapi.com/account"
 #: What --check offers to release when it asks the server whether the
 #: credential works. NOTHING CAN EVER HOLD A CLAIM ON IT: every real dataset
 #: name is built server-side as "google_jobs:query:<slug>" out of the server's
-#: own query bank (api/app.py:509), and no slug is spelled like this.
+#: own query bank (api/app.py:546), and no slug is spelled like this.
 CHECK_PROBE_DATASET = "google_jobs:query:__check__"
 
 
@@ -755,12 +785,12 @@ def check_credential(base_url_ok, send=probe):
     THE PROBE IS A RELEASE OF A DATASET NOBODY CAN HOLD, AND THE 409 IS THE
     PASS. Every authenticated route on that server does something. /v1/queries/
     claim locks rows out of the pool for CLAIM_TTL_MINUTES apiece and meters
-    the caller against a daily cap (query_claims.py:1224, api/app.py:434-474), so
+    the caller against a daily cap (query_claims.py:1224, api/app.py:434-505), so
     checking a credential with it would spend the allowance being checked, and
     on a day when the bank is stale it would leave real queries claimed by a
     worker that was only asking a question. Release is the one authenticated
     route that can be made to change nothing: it authenticates FIRST and asks
-    whether the caller holds the claim SECOND (api/app.py:658, :660), so a
+    whether the caller holds the claim SECOND (api/app.py:695, :697), so a
     dataset the query bank cannot produce reaches the credential check, writes
     no submission_log row, commits nothing, and comes back 409.
 

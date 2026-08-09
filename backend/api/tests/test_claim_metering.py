@@ -26,7 +26,7 @@ TWO HALVES, AND EITHER ALONE IS WRONG.
 A REQUEST GRANTED NOTHING WRITES NOTHING. It locked no row and cost nothing, and
 charging for it would exhaust an honest daily cron's allowance on exactly the
 days the bank is fresh -- the worker prints "nothing to do" and exits 0 on those
-(`contributor-worker/google-serpapi-worker.py:459-465`). Request volume with no
+(`contributor-worker/google-serpapi-worker.py:489-495`). Request volume with no
 grant is a rate concern for whatever terminates TLS, not something a per-query
 cap can express.
 
@@ -313,8 +313,8 @@ class TestTheCitationInThisModulesDocstring(unittest.TestCase):
         # "exits 0" is the other half of the claim and the half a nearby
         # sys.exit(1) would quietly falsify -- main() has three of those above
         # this branch. A bare return is what cli() turns into exit 0
-        # (`contributor-worker/google-serpapi-worker.py:997-998`, reached from
-        # `:836`), and this asserts the branch leaves that way and not another.
+        # (`contributor-worker/google-serpapi-worker.py:1027-1028`, reached from
+        # `:866`), and this asserts the branch leaves that way and not another.
         cited = self.cited_lines()
         self.assertNotIn("sys.exit", "\n".join(cited))
         self.assertEqual("return", cited[-1].strip())

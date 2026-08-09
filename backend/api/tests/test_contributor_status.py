@@ -258,12 +258,16 @@ class TestWhatAPollReports(_ClaimCase):
         # to spend and is granted nothing -- while the report that said so is
         # still recorded, because T-35 puts the check-in above every branch that
         # can decide against the poll and commits it. If a future edit moves the
-        # check-in back below the refusal, this test goes red on the write
-        # rather than on the status code.
+        # check-in back below the refusal, this test goes red on the write.
+        #
+        # T-57 CHANGED WHAT THE REFUSAL LOOKS LIKE, not whether there is one:
+        # the empty list replaces a 429 that told a Builder out of credits they
+        # had hit a daily cap. The assertion is on the grant, which is the fact
+        # this test was always about -- it does not name the status code, so it
+        # would survive the shape moving again.
         conn = FakeConn()
-        with self.assertRaises(HTTPException) as caught:
-            run_claim(conn, quota_remaining=0)
-        self.assertEqual(caught.exception.status_code, 429)
+        result = run_claim(conn, quota_remaining=0)
+        self.assertEqual(result["queries"], [])
         self.assertEqual(conn.check_ins[0]["quota_remaining"], 0)
         self.assertIsNotNone(conn.check_ins[0]["quota_reported_at"])
 
@@ -470,14 +474,52 @@ class TestTheReportShowsTheFourFacts(unittest.TestCase):
         self.assertIn("9", notes)
         self.assertIn("2026-08-01T09:00:00", notes)
 
+    def test_a_balance_at_the_floor_says_what_it_means_for_the_work(self):
+        # T-57's report half. Both numbers were already on this row and nothing
+        # joined them, so `quota 2` read as a healthy Builder -- an operator
+        # could not tell one whose worker is being granted nothing from one
+        # whose machine had simply gone quiet.
+        notes = report.status_notes([self._record(
+            quota_remaining=2, quota_reported_at="2026-08-09T09:00:00",
+            reserve_floor=2)])
+        self.assertIn("AT OR BELOW", notes)
+        self.assertIn("2", notes)
+
+    def test_a_balance_below_the_floor_says_it_too(self):
+        # `<=`, not `==`: a balance that fell past the floor between two polls
+        # is the same state and the more urgent one.
+        notes = report.status_notes([self._record(
+            quota_remaining=1, quota_reported_at="2026-08-09T09:00:00",
+            reserve_floor=5)])
+        self.assertIn("AT OR BELOW", notes)
+
+    def test_a_balance_above_the_floor_is_not_annotated(self):
+        # The other half of the rule the heading already follows: a note on
+        # every line is a note nobody reads, and a floor a balance clears is
+        # not news.
+        notes = report.status_notes([self._record(
+            quota_remaining=40, quota_reported_at="2026-08-09T09:00:00",
+            reserve_floor=2)])
+        self.assertIn("40", notes)
+        self.assertNotIn("AT OR BELOW", notes)
+
+    def test_an_unset_floor_annotates_nothing_even_at_a_zero_balance(self):
+        # DEFAULT_RESERVE_FLOOR is 0 but a NULL column is not a 0 here: with no
+        # floor recorded there is no floor to be at, and `None <= 0` would raise
+        # rather than merely mislead.
+        notes = report.status_notes([self._record(
+            quota_remaining=0, quota_reported_at="2026-08-09T09:00:00")])
+        self.assertNotIn("AT OR BELOW", notes)
+
     def test_nothing_reported_prints_no_note_at_all(self):
         # A heading that is always there is a heading nobody reads -- the same
         # rule totals_line() already applies to its NULL caveat.
         self.assertEqual(report.status_notes([self._record()]), "")
 
     def test_the_status_keys_do_not_disturb_the_bucket_reconciliation(self):
-        # summarize() asserts the five buckets add to rows_total. Six more keys
-        # on the same dict must not enter that sum.
+        # summarize() asserts the five buckets add to rows_total. The status
+        # keys on the same dict must not enter that sum -- there are seven since
+        # T-57 put `reserve_floor` beside the balance it qualifies.
         record = self._record(claims=2, last_check_in="2026-08-09T10:00:00")
         self.assertEqual(record["rows_total"], 2)
 
@@ -921,10 +963,40 @@ class TestTheWorkerSideOfTheContract(unittest.TestCase):
         self.assertGreaterEqual(source.count("remember(last_error="), 4)
 
     def test_the_balance_is_read_on_every_path_that_polled_successfully(self):
-        # Paused, nothing-to-do, and a run that did work. A balance refreshed
-        # only after real work would go stale on precisely the quiet machines
-        # this report is for.
-        self.assertEqual(self._source().count("remember_quota()"), 3)
+        # Paused, at the reserve floor (T-57), nothing-to-do, and a run that did
+        # work. A balance refreshed only after real work would go stale on
+        # precisely the quiet machines this report is for.
+        #
+        # THE FOURTH IS THE ONE THAT CANNOT BE DROPPED. The server reads the
+        # floor against a balance that expires after a couple of polls and then
+        # falls back to the cap reading -- so a worker that stopped reporting on
+        # this path would be handed work again within hours having bought no
+        # credits, and the floor would quietly stop binding.
+        self.assertEqual(self._source().count("remember_quota()"), 4)
+
+    def test_the_worker_reads_the_reserve_flag_and_leaves_by_a_bare_return(self):
+        # T-57's worker half, and the exit status IS the row: this arrives as a
+        # 200 precisely so the branch does not go through the HTTPError path,
+        # which exits 1. A sys.exit(1) reintroduced anywhere in this branch puts
+        # a Builder who has simply spent their credits back to an hourly failure
+        # about a state they are correctly in.
+        source = self._source()
+        self.assertIn('claimed.get("reserve_reached")', source)
+        branch = source.split('claimed.get("reserve_reached")', 1)[1]
+        branch = branch.split("\n    queries =", 1)[0]
+        self.assertIn("return", branch)
+        self.assertNotIn("sys.exit", branch)
+
+    def test_the_worker_says_the_state_does_not_clear_at_midnight(self):
+        # The whole reason the row exists rather than the shape alone: the
+        # refusal a Builder was being shown named a daily limit, and this one is
+        # not one. If the message stops saying so, the 200 has fixed the exit
+        # status and left the Builder with the same wrong mental model.
+        source = self._source()
+        branch = source.split('claimed.get("reserve_reached")', 1)[1]
+        branch = branch.split("\n    queries =", 1)[0]
+        self.assertIn("DOES NOT", branch.upper())
+        self.assertIn("MIDNIGHT", branch.upper())
 
     def test_the_worker_still_decides_nothing_from_what_it_reports(self):
         # T-34's property, extended to this row: the worker reports and does

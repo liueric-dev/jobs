@@ -205,13 +205,21 @@ _ROW_KEYS = ("rows_total", "claims", "submits", "empty_submits", "releases",
 _STATUS_SQL = """
         SELECT c.id, c.name, s.last_check_in_at, s.worker_version,
                s.quota_remaining, s.quota_reported_at, s.last_error,
-               s.last_error_at
+               s.last_error_at, c.reserve_floor
         FROM contributors c
         LEFT JOIN contributor_status s ON s.contributor_id = c.id
 """
 
+#: `reserve_floor` is the odd one out and is here on purpose (T-57): it is a
+#: SETTING off `contributors`, not one of T-35's four reported facts, and it is
+#: selected because the balance beside it is meaningless without it. A reader
+#: seeing `quota 2` cannot tell a healthy Builder from one whose worker is being
+#: granted nothing; `quota 2 ... floor 2` is the whole diagnosis. Both numbers
+#: were already in the row and nothing joined them, which is the half of T-57
+#: the wire change cannot fix.
 _STATUS_KEYS = ("last_check_in", "worker_version", "quota_remaining",
-                "quota_reported_at", "last_error", "last_error_at")
+                "quota_reported_at", "last_error", "last_error_at",
+                "reserve_floor")
 
 #: What a contributor with no status row reads as. Every key present and every
 #: value None, so a row is the same shape whether or not a worker has ever
@@ -421,8 +429,22 @@ def status_notes(records):
     for record in records:
         who = record["contributor_id"]
         if record.get("quota_remaining") is not None:
+            # AND WHAT IT MEANS FOR THE WORK, WHICH IS THE POINT OF PRINTING IT
+            # (T-57). At or below the floor, this contributor is granted nothing
+            # -- and the state does not end at midnight, so an operator reading
+            # a quiet Builder needs to see the reason here rather than infer a
+            # broken machine. Only the binding case is annotated: a floor a
+            # balance is comfortably above is not news, and a note on every line
+            # is a note nobody reads.
+            floor = record.get("reserve_floor")
+            at_floor = (floor is not None
+                        and record["quota_remaining"] <= floor)
             lines.append(f"  {who}  quota {record['quota_remaining']} "
-                         f"reported {record.get('quota_reported_at') or '-'}")
+                         f"reported {record.get('quota_reported_at') or '-'}"
+                         + (f" -- AT OR BELOW the reserve floor of {floor}; "
+                            "no queries are being granted until credits are "
+                            "topped up or the floor is lowered" if at_floor
+                            else ""))
         if record.get("last_error"):
             lines.append(f"  {who}  last error "
                          f"{record.get('last_error_at') or '-'} -- "

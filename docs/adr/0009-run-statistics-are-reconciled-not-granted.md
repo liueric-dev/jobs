@@ -41,7 +41,7 @@ on the deployed database rather than inferred. **No grant changes in either dire
 1. **A fourth action, `run`**, written by the dispatch endpoint `0007` owes, on the branch
    `mark_success` sits on in the other mode. Not inferred from the existing `submit` row, because
    `api/app.py` writes one on the success path *and* both refusal paths and `reason` does not
-   separate them (`backend/api/app.py:559`). Counting a refused submit as a run is `D08` rebuilt one
+   separate them (`backend/api/app.py:596`). Counting a refused submit as a run is `D08` rebuilt one
    table over.
 2. **`searchqueries.reconcile_contributor_runs()`**, step 2 of the nightly step: after the seed,
    **before the decay** (`should_retire` reads `last_result_at`) and **before the dispatch**. It

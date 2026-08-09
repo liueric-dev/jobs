@@ -521,9 +521,16 @@ class TestTheFloorAgainstAReportedBalance(_SettingsCase):
         self.assertEqual(len(result["queries"]), self.FALLBACK)
 
     def test_a_balance_at_the_floor_is_refused(self):
-        with self.assertRaises(HTTPException) as caught:
-            run_claim(self._conn(self._stored(self.FLOOR)))
-        self.assertEqual(caught.exception.status_code, 429)
+        # STILL REFUSED, AND THE SHAPE OF THE REFUSAL MOVED IN T-57. This was a
+        # 429 until a Builder at their floor became the ordinary case rather
+        # than an operator/Builder disagreement -- `daily limit reached (0/0)`
+        # named a cap nobody set, and a 4xx made the worker exit 1 hourly for a
+        # state it was correctly in. The boundary this asserts is T-54's and is
+        # unchanged: a balance AT the floor buys nothing.
+        result = run_claim(self._conn(self._stored(self.FLOOR)))
+        self.assertEqual(result["queries"], [])
+        self.assertIs(result["reserve_reached"], True)
+        self.assertIs(result["paused"], False)
 
     def test_the_last_credit_above_the_floor_is_granted(self):
         # One either side of the boundary, so a `<` for `<=` in the headroom
@@ -539,9 +546,10 @@ class TestTheFloorAgainstAReportedBalance(_SettingsCase):
         # was stored an hour ago. Here the stored balance would have granted
         # the full cap and the reported one grants nothing.
         conn = self._conn(self._stored(self.BALANCE))
-        with self.assertRaises(HTTPException) as caught:
-            run_claim(conn, max_queries=self.CAP, quota_remaining=self.FLOOR)
-        self.assertEqual(caught.exception.status_code, 429)
+        result = run_claim(conn, max_queries=self.CAP,
+                           quota_remaining=self.FLOOR)
+        self.assertEqual(result["queries"], [])
+        self.assertIs(result["reserve_reached"], True)
         self.assertEqual(conn.check_ins[0]["quota_remaining"], self.FLOOR)
 
     def test_a_poll_reporting_no_balance_leaves_the_stored_one_binding(self):
@@ -559,10 +567,49 @@ class TestTheFloorAgainstAReportedBalance(_SettingsCase):
             max_queries=self.CAP)
         self.assertEqual(len(result["queries"]), 1)
 
+    def test_the_two_refusals_are_different_answers(self):
+        # THE ROW ITSELF (T-57). One contributor is out of credits and one has
+        # spent the operator's daily cap; before this they were the same 429
+        # saying the same thing, and only one of them clears at midnight. Both
+        # fixtures are refused -- the assertion is that they are refused
+        # differently, so a Builder and an operator can tell which is which.
+        credits = run_claim(self._conn(self._stored(self.FLOOR)))
+        self.assertIs(credits["reserve_reached"], True)
+
+        with self.assertRaises(HTTPException) as caught:
+            run_claim(self._conn(self._stored(self.BALANCE), used=self.CAP))
+        self.assertEqual(caught.exception.status_code, 429)
+        self.assertIn("daily limit reached", caught.exception.detail)
+
+    def test_a_contributor_who_never_reported_is_not_told_they_are_out(self):
+        # The distinction quota_headroom() keeps and this branch inherits: None
+        # is "nothing usable was reported", not "reported zero". A Builder
+        # between opting in and their first completed run must never be told
+        # they have spent credits they have not spent -- they fall back to the
+        # cap reading, and are refused (if at all) as a cap.
+        used = self.CAP  # spent out under the fallback, with no balance at all
+        with self.assertRaises(HTTPException) as caught:
+            run_claim(self._conn(used=used))
+        self.assertEqual(caught.exception.status_code, 429)
+
+    def test_the_flag_is_false_rather_than_absent_on_an_ordinary_reply(self):
+        # The same argument `paused` is carried by: "at the reserve floor" and
+        # "nothing stale right now" are both an empty list, so a key that
+        # appeared only when true would leave a worker unable to tell them
+        # apart -- and a granting reply is where that is cheapest to assert.
+        result = run_claim(self._conn(self._stored(self.BALANCE)),
+                           max_queries=1)
+        self.assertIs(result["reserve_reached"], False)
+
     def test_a_refusal_on_the_floor_locks_nothing_and_logs_nothing(self):
+        # THE PROPERTY THAT SURVIVED THE 200 (T-57), and the reason it is worth
+        # re-asserting rather than deleting: a refusal that returns instead of
+        # raising no longer gets `with conn:`'s rollback for free, so "granted
+        # nothing" now has to be true because the branch is above the query bank
+        # rather than because an exception undid it.
         conn = self._conn(self._stored(self.FLOOR))
-        with self.assertRaises(HTTPException):
-            run_claim(conn)
+        result = run_claim(conn)
+        self.assertEqual(result["queries"], [])
         self.assertEqual(conn.log, [])
         self.assertEqual(conn.claimed, [])
 
