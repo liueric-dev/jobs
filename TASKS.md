@@ -173,7 +173,7 @@ is the wrong coupling, which is what "soft" is doing here.
 ```bash
 cd backend
 grep -rn MAX_QUERIES_PER_BUILDER --include=*.py . | grep -v __pycache__
-# today: 8 lines -- searchnorm.py:78, searchnorm.py:338 (a comment), webapp/search.py:200,204,272,276,
+# today: 8 lines -- searchnorm.py:78, searchnorm.py:420 (a comment), webapp/search.py:200,204,272,276,
 #   and webapp/tests/test_search_signal.py:184,195
 cd webapp && .venv/bin/python -m unittest discover -s tests
 ```

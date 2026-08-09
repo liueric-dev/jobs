@@ -105,7 +105,7 @@ def register(conn, text, source="seeded", location="new york"):
 
     SOURCE DEFAULTS TO `seeded`, NOT `builder`, AND THAT IS THE TEST WORKING.
     is_due() says an unwatched `builder` query that has already run is not due
-    REGARDLESS of its run statistics (searchnorm.py:235), so a builder row
+    REGARDLESS of its run statistics (searchnorm.py:317), so a builder row
     would go not-due after the reconcile whether or not the reconcile wrote
     anything -- the assertion would pass for the wrong reason. `seeded` is in
     UNDECAYABLE_SOURCES, so the only thing that can make it not-due is the
