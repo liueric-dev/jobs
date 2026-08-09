@@ -82,6 +82,14 @@ ingress:
   - hostname: jobs-api.etotheric.com
     service: http://localhost:8420
 
+  # ---- bankan: separate app, separate systemd unit, separate Postgres role -
+  #
+  # Port 3011, per bankan/deploy/systemd/bankan.service. Same host, unrelated
+  # to the jobs webapp/api above -- listed here only because this tunnel is
+  # shared across every app on this machine.
+  - hostname: bankan.etotheric.com
+    service: http://localhost:3011
+
   # Required terminator. cloudflared refuses to start without a catch-all, and
   # 404 rather than a default backend is deliberate: a hostname added to the
   # Cloudflare dashboard but not to this file must fail visibly, not land on
