@@ -219,8 +219,8 @@ forward commit, so a mechanical revert scan under-reports what was undone.
 
 - **`api/` may not start — but nothing in the code says so, and this entry was wrong twice.**
   Re-checked 2026-08-03; line numbers re-checked 2026-08-08 (`T-46`), after `T-39` moved the check
-  itself out of this file. `app.verify_schema()` is still at `backend/api/app.py:99` but is now only
-  the connection half; the list it runs is `qc.verify_schema()` (`backend/api/query_claims.py:323`),
+  itself out of this file. `app.verify_schema()` is still at `backend/api/app.py:104` but is now only
+  the connection half; the list it runs is `qc.verify_schema()` (`backend/api/query_claims.py:380`),
   whose column loop is `:399-410` and whose raise is `:412-419`, and it requires
   `submission_log.action` (`query_claims.py:196-197`). **There is no mismatch between the two
   definitions:** `qc.ensure_schema` creates the table *with* `action TEXT` (`query_claims.py:304`) *and*
@@ -229,7 +229,7 @@ forward commit, so a mechanical revert scan under-reports what was undone.
   database state** — that init-schema has not been run against the deployed DB — which this repo
   can neither confirm nor refute. Run it and see.
   The recovery claim was also wrong: `JOBS_ADMIN_DATABASE_URL` is indeed absent from
-  `backend/api/.env`, but `manage_users.py:40` reads
+  `backend/api/.env`, but `manage_users.py:45` reads
   `os.environ.get("JOBS_ADMIN_DATABASE_URL", qc.DATABASE_URL)` and **falls back**. If anything
   blocks self-repair it is that `jobs_api` lacks CREATE on public — a grant question, not an
   env-file one.
@@ -383,7 +383,7 @@ The ones that cost something. `.claude/CLAUDE.md` owns the short list; this is t
   list.** Getting the order wrong does not raise — it compares a user id against a profile name,
   matches nothing, and reports every Builder as having no state
   (`backend/webapp/jobs.py:303-324`; `search.py:102-110`).
-- **`api/query_claims.py:494` defines a function named `upsert` returning an `UpsertResult`**, whose
+- **`api/query_claims.py:561` defines a function named `upsert` returning an `UpsertResult`**, whose
   docstring says "It still unpacks to (new, updated, unchanged)". It is safe today, but it is the
   exact shape of the historical defect and a `grep` audit hits it first.
 - **`daily_budget` in `config/google-queries.json` is enforced per request, not per day.** What

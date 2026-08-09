@@ -59,6 +59,7 @@ import os
 import secrets
 import sys
 from datetime import datetime, timedelta, timezone
+from typing import NamedTuple
 
 # api/ sits one level below the pipeline modules it shares code with. Python
 # puts THIS file's directory on sys.path, not its parent, so the parent is
@@ -166,6 +167,32 @@ REQUIRED_SEQUENCES = {
     "submission_log_id_seq": ("USAGE", "SELECT"),
 }
 
+#: docs/adr/0007 decision 3's desired state: the three settings the server holds
+#: per contributor, with the DDL that creates them. ONE LITERAL, read by
+#: ensure_schema() (which adds exactly these columns) and by REQUIRED_COLUMNS
+#: below (which declares exactly these names) -- the shape
+#: MIN_POLL_INTERVAL_SECONDS is annotated with one file over, where a number the
+#: code enforces and a number the code schedules on are one edit rather than two
+#: that can drift.
+#:
+#: WHY THEY LIVE ON `contributors` AND NOT ON A TABLE OF THEIR OWN. They are 1:1
+#: with a contributor, they are three scalars, and they have no history to keep
+#: -- a settings table would be a second place a contributor can be said to
+#: exist, would need its own grant and its own "no row yet" branch, and every
+#: read of it would be a LEFT JOIN resolving to the same defaults
+#: contributor_settings() resolves to from NULL. The cost, stated: `contributors`
+#: was identity-only and never updated after INSERT, and this makes it identity
+#: AND policy, so the row an audit trail's foreign key points at is now a row
+#: that changes. That is accepted rather than unnoticed -- what is lost is the
+#: ability to say WHEN a contributor was paused and by whom, which no reader
+#: needs today and which TASKS.md's T-55 is filed against.
+CONTRIBUTOR_SETTING_COLUMNS = (
+    ("paused", "BOOLEAN"),
+    ("daily_cap", "INTEGER"),
+    ("reserve_floor", "INTEGER"),
+)
+CONTRIBUTOR_SETTINGS = tuple(name for name, _ in CONTRIBUTOR_SETTING_COLUMNS)
+
 #: Columns this service WRITES that were not in submission_log's original
 #: CREATE TABLE, and which therefore exist only where `manage_users.py
 #: init-schema` has run since they were added.
@@ -206,10 +233,25 @@ REQUIRED_SEQUENCES = {
 #: NOT LISTED, deliberately: dataset and last_success_at. Both are written by
 #: the claim SQL and both are in job_ingest_state's CREATE TABLE, so they exist
 #: if the table does and REQUIRED_TABLES already covers that case.
+#:
+#: T-34 ADDED THE FIRST THREE THIS SERVICE ONLY READS, and that is a widening of
+#: the contract the two paragraphs above state, made deliberately. Every entry
+#: before them was written by a statement here; contributors' three settings are
+#: read by `claim` and written only by manage_users.py on the admin credential.
+#: The criterion that decides it is the one the paragraph above states -- can
+#: this column go missing on its own? -- and not the direction of the access:
+#: all three arrive by add_missing_columns onto a table that already exists, so
+#: a deploy that ships app.py ahead of `init-schema` finds a contributors table
+#: that passes to_regclass, passes its privilege check, and is missing the
+#: column `claim`'s SELECT names. That is a 500 on EVERY claim, from a service
+#: that started cleanly -- the identical failure, and a read rather than a write
+#: does not soften it. verify_schema()'s docstring said "only columns this
+#: service WRITES" and was corrected here rather than left to disagree.
 REQUIRED_COLUMNS = {
     "submission_log": ("action",),
     "job_ingest_state": ("claimed_at", "claimed_by", "claim_granted_at"),
     "search_queries": ("claimed_at", "claimed_by", "claim_granted_at"),
+    "contributors": CONTRIBUTOR_SETTINGS,
 }
 
 #: The closed vocabulary of submission_log.action. Free TEXT with a closed set
@@ -311,6 +353,21 @@ def ensure_schema(conn):
             notes TEXT
         )
     """)
+    # docs/adr/0007 decision 3's desired state, added after this table's first
+    # CREATE and therefore by add_missing_columns, exactly as `action` is below
+    # and for the same lock reason. See CONTRIBUTOR_SETTINGS for what each one
+    # means and why they live on this table rather than on one of their own.
+    #
+    # ALL THREE ARE NULLABLE WITH NO DEFAULT, DELIBERATELY. A contributor minted
+    # before this column existed and one minted after it with nothing configured
+    # are the same contributor, and NULL says "the operator has expressed no
+    # policy for this one" in both cases. contributor_settings() resolves NULL
+    # to the service-wide default at read time, so a DEFAULT here would be a
+    # second place that number lives -- and backfilling it onto every existing
+    # row would turn "unset" into "set to today's default", which is a different
+    # fact and the one an operator would later be unable to distinguish.
+    dbconn.add_missing_columns(conn, "contributors",
+                               CONTRIBUTOR_SETTING_COLUMNS)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS api_keys (
             key_hash TEXT PRIMARY KEY,
@@ -394,8 +451,18 @@ def verify_schema(conn):
     And the columns, for the third instance of the same argument. A table can
     exist, be granted, and still be missing a column every INSERT names --
     init-schema is a separate admin command, so shipping this code ahead of it
-    is one `git pull` away. REQUIRED_COLUMNS lists only columns this service
-    WRITES; reads that lose a column fail visibly at the query.
+    is one `git pull` away.
+
+    THIS PARAGRAPH USED TO END "REQUIRED_COLUMNS lists only columns this service
+    WRITES; reads that lose a column fail visibly at the query", and T-34
+    falsified the second clause rather than working around it. `contributors`'
+    three settings columns are read by `claim` and written only by
+    manage_users.py on the admin credential, and losing one of them fails at the
+    query on EVERY claim -- visibly, from a service that started cleanly, which
+    is the same 500 the write case gives and not a milder one. What the map
+    lists is columns that can go missing on their own: added by
+    add_missing_columns to a table that already exists, rather than present in a
+    CREATE TABLE. See REQUIRED_COLUMNS itself for the full argument.
     """
     problems = []
     for table, privileges in REQUIRED_TABLES.items():
@@ -512,6 +579,93 @@ def mint_credential(conn, name, label=None, contributor_id=None, notes=None):
         (key_hash, contributor_id, label, now),
     )
     return contributor_id, raw_key, key_hash, now
+
+
+# --------------------------------------------------------------------------
+# Contributor settings -- docs/adr/0007 decision 3, "the server holds desired
+# state"
+# --------------------------------------------------------------------------
+
+#: What a contributor with nothing configured gets. `daily_cap` is deliberately
+#: absent: its default is app.MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY, which is
+#: env-configurable and belongs to the service rather than to this module, and
+#: is passed into claim_allowance() rather than duplicated here.
+DEFAULT_RESERVE_FLOOR = 0
+
+
+class ContributorSettings(NamedTuple):
+    """One contributor's desired state, with NULLs already resolved.
+
+    `daily_cap` stays None when unset, because "unset" and "set to the
+    service-wide default" are different facts and only the caller knows what
+    that default currently is. The other two resolve here: an absent pause is
+    not paused and an absent floor reserves nothing, and neither has a second
+    candidate value anywhere.
+    """
+    paused: bool
+    daily_cap: int | None
+    reserve_floor: int
+
+
+def contributor_settings(conn, contributor_id):
+    """Read one contributor's settings. Missing row -> the defaults.
+
+    A MISSING ROW IS NOT AN ERROR HERE, and that is not defensiveness. The only
+    caller reaches this after authenticate() has already resolved a live
+    api_keys row to this id, and api_keys.contributor_id is a foreign key onto
+    contributors -- so the row exists, and the empty case is unreachable rather
+    than tolerated. Returning defaults instead of raising keeps the unreachable
+    case behaving like the ordinary one: an operator who has expressed no policy
+    gets no policy, which is what an absent row also means.
+    """
+    row = conn.execute(
+        "SELECT paused, daily_cap, reserve_floor FROM contributors WHERE id = %s",
+        (contributor_id,),
+    ).fetchone()
+    if row is None:
+        return ContributorSettings(False, None, DEFAULT_RESERVE_FLOOR)
+    paused, daily_cap, reserve_floor = row
+    return ContributorSettings(
+        bool(paused),
+        daily_cap,
+        DEFAULT_RESERVE_FLOOR if reserve_floor is None else reserve_floor,
+    )
+
+
+def claim_allowance(settings, default_cap):
+    """How many queries this contributor may be granted today, in total.
+
+    Pure arithmetic over a settings tuple and a number, so the boundary the row
+    that built this is specified on can be tested without a database, a request
+    or a query bank -- the same reason ../score.py's score_job() takes no I/O.
+
+    TWO NUMBERS, ONE SUBTRACTION, AND THE SECOND IS NOT REDUNDANT. `cap - floor`
+    collapses arithmetically into a single smaller cap, and if the two had one
+    owner it should be one column. They do not. The cap is the OPERATOR's: how
+    much of a contributor's day this service is willing to schedule. The floor
+    is the BUILDER's: how many of their own SerpApi credits they keep back. Held
+    as one number, an operator raising a cap from 8 to 12 silently spends a
+    reserve they cannot see and did not set, and the Builder's only way to
+    restate it is to notice and ask. Two columns means each party edits their
+    own number without knowing the other's, which is the property worth a
+    column.
+
+    THE FLOOR IS DENOMINATED IN A DAY'S CREDITS, not in a balance. `0007`
+    decision 4's pacing divides credits remaining by days left, and a floor
+    against a REPORTED remaining balance would be the more natural reading of
+    the word -- but the balance is contributor-reported and nothing reports it
+    yet: T-35 owns "remaining quota", and building a floor against a number that
+    does not arrive would be a setting that silently never binds. See TASKS.md's
+    T-54, filed against this line, for the version that reads a balance.
+
+    NEVER BELOW ZERO. A floor larger than the cap is an operator and a Builder
+    who disagree, and the resolution is that nothing is scheduled -- not a
+    negative allowance, which `used >= allowance` would read as "already over"
+    correctly but `min(req.max, allowance - used)` would read as a negative
+    max_queries and hand to a query bank that has no opinion about one.
+    """
+    cap = default_cap if settings.daily_cap is None else settings.daily_cap
+    return max(0, cap - settings.reserve_floor)
 
 
 # --------------------------------------------------------------------------

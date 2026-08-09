@@ -251,12 +251,21 @@ class TestRequiredColumns(unittest.TestCase):
             with open(path, encoding="utf-8") as fh:
                 sources.append(fh.read())
         combined = "\n".join(sources)
+        # THE TYPE IS NOT THE SUBJECT. This used to look for the literal
+        # `("<column>", "TEXT")`, which was accurate while every declared column
+        # happened to be TEXT and became a false negative the moment one was
+        # not: T-34's three settings on `contributors` are BOOLEAN and INTEGER,
+        # and a check that reads a column as undeclared because of its type
+        # would be reporting the wrong fact. What this asserts is what its name
+        # says -- that some add_missing_columns pair in one of the three modules
+        # names the column -- so the type is matched loosely and on purpose.
         for table, columns in qc.REQUIRED_COLUMNS.items():
             for column in columns:
-                self.assertIn(f'("{column}", "TEXT")', combined,
-                              f"{table}.{column} is required at startup but "
-                              f"nothing in query_claims.py, schema.py or "
-                              f"lib/state.py ever adds it")
+                self.assertRegex(
+                    combined, r'\("' + re.escape(column) + r'", "[A-Z][A-Z ]*"\)',
+                    f"{table}.{column} is required at startup but "
+                    f"nothing in query_claims.py, schema.py or "
+                    f"lib/state.py ever adds it")
 
     def test_every_claim_column_written_is_declared(self):
         """The inverse of the test above, and T-45's actual finding.

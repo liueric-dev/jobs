@@ -10,6 +10,9 @@ tunnel), unlike app.py which is the untrusted-facing surface.
     python3 manage_users.py create --name "Dave" --label "dave-laptop"
     python3 manage_users.py list
     python3 manage_users.py revoke --key-hash <prefix>
+    python3 manage_users.py settings --contributor c_ab12 --paused
+    python3 manage_users.py settings --contributor c_ab12 --active \
+                                     --daily-cap 8 --reserve-floor 2
 
 KEY HANDLING: the raw key is printed exactly once, at creation, and is never
 stored anywhere -- only sha256(key) goes into the database. There is
@@ -17,12 +20,14 @@ deliberately no "show me Dave's key again" command: if a key is lost, revoke
 it and mint a new one. That way a database dump (or this script's output being
 piped somewhere) never yields working credentials.
 
-TWO CREDENTIALS: `init-schema` is the only command that issues DDL, and it is
-the only one that uses JOBS_ADMIN_DATABASE_URL. Everything else runs on the
-same restricted DATABASE_URL the API itself uses, because create/list/revoke
-need nothing beyond the INSERT/SELECT/UPDATE grants that role already holds.
-Keeping schema creation in a separate, explicitly-invoked command is what lets
-the long-running service hold no schema-modification rights at all.
+TWO CREDENTIALS: `init-schema` issues DDL and `settings` writes policy, and
+those two are the ones that use JOBS_ADMIN_DATABASE_URL. Everything else runs
+on the same restricted DATABASE_URL the API itself uses, because
+create/list/revoke need nothing beyond the INSERT/SELECT/UPDATE grants that role
+already holds. Keeping schema creation in a separate, explicitly-invoked command
+is what lets the long-running service hold no schema-modification rights at all;
+keeping `settings` there is what stops the internet-facing role from being able
+to rewrite the policy that governs it -- see cmd_settings().
 """
 
 import os
@@ -115,6 +120,68 @@ def cmd_list(args):
         print(f"{cid}  {name:<20}  {kh:<12}  {label or '-':<16}  {created}  [{status}]")
 
 
+def cmd_settings(args):
+    """Set (or clear) one contributor's desired state -- docs/adr/0007 dec. 3.
+
+    ON THE ADMIN CREDENTIAL, WHICH IS THE THIRD COMMAND TO NEED ONE AND THE
+    FIRST THAT ISSUES NO DDL. `jobs_api` holds SELECT and INSERT on
+    `contributors` and deliberately not UPDATE, and this command is the reason
+    to keep it that way rather than the reason to widen it: these three columns
+    are the operator's policy over a contributor's machine, and the role that
+    faces those machines must not be able to rewrite them. A compromised app.py
+    that could un-pause a contributor and raise their own cap would make the
+    control layer 0007 decision 3 exists to build enforceable only against a
+    process that was not compromised, which is not enforcement.
+
+    So the module docstring's "TWO CREDENTIALS" split now reads: the admin URL
+    is DDL AND policy; the restricted URL is everything the running service
+    could do anyway.
+
+    UNPASSED IS UNTOUCHED, `--clear` IS BACK TO THE DEFAULT. Three settings on
+    one row means the obvious implementation writes all three every time, so
+    `settings --paused` would silently reset a cap somebody set last week. Only
+    the flags actually given are in the UPDATE. Clearing to NULL is spelled out
+    rather than done with a sentinel value, because 0 is a meaningful cap (spend
+    nothing) and would otherwise be unreachable.
+    """
+    updates = {}
+    if args.paused is not None:
+        updates["paused"] = args.paused
+    for name in ("daily_cap", "reserve_floor"):
+        value = getattr(args, name)
+        if value is not None:
+            updates[name] = None if value == "clear" else int(value)
+    if not updates:
+        print("nothing to set; pass at least one of --paused/--active, "
+              "--daily-cap, --reserve-floor", file=sys.stderr)
+        sys.exit(1)
+
+    # Every spliced name is a key this function put there itself, from the
+    # literal tuple above and args.paused -- never a value off the command line.
+    # See .claude/rules/sql.md on why identifier splicing is constants-only.
+    assignments = ", ".join(f"{name} = %s" for name in updates)
+    with connect(admin=True) as conn:
+        changed = conn.execute(
+            f"UPDATE contributors SET {assignments} WHERE id = %s",  # noqa: S608
+            (*updates.values(), args.contributor),
+        ).rowcount
+        conn.commit()
+
+    if not changed:
+        print(f"no contributor with id {args.contributor!r}", file=sys.stderr)
+        sys.exit(1)
+
+    with connect(admin=True) as conn:
+        row = conn.execute(
+            "SELECT paused, daily_cap, reserve_floor FROM contributors WHERE id = %s",
+            (args.contributor,),
+        ).fetchone()
+    paused, cap, floor = row
+    print(f"{args.contributor}  paused={bool(paused)}  "
+          f"daily_cap={'default' if cap is None else cap}  "
+          f"reserve_floor={0 if floor is None else floor}")
+
+
 def cmd_revoke(args):
     with connect() as conn:
         rows = conn.execute(
@@ -159,6 +226,20 @@ def main():
 
     l = sub.add_parser("list", help="list contributors and keys")
     l.set_defaults(func=cmd_list)
+
+    s = sub.add_parser("settings", help="set a contributor's pause/cap/reserve")
+    s.add_argument("--contributor", required=True, help="contributor_id")
+    # One destination, two flags, so neither "--paused false" nor a bare
+    # "--paused" that means the opposite of what it reads is possible.
+    s.add_argument("--paused", dest="paused", action="store_const", const=True,
+                   default=None, help="stop granting this contributor queries")
+    s.add_argument("--active", dest="paused", action="store_const", const=False,
+                   help="resume granting queries")
+    s.add_argument("--daily-cap", dest="daily_cap", default=None,
+                   help="queries per day, or 'clear' for the service default")
+    s.add_argument("--reserve-floor", dest="reserve_floor", default=None,
+                   help="credits per day to keep unspent, or 'clear' for 0")
+    s.set_defaults(func=cmd_settings)
 
     r = sub.add_parser("revoke", help="revoke an API key by key_hash prefix")
     r.add_argument("--key-hash", required=True, dest="key_hash")

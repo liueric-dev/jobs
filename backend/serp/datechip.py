@@ -6,7 +6,7 @@ still has one. What it did not have was a way for anything other than that
 script to reach it, which is why task 25's run_due() had no date policy at all
 and would have re-fetched the same relevance-ranked page every night.
 
-THE SECOND COPY IN THE REPO IS DELIBERATE AND STAYS. api/query_claims.py:456
+THE SECOND COPY IN THE REPO IS DELIBERATE AND STAYS. api/query_claims.py:523
 holds its own, because ".claude/CLAUDE.md" says the three processes share only
 schema.py and lib/ -- backend/api/ importing a pipeline module would break the
 property that lets it run under its own venv with

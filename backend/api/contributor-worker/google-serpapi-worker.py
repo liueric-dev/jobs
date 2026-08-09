@@ -327,6 +327,26 @@ def main():
     # ones never told.
     report_poll_interval(clamp_poll_interval(claimed.get("poll_interval_seconds")))
 
+    # REPORTED, NOT OBEYED. The server has already granted nothing -- this
+    # branch skips no work, spends no credit and decides nothing, and if it were
+    # deleted the run would behave identically. What would change is what the
+    # Builder reads: a paused machine and a machine with nothing stale to do
+    # both print a line about having nothing to do, and "a paused worker being
+    # indistinguishable from a broken one" (see report_poll_interval) is the
+    # same failure one step along. The server's pause is the source of truth and
+    # this is the only thing said about it locally, which is what keeps it from
+    # becoming a second one.
+    #
+    # `.get`, and a truth test rather than `is True`: a server that predates
+    # this sends no key at all, exactly as with the poll interval, so either end
+    # may be deployed first.
+    if claimed.get("paused"):
+        print("worker: paused by the server -- no queries were claimed and no "
+              "SerpApi credit was spent. Nothing is wrong with this machine, "
+              "and it will pick up again on its own when the operator resumes "
+              "it; the schedule keeps running so that it can.")
+        return
+
     queries = claimed.get("queries", [])
     if not queries:
         # Not an error: it means everything is already up to date. Exiting 0
@@ -527,7 +547,7 @@ SERPAPI_ACCOUNT_URL = "https://serpapi.com/account"
 #: What --check offers to release when it asks the server whether the
 #: credential works. NOTHING CAN EVER HOLD A CLAIM ON IT: every real dataset
 #: name is built server-side as "google_jobs:query:<slug>" out of the server's
-#: own query bank (api/app.py:362), and no slug is spelled like this.
+#: own query bank (api/app.py:420), and no slug is spelled like this.
 CHECK_PROBE_DATASET = "google_jobs:query:__check__"
 
 
@@ -577,7 +597,7 @@ def probe(request, timeout=None):
 def check_base_url(send=probe):
     """Is JOBS_API_BASE_URL an address where this service answers?
 
-    /v1/health (api/app.py:216) needs no credential, so this separates "your
+    /v1/health (api/app.py:221) needs no credential, so this separates "your
     address is wrong" from "your key is wrong" -- which the next check depends
     on, and which the row requires be distinguishable in the output.
     """
@@ -616,12 +636,12 @@ def check_credential(base_url_ok, send=probe):
     THE PROBE IS A RELEASE OF A DATASET NOBODY CAN HOLD, AND THE 409 IS THE
     PASS. Every authenticated route on that server does something. /v1/queries/
     claim locks rows out of the pool for CLAIM_TTL_MINUTES apiece and meters
-    the caller against a daily cap (query_claims.py:768, api/app.py:329-334), so
+    the caller against a daily cap (query_claims.py:924, api/app.py:371-385), so
     checking a credential with it would spend the allowance being checked, and
     on a day when the bank is stale it would leave real queries claimed by a
     worker that was only asking a question. Release is the one authenticated
     route that can be made to change nothing: it authenticates FIRST and asks
-    whether the caller holds the claim SECOND (api/app.py:511, :513), so a
+    whether the caller holds the claim SECOND (api/app.py:569, :571), so a
     dataset the query bank cannot produce reaches the credential check, writes
     no submission_log row, commits nothing, and comes back 409.
 

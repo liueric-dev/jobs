@@ -116,7 +116,7 @@ def _database_url_unchanged():
     every other caller, and keeps the precedence `--url` > exported
     DATABASE_URL > backend/.env, with webapp/.env contributing nothing. It
     restores before api/ is imported too, so that module's own module-scope
-    DATABASE_URL capture (api/query_claims.py:90-91) does not inherit the same
+    DATABASE_URL capture (api/query_claims.py:91-92) does not inherit the same
     wrong value; nothing in this tool's path reads that constant today, which
     makes it the kind of thing that is only ever noticed after it matters.
     """

@@ -96,7 +96,7 @@ RUN_STATISTICS = ("last_run_at", "run_count", "provider_last_used",
 #: already carries "google_jobs:query:<slug>" for the other claim mode, so the
 #: two modes are told apart by the prefix and nothing else. A `query_id` column
 #: would be the tidier shape and is not available: the service holds no DDL
-#: rights (api/query_claims.py:267), so adding one is an admin command on a
+#: rights (api/query_claims.py:309), so adding one is an admin command on a
 #: deployed database, and the prefix costs nothing that a column would buy.
 #:
 #: DEFINED HERE, ON THE PIPELINE SIDE, AND IMPORTED BY api/. That is the only
@@ -113,7 +113,7 @@ CONTRIBUTOR_DATASET_PREFIX = "search_query:"
 #: reason is that the inference is not available. api/app.py writes a `submit`
 #: row on the success path AND on both refusal paths, and `reason` does not
 #: separate them -- the success path sets a reason too when records failed to
-#: write (api/app.py:493). Counting a refused submit as a run is exactly defect
+#: write (api/app.py:551). Counting a refused submit as a run is exactly defect
 #: D08 (an empty submission advancing a watermark) rebuilt one table over, so
 #: the signal is written explicitly by the side that knows, on the same branch
 #: mark_success sits on in the other mode.

@@ -56,10 +56,16 @@ class FakeConn:
 
     def __init__(self, *, contributor="c_test", revoked=None, claim_rows_today=0,
                  claim_state=None, last_success=None, claim_wins=True,
-                 watermarks=None):
+                 watermarks=None, settings=(None, None, None)):
         self.contributor = contributor
         self.revoked = revoked
         self.claim_rows_today = claim_rows_today
+        #: (paused, daily_cap, reserve_floor) as contributor_settings() reads
+        #: them, straight off the row and NOT pre-resolved: all-NULL is the
+        #: default and is what every test written before T-34 gets, so those
+        #: tests keep asserting the behaviour of a contributor the operator has
+        #: expressed no policy for. Pass None for a MISSING contributors row.
+        self.settings = settings
         #: (claimed_by, claimed_at, claim_granted_at), as holds_claim reads it.
         self.claim_state = claim_state
         self.last_success = last_success
@@ -109,6 +115,8 @@ class FakeConn:
             else:
                 counted += len(self.log)
             return FakeResult([(counted,)])
+        if flat.startswith("SELECT paused, daily_cap, reserve_floor FROM contributors"):
+            return FakeResult([self.settings] if self.settings is not None else [])
         if flat.startswith("SELECT claimed_by, claimed_at, claim_granted_at"):
             return FakeResult([self.claim_state] if self.claim_state else [])
         if flat.startswith("SELECT last_success_at FROM job_ingest_state"):

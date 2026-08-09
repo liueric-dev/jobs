@@ -194,6 +194,40 @@ Only SerpApi-backed buckets are offered. The Apify source bills the operator's
 own account per result, so it stays in the private pipeline — contributors
 spend their own SerpApi quota, which is the point.
 
+### Contributor settings — the server holds desired state
+
+`docs/adr/0007` decision 3. Three columns on `contributors`, read by `claim` on
+every poll and written only by `manage_users.py settings`:
+
+| Setting | Unset means | What it does |
+|---|---|---|
+| `paused` | not paused | `claim` grants nothing and answers `{"paused": true, "queries": [], "poll_interval_seconds": N}` |
+| `daily_cap` | `MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` | this contributor's claims-per-day ceiling, replacing the service default rather than capping it |
+| `reserve_floor` | `0` | credits per day the Builder keeps; `allowance = max(0, cap − floor)` |
+
+```bash
+python3 manage_users.py settings --contributor c_ab12 --paused
+python3 manage_users.py settings --contributor c_ab12 --active --daily-cap 8 --reserve-floor 2
+python3 manage_users.py settings --contributor c_ab12 --daily-cap clear
+```
+
+**`settings` runs on `JOBS_ADMIN_DATABASE_URL`, and it is the second command
+that does** — `jobs_api` holds SELECT and INSERT on `contributors`, not UPDATE,
+so the internet-facing role cannot rewrite the policy that governs it. That is
+why the grant table below is unchanged by this feature.
+
+**A pause is a `200`, never a `4xx`.** The worker exits 1 on any HTTP error from
+`claim`, so refusing a paused contributor would make a deliberately quiet
+machine report itself broken; `0007`'s dormancy consequence is that pausing
+stops *spending*, not *reporting*. The reply still carries
+`poll_interval_seconds`, because that poll is the only channel a resume can
+arrive on.
+
+**The two numbers are spent server-side and never sent.** The worker is told
+`paused` — so a Builder can tell a paused machine from an idle one — and nothing
+else. A number the worker could act on is a number it could disagree about, and
+`0007` decision 3 gives it no policy beyond its poll-interval floor.
+
 **`submit` with an empty `jobs` array does not advance the watermark**
 (defect D08, fixed 2026-08-02). It releases the claim, logs the submission and
 returns `watermark_advanced: false`. The pipeline's own
@@ -315,6 +349,10 @@ asserts that no table is queried without being declared, **and** that no table i
 declared without being queried. A privilege held for no reason is a hole in a
 security posture whose whole claim is "this role can do exactly six things."
 
+`contributors` keeps SELECT/INSERT and gains no UPDATE despite growing three
+mutable settings columns, because the only writer is `manage_users.py settings`
+on the admin credential — see "Contributor settings" above.
+
 ### Required columns
 
 `query_claims.REQUIRED_COLUMNS` is a third map, checked at startup by the same
@@ -322,8 +360,17 @@ security posture whose whole claim is "this role can do exactly six things."
 table can exist, be granted correctly, and still be missing a column every
 `INSERT` names — `init-schema` is a deliberately separate admin command this
 service holds no rights to run, so shipping the code ahead of it is one `git
-pull` away. Today it holds one entry: `submission_log.action`, added 2026-08-02
-so `claims_today()` can count claims rather than log rows (defect D41).
+pull` away.
+
+**Read the map, not a count written here.** It held one entry when this section
+was written (`submission_log.action`, added 2026-08-02 so `claims_today()` could
+count claims rather than log rows — defect D41); `T-45` widened it to seven
+across three tables, and `T-34` added `contributors`' three settings. What
+qualifies an entry is not how the column is accessed but whether it can go
+missing on its own: every one arrives via `dbconn.add_missing_columns` on a table
+that already exists, rather than in a `CREATE TABLE`. `T-34`'s three are the
+first this service only ever **reads** — losing one is a 500 on every claim from
+a service that started cleanly, which is the same failure the written case gives.
 
 `action` is one of `claim`, `submit`, `release` — free `TEXT` with the closed set
 in `query_claims.SUBMISSION_ACTIONS`, because a `CHECK` constraint would need DDL

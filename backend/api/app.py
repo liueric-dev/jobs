@@ -50,6 +50,11 @@ from lib import text
 
 MAX_JOBS_PER_SUBMIT = int(os.environ.get("MAX_JOBS_PER_SUBMIT", "50"))
 MAX_QUERIES_PER_CLAIM = int(os.environ.get("MAX_QUERIES_PER_CLAIM", "5"))
+#: The service-wide daily claim cap, and since T-34 the DEFAULT one rather than
+#: the only one: `contributors.daily_cap` overrides it per contributor and NULL
+#: there means this number. It stays an env var because a service with no
+#: contributor rows configured still needs a cap, and because raising it for
+#: everybody must not require thirty UPDATEs.
 MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY = int(
     os.environ.get("MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY", "50")
 )
@@ -322,15 +327,61 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
     this cap cannot express -- a cooperating worker's cadence and a hostile
     one's request rate are different problems, and only the first is answered
     here.
+
+    AND THE REST OF THE DESIRED STATE (T-34). `paused` rides on every reply
+    beside the interval; the daily cap and the reserve floor are spent HERE and
+    never sent, because a number the worker could act on is a number the worker
+    could disagree about. That asymmetry is the point of decision 3 rather than
+    an omission: the worker holds no policy of its own beyond T-31's clamp, so
+    the only settings it is told are the ones it must REPORT (a paused machine
+    that looked idle is indistinguishable from a broken one) rather than the
+    ones it would have to ENFORCE. Enforcement of both numbers is the
+    `allowance` arithmetic below, on this side of the wire, where a contributor
+    running a patched worker gets exactly the same answer.
     """
     with db() as conn:
         contributor_id = authenticate(conn, authorization)
+        settings = qc.contributor_settings(conn, contributor_id)
+
+        # PAUSE IS A NORMAL REPLY, NOT AN ERROR, AND THAT IS THE WHOLE DESIGN.
+        # A 4xx here would be wrong three times over: the worker exits 1 on any
+        # HTTPError from this route (contributor-worker/
+        # google-serpapi-worker.py:315-318), so a deliberately quiet machine
+        # would report itself broken; a Builder reading their own logs could not
+        # tell "the operator paused me" from "my credential died"; and T-35's
+        # check-in has to be recorded for a paused contributor above all others
+        # -- 0007's dormancy consequence is precisely that pausing stops
+        # SPENDING and not REPORTING, so a paused worker still has to reach the
+        # same place in this function that an idle one does.
+        #
+        # It returns BEFORE claims_today() and before the query bank is opened,
+        # and that ordering is deliberate rather than an optimisation: a paused
+        # contributor is granted nothing, so there is nothing to meter, and
+        # charging a paused poll against a cap would make a pause spend the
+        # allowance it exists to stop spending. It returns AFTER authenticate(),
+        # so a revoked key is still a 401 -- pause is policy for a contributor
+        # this service recognises, not a way to answer one it does not.
+        if settings.paused:
+            return {"poll_interval_seconds": POLL_INTERVAL_SECONDS,
+                    "paused": True, "queries": []}
+
+        # The operator's cap and the Builder's reserve, resolved into the one
+        # number the rest of this function spends. See qc.claim_allowance() for
+        # why they are two settings and not one.
+        allowance = qc.claim_allowance(settings, MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY)
 
         used = claims_today(conn, contributor_id)
-        if used >= MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY:
+        # >=, AND THE BOUNDARY IS THE POINT. `used == allowance` is a
+        # contributor who has spent exactly what they are allowed, and it must
+        # refuse: with `>` they would be handed one more, so a reserve floor of
+        # 2 would keep 1. The same edge is why `remaining` below is computed
+        # from `allowance` and not from MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY --
+        # subtracting the floor here and then forgetting it there would let a
+        # single request walk straight through the reserve it just checked.
+        if used >= allowance:
             raise HTTPException(
                 status_code=429,
-                detail=f"daily limit reached ({used}/{MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY})",
+                detail=f"daily limit reached ({used}/{allowance})",
             )
 
         try:
@@ -338,7 +389,7 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
         except (OSError, ValueError, KeyError) as e:
             raise HTTPException(status_code=500, detail=f"query bank unavailable: {e}")
 
-        remaining = MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY - used
+        remaining = allowance - used
         picked = qc.pick_stale_queries_by_bucket(
             conn, buckets, claimed_by=contributor_id,
             max_queries=min(req.max, remaining),
@@ -357,6 +408,13 @@ def claim(req: ClaimRequest, authorization: str = Header(default=None)):
             # quiet contributor never, and the quiet ones are exactly the
             # machines an operator needs to be able to slow down or wave off.
             "poll_interval_seconds": POLL_INTERVAL_SECONDS,
+            # ON EVERY REPLY TOO, and false rather than absent. The worker asks
+            # `claimed.get("paused")` and an empty query list is the common
+            # honest answer, so a key that appeared only when it was true would
+            # leave "paused" and "nothing stale right now" reading identically
+            # to a client that had not been updated -- which is the one
+            # distinction this flag exists to carry.
+            "paused": False,
             "queries": [
                 {
                     "dataset": f"google_jobs:query:{q['slug']}",

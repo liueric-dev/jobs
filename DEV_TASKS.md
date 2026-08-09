@@ -26,7 +26,7 @@ than trim. OQ-34 carries the three ways out. Everything cut is in git at 9a05925
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-37`.** Numbers are
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-38`.** Numbers are
 never reused and never renumbered; `OQ-7` is closed and stays in the table so citations resolve.
 
 **Every row here needs you.** A session cannot start any of them: each needs a machine, an account,
@@ -51,6 +51,59 @@ system that already works, not one waiting to be unblocked.
 ---
 
 ## Open
+
+### OQ-37 — `jobs-api` will not restart until `init-schema` runs, and it is running now
+
+**Why it is yours:** a DDL run against the live database while `jobs-api` is serving it, not a
+missing credential. **The first version of this row said the credential was missing and that was
+under-checked:** `JOBS_ADMIN_DATABASE_URL` is indeed absent from `backend/api/.env`, so
+`manage_users.py` falls back to the restricted `jobs_api` URL and the ALTER fails with permission
+denied — but `public.contributors` is owned by **`jobs_pipeline`**, which is the role in
+`backend/.env`'s own `DATABASE_URL`. The exact `ADD COLUMN` was dry-run on that credential against
+the live database on 2026-08-09 and rolled back; it succeeds. So what is yours is the decision, not
+the access.
+
+**What:** `T-34` added three columns to `contributors` and to
+`query_claims.REQUIRED_COLUMNS`, and `verify_schema()` runs in the FastAPI lifespan. The live
+`public.contributors` has `id`/`name`/`created_at`/`notes` and nothing else (read off the deployed
+`jobs` database on the pipeline credential, 2026-08-09; the table is empty, 0 rows). So the
+**currently running** `jobs-api.service` — active on `127.0.0.1:8420`, `/v1/health` answering, and
+started before this change — keeps working, and **the next restart of it fails to start**.
+
+**This is `OQ-7` again, and that row is the reason to file this rather than mention it.** There, the
+whole webapp was down for a day because `verify_schema()` raised in the lifespan, the process
+exited, and nobody had started it. The refusal is the designed behaviour — the alternative is a
+service that starts cleanly and 500s on every claim — but it is a deploy step, and a deploy step
+nobody performed is what `OQ-7` cost.
+
+**Two routes, and they are not equivalent — pick deliberately.** `init-schema` runs
+`qc.ensure_schema()`, which calls `schema.ensure_schema()` and therefore also brings the app view
+and the foreign-key cascade repair (`backend/api/query_claims.py:326-330` says so outright). That is
+the documented, idempotent path and the one the docstring intends; it is also more than three
+columns, against a database a live webapp reads, and `.claude/CLAUDE.md`'s standing warning about
+view-DROP-and-GRANT-loss is next door to it ([`docs/adr/0004`](docs/adr/0004-provision-database-issues-no-grants.md)).
+The narrow route issues only what `T-34` added and touches nothing else.
+
+```bash
+# route (a) -- the documented one, and more than these three columns
+cd backend/api
+JOBS_ADMIN_DATABASE_URL="$(grep ^DATABASE_URL= ../.env | cut -d= -f2-)" \
+  .venv/bin/python manage_users.py init-schema
+
+# route (b) -- only what T-34 added; same statements add_missing_columns issues
+#   ALTER TABLE contributors ADD COLUMN IF NOT EXISTS paused BOOLEAN;
+#   ALTER TABLE contributors ADD COLUMN IF NOT EXISTS daily_cap INTEGER;
+#   ALTER TABLE contributors ADD COLUMN IF NOT EXISTS reserve_floor INTEGER;
+
+sudo systemctl restart jobs-api && curl -s localhost:8420/v1/health
+```
+
+**Done when:** `paused`, `daily_cap` and `reserve_floor` exist on `public.contributors`,
+`jobs-api.service` has been restarted deliberately rather than discovered down, and `/v1/health`
+answers after it. **No GRANT changes** — the new columns are read on the existing SELECT and written
+only by `manage_users.py settings`, which runs on the admin credential.
+
+---
 
 ### OQ-3 — More labellers on the same ten overlap rows, and round 2
 
@@ -294,7 +347,7 @@ ADR, since it either ratifies or reverses a documented position.
 **What:** `0007` scopes onboarding completely and offboarding not at all. A cohort ends. Three
 questions the code cannot answer:
 
-- **Credential revocation.** `manage_users.py revoke` exists (`backend/api/manage_users.py:123`), so
+- **Credential revocation.** `manage_users.py revoke` exists (`backend/api/manage_users.py:190`), so
   the mechanism is there and the policy is not. An alumnus spending their own credits on the next
   cohort's search is a gift — and also an account you no longer have a relationship with.
 - **Keyword retention.** `search_queries` deliberately carries no per-Builder identity
@@ -339,7 +392,7 @@ already spending 8/day leaves very little reserve to allocate, which may settle 
 database, which no session may touch.
 
 **What:** `T-26` gave `api/query_claims.py` a claim mode over `search_queries`, so that table is now
-the seventh entry in `REQUIRED_TABLES` (`backend/api/query_claims.py:104`) and `verify_schema()`
+the seventh entry in `REQUIRED_TABLES` (`backend/api/query_claims.py:105`) and `verify_schema()`
 checks it at startup like the other six. Until these run, the service refuses to start and names the
 missing grant:
 
@@ -369,7 +422,7 @@ host no session can reach — `OQ-30` first, and that is the only reason for the
 **What:** `T-30` shipped `--check`, and one of its three checks is unverified against anything real.
 The credential check asks the deployed `api/` to release a claim nobody holds and reads the **409** as
 "your key is good" and the **401** as "your key is not" — an ordering inside `release`
-(`backend/api/app.py:511`, `:513`) that `api/tests/test_worker_check.py` pins with a fake connection.
+(`backend/api/app.py:569`, `:513`) that `api/tests/test_worker_check.py` pins with a fake connection.
 **The 401 branch has been run against a real HTTP server; the 409 branch never has.** A fake that
 agrees with the code it stands in for cannot tell you the deployed service agrees too.
 
@@ -426,13 +479,13 @@ machine can reach, and the `JOBS_ADMIN_DATABASE_URL` question has an answer eith
 cannot be delegated to a session that would otherwise just pick one.
 
 **What:** `install_agent` takes its interval from `MIN_POLL_INTERVAL_SECONDS` and from nowhere else
-(`backend/api/contributor-worker/google-serpapi-worker.py:450`), so an operator who sets
+(`backend/api/contributor-worker/google-serpapi-worker.py:470`), so an operator who sets
 `POLL_INTERVAL_SECONDS` to six hours gets thirty machines that report the ask and keep polling
 hourly. `TASKS.md`'s `T-41` is the implementation and is **blocked on this row**. The two routes
 differ on one property, and it is the one no test in this tree can observe:
 
 - **(a) `--install` asks the server once.** Costs no SerpApi credit — only a claimed *search* does —
-  but `claim` is the only route returning `poll_interval_seconds` (`backend/api/app.py:359`), and
+  but `claim` is the only route returning `poll_interval_seconds` (`backend/api/app.py:410`), and
   claiming leases queries the installing process will not run, so (a) is either a leak of live claims
   at install time or a server change to carry the interval somewhere cheaper. It also reverses
   `T-30`'s split, which specified `--install` to talk to nothing and `--check` to be the thing that
@@ -473,7 +526,7 @@ Filed by `T-40`, 2026-08-08, which spent its session rewriting fourteen and expe
 **The evidence is not a projection.** `T-28`/`T-29`/`T-30` closed with correct citations into
 `google-serpapi-worker.py` and `T-30`/`T-31` broke all twelve; `T-42` corrected six into `api/app.py`
 and `T-39` broke them the next commit (`T-46` has both lists). Every one still resolves, so nothing
-reported it. `api/app.py:580-587` already carries a mitigation — two constants parked at the bottom
+reported it. `api/app.py:638-645` already carries a mitigation — two constants parked at the bottom
 so nothing is inserted above `submit()` — and `T-39` inserted above `submit()` anyway.
 
 **Three options, not equivalent.** (1) Keep rewriting: every row pays forever and a row that forgets
