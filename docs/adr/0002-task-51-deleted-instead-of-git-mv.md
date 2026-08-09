@@ -18,7 +18,8 @@ Tranche nine's task 51 was *archive the rest*. Its README was explicit about the
 `5046f98` deleted 137 files and 42,777 lines under `docs/` and left no stubs at all, replacing the
 whole tree with one file written from the code. The deviation was not argued in the commit and no
 register recorded it; it surfaced only when [`../../DEV_TASKS.md`](../../DEV_TASKS.md) was written
-and the tranche's state had to be reconciled row by row (`../../DEV_TASKS.md:307-309`).
+and the tranche's state had to be reconciled row by row (`../../DEV_TASKS.md`, § *Tranche nine, and
+where it ended up* — named rather than numbered, per [`0008`](0008-the-freeze-covers-the-argument-not-the-citations.md)).
 
 The reasoning that justified it is sound and worth preserving. An audit found 168 places where those
 documents contradicted the code. A stub that points at a document which was wrong is a slower path
@@ -51,6 +52,6 @@ delete was the better call.
 - The citation checker `backend/tools/audit-citations.py` treats a bare `docs/…` path as a finding
   and the `git show refactor-freeze-2026-08-02:<path>` form as valid, deliberately. It does not
   validate the path behind the tag, so get it right by hand.
-- The durable lesson, from `../STATE-OF-THE-SYSTEM.md:443-448`: every high-severity finding was a
+- The durable lesson, from `../STATE-OF-THE-SYSTEM.md:459-464`: every high-severity finding was a
   document describing a state of the world that had since changed. **Not one had ever been false
   when written.** That is the argument for few documents, and for rationale over description.

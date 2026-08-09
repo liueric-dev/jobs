@@ -16,7 +16,7 @@ The spec's rule applies from here: past 450, move narrative out rather than rais
 T-47 tried that on 2026-08-08 and could not: 711 pruned to 534, and filing the finding as OQ-34
 put it at 565. The shortfall is the row's own finding, not an unfinished job. Nothing could be
 moved out -- an open row is an unsettled question by definition, so docs/adr/ cannot hold one,
-T-43's freeze question is unanswered, and .claude/CLAUDE.md rules out a third file -- so only
+T-43's freeze question was unanswered then, and .claude/CLAUDE.md rules out a third file -- so only
 prose could go, and it did. No row, no open question, no option in a decision, no date and no
 file:line was dropped; the citation set was diffed before and after to prove it. What is left is
 options and "why a session cannot answer this", which is what the budget exists to protect rather
@@ -508,7 +508,7 @@ would be granting itself the exception.
 **What:** The BUDGET NOTE says "past 450, move narrative out rather than raise the number", but
 there is nowhere to move it. An open `OQ-` row is an unsettled question by definition, so
 [`docs/adr/`](docs/adr/) — which takes decisions, one per file, frozen on write — cannot hold one;
-`T-43`'s freeze question is unanswered on top of that; and `.claude/CLAUDE.md` puts what is left to
+`T-43`'s freeze question was unanswered on top of that; and `.claude/CLAUDE.md` puts what is left to
 do in exactly two files, so a third is not available. So the rule's own prescribed remedy is
 unavailable and only pruning is left. `T-47` pruned everything that was restatement, drafting
 history or elaboration — 25% of the file — and stopped at 534 because what remains is options,
@@ -522,7 +522,7 @@ task 53 originally assumed, and `TASK-52-harness.md` is the precedent for a root
 neither of the two; it costs an edit to `.claude/CLAUDE.md`. (3) **Let `docs/adr/` take the
 settled halves** — several rows carry decisions already taken (`OQ-5` staged 2026-08-03, `OQ-4a`'s
 digest deletion 2026-08-04), which by `.claude/CLAUDE.md`'s own rule belong in an ADR rather than in
-prose here; this needs `T-43` answered first.
+prose here. **`T-43` was answered 2026-08-09 by [`0008`](docs/adr/0008-the-freeze-covers-the-argument-not-the-citations.md), so this route is now open** — which does not decide it.
 
 **Done when:** one is chosen and written down — in an ADR if it changes what `.claude/CLAUDE.md`
 means, in the BUDGET NOTE if it only moves the number — and this file is inside whatever the

@@ -43,7 +43,7 @@ table at the foot of this file. `T-1` and `T-2` set the original ordering: they 
 layer every later row leaned on, and everything since runs against CI rather than a transcribed
 count.
 
-**The ten open rows are one project, not a queue.** They cut
+**The nine open rows are one project, not a queue.** They cut
 [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md) into buildable
 steps and are listed in dependency order, not priority order: the server side is done, the worker
 can be installed, it can report on itself, and since `T-31` closed the server dictates its poll
@@ -52,7 +52,7 @@ and what is left is that nothing can *move* that schedule (`T-41`, gated on `OQ-
 … `T-37` are policy that needs both halves in place, and `T-32` and `T-33` are the two that change
 live pipeline behaviour rather than adding to it. `T-38` and `T-51` are the exceptions to the
 dependency order and belong at the front: neither cuts `0007`, and each is a gap a closed row found
-and could not close (`T-26`, `T-50`). **`T-51` is the front** — 104 unread citations into `backend/`.
+and could not close (`T-26`, `T-50`). **`T-51` is the front** — 103 unread citations into `backend/`.
 
 **Six rows closed on 2026-08-08 and their reasoning is in the table below, not here** — `T-39`,
 then its two findings `T-44` and `T-45`, then `T-40`, `T-46` and `T-47`, each filing the next. That
@@ -105,20 +105,16 @@ are the rows most exposed to this, since both turn on elapsed time.
 
 ---
 
-### T-51 — 104 citations into `backend/` nobody has read, and one of them is in the rules file
+### T-51 — 103 `frontend/` citations into `backend/` modules other than `jobs.py`
 
-Filed by `T-50`, 2026-08-08, which corrected 79 numbers and drew its scope at `jobs.py`. All 104
-resolve — `T-40`'s blindspot for the seventh row running. **Start with the one that is not in
-`frontend/`:** `.claude/CLAUDE.md:64` says step 3's fallback DROPs a view and takes every GRANT with
-it, citing `backend/schema.py:1253` — **the closing `"""` and `noqa` of `_APP_VIEW_SQL`, a string
-literal, not a DROP.** The fallback is `DROP VIEW IF EXISTS` at `schema.py:1313` inside
-`ensure_app_view` (`:1296-1316`), grants captured `:1312`, reissued `:1315`. Never right at any of
-the eight commits that touched `.claude/CLAUDE.md`, and first here because every session reads this
-file before anything and the sentence exists to stop a `provision-database.py` run against a
-populated database.
+Filed by `T-50`, 2026-08-08, which corrected 79 numbers and drew its scope at `jobs.py`. All 103
+resolve — `T-40`'s blindspot for the seventh row running. They go into `onboarding.py` (26),
+`schema_web.py` (23), `schema.py` (23), `auth.py` (9), `app.py` (6), `score.py`/`extract.py` (5
+each), `cohort.py` (3) and five more. **The row's original first item, `.claude/CLAUDE.md:64`, was
+corrected by `T-43` on 2026-08-09** — it is the same claim
+`docs/adr/0004-provision-database-issues-no-grants.md:50` got wrong, and leaving one of two
+co-wrong pointers to the GRANT hazard right is worse than either.
 
-**The other 103 are `frontend/`'s**, into `onboarding.py` (26), `schema_web.py` (23), `schema.py`
-(23), `auth.py` (9), `app.py` (6), `score.py`/`extract.py` (5 each), `cohort.py` (3) and five more.
 **`T-50` read four and two were never right**: `format.mjs:33`'s `schema.py:791` (an index creation,
 cited for `posted_at_ts` being nullable → `:696`) and `format.mjs:186`'s `schema_web.py:169-170` (a
 persona comment, cited for `DISMISS_REASONS` → `:272-273`); the other two had drifted. **A fifth is
@@ -178,46 +174,6 @@ not build both.**
 actually fire on the new cadence, with the launchd hazard the chosen route carries either avoided
 or pinned by a test, and with the worker's report updated so it no longer describes a schedule
 nothing can move.
-
----
-
-### T-43 — Two `docs/adr/` citations name the wrong paragraph, and the files are frozen
-
-Found while closing `T-42`, in the one place `T-42` could not fix. `docs/adr/README.md:20` and
-`docs/adr/0002-task-51-deleted-instead-of-git-mv.md:54` both cite
-`../STATE-OF-THE-SYSTEM.md:443-448` for "every high-severity finding was a document describing a
-state of the world that had since changed — not one had ever been false when written". **That
-paragraph is at `:459-464` today**, and `:443-448` is the inter-annotator ceiling — a different
-subject entirely.
-
-**It was already wrong before this session and is not `T-42`'s drift.** At `f185642` the claim sat
-at `:457-462` and the citation still read `:443-448`, so it was 14 lines out on arrival; `T-42`'s
-own edit to `:221` added two lines above it and made that 16. Neither number was ever right.
-`tools/audit-citations.py` cannot see it — the range resolves, and the tool checks only that, which
-is `T-40`'s blindspot for the third row running.
-
-**Why this is its own row: `docs/adr/` is frozen on write** (`.claude/CLAUDE.md`, "one file per
-decision, frozen on write"). A citation is not a decision, so correcting one is arguably outside
-what the freeze protects — but the freeze has no stated exception, and inventing one in passing
-while closing an unrelated row is how a convention stops meaning anything. **Decide what the freeze
-covers first, then edit.** If the answer is that it covers the argument and not the bookkeeping,
-say so in the commit and fix both lines; if it covers the bytes, the correction belongs in a new
-ADR that supersedes, or nowhere.
-
-**There is a third, found by `T-47` on 2026-08-08, and it makes the pattern rather than extending a
-list.** `docs/adr/0002-task-51-deleted-instead-of-git-mv.md:21` cites `../../DEV_TASKS.md:307-309`
-for the claim that the tranche's state "had to be reconciled row by row". **It was never right
-either.** At `45d6d3a`, the commit that added that ADR, and at its parent, `DEV_TASKS.md` was
-exactly `450` lines and `:307-309` was `OQ-4b`'s Cloudflare paragraph; the tranche table it means
-was at `:430-437`. So all three of this row's citations were wrong on arrival, none by drift — **the
-defect is that a citation into a moving file was never checked at its target, not that files move.**
-`T-47` renumbered `DEV_TASKS.md` and deliberately left this one rather than half-fix a set this row
-owns; its real target today is the `## Tranche nine` table.
-
-**Done when:** the freeze question has an answer written down, all three citations are consistent
-with it, and `tools/audit-citations.py` still prints `0 new`. **Do not add any of them to
-`config/citation-baseline.json`** — all resolve today, so the baseline cannot express the problem
-and adding them would record the opposite of what is wrong.
 
 ---
 
@@ -461,6 +417,7 @@ ADR, or a rules file — checked row by row, not assumed.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~T-43~~ | Two `docs/adr/` citations name the wrong paragraph, and the files are frozen | **Closed 2026-08-09 by [`docs/adr/0008`](docs/adr/0008-the-freeze-covers-the-argument-not-the-citations.md), which answers the freeze question the row could not: the freeze protects the claim, not the bookkeeping.** A citation, link or typo may be corrected in place; anything that changes what a decision says may not. **The row's scope was three citations and the real number is four** — all seven line citations in `docs/adr/` were read at their targets, and `docs/adr/0004-provision-database-issues-no-grants.md:50` cites `backend/schema.py:1215-1223` for the fallback that DROPs `jobs_app` and takes every GRANT with it, which is now a column list inside `_APP_VIEW_SQL`. **That is the same claim `.claude/CLAUDE.md:64` gets wrong**, differently, as `:1253` — so both pointers to the repo's one operational landmine missed it, and `.claude/CLAUDE.md` sends the reader to `0004` for the detail. The DROP is at `backend/schema.py:1313`, grants captured `:1312`, reissued `:1315`; both corrected, which takes the first item out of `T-51` early rather than leaving one of two co-wrong pointers right. **The row's own generalization was wrong**: it concluded all three were wrong on arrival and that 'the defect is that a citation into a moving file was never checked at its target, not that files move' — but `0004:50` was exactly right when written at `45d6d3a` and has since moved 98 lines. Both mechanisms are real, and this is the third row running (`T-49`, `T-50`, `T-43`) whose bulk classification did not survive reading each citation individually. **The other three corrected as the row specified**: `docs/adr/README.md:20` and `docs/adr/0002-task-51-deleted-instead-of-git-mv.md:54` → `docs/STATE-OF-THE-SYSTEM.md:459-464` (`:443-448` is the inter-annotator ceiling, 14 lines out on arrival), and `docs/adr/0002-task-51-deleted-instead-of-git-mv.md:21` → the `## Tranche nine` section **named rather than numbered**, per `0008` decision 2: `TASKS.md` and `DEV_TASKS.md` are renumbered wholesale by routine maintenance — `T-47` cut 177 lines from one in a single commit — so a line number into them is stale within days, and correcting `:307-309` to a new number would only have reset the clock. **Three of the seven were already right** (`docs/adr/0003-layer-3-is-recorded-not-built.md:31`, `docs/adr/0004-provision-database-issues-no-grants.md:39`, and `docs/adr/0006-contributor-credential-auto-minted-local-daemon.md:17`'s tag-form citation, whose line `audit-citations.py` does not validate and which was therefore verified by hand: `DEC-84` is exactly at `:2903`). Suites `1462`/`397`/`278`, no skips; mypy clean; citations `0 new`; ruff `1004` per-rule identical; both frontend checkers pass. **Nothing added to `config/citation-baseline.json`** — all four resolved, so the baseline records the opposite. **Verified against a real database: not applicable and not faked** — prose only, no schema, role or query touched. `OQ-34`'s third route is now available; it is not thereby decided |
 | ~~T-50~~ | 75 `jobs.py` citations in `frontend/` nobody had read at the target, filed by `T-49` with a full per-file breakdown | **Closed 2026-08-08. The row's counts were exactly right and its drift/never-right framing was not: 71 of the 75 named a line that does not carry their claim, and 45 of the 79 numbers corrected were never right at any commit rather than drifted.** The four the row predicted would still hold do (`crawl.mjs:25` and `saved.mjs:14` on `jobs.py:40`, `detail.mjs:254` and `shipped/MANIFEST.json:83` on `:52-53`) and were the only correct ones `T-48`/`T-49` had not already fixed — 101 = 26 read + 71 wrong + 4 right, which reconciles the row's arithmetic exactly. **Every one was read at its target and none taken on trust**, and the count is 79 rather than 75 because **eight bare `:NNN` continuations sit inside the same sentences and no `jobs.py:` count can see them** — `crawl.mjs:8`'s `:370`, `crawl.mjs:40`'s and `frontend/README.md:644`'s `:362-364`, `events.mjs:11`'s `:370-374`, `events.mjs:47`'s `:831-834`, `api.mjs:128`'s `:193-215`, `frontend/README.md:474`'s `:500` and `:564`. **The never-right population is the finding.** Every route citation was wrong on arrival — `README.md`'s `jobs.py:336`/`:440`/`:753` and `contract/MANIFEST.json`'s `:310`/`:413`/`:641` → `:409`/`:581`/`:916` — as were every citation for `missing_request_id` (`:529-532` → `:682-685`, three sites), the whole-batch rule (`:503-512` → `:659-664`), the detail endpoint serving a dismissed posting (`:440-448` → `:583-588`, three sites), the eight query parameters (`:337-348` → `:412-420`, three sites), `include_dismissed` (`:346`, `:362-364` → `:419-420`, `:456-457`), the dismissal default (`:364-365` → `:458-459`), and the whole `record_events` tail in `shipped/MANIFEST.json` (`:792-793` → `:1038-1039`, `:619-665` → `:1019-1027`, `:789` → `:986-987`/`:1035`, `:724-725` → `:967-968`, `:722` → `:965`). **The 34 that had drifted moved by no constant** — `+1` (`:90` → `:91`, five sites), `+17` (`:123` → `:140`), `+19` (`:286-291` → `:305-310`), `+58` (`:500` → `:558`), confirming the row's warning. **Four numbers into other modules were corrected because they share a sentence with a `jobs.py` number** (`T-42`'s half-renumbered-sentence rule): `schema.py:144` → `:147` and `:567` → `:657` had drifted; `schema.py:791` → `:696` and `schema_web.py:169-170` → `:272-273` were never right. **One content error, not a line error:** `events.mjs:47` said the impression dedup is keyed `(profile, job_id)`; `OQ-2` narrowed it to `(app_user_id, job_id)` on 2026-08-03 and the comment never followed. **Two citations were expanded from one number to two** because a single line could not carry a two-part claim (`shipped/MANIFEST.json:75`, `:102`), and `shipped/MANIFEST.json`'s `_line_numbers` preamble — which asserts the numbers below are correct — was updated rather than left contradicting the block it introduces. **No file changed line count**, checked against `HEAD` file by file (76 insertions, 76 deletions), and both `MANIFEST.json`s re-parsed as JSON. Suites `1462`/`397`/`278`, no skips; mypy clean; citations `0 new` (3 known-drifted); ruff `1004`, per-rule statistics byte-identical to `HEAD` (no `.py` file touched); `verify_fixtures.py` and `check_client.mjs` (57 checks) both pass. **Nothing added to `config/citation-baseline.json`** — all 101 resolve, so the baseline records the opposite of the defect. **Verified against a real database: not applicable and not faked** — comments, prose and two fixture manifests; no schema, role or query touched. One finding filed: `T-51` |
 | ~~T-49~~ | Seven `jobs.py` citations in `frontend/`, filed by `T-48` as four stale and three never right, with every target pre-named | **Closed 2026-08-08. Seven was an undercount by a factor of three and the row's own drift/never-right split was wrong: 22 numbers at 19 sites were corrected, and six of them were never right at any commit, not three.** The row's seven were all confirmed at the target and none was taken on trust: `MANIFEST.json:15`'s `jobs.py:493, :500` → `:551, :558` and `:61`'s `:562, :564` → `:620, :622` (both exactly right at `681c2a1`, so drift as filed), and `frontend/README.md:305`'s `:370`, `:424`, `:432` → `:464` (`request_id = new_request_id()`), `:565` (`item["rank"] = first_rank + offset`), `:571` (both riding into `encode_cursor`), derived from the claim because at `681c2a1` those three lines were `def cohort_signal(...)`, a joins comment and a blank. **The scope that mattered was the containing block, not the named line.** `MANIFEST.json:15` sits in `GET_v1_jobs.json`'s `derived_from`, which carries **eleven** `jobs.py` numbers and two `schema.py` ones, and every one was wrong: `:432-433` → `:573-574`, `:102-111` → `:119-128`, `:320-329` → `:339-348`, `:416-417` → `:551-552`, `:367` → `:386`, `:370` → `:389`, `:423-424` → `:564-565`, `:370 / 164-179` → `:464 / 181-196`, `:124` → `:141`, `:364-365` → `:458-459`, plus `schema.py:726-774` → `:1196-1253` (`_APP_VIEW_SQL`) and `:742-743` → `:1212-1213` (the salary `coalesce`). Its `notes` carried two more — `:286-291` → `:305-310` (`_EVENT_STATE_JOIN`) and `:370` → `:389` — and `GET_v1_jobs_by_id.json` three: `:113` → `:130`, `:562, :564` → `:620, :622`, and a `notes` `:423` → `:565`. **Checked at `681c2a1` one by one rather than classified in bulk**, which is what showed the row's split to be wrong: `:432-433`, `:416-417`, `:423-424`, `:364-365`, the `notes` `:423`, and the `:370` half of `:370 / 164-179` (a copy of the line above it; the mint site was `:445` there) were **never right**, while `:102-111`, `:320-329`, `:493/:500`, `:367`, `:370`, `:124`, `:113`, `:562/:564` and `:286-291` were exact when written. **One correction is to `T-48`'s own work**: it wrote `jobs.py:102-111` → `:119-129` in `frontend/js/api.mjs:10` by adding 17 to both ends, but `LIST_COLUMNS` closes at `:128` and `:129` is blank — an offset applied to a range whose length it should have preserved, which is the error `T-48`'s row is itself a warning about. Corrected to `:119-128`. **One content error, not a line error:** that item called `LIST_COLUMNS` "the 34 view columns"; `ast` says 35 (`role_track` was appended after). **No file changed line count**, checked against `HEAD` file by file, and `MANIFEST.json` re-parsed as JSON. Suites `1462`/`397`/`278`, no skips; mypy clean; citations `0 new` (3 known-drifted); ruff `1004`, per-rule composition byte-identical to `HEAD`; `verify_fixtures.py` and `check_client.mjs` (57 checks) both pass. **Nothing added to `config/citation-baseline.json`** — all resolve, so the baseline records the opposite of the defect. **Verified against a real database: not applicable and not faked** — prose, comments and one fixture manifest; no schema, role or query touched. One finding filed: `T-50` |
 | ~~T-48~~ | Four citations into `webapp/app.py` named lines that no longer carried the claim, found by sweeping `app.py:NNN` after `T-46`'s narrower pattern missed them | **Closed 2026-08-08. Four sites was a floor and one of the two "correct, and to be left alone" sites was half-wrong — the row made, on itself, the exact error its own predecessor was filed for.** The four are fixed and read at the target: `app.py:93` → `:101` in `frontend/js/api.mjs:14` and `frontend/README.md:315`, `app.py:99` → `:106` in `frontend/README.md:103` and `frontend/verify_fixtures.py:443`. **A fifth site the row never saw carries the same `:93`** — `frontend/fixtures/shipped/MANIFEST.json:313`, in scope because the checker's `SKIP_PATHS` note says `MANIFEST.json` under `fixtures/` is deliberately not skipped (`backend/tools/audit-citations.py:98-99`) — and its `errors/` block held **six** more numbers, every one correct at `fe3df28` and every one stale now: `jobs.py:131-157` → `:148-174` (`ContractError` through `contract_error_handler`), `:503-556` → `:656-709` (`validate_batch`), the two list-repr f-strings `:526, 551` → `:679, 704`, the malformed cursor `:235` → `:252` and the 404 `:468` → `:619`. `auth.py:92, 107, 117` are unmoved and were left alone. **The same two `jobs.py` numbers are wrong in `api.mjs`'s own sentence**, which the row read as four numbers and is seven: item 1's `jobs.py:102-111` → `:119-129` (`LIST_COLUMNS`) and `:417` → `:552`, and item 2's `:468`/`:235` alongside the `app.py` number. **`frontend/README.md:103` is a three-number blockquote, not a one-number one**: `schema_web.py:93` → `:100` (`builder_profiles` in `REQUIRED_TABLES`) and `:360` → `:428` (`_ensure_app_users_profile_key`) were wrong beside it. `frontend/verify_fixtures.py:443` likewise carried `onboarding.py:534` → `:540`. **Of the two sites declared correct, one was and one was not.** `docs/STATE-OF-THE-SYSTEM.md:381` (`app.py:84`, the `allow_methods` literal) holds exactly. `frontend/serve.py:18`'s `app.py:78-84` named the whole `add_middleware` call when written at `681c2a1` and now truncates it one line short of `allow_headers`; corrected to `:79-85` by reading both ends, not by adding one. Its companion `auth.py:359-360` holds. **Scope was drawn and stated rather than let run:** every number in the sentence, comment item or `derived_from` block containing a corrected `app.py` citation was read and fixed; everything else found while sweeping was filed as **`T-49`** (seven more `jobs.py` numbers — `frontend/README.md:305`'s three, which were never right at any commit, and `MANIFEST.json:15`/`:61`'s four, which drifted). **`:417` was itself never right** — at `681c2a1` it was a docstring about cohort rendering — so the row's premise that all of these are drift is false for three of the numbers it touched and three of the seven it filed. **No file changed line count**, checked against `HEAD` file by file, and `MANIFEST.json` re-parsed as JSON. Suites `1462`/`397`/`278`, no skips; mypy clean; citations `0 new` (3 known-drifted); ruff `1004`, per-rule composition byte-identical to `HEAD`; `verify_fixtures.py` and `check_client.mjs` (57 checks) both pass. **Nothing added to `config/citation-baseline.json`** — all of these resolve, so the baseline records the opposite of the defect. **Verified against a real database: not applicable and not faked** — comments, prose and one fixture manifest; no schema, role or query touched. One finding filed: `T-49` |

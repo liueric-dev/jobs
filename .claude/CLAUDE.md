@@ -61,7 +61,7 @@ cd backend/api    && .venv/bin/python -m unittest discover -s tests
 **Standing a database up from nothing is one command** — the DDL lives in five functions across
 four modules and nothing else invokes all five. **Read the banner at the top of the file before
 running it against anything populated**: step 3's fallback DROPs a view and takes every GRANT with
-it (`backend/schema.py:1253`, fixed by `T-13`, re-grant not re-decision — see
+it (`backend/schema.py:1313`, fixed by `T-13`, re-grant not re-decision — see
 [`docs/adr/0004`](../docs/adr/0004-provision-database-issues-no-grants.md)).
 
 ```bash

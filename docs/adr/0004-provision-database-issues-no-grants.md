@@ -47,7 +47,7 @@ test passes when the roles can do too much.
   intentional and `backend/webapp/README.md` is the second step.
 - **The script carries one hazard, in a banner at the top of the file.** Step 3 is
   `schema.ensure_app_view()`, whose fallback DROPs the view on a column reorder and takes every
-  GRANT with it, with no re-grant anywhere in this repo (`backend/schema.py:1215-1223`). Unreachable
+  GRANT with it, with no re-grant anywhere in this repo (`backend/schema.py:1313`). Unreachable
   on an empty database; real against a populated deployment. `--verify-only` exists for that and
   changes nothing. `T-13` in [`../../TASKS.md`](../../TASKS.md) is the fix.
 - If a privilege-granting tool is ever wanted, it is a separate script with its own review, not a
