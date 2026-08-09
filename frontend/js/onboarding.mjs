@@ -19,7 +19,7 @@
 // asserts the rendered markup contains none.
 //
 // EVERY FIELD IS OPTIONAL, INCLUDING ALL OF THEM. Each column is nullable and
-// NULL means NOBODY ASKED rather than "no" (schema_web.py:228-232), and
+// NULL means NOBODY ASKED rather than "no" (schema_web.py:290-294), and
 // OnboardingRequest defaults every field to None (onboarding.py:270-277) for
 // the stated reason that "you may skip this" is the actual product
 // requirement. So this screen has a "Skip for now" on it and submitting an
@@ -27,7 +27,7 @@
 // inventing a constraint the schema refuses to express.
 //
 // IT EMITS NO EVENTS THROUGH events.mjs. The judgements ride inside the POST
-// body and the SERVER mints their request_id (onboarding.py:489) -- a seed set
+// body and the SERVER mints their request_id (onboarding.py:478) -- a seed set
 // is its own render, and it is honest to name it as one. Sending them as
 // impressions or saves under the LIST's request_id would claim they were part
 // of a render they were not, and would arm derive_skips against rows nobody was
@@ -65,7 +65,7 @@ export const SEED_TARGET = 18;
 //
 // EVERY SLUG BELOW IS backend/webapp/schema_web.py's, AND THE ORDER IS TOO.
 // Each tuple there generates a CHECK constraint on builder_profiles or
-// app_users (schema_web.py:543-577), and onboarding.validate_request()
+// app_users (schema_web.py:657-664, :512), and onboarding.validate_request()
 // (:316-337) refuses anything outside it with a 400 -- so a slug invented here
 // is a 400 on one Builder's submit and nowhere else. check_client.mjs
 // re-derives all five tuples from Python and fails on a value with no copy,
@@ -77,7 +77,7 @@ export const SEED_TARGET = 18;
 // say." `hybrid_ok` humanises to "Hybrid ok", which is a slug wearing a hat.
 
 /** Prior domain. NULL and `none` are DIFFERENT ANSWERS and the difference is
- *  load-bearing: schema_web.py:177-182 spends a paragraph on it. `none` is a
+ *  load-bearing: schema_web.py:239-244 spends a paragraph on it. `none` is a
  *  real answer about a real person -- "I have not worked in any of these" --
  *  and NULL means nobody asked. So "Prefer not to say" is the absence of a
  *  selection and is NOT an option in this list. */
@@ -95,7 +95,7 @@ export const PRIOR_DOMAIN_LABELS = {
 };
 
 /** Current situation. The one onboarding field that is about urgency rather
- *  than matching (schema_web.py:251-257): nothing scores or filters on it. */
+ *  than matching (schema_web.py:315-316): nothing scores or filters on it. */
 export const SITUATION_LABELS = {
   employed_seeking: "Working now, and looking",
   unemployed_seeking: "Not working, and looking",
@@ -104,7 +104,7 @@ export const SITUATION_LABELS = {
 };
 
 /** Where they will work. Three values because the read path has exactly two
- *  booleans, `location_is_nyc` and `location_is_remote` (schema_web.py:284-290);
+ *  booleans, `location_is_nyc` and `location_is_remote` (schema_web.py:348-354);
  *  a richer vocabulary would be a promise the list cannot keep. */
 export const LOCATION_PREF_LABELS = {
   nyc: "In New York City",
@@ -113,7 +113,7 @@ export const LOCATION_PREF_LABELS = {
 };
 
 /** A THRESHOLD, NOT A SET, and the copy has to carry that or the answers are
- *  wrong. schema_web.py:299-307: this is "the least-flexible arrangement a
+ *  wrong. schema_web.py:363-371: this is "the least-flexible arrangement a
  *  Builder will accept", read as "this or better" over extract.REMOTE_POLICY.
  *  `onsite_ok` is the PERMISSIVE end -- it means "onsite is acceptable too",
  *  not "onsite only" -- which reads backwards from the slug and is why every
@@ -128,7 +128,7 @@ export const REMOTE_PREF_LABELS = {
 
 /** Hard scheduling limits, as a set. ONE VALUE, and that is the honest size of
  *  it: `no_overnight` is the only constraint attested anywhere in the repo
- *  (schema_web.py:317-328). Rendered as checkboxes rather than a select
+ *  (schema_web.py:381-387). Rendered as checkboxes rather than a select
  *  because the column is TEXT[] and `{}` -- "asked, and there are none" -- is
  *  a different answer from NULL. */
 export const SCHEDULE_CONSTRAINT_LABELS = {
@@ -194,7 +194,7 @@ function reset() {
  *
  * 26 asks for postings "drawn across `role_track`s". ~~THERE IS NO role_track
  * TO DRAW ACROSS~~ -- THERE IS, as of the commit that added `f.role_track` to
- * the `jobs_app` view. The column is on job_facts (backend/schema.py:740; the
+ * the `jobs_app` view. The column is on job_facts (backend/schema.py:745; the
  * old cite here said :542, which is the profiles DDL and was wrong about the
  * table as well as the line), and the view not selecting it was the finding
  * frontend/README.md § "What building against these fixtures turned up" opened
@@ -258,7 +258,7 @@ async function loadSeed() {
  *
  * A FIELD NOBODY ANSWERED IS OMITTED, NOT SENT AS null. Both are accepted --
  * every field defaults to None -- but the UPSERT is `coalesce(EXCLUDED.x,
- * builder_profiles.x)` on all seven (onboarding.py:432-444), i.e. ABSENT MEANS
+ * builder_profiles.x)` on all seven (onboarding.py:438-449), i.e. ABSENT MEANS
  * PRESERVE. So on a re-submission an omitted field keeps the Builder's earlier
  * answer, which is what "I did not touch that question" means. Sending an
  * explicit null does the same thing today; omitting it is what the intent
@@ -267,7 +267,7 @@ async function loadSeed() {
  *
  * `schedule_constraints: []` IS SENT WHEN THE BUILDER UNTICKED EVERYTHING, and
  * that is not the same as omitting it: `{}` is "asked, and there are none",
- * NULL is "nobody asked" (schema_web.py:238-245). The form knows which of the
+ * NULL is "nobody asked" (schema_web.py:303-307). The form knows which of the
  * two happened, so it says so.
  */
 export function buildRequest(answers, verdicts) {
@@ -392,7 +392,7 @@ function formScreen() {
  *  null, which is the column's "nobody asked". For prior_domain that matters
  *  more than anywhere else: `none` is in the list below as its own answer,
  *  because "I have not worked in any of these" and "I did not say" are
- *  different facts about a person (schema_web.py:177-182). */
+ *  different facts about a person (schema_web.py:239-244). */
 function select(name, question, labels, current) {
   const options = Object.entries(labels).map(([slug, text]) =>
     `<option value="${esc(slug)}"${current === slug ? " selected" : ""}>${esc(text)}</option>`
@@ -514,7 +514,7 @@ function emptyState() {
  * floor" -- it is the bottom of the resolution merge and the reason
  * onboarding.DEFAULTS bottoms out at 0 rather than at None (onboarding.py:
  * 81-83) -- so coercing an empty box to 0 records a preference nobody
- * expressed, where NULL means nobody asked (schema_web.py:228-232).
+ * expressed, where NULL means nobody asked (schema_web.py:290-294).
  * `Number("")` is `0`, which is exactly how that bug gets written; every
  * conversion here goes through the empty check first.
  *
@@ -547,7 +547,7 @@ export function readAnswers(get, getAll) {
     comp_floor: int("comp_floor"),
     // Always an array, never null: the Builder was shown the boxes, so "none
     // ticked" is an answer. NULL would say nobody asked, and `{}` versus NULL
-    // is a distinction schema_web.py:238-245 draws on purpose.
+    // is a distinction schema_web.py:303-307 draws on purpose.
     schedule_constraints: (getAll("schedule_constraints") || []).map(String),
   };
 }

@@ -1,11 +1,11 @@
 // The track vocabulary, the plain-language labels, and the grouping.
 //
-// THE VOCABULARY IS extract.ROLE_TRACK (backend/extract.py:305-308), DEC-77.
+// THE VOCABULARY IS extract.ROLE_TRACK (backend/extract.py:307-310), DEC-77.
 // Nine snake_case values, and they are what is actually stored on
-// job_facts.role_track (backend/schema.py:740 -- NOT jobs.role_track at :542,
+// job_facts.role_track (backend/schema.py:745 -- NOT jobs.role_track at :542,
 // which is the profiles DDL and was wrong about the table as well as the
 // line). Rejected: score.TRACKS
-// (backend/score.py:281-282), the five Title Case values that arrive on every
+// (backend/score.py:301-302), the five Title Case values that arrive on every
 // row as `primary_track`. Reason: ROLE_TRACK is the stored value and is
 // already slug-shaped, so grouping by it needs no mapping layer and invents no
 // second vocabulary.
@@ -122,7 +122,7 @@ export function humanise(slug) {
  * The track a posting belongs to, or UNTRACKED.
  *
  * A value outside the nine is treated as no track rather than passed through:
- * the vocabulary is closed (extract._enum, backend/extract.py:754, maps
+ * the vocabulary is closed (extract._enum, backend/extract.py:637, maps
  * anything unrecognised to null before it is ever stored), so a stray value
  * reaching here means the response is from a newer server than this file, and
  * inventing a group for it would put one posting under a heading nobody wrote.

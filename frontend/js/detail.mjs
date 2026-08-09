@@ -180,7 +180,7 @@ function paint(root, job) {
  *
  * "BUILDERS", NOT "OTHER BUILDERS", AND THE WORD MATTERS. The fold is
  * `COUNT(DISTINCT app_user_id)` across the whole cohort profile
- * (`backend/cohort.py:113`) — it counts everyone with a live save, INCLUDING
+ * (`backend/cohort.py:114`) — it counts everyone with a live save, INCLUDING
  * whoever is reading this page. "3-5 other Builders" would therefore be wrong
  * by one exactly when the reader is one of them, and wrong in the direction
  * that inflates the number. This is the same class of mistake as rendering

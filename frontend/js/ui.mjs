@@ -17,7 +17,7 @@ import { esc, ageLabel, compLabel, placeLabel, reasonsFor, DISMISS_REASONS }
  * bucket that does not exist yet would only ever have been a label on it.
  *
  * AN UNSCORED POSTING IS NORMAL AND IS RENDERED ANYWAY. jobs_app LEFT JOINs
- * job_scores (backend/schema.py:818) and scoring is budget-limited, so
+ * job_scores (backend/schema.py:1247) and scoring is budget-limited, so
  * fit_score, primary_track, gap_bridging_angle, risk_factors and
  * key_technologies are null together on a posting the nightly run has not
  * reached. The card falls back to `summary`, labelled as the posting's own

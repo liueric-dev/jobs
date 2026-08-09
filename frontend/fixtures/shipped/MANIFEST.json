@@ -2,7 +2,7 @@
   "_comment": "What each fixture in this directory is, and the file:line it was derived from. It is a sidecar rather than a `_comment` key inside each fixture because these bodies are meant to be byte-faithful: a client that parses one must see exactly what the API sends, and an extra key would be a lie in the shape of documentation. `python3 frontend/verify_fixtures.py` re-derives every claim below from the source and fails if one has gone stale.",
   "_derived_from": "backend/webapp/jobs.py, backend/webapp/auth.py, backend/webapp/schema_web.py, backend/webapp/onboarding.py, backend/webapp/search.py, backend/searchnorm.py, backend/schema.py. The job/event/me fixtures were derived from the working tree at 2026-08-01, one commit past da47503; the four onboarding fixtures were derived on 2026-08-02, at 43f95c0; the eleven search fixtures on 2026-08-02, at aa1d837.",
   "_two_of_the_sources_are_not_under_webapp": "backend/searchnorm.py and backend/schema.py are TOP-LEVEL pipeline modules and are read here on purpose. searchnorm.py owns the InvalidQuery codes a client can receive from POST /v1/searches -- search.py re-raises them as `ContractError(bad.code, str(bad))`, so four of the five search error codes appear as a literal nowhere in backend/webapp/. schema.py owns SEARCH_MIN_WATCHERS and SEARCH_WATCHER_BUCKETS, beside their cohort_signal equivalents, because it generates the CHECK constraint from the same tuple the writer reads. verify_fixtures.py reads both rather than restating four codes and three labels.",
-  "_line_numbers": "READ THE CODE, NOT THE CITE -- git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md's own instruction, and it applies here for a concrete reason: jobs.py moved ~26 lines while these fixtures were being written (the D66/D67 fix). The line numbers below were re-derived after that landed, and again at HEAD on 2026-08-08 (T-49, then T-50), each read at its target rather than mapped forward by an offset -- jobs.py is 1039 lines now and did not move by a constant. verify_fixtures.py resolves everything by NAME and never by line, so it stays right when these drift; it is the authority, this is the map.",
+  "_line_numbers": "READ THE CODE, NOT THE CITE -- git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md's own instruction, and it applies here for a concrete reason: jobs.py moved ~26 lines while these fixtures were being written (the D66/D67 fix). The line numbers below were re-derived after that landed, and again at HEAD on 2026-08-08 (T-49, then T-50 for jobs.py, then T-51 for every other module), each read at its target rather than mapped forward by an offset -- jobs.py is 1039 lines now and did not move by a constant, and the schema.py/score.py/auth.py numbers T-51 corrected had moved by no constant either. verify_fixtures.py resolves everything by NAME and never by line, so it stays right when these drift; it is the authority, this is the map.",
   "_status": "REAL. Every endpoint here has a route today. These are what the API returns, not what it should return.",
 
   "GET_v1_jobs.json": {
@@ -23,15 +23,15 @@
       "schema.py:1212-1213 -- salary is coalesce(salary_text, currency || ' ' || min-max); Con Edison shows the derived form"
     ],
     "notes": [
-      "match_reasons, tech_stack, risk_factors and key_technologies are TEXT columns holding json.dumps(...) output (match.py:526, extract.py:755, score.py:851-853). They arrive as JSON *strings*; the endpoint does not parse them. The client must json.parse each one.",
-      "posted_at_ts is TIMESTAMPTZ (schema.py:500) so it serialises with an offset: '2026-07-25T00:00:00+00:00'. first_seen and last_seen are TEXT in '%Y-%m-%dT%H:%M:%S' with no zone (schema.py:353-354).",
-      "Rent the Runway has fit_score, primary_track, gap_bridging_angle, risk_factors and key_technologies all null: jobs_app LEFT JOINs job_scores (schema.py:768) and scoring is budget-limited, so an unscored posting is normal, not an error.",
+      "match_reasons, tech_stack, risk_factors and key_technologies are TEXT columns holding json.dumps(...) output (match.py:624, extract.py:767, score.py:873-875). They arrive as JSON *strings*; the endpoint does not parse them. The client must json.parse each one.",
+      "posted_at_ts is TIMESTAMPTZ (schema.py:696) so it serialises with an offset: '2026-07-25T00:00:00+00:00'. first_seen and last_seen are TEXT in '%Y-%m-%dT%H:%M:%S' with no zone (schema.py:495-496).",
+      "Rent the Runway has fit_score, primary_track, gap_bridging_angle, risk_factors and key_technologies all null: jobs_app LEFT JOINs job_scores (schema.py:1247) and scoring is budget-limited, so an unscored posting is normal, not an error.",
       "Con Edison has posted_at_ts null and still ranks above Rent the Runway, because match_score leads the sort and only the tie-break coalesces to -infinity.",
-      "primary_track values are Title Case from score.TRACKS (score.py:281-282). They are NOT the contract's track slugs.",
+      "primary_track values are Title Case from score.TRACKS (score.py:301-302). They are NOT the contract's track slugs.",
       "seen and applied became PER-BUILDER on 2026-08-01 (defects D66 and D67, git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md). They are resolved from job_events by app_user_id (jobs.py:305-310), not by profile. The response SHAPE did not change -- only which rows the join matches -- so these fixtures were unaffected. An event written before job_events.app_user_id existed carries NULL and resolves both to false for everyone, which is the safe direction.",
       "cohort_signal LANDED 2026-08-02 (task 28) and these fixtures were re-frozen for it. Key ORDER is load-bearing and is asserted: LIST_COLUMNS, STATE_FIELDS, cohort_signal, rank. Mount Sinai carries {'save_bucket': '3-5'} so a client author sees the populated shape once; every other row is null.",
       "null IS A SUPPRESSION, NOT 'NO DATA', and this is the single most misreadable field in the payload. The count is withheld below three Builders, so null is the answer for BOTH 'nobody saved this' and 'one or two did' -- the row does not exist and the endpoint cannot tell them apart either (jobs.py:389). In a thirty-person cohort who see each other in a classroom, a count of one is close to an identifier. A client must NEVER render it as '0 saves' or a greyed zero: absence of a badge must not be readable as 'exactly one or two'. At today's cohort size EVERY value is null, so null is the case the UI has to handle well, not the edge case.",
-      "save_bucket is one of '3-5', '6-10', '10+' -- schema.py:564 (NOT NULL on the table) and the cohort_signal_bucket CHECK at schema.py:567."
+      "save_bucket is one of '3-5', '6-10', '10+' -- schema.py:654 (NOT NULL on the table) and the cohort_signal_bucket CHECK at schema.py:657."
     ]
   },
 
@@ -111,10 +111,10 @@
 
   "GET_v1_me.json": {
     "endpoint": "GET /v1/me",
-    "derived_from": ["auth.py:450-459 -- four keys: email, display_name, profile, is_admin"],
+    "derived_from": ["auth.py:469-474 -- four keys: email, display_name, profile, is_admin"],
     "notes": [
       "There is no onboarding block, no prior_domain and no cohort information. It deliberately touches no jobs table.",
-      "profile is 'pursuit' (migrations/migrate_pursuit_profile.py:109), not the contract's 'pursuit-cohort-2026a'."
+      "profile is 'pursuit' (migrations/migrate_pursuit_profile.py:110), not the contract's 'pursuit-cohort-2026a'."
     ]
   },
 

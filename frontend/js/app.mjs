@@ -64,7 +64,7 @@ async function boot() {
  * #/today -- so a deep link into a posting still resolves. And it never blocks
  * the list: every onboarding field is optional server-side, so a Builder who
  * skips it is a Builder with NULLs, which is the honest state and is exactly
- * what the nullable columns mean (schema_web.py:228-232). Gating the list on a
+ * what the nullable columns mean (schema_web.py:290-294). Gating the list on a
  * form would lose people at screen zero, in a population where
  * 26 § Onboarding says "every additional screen loses someone".
  *

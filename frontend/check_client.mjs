@@ -362,9 +362,9 @@ it("every track in the vocabulary has plain-language copy", () => {
 it("the shipped payload carries role_track, and grouping runs on it", () => {
   // THIS TEST USED TO PIN THE OPPOSITE, and the inversion is the deliverable.
   // It read "the shipped payload carries no role_track, so every row is
-  // UNTRACKED", because role_track sat on job_facts (backend/schema.py:733 --
-  // the old cite said `jobs` at :542 and was wrong about the table as well as
-  // the line) and jobs_app did not select it, so it reached no response body.
+  // UNTRACKED", because role_track sat on job_facts (backend/schema.py:745 --
+  // the old cites said `jobs` at :542 and then :733, and neither is the
+  // column) and jobs_app did not select it, so it reached no response body.
   // It closed: "If this ever starts failing, the field has landed and grouping
   // begins working on its own -- which is the point of writing it this way
   // round." The field has landed. Nothing in tracks.mjs changed.
@@ -373,7 +373,7 @@ it("the shipped payload carries role_track, and grouping runs on it", () => {
     assert.ok("role_track" in job, `${job.id} lost role_track`);
   }
   // A null track is a real answer and not a gap -- "no track fits this" has to
-  // be representable (backend/schema.py:715-723), and one row in every four is
+  // be representable (backend/schema.py:720-726), and one row in every four is
   // roughly the live rate through the view. It buckets to UNTRACKED, which is
   // why UNTRACKED needs copy as good as any named track's.
   const seen = body.jobs.map((j) => tracks.trackOf(j));
@@ -404,7 +404,7 @@ it("grouping keys off role_track the moment it appears", () => {
                    "groups order by their best rank, and by nothing else");
   assert.deepEqual(groups[0].jobs.map((j) => j.id), ["a", "c"]);
   // A null track and a track outside the closed vocabulary land in the same
-  // place. Neither is dropped -- schema.py:715-723 makes role_track NULLABLE
+  // place. Neither is dropped -- schema.py:720-726 makes role_track NULLABLE
   // BY DESIGN, so "no track fits this" is an answer and not an absence.
   assert.deepEqual(groups[1].jobs.map((j) => j.id), ["b", "e"]);
 });
@@ -641,7 +641,7 @@ it("there is no file upload anywhere in the client", async () => {
 
 it("every onboarding vocabulary is schema_web's, in order, with copy", () => {
   // ONE SOURCE, THREE ENFORCEMENTS. Each tuple generates a CHECK constraint on
-  // builder_profiles (schema_web.py:543-577) AND is what
+  // builder_profiles (schema_web.py:657-664) AND is what
   // onboarding.validate_request() refuses outside of (:316-337), so a slug
   // invented in the client is a 400 on one Builder's submit and nowhere else.
   // The blurb-style requirement is the tracks.mjs one: a value with no copy is
@@ -747,7 +747,7 @@ function answersFrom(fields, checked = []) {
 
 it("an untouched form sends nothing, and a blank number is never a zero", () => {
   // ABSENT MEANS PRESERVE on all seven columns -- the upsert is
-  // coalesce(EXCLUDED.x, builder_profiles.x) (onboarding.py:432-444) -- so
+  // coalesce(EXCLUDED.x, builder_profiles.x) (onboarding.py:438-449) -- so
   // omitting a field is how "I did not touch that question" is expressed. An
   // untouched <select> yields "" and an untouched number box yields "", and
   // BOTH have to come out as null: NULL means nobody asked, and 0 is a real
@@ -774,7 +774,7 @@ it("an untouched form sends nothing, and a blank number is never a zero", () => 
 });
 
 it("an empty schedule_constraints is sent, because {} is not NULL", () => {
-  // schema_web.py:238-245: `{}` is "asked, and there are none", NULL is
+  // schema_web.py:303-307: `{}` is "asked, and there are none", NULL is
   // "nobody asked". The Builder was shown the boxes either way, so the empty
   // set is a real answer and has to reach the wire as [].
   const none = onboardingView.buildRequest(answersFrom({}, []), new Map());
@@ -848,7 +848,7 @@ it("the form reads both onboarding states out of the shipped fixtures", async ()
   assert.match(firstRun, /Let's set you up/,
                "a Builder who has never onboarded gets the first-run heading");
   // NULL prior_domain is "nobody asked" and must not preselect the domain
-  // literally named 'none' -- schema_web.py:177-182 makes that load-bearing.
+  // literally named 'none' -- schema_web.py:239-244 makes that load-bearing.
   assert.match(firstRun, /<option value=""\s+selected>Prefer not to say/);
 
   const done = await renderOnboarding(fixture("GET_v1_onboarding.json"));
@@ -872,7 +872,7 @@ it("the two onboarding fixtures agree about the same Builder", () => {
 });
 
 it("completed_at carries no zone, because onboarded_at is TEXT", () => {
-  // builder_profiles.onboarded_at is TEXT (schema_web.py:553) written by
+  // builder_profiles.onboarded_at is TEXT (schema_web.py:649) written by
   // lib.timeparse.utc_now_str(), whose docstring says '%Y-%m-%dT%H:%M:%S' is
   // load-bearing and "must not gain an offset". The fixture inherited a
   // trailing Z from the contract, which invented this response shape; a client

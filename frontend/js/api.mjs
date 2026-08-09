@@ -146,17 +146,17 @@ export async function getJob(jobId) {
  * GET /v1/onboarding. Has this Builder onboarded?
  *
  * Returns {onboarding: {completed, completed_at, prior_domain, prior_years},
- * profile} -- backend/webapp/onboarding.py:517-531, and the block itself is
- * _state() at :502-514.
+ * profile} -- backend/webapp/onboarding.py:536-537, and the block itself is
+ * _state() at :507-520.
  *
  * IT IS THIS ROUTE AND NOT AN `onboarding` BLOCK ON GET /v1/me. The contract
  * invents one on /v1/me (fixtures/contract/ASPIRATIONAL_GET_v1_me.json) and
- * onboarding.py:519-528 says in terms why it did not build it there: /v1/me is
+ * onboarding.py:527-534 says in terms why it did not build it there: /v1/me is
  * auth.py's and "deliberately touches no jobs table", which is worth more than
  * saving a request. The two must never both exist with different shapes, so
  * this client calls exactly one of them and it is this one.
  *
- * `completed_at` CARRIES NO ZONE. onboarded_at is TEXT (schema_web.py:553)
+ * `completed_at` CARRIES NO ZONE. onboarded_at is TEXT (schema_web.py:649)
  * written by lib.timeparse.utc_now_str(), whose docstring says the
  * '%Y-%m-%dT%H:%M:%S' shape is load-bearing and "must not gain an offset".
  * Same trap as `first_seen` -- see format.mjs, which appends the Z.
@@ -169,7 +169,7 @@ export function getOnboarding() {
  * POST /v1/onboarding. The structured form and the seed judgements, together.
  *
  * ONE REQUEST, NOT TWO, and that is the endpoint's shape rather than a client
- * convenience: onboarding.py:591-594 writes the profile row and commits it
+ * convenience: onboarding.py:597-600 writes the profile row and commits it
  * BEFORE recording the judgements, deliberately, so that the survivable half-
  * failure is "onboarded with no judgements" rather than "judgements belonging
  * to a Builder with no profile row". Splitting this into two calls client-side

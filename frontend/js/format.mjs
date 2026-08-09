@@ -41,7 +41,7 @@ export function postingAge(job, now = new Date()) {
   if (posted && !Number.isNaN(posted.getTime())) {
     return { days: daysBetween(posted, now), exact: true };
   }
-  // first_seen is TEXT in '%Y-%m-%dT%H:%M:%S' with no zone (schema.py:353-354).
+  // first_seen is TEXT in '%Y-%m-%dT%H:%M:%S' with no zone (schema.py:495).
   const seen = job.first_seen ? new Date(`${job.first_seen}Z`) : null;
   if (seen && !Number.isNaN(seen.getTime())) {
     return { days: daysBetween(seen, now), exact: false };
@@ -83,7 +83,7 @@ export function ageLabel(job, now = new Date()) {
  * and the shipped payload has `salary`, `comp_min`, `comp_max` and
  * `comp_currency` and no provenance flag at all: `is_estimated` appears
  * nowhere in backend/schema.py, and the only mention in the tree is
- * `comp_is_estimated` in backend/evals/mock_corpus.py:101, which is a fixture
+ * `comp_is_estimated` in backend/evals/mock_corpus.py:104, which is a fixture
  * key. Adzuna, the source the contract names as predicting salary, is a stub
  * (backend/tools/ats-discover.py:57, task 15).
  *
@@ -109,7 +109,7 @@ function compRange(job) {
     return lo != null ? `From ${fmt(lo)}` : `Up to ${fmt(hi)}`;
   }
   // `salary` is coalesce(j.salary_text, currency || ' ' || min-max)
-  // (schema.py:795-796), so it is the employer's own string only when
+  // (schema.py:1212-1213), so it is the employer's own string only when
   // salary_text was set. With comp_min/comp_max both null it is the employer's
   // string by construction.
   return job.salary || null;

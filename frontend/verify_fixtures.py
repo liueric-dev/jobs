@@ -470,7 +470,7 @@ def check(problems):
            response["onboarding"], onboarding_state)
 
     # `completed_at` HAS NO ZONE AND MUST NOT GROW ONE. builder_profiles.
-    # onboarded_at is TEXT (schema_web.py:553) written by
+    # onboarded_at is TEXT (schema_web.py:649) written by
     # lib.timeparse.utc_now_str(), whose docstring says the
     # '%Y-%m-%dT%H:%M:%S' shape is load-bearing and "must not gain an offset or
     # microseconds" because both pipelines compare these as STRINGS. The fixture
@@ -489,7 +489,7 @@ def check(problems):
                 f"fixture inventing a timezone the column does not carry.")
 
     # A first-run Builder is `completed: false` with NULL everywhere, and NULL
-    # is not the prior_domain literally named 'none' -- schema_web.py:177-182
+    # is not the prior_domain literally named 'none' -- schema_web.py:239-244
     # makes that distinction load-bearing.
     first_run = _load("GET_v1_onboarding.first_run.json")["onboarding"]
     if first_run["completed"] is not False or first_run["completed_at"] is not None:

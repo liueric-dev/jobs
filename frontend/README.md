@@ -61,15 +61,15 @@ against `shipped/`, because that is what the server sends.
 | `GET /v1/jobs` | yes, `jobs.py:409` | both — shapes differ |
 | `GET /v1/jobs/{id}` | yes, `jobs.py:581` | both — shapes differ |
 | `POST /v1/events` | yes, `jobs.py:916` | both — **request shapes agree** |
-| `GET /v1/me` | yes, `auth.py:450` | both — contract adds an onboarding block |
+| `GET /v1/me` | yes, `auth.py:465` | both — contract adds an onboarding block |
 | `GET /v1/searches` | ~~**no route, no table**~~ **yes, `search.py`** | **both — shapes differ** |
 | `POST /v1/searches` | ~~**no route, no table**~~ **yes, `search.py`** | **both — shapes differ** |
 | `GET /v1/searches/{id}` | **yes, `search.py`** | `shipped/` only — not in the contract |
 | `POST /v1/searches/{id}/watch` | **yes, `search.py`** | `shipped/` only — not in the contract |
 | `POST /v1/searches/{id}/unwatch` | **yes, `search.py`** | `shipped/` only — not in the contract |
 | `GET /v1/searches/{id}/results` | **yes, `search.py`** | `shipped/` only — not in the contract |
-| `POST /v1/onboarding` | ~~**no route, no table**~~ **yes, `onboarding.py:534`** | ~~`contract/` only — **and nothing checks it**~~ **`shipped/`, 2026-08-02** |
-| `GET /v1/onboarding` | **yes, `onboarding.py:517`** | ~~**no fixture at all**~~ **`shipped/`, two of them** |
+| `POST /v1/onboarding` | ~~**no route, no table**~~ **yes, `onboarding.py:540`** | ~~`contract/` only — **and nothing checks it**~~ **`shipped/`, 2026-08-02** |
+| `GET /v1/onboarding` | **yes, `onboarding.py:523`** | ~~**no fixture at all**~~ **`shipped/`, two of them** |
 
 ~~Every aspirational file is named `ASPIRATIONAL_*`. `search_queries` and
 `builder_profiles` exist nowhere in `schema.py` or `schema_web.py` — these three
@@ -322,7 +322,7 @@ Everything else the contract adds — `tracks[]`, `posting_age_days`,
   posting — undo has to be reachable — so
   `GET_v1_jobs_by_id.dismissed.json` is the state the undo flow renders from.
 - **The profile is `pursuit`**, not the contract's `pursuit-cohort-2026a`, and
-  job ids are 24-char sha256 prefixes (`lib/ids.py:33,36`), not the contract's
+  job ids are 24-char sha256 prefixes (`lib/ids.py:35,45`), not the contract's
   illustrative `gh_acme_4821`.
 - **An unscored posting is normal.** `jobs_app` LEFT JOINs `job_scores` and
   scoring is budget-limited, so `fit_score`, `primary_track`,
@@ -357,7 +357,7 @@ Everything else the contract adds — `tracks[]`, `posting_age_days`,
   which is why a suggestion reads *"For roles like: Working with data"* and
   nothing groups search **results** by track at all.
 - **And the bucket counts the reader.** The fold is
-  `COUNT(DISTINCT app_user_id)` over the whole profile (`backend/cohort.py:113`),
+  `COUNT(DISTINCT app_user_id)` over the whole profile (`backend/cohort.py:114`),
   which includes whoever is looking at the page. So the copy is "3-5 Builders
   saved this posting", never "3-5 *other* Builders" — that would be wrong by one
   exactly when the reader is one of them, and wrong in the flattering direction.
@@ -367,19 +367,19 @@ Everything else the contract adds — `tracks[]`, `posting_age_days`,
 - ~~**The track vocabulary is undecided.** The contract's one example,
   `ai_operations`, is a `role_archetype` value in `config/pursuit-criteria.json`,
   not a track. The only track vocabulary in the code is `score.TRACKS`
-  (`score.py:281-282`). The `contract/` fixtures slugify those and put the
+  (`score.py:301-302`). The `contract/` fixtures slugify those and put the
   stored Title Case in `label`; whoever implements task 32 has to actually
   decide this.~~
 
   > **DECIDED 2026-08-02, `DEC-77`, and the struck sentence was WRONG on its
   > facts.** *"The only track vocabulary in the code is `score.TRACKS`"* — there
   > are **two**, and the one this paragraph missed is the one that matters:
-  > **`extract.ROLE_TRACK` (`backend/extract.py:305-308`)**, nine snake_case
+  > **`extract.ROLE_TRACK` (`backend/extract.py:307-310`)**, nine snake_case
   > values, which is what is actually stored on `job_facts.role_track`
-  > (~~`jobs.role_track`, `backend/schema.py:542`~~ — **`backend/schema.py:740`**;
+  > (~~`jobs.role_track`, `backend/schema.py:542`~~ — **`backend/schema.py:745`**;
   > `:542` is the `profiles` DDL, so that cite was wrong about the table as well
   > as the line) and what `extract._enum` validates against
-  > (`backend/extract.py:754`). `score.TRACKS` is five Title Case values written
+  > (`backend/extract.py:637`). `score.TRACKS` is five Title Case values written
   > by the LLM scorer into `job_scores.primary_track`.
   >
   > The client groups by **`ROLE_TRACK`**: it is the stored value, it is already
@@ -405,7 +405,7 @@ to be assumed.
 
 **1. ~~`role_track` is in no response body, so DEC-77's grouping has nothing to
 group by.~~ CLOSED — the field landed.** It is a column on `job_facts`
-(~~`backend/schema.py:542`~~ **`:740`**) that the `jobs_app` view did not
+(~~`backend/schema.py:542`~~ **`:745`**) that the `jobs_app` view did not
 select, therefore not in `LIST_COLUMNS`, therefore not in `GET /v1/jobs` or
 `GET /v1/jobs/{id}`. *"The two lines that would fix it are in two files this
 stream does not own"* — those two lines are now written: `f.role_track` is the
@@ -431,7 +431,7 @@ false is worth less than a red one.
 The struck sentence *"which is also what `backend/schema.py:534` predicts
 independently, since `role_track` is NULL on every pre-task-11 row anyway"* was
 **wrong twice**: `:534` is the `profiles` DDL, and the comment it meant (now
-`:725`) had itself gone stale when task 12 re-extracted. Measured through the
+`:730-731`) had itself gone stale when task 12 re-extracted. Measured through the
 view on 2026-08-02: **134 of 166 visible `pursuit` rows carry a track, all nine
 values present.** Re-measure before quoting — `git show refactor-freeze-2026-08-02:docs/facts-v3-diff.md` records
 that a corpus statistic here has a shelf life of one night.
@@ -454,14 +454,14 @@ list that would supply the `request_id` hides it, so the cold-reload undo path
 is the one place the two rules pull against each other.
 
 **4. `comp.is_estimated` is required by the contract and exists nowhere.** Not
-in `job_facts` (`backend/schema.py:474-476` has `comp_min`, `comp_max`,
+in `job_facts` (`backend/schema.py:564-566` has `comp_min`, `comp_max`,
 `comp_currency` and no provenance flag), not in the view, not in `LIST_COLUMNS`.
 The only occurrence in the tree is `comp_is_estimated` in
-`backend/evals/mock_corpus.py:101`, a fixture key. Adzuna — the source the
+`backend/evals/mock_corpus.py:104`, a fixture key. Adzuna — the source the
 contract names as predicting salary — is a stub (`backend/tools/ats-discover.py:57`,
 task 15). Worse, `jobs_app` **coalesces away the distinction that would let a
 client infer it**: `salary` is `coalesce(j.salary_text, currency || ' ' || min-max)`
-(`backend/schema.py:795-796`), so the employer's own string and a figure the
+(`backend/schema.py:1212-1213`), so the employer's own string and a figure the
 extractor derived arrive in the same field under the same name. `js/format.mjs`
 reads the flag under either spelling and qualifies the figure when it is set;
 with the flag absent it shows the figure plainly, which is right today and

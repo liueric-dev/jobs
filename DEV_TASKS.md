@@ -497,6 +497,33 @@ one ambiguous case; `T-47` held the same line on 2026-08-08 while renumbering th
 `.claude/CLAUDE.md`'s citation rule means, and `T-46` is edited to match. **If the answer is (1), say
 so explicitly** — an unrecorded status quo is what let this run for five days.
 
+### OQ-35 — A citation into a sibling repo is unrepresentable, and it is red in your working tree now
+
+Filed by `T-51`, 2026-08-09, from your own uncommitted change — untouched, because it is yours.
+
+**Why it is yours:** decision, and the evidence is a repo a session cannot see.
+
+**What:** `deploy/cloudflared/config.yml:87` cites a systemd unit under a sibling `bankan` checkout
+for the port the new `bankan.etotheric.com` ingress points at. (The path is not repeated here: it
+would make this row unresolvable too, which is the defect.) That file is in a *different* repo on
+the same machine, so `tools/audit-citations.py` — which resolves every path against this repo root —
+reports it unresolvable, and `tests/test_citations.py`'s
+`test_no_citation_broke_that_was_not_already_broken` is a **red test in the working tree right
+now**. `T-51`'s own numbers were verified against a copy with this file restored to `HEAD`: `0 new`,
+suite `1462` OK. Commit it as-is and CI's `suites` job goes red on `main`.
+
+**Three ways out, and they are not equivalent.** (1) **Drop the `file:line`** and name the port in
+prose — cheapest, and it loses the one pointer that says where 3011 comes from. (2) **Add the
+sibling-repo form to `audit-citations.py`**, the way `git show <ref>:<path>` was added for the
+2026-08-02 deletions — it makes cross-repo cites checkable-looking while validating nothing, which
+is the blindspot [`audit-citations.py`'s tag-line form](.claude/CLAUDE.md) already has once. (3)
+**Accept it in `config/citation-baseline.json`** — which `.claude/CLAUDE.md` forbids ("never add to
+that file to silence a finding"), so taking it is an exception only you can grant.
+
+**Done when:** one is chosen, the suite is green with `config.yml` as committed, and if the answer
+is (2) or (3) it is written down where the citation rule is — an ADR, since it changes what that
+rule covers.
+
 ### OQ-34 — This file cannot reach its own 450-line budget, and the three ways out are all yours
 
 Filed by `T-47`, 2026-08-08, which cut 711 → 534 and could not close the rest without taking
