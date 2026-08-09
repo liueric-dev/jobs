@@ -1012,6 +1012,41 @@ class TestTheWorkerReportsThePauseAndDecidesNothing(unittest.TestCase):
         for setting in ("daily_cap", "reserve_floor"):
             self.assertNotIn(setting, source)
 
+    def _pause_branch(self):
+        """The worker's dormancy path, sliced out of its source.
+
+        T-36's half that no other test reaches. The server side of dormancy is
+        pinned in several places -- granted nothing, no log row, the query bank
+        never opened, the check-in written anyway -- and all of it is about what
+        this service does. None of it can say what the BUILDER'S machine does
+        when told, and "reactivating requires no action on the Builder's
+        machine" is a claim about that machine.
+        """
+        source = self._source()
+        self.assertIn('claimed.get("paused")', source,
+                      "the worker no longer branches on the pause")
+        branch = source.split('claimed.get("paused")', 1)[1]
+        return branch.split("\n    # THE OTHER GRANTED-NOTHING", 1)[0]
+
+    def test_a_paused_poll_spends_no_serpapi_credit(self):
+        # "Pauses spending, not check-in" is only half-proved by a server that
+        # grants nothing: a worker that searched anyway would spend a Builder's
+        # credits on results it had no claim to submit. The branch returns
+        # before the loop, so the assertion is that nothing in it searches.
+        self.assertNotIn("serpapi_search(", self._pause_branch())
+
+    def test_a_paused_poll_leaves_the_schedule_alone(self):
+        # THE REACTIVATION HALF, AND IT IS A PROPERTY OF AN ABSENCE. Nothing has
+        # to be re-enabled on the Builder's machine when the operator unpauses
+        # them -- but only because the pause path neither uninstalls the agent
+        # nor exits non-zero into a launchd/cron failure. A worker that tidied
+        # itself away while dormant would make resuming a support conversation
+        # with thirty people, which is the cost this row exists to avoid.
+        branch = self._pause_branch()
+        self.assertNotIn("uninstall", branch)
+        self.assertNotIn("sys.exit", branch)
+        self.assertIn("return", branch)
+
 
 if __name__ == "__main__":
     unittest.main()
