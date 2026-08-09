@@ -173,13 +173,19 @@ def validate(text, location=None):
 
 
 # --------------------------------------------------------------------------
-# Cadence and decay
+# Pacing, freshness and decay
 # --------------------------------------------------------------------------
 
-#: Don't re-run a query that succeeded this recently. 20 hours rather than 24
-#: for the reason ingest/google-serpapi.py:172-178 gives for the identical
-#: constant: a fixed daily cron time drifting a few minutes must never skip a
-#: legitimate next-day run.
+#: A MINIMUM-FRESHNESS FLOOR, and no longer the thing that decides whether a
+#: query runs -- run_allowance() below is. 20 hours rather than 24 for the
+#: reason ingest/google-serpapi.py:172-178 gives for the identical constant: a
+#: fixed daily cron time drifting a few minutes must never skip a legitimate
+#: next-day run.
+#:
+#: What it stops is re-asking a provider a question whose answer is still
+#: fresh. What it must NOT stop is a second run on the same day reaching the
+#: queries the first run's budget cut off -- those are different queries, so
+#: the floor never sees them, which is why demoting it costs nothing here.
 RERUN_HOURS = 20
 
 #: A query with no watchers and no results for this long stops running. The
@@ -210,17 +216,91 @@ def _hours_between(later, earlier):
             - datetime.strptime(earlier, fmt)).total_seconds() / 3600.0
 
 
-def is_due(now, last_run_at, active_watchers, source, retired_at=None):
+def days_left_in_cycle(now, reset_day=1):
+    """Days remaining in the billing cycle, COUNTING TODAY. Never below 1.
+
+    THE VENDOR DOES NOT SEND A RESET DATE. serp/providers/serpapi.py:150's
+    account() returns used, left and allowance and nothing about when the
+    period turns over, so the boundary is derived here rather than read.
+
+    `reset_day` defaults to 1 because that is the vendor's own framing -- the
+    fields it answers with are named `this_month_usage` and
+    `searches_per_month` -- and it is a PARAMETER rather than a constant
+    because SerpApi bills from the signup date, so an account opened on the
+    12th turns over on the 12th and the default is wrong for it by up to a
+    month. It is wrong in the safe direction on a calendar-month reading and
+    the unsafe one on a late-signup account, which is why OQ-36 asks for the
+    real date rather than this guessing it.
+
+    Counting today is deliberate: on the last day of the cycle the answer is 1
+    and the whole remainder is spendable in that run, which is the "credits
+    that expire at cycle end" half of docs/adr/0007 decision 4.
+    """
+    from calendar import monthrange
+    from datetime import date, datetime
+    today = datetime.strptime(now, "%Y-%m-%dT%H:%M:%S").date()
+    reset_day = max(1, int(reset_day))
+    # Clamp into the month: a cycle anchored on the 31st turns over on the
+    # 30th of a 30-day month, the same way every monthly-billing system does.
+    def _anchor(year, month):
+        return date(year, month, min(reset_day, monthrange(year, month)[1]))
+    nxt = _anchor(today.year, today.month)
+    if nxt <= today:
+        year, month = (today.year + 1, 1) if today.month == 12 else (today.year,
+                                                                    today.month + 1)
+        nxt = _anchor(year, month)
+    return (nxt - today).days
+
+
+def run_allowance(left, days_left, reserve=0):
+    """How many searches this run may spend, or None for UNPACED. Pure.
+
+    None is the answer whenever the plan data is not available -- `left` is
+    None because the vendor could not be reached, or was reached and reported
+    no figure. serp/quota.py's own docstring settles the direction and this
+    inherits it rather than re-deciding it: check() ALLOWS when it cannot
+    reach the vendor, because the cost of allowing is one refused search and
+    the cost of refusing is the whole bank. A network blip must not become a
+    night that dispatches nothing.
+
+    THE FLOOR OF 1 IS NOT ROUNDING. Three credits with ten days left divides
+    to zero, which would strand them until they expire -- the exact loss
+    decision 4 exists to stop. A cycle with anything left in it spends at
+    least one search per run; `reserve` is what expresses "hold some back",
+    and it is checked before the floor so a reserve that covers the remainder
+    really does stop the spending.
+    """
+    if left is None or days_left is None:
+        return None
+    spendable = int(left) - int(reserve or 0)
+    if spendable <= 0:
+        return 0
+    return max(1, spendable // max(1, int(days_left)))
+
+
+def is_due(now, last_run_at, active_watchers, source, retired_at=None,
+           allowance=None):
     """Should this query be sent to a provider on this run?
 
     Retired first, and unconditionally: retirement is the whole point of
     decay and a retired query that is still due would spend the quota the
     decay rule exists to stop spending.
 
+    THE BUDGET IS SECOND, AND IT OUTRANKS EVERY REASON BELOW IT. `allowance`
+    is how many searches this run may still spend -- None for unpaced, which
+    is what every caller that has no plan data passes and what keeps a vendor
+    outage from emptying the night. At zero nothing is due, including a
+    never-run query: the asynchronous promise is that a Builder's first search
+    lands on the next cycle, and a run with no budget left is not one.
+
+    THE CALLER DECREMENTS. This takes the allowance and never fetches it, so
+    the predicate stays pure and sweepable; searchqueries.due_queries() walks
+    the rows in fair-share order and counts down as it accepts them.
+
     A never-run query is due immediately, whatever its source. That is the
     asynchronous promise in the task file -- "a query is submitted, queued,
-    run on the nightly cycle" -- and a first run that waited a cadence window
-    would make a Builder's first search the slowest one they ever do.
+    run on the nightly cycle" -- and a first run that waited a freshness
+    window would make a Builder's first search the slowest one they ever do.
 
     An UNWATCHED builder query that has already run is NOT due. Nobody is
     waiting for it; it stays in the table (so a second Builder typing the same
@@ -229,6 +309,8 @@ def is_due(now, last_run_at, active_watchers, source, retired_at=None):
     a Builder with no search term is shown.
     """
     if retired_at:
+        return False
+    if allowance is not None and allowance <= 0:
         return False
     if not last_run_at:
         return True

@@ -21,7 +21,10 @@ Five things, in that order, and the order is not arbitrary:
              After the fold, so a query retiring tonight still had its badge
              computed from the watchers it had; before dispatch, so a retired
              query is not run one last time on the night it retires.
-  5. RUN     dispatch the due queries to a provider.
+  5. RUN     dispatch the due queries to a provider, up to the budget this
+             run may spend. The budget is read from the vendor's own counter
+             at the top of this step, so it reflects what the reconcile above
+             and every other spender of the account have already taken.
 
 ~~WHAT STEP 5 DOES NOT DO YET, AND THE BLOCKER BY NAME.~~ STEP 5 DISPATCHES, as
 of 2026-08-02. tranche_four/23 landed `backend/serp/`, and build_provider()
@@ -353,14 +356,22 @@ def apply_decay(conn, now=None):
     return retired
 
 
-def due_queries(conn, now=None):
+def due_queries(conn, now=None, allowance=None):
     """Every query a provider should be asked about on this run.
 
-    The cadence rule is searchnorm.is_due(), pure and swept. Ordered by
-    last_run_at NULLS FIRST so a query nobody has ever run goes before one that
-    ran yesterday -- the asynchronous promise is that a Builder's first search
+    The rule is searchnorm.is_due(), pure and swept. Ordered by last_run_at
+    NULLS FIRST so a query nobody has ever run goes before one that ran
+    yesterday -- the asynchronous promise is that a Builder's first search
     lands on the next cycle, and a fair-share order that put it behind eighty
     daily re-runs would not keep it.
+
+    `allowance` is searchnorm.run_allowance()'s answer: how many searches this
+    run may spend, or None for unpaced. THIS FUNCTION IS WHERE IT IS SPENT --
+    is_due() is handed the remainder and this loop counts down as it accepts,
+    which is what keeps the predicate pure. The ORDER is what makes the cut
+    fair rather than arbitrary: the budget runs out at the bottom of the list,
+    so the queries it drops are the freshest ones, and the next run reaches
+    them because their turn has come round rather than because a clock expired.
     """
     now = now or utc_now_str()
     watchers = active_watcher_counts(conn)
@@ -377,8 +388,9 @@ def due_queries(conn, now=None):
     for row in rows:
         (query_id, normalized_text, normalized_location, display_text,
          display_location, chips, source, last_run_at, retired_at) = row
+        remaining = None if allowance is None else allowance - len(due)
         if searchnorm.is_due(now, last_run_at, watchers.get(query_id, 0),
-                             source, retired_at):
+                             source, retired_at, remaining):
             due.append({
                 "id": query_id,
                 "normalized_text": normalized_text,
@@ -564,17 +576,60 @@ def attach_results(conn, query_id, job_ids, provider=None, now=None):
     return written
 
 
-def run_due(conn, provider=None, now=None):
+def pacing_allowance(provider, now=None):
+    """How many searches this run may spend against `provider`, or None.
+
+    THE ONE PLACE THE PLAN DATA IS FETCHED, which is what keeps
+    searchnorm.run_allowance() and searchnorm.is_due() pure. It costs no extra
+    HTTP call: quota.Ledger.account() reads the vendor once per run and caches
+    it (serp/quota.py:141), and quota.Ledger.check() is already going to want
+    the same read for its baseline.
+
+    None -- UNPACED -- on every path where the answer is not known: no ledger,
+    no config entry, an unreachable vendor, or a vendor that answered without
+    a `left` figure. serp/quota.py's module docstring is the authority for that
+    direction and this does not re-decide it: the cost of allowing is one
+    refused search, the cost of refusing is the whole bank.
+
+    `reserve` is read from the SAME config entry quota.Ledger.check() reads, so
+    the soft pacing and the hard refusal cannot disagree about how much of the
+    account this pipeline may touch.
+    """
+    ledger = getattr(provider, "ledger", None)
+    name = getattr(provider, "name", None)
+    if ledger is None or name is None:
+        return None
+    data = ledger.account(name)
+    if data is None:
+        return None
+    entry = (getattr(ledger, "config", None) or {}).get(name) or {}
+    days_left = searchnorm.days_left_in_cycle(
+        now or utc_now_str(), entry.get("cycle_reset_day", 1))
+    return searchnorm.run_allowance(data.get("left"), days_left,
+                                    entry.get("reserve") or 0)
+
+
+def run_due(conn, provider=None, now=None, allowance=None):
     """Dispatch due queries to `provider`, or report the deferral.
 
     `provider` is a callable taking one due-query dict and returning a list of
-    jobs.id values it wrote. None -- which is every caller today -- means
-    tranche_four/23 has not landed and nothing is dispatched. See the module
-    docstring for what unblocks it.
+    jobs.id values it wrote. None means nothing is dispatched -- see
+    build_provider() for the three causes and the line each one prints.
 
-    Returns (dispatched, due_count).
+    `allowance` paces the run (docs/adr/0007 decision 4). Passed explicitly it
+    is used as given -- which is what the sweep does; left None it is derived
+    from the provider's own plan data by pacing_allowance() above. A run with
+    no provider derives nothing, because there is no account to ask and
+    nothing to spend.
+
+    Returns (dispatched, due_count), and `due_count` is the count AFTER pacing
+    -- what this run intends to spend, not what it would spend unpaced. A
+    "due" figure that counted queries the budget already declined would be a
+    number no run ever acts on.
     """
-    due = due_queries(conn, now=now)
+    if provider is not None and allowance is None:
+        allowance = pacing_allowance(provider, now=now)
+    due = due_queries(conn, now=now, allowance=allowance)
     if provider is None:
         return 0, len(due)
     dispatched = 0
@@ -672,7 +727,12 @@ def main():
     # build_provider() returns None and the loud stderr line below says which
     # of the two it was.
     provider, why_not = build_provider(conn, dry_run=args.dry_run)
-    dispatched, due = run_due(conn, provider=provider, now=now)
+    # DERIVED HERE RATHER THAN INSIDE run_due() ONLY SO IT CAN BE PRINTED.
+    # run_due() derives the same number when it is handed None, and the two
+    # paths must not drift -- one call, one value, passed on.
+    allowance = pacing_allowance(provider, now=now) if provider else None
+    dispatched, due = run_due(conn, provider=provider, now=now,
+                              allowance=allowance)
 
     # ALERT ON VOLUME, NOT ERRORS (.claude/CLAUDE.md). Every number is printed
     # every run, including the zeros, so a run that stopped seeding or stopped
@@ -682,10 +742,21 @@ def main():
     # have created -- and every one of those is a never-run query, which
     # is_due() makes due immediately, which is now one metered provider call
     # each. Printing the sum is the difference between a report and an estimate.
+    # THE PACING CAP IS PRINTED FOR THE SAME REASON THE ZEROS ARE. An account
+    # that has run out paces to 0 and every following number goes to zero with
+    # it; without this line that reads as "nothing was due tonight", which is
+    # this system's failure mode wearing an ordinary run's clothes. `unpaced`
+    # is not a synonym for "no limit applied" -- it means the plan data could
+    # not be read, so it names the thing that failed rather than the effect.
+    # ON A DRY RUN IT IS ALWAYS `unpaced`: no provider is built, so there is no
+    # ledger to ask, and `due` is therefore the ceiling rather than the estimate
+    # the paragraph above describes.
     would_be_due = f" (+{seeded} once seeded)" if args.dry_run and seeded else ""
     print(f"search-queries{' [dry run]' if args.dry_run else ''}: "
           f"seeded={seeded} reconciled={reconciled} "
-          f"retired={len(retired)} due={due}{would_be_due} "
+          f"retired={len(retired)} "
+          f"allowance={'unpaced' if allowance is None else allowance} "
+          f"due={due}{would_be_due} "
           f"dispatched={dispatched}"
           + (f" via {provider.name}" if provider else "")
           + ("; " + "; ".join(parts) if parts else "; no active profiles"))
@@ -700,6 +771,24 @@ def main():
         # wrong because nothing ever printed the two numbers next to each other.
         if provider.ledger is not None:
             print(provider.ledger.report([provider.name]))
+    if allowance == 0:
+        # LOUD, ON STDERR, and this case is NEW with docs/adr/0007 decision 4.
+        # An exhausted account used to reach serp/__init__.py:231's
+        # ledger.check() and RAISE, because a query was always dispatched and
+        # the refusal came back from the vendor. Pacing declines before any
+        # query is dispatched, so that raise cannot happen and the step now
+        # exits 0. That is deliberate -- a free tier spent at cycle end is the
+        # expected state, and failing the nightly run every night for the last
+        # week of the month is the noise this repo already refuses elsewhere.
+        # What is NOT acceptable is it looking like a night when nothing was
+        # due, which is why this says which of the two it was.
+        #
+        # `== 0` and not `not allowance`: None is unpaced (the vendor could
+        # not be reached) and must not print a sentence claiming the vendor
+        # reported anything.
+        print("search-queries: the vendor reports NOTHING LEFT to spend this "
+              "cycle, so no query was dispatched and nothing is due. This is "
+              "a deferral, not a failure.", file=sys.stderr)
     if due and not dispatched:
         # Loud, on stderr, every single run. run-daily.py treats stdout as the
         # report and stderr as detail; a deferral that printed nothing would be

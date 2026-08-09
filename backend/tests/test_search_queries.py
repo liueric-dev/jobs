@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -264,13 +265,77 @@ class TestCadence(unittest.TestCase):
         self.assertTrue(searchnorm.is_due(self.NOW, "2026-08-01T03:00:00", 1,
                                           "builder"))
 
-    def test_the_window_is_twenty_hours_not_twenty_four(self):
-        # ingest/google-serpapi.py:172-178's constant and its reason: a fixed
-        # daily cron time drifting a few minutes must never skip a legitimate
-        # next-day run.
+    def test_the_freshness_floor_is_twenty_hours_and_still_binds(self):
+        # WAS test_the_window_is_twenty_hours_not_twenty_four, which asserted
+        # the constant and one query either side of it. docs/adr/0007 decision
+        # 4 demoted RERUN_HOURS from deciding whether a query runs to a
+        # minimum-freshness floor, which does not make that assertion wrong --
+        # it makes it insufficient, because it passes identically whether the
+        # constant is a floor or the whole rule.
+        #
+        # What a floor means, and what the old test could not tell apart: a
+        # query inside the window is refused NO MATTER HOW MUCH BUDGET THERE
+        # IS. An unlimited allowance does not buy a re-ask of a question whose
+        # answer is still fresh.
         self.assertEqual(searchnorm.RERUN_HOURS, 20)
         self.assertTrue(searchnorm.is_due(self.NOW, "2026-08-01T04:00:00", 1,
                                           "builder"))
+        for allowance in (None, 1, 10_000):
+            with self.subTest(allowance=allowance):
+                self.assertFalse(
+                    searchnorm.is_due(self.NOW, "2026-08-01T10:00:00", 1,
+                                      "builder", None, allowance),
+                    "budget must not buy a re-run inside the freshness floor")
+
+    def test_pacing_and_not_cadence_is_what_picks_the_query(self):
+        # The other half, and the one the demotion is FOR: a query the floor
+        # has cleared is still refused when the run has no budget left. Before
+        # decision 4 nothing could refuse it, because the floor was the only
+        # gate there was.
+        #
+        # source='seeded', deliberately. An unwatched 'builder' query that has
+        # already run is never due whatever its statistics say, so writing this
+        # against 'builder' with 0 watchers would pass for the wrong reason and
+        # go on passing if the allowance were ignored entirely.
+        stale = "2026-07-01T00:00:00"
+        self.assertTrue(searchnorm.is_due(self.NOW, stale, 0, "seeded", None, 5))
+        self.assertFalse(searchnorm.is_due(self.NOW, stale, 0, "seeded", None, 0))
+
+    def test_an_exhausted_budget_outranks_the_never_run_shortcut(self):
+        # A never-run query is due immediately -- that is the asynchronous
+        # promise -- but "immediately" cannot mean "on a run with nothing left
+        # to spend". The budget check therefore sits ABOVE the shortcut, and
+        # this is the case that pins the order; moved below it, a bank of
+        # never-run rows would spend straight past the cap.
+        self.assertTrue(searchnorm.is_due(self.NOW, None, 0, "seeded", None, 1))
+        self.assertFalse(searchnorm.is_due(self.NOW, None, 0, "seeded", None, 0))
+
+    def test_a_generous_budget_does_not_resurrect_a_retired_query(self):
+        # NOT an ordering assertion, deliberately, and it was written as one
+        # first: retirement and the budget are both refusals, so swapping the
+        # two guards is behaviourally indistinguishable and a test named for
+        # the order passes under either. Reordering them is safe; what is not
+        # safe is a budget large enough to look like "no limit" reaching a
+        # retired row, which is what this actually pins.
+        self.assertFalse(searchnorm.is_due(self.NOW, None, 5, "builder",
+                                           "2026-07-01T00:00:00", 10_000))
+        self.assertFalse(searchnorm.is_due(self.NOW, None, 5, "builder",
+                                           "2026-07-01T00:00:00", 0))
+
+    def test_an_unpaced_call_is_exactly_the_old_behaviour(self):
+        # `allowance=None` is what every caller with no plan data passes, and
+        # it must be indistinguishable from the predicate before decision 4 --
+        # otherwise a vendor outage silently changes which queries run.
+        for last_run, watchers, source in (
+                (None, 0, "builder"), ("2026-08-01T10:00:00", 1, "builder"),
+                ("2026-08-01T03:00:00", 1, "builder"),
+                ("2026-07-01T00:00:00", 0, "builder"),
+                ("2026-07-01T00:00:00", 0, "seeded")):
+            with self.subTest(last_run=last_run, source=source):
+                self.assertEqual(
+                    searchnorm.is_due(self.NOW, last_run, watchers, source),
+                    searchnorm.is_due(self.NOW, last_run, watchers, source,
+                                      None, None))
 
     def test_an_unwatched_builder_query_stops_running(self):
         # It is not retired -- a second Builder typing the same words still
@@ -289,6 +354,108 @@ class TestCadence(unittest.TestCase):
     def test_a_retired_query_is_never_due(self):
         self.assertFalse(searchnorm.is_due(self.NOW, None, 5, "builder",
                                            retired_at="2026-07-01T00:00:00"))
+
+
+class TestRunAllowance(unittest.TestCase):
+    """searchnorm.run_allowance() -- the whole of docs/adr/0007 decision 4's
+    arithmetic, and pure, so it is swept over a table rather than reasoned
+    about."""
+
+    def test_credits_remaining_over_days_remaining(self):
+        self.assertEqual(searchnorm.run_allowance(250, 31), 8)
+        self.assertEqual(searchnorm.run_allowance(250, 10), 25)
+        self.assertEqual(searchnorm.run_allowance(250, 1), 250)
+
+    def test_an_idle_week_raises_the_allowance_rather_than_stranding_credit(self):
+        # THE ROW'S CENTRAL CLAIM, as arithmetic. A contributor whose machine
+        # was shut for a week did not spend, so `left` did not fall while
+        # `days_left` did -- and the allowance rises to absorb the backlog
+        # instead of holding them to the cadence that let it build up.
+        steady = searchnorm.run_allowance(250, 31)
+        after_idle_week = searchnorm.run_allowance(250, 24)
+        self.assertGreater(after_idle_week, steady)
+        # And it converges: the same credits over fewer days keeps rising, so
+        # the last day of the cycle spends the remainder rather than 1/31 of it.
+        self.assertEqual(searchnorm.run_allowance(250, 1), 250)
+
+    def test_a_remainder_too_small_to_divide_is_spent_not_stranded(self):
+        # 3 credits over 10 days floors to 0, which would strand all three
+        # until they expire -- the exact loss decision 4 exists to stop. The
+        # floor of 1 is the rule, not a rounding artefact.
+        self.assertEqual(searchnorm.run_allowance(3, 10), 1)
+        self.assertEqual(searchnorm.run_allowance(1, 31), 1)
+
+    def test_an_empty_account_paces_to_zero_and_the_reserve_is_honoured(self):
+        # Zero is a real answer and is NOT None: the vendor was reached and
+        # said there is nothing left. Conflating the two would make an
+        # exhausted account dispatch as though it were unmetered.
+        self.assertEqual(searchnorm.run_allowance(0, 10), 0)
+        self.assertEqual(searchnorm.run_allowance(-5, 10), 0)
+        self.assertEqual(searchnorm.run_allowance(10, 10, reserve=10), 0)
+        self.assertEqual(searchnorm.run_allowance(10, 10, reserve=4), 1)
+        # The reserve is checked BEFORE the floor of 1, or "hold 10 back"
+        # would still spend one a run and drain the reserve it named.
+        self.assertEqual(searchnorm.run_allowance(11, 100, reserve=10), 1)
+        self.assertEqual(searchnorm.run_allowance(10, 100, reserve=10), 0)
+
+    def test_unknown_plan_data_is_unpaced_and_not_zero(self):
+        # serp/quota.py's direction, inherited rather than re-decided: the
+        # cost of allowing is one refused search and the cost of refusing is
+        # the whole bank. None here, 0 above, and they must never be swapped.
+        self.assertIsNone(searchnorm.run_allowance(None, 10))
+        self.assertIsNone(searchnorm.run_allowance(250, None))
+
+    def test_it_does_no_io(self):
+        # The purity clause, asserted rather than asserted-in-a-docstring.
+        # A predicate that needs a connection is a predicate nobody sweeps.
+        import socket
+        with unittest.mock.patch.object(
+                socket, "socket",
+                side_effect=AssertionError("run_allowance opened a socket")):
+            self.assertEqual(searchnorm.run_allowance(250, 10), 25)
+            self.assertTrue(searchnorm.is_due("2026-08-02T00:00:00",
+                                              "2026-07-01T00:00:00", 0,
+                                              "seeded", None, 5))
+
+
+class TestDaysLeftInCycle(unittest.TestCase):
+    """The cycle boundary the vendor does not send. See OQ-36."""
+
+    def test_it_counts_today_so_the_last_day_spends_the_remainder(self):
+        self.assertEqual(
+            searchnorm.days_left_in_cycle("2026-08-31T23:00:00"), 1)
+        self.assertEqual(
+            searchnorm.days_left_in_cycle("2026-08-01T00:00:00"), 31)
+        self.assertEqual(
+            searchnorm.days_left_in_cycle("2026-08-02T00:00:00"), 30)
+
+    def test_it_is_never_zero(self):
+        # A zero would be a division by zero in run_allowance() on exactly one
+        # day a month -- the day the whole feature matters most.
+        for day in range(1, 29):
+            stamp = f"2026-02-{day:02d}T12:00:00"
+            with self.subTest(stamp):
+                self.assertGreaterEqual(
+                    searchnorm.days_left_in_cycle(stamp), 1)
+
+    def test_a_late_signup_anchor_is_a_parameter_not_a_constant(self):
+        # SerpApi bills from the signup date, so an account opened on the 12th
+        # turns over on the 12th. The default of 1 is the vendor's own framing
+        # (`this_month_usage`), not a verified fact about any real account --
+        # which is what OQ-36 asks for.
+        self.assertEqual(
+            searchnorm.days_left_in_cycle("2026-08-02T00:00:00", 12), 10)
+        self.assertEqual(
+            searchnorm.days_left_in_cycle("2026-08-12T00:00:00", 12), 31)
+
+    def test_an_anchor_past_the_end_of_a_short_month_clamps(self):
+        # A cycle anchored on the 31st turns over on the 28th of February,
+        # the way every monthly-billing system resolves it. Unclamped this
+        # raises ValueError and takes the nightly run with it.
+        self.assertEqual(
+            searchnorm.days_left_in_cycle("2026-02-10T00:00:00", 31), 18)
+        self.assertEqual(
+            searchnorm.days_left_in_cycle("2026-04-10T00:00:00", 31), 20)
 
 
 class TestDecay(unittest.TestCase):
@@ -915,6 +1082,197 @@ class TestResultsRouteThroughTheGate(unittest.TestCase):
             self.assertEqual(self._visible(conn, query_id), [])
 
 
+class TestTheBudgetPacesTheDispatch(unittest.TestCase):
+    """docs/adr/0007 decision 4 against the schema, not against the predicate."""
+
+    NOW = "2026-08-02T00:00:00"
+
+    def _seed(self, conn, n, *, source="seeded", first_requested="2026-07-01T00:00:00"):
+        """`n` rows, none of them ever run, all of them due."""
+        ids = []
+        for i in range(n):
+            normalized_text, normalized_location = searchnorm.validate(f"query {i}")
+            ids.append(conn.execute(
+                searchnorm.REGISTER_QUERY_SQL,
+                (normalized_text, normalized_location, f"query {i}",
+                 searchnorm.DEFAULT_LOCATION, None, source, None,
+                 first_requested)).fetchone()[0])
+        conn.commit()
+        return ids
+
+    def test_the_allowance_caps_what_the_run_will_spend(self):
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._seed(conn, 10)
+            self.assertEqual(
+                len(searchqueries.due_queries(conn, now=self.NOW)), 10,
+                "unpaced, every never-run row is due -- the pre-decision-4 rule")
+            self.assertEqual(
+                len(searchqueries.due_queries(conn, now=self.NOW, allowance=3)), 3)
+            self.assertEqual(
+                len(searchqueries.due_queries(conn, now=self.NOW, allowance=0)), 0)
+
+    def test_the_cut_falls_at_the_bottom_of_the_fair_share_order(self):
+        # The order is last_run_at NULLS FIRST, id -- and the budget must take
+        # a PREFIX of it, not an arbitrary subset. Otherwise the queries the
+        # budget drops are not the ones whose turn had not come, and a row at
+        # the back of the queue could starve for good.
+        with scratchdb.scratch_schema() as (conn, _name):
+            ids = self._seed(conn, 6)
+            paced = [q["id"] for q in
+                     searchqueries.due_queries(conn, now=self.NOW, allowance=4)]
+            self.assertEqual(paced, sorted(ids)[:4])
+
+    def test_a_second_run_the_same_day_reaches_what_the_budget_cut_off(self):
+        # THIS IS WHAT DEMOTING RERUN_HOURS BUYS, and the row's "catch up
+        # rather than being rate-limited to one run per RERUN_HOURS".
+        #
+        # Before decision 4 the freshness floor was the only gate, so a run
+        # that dispatched took every due row and left nothing for 20 hours.
+        # Now the first run stops at its budget and the SECOND run two hours
+        # later picks up the remainder -- the rows it reaches were never run,
+        # so the floor never sees them and cannot refuse them.
+        with scratchdb.scratch_schema() as (conn, _name):
+            ids = self._seed(conn, 10)
+            first = [q["id"] for q in
+                     searchqueries.due_queries(conn, now=self.NOW, allowance=4)]
+            for query_id in first:
+                searchqueries.record_run(conn, query_id, "serpapi", 1, now=self.NOW)
+            later = "2026-08-02T02:00:00"      # two hours on, well inside the floor
+            second = [q["id"] for q in
+                      searchqueries.due_queries(conn, now=later, allowance=4)]
+            self.assertEqual(len(second), 4)
+            self.assertFalse(set(first) & set(second),
+                             "the four already run are inside the freshness "
+                             "floor and must not be re-asked")
+            self.assertEqual(sorted(first + second), sorted(ids)[:8])
+
+    def test_the_floor_still_refuses_a_fresh_query_however_large_the_budget(self):
+        # The same claim as the predicate test, but through the SQL: a run
+        # with money left over does not re-ask a question answered an hour ago.
+        with scratchdb.scratch_schema() as (conn, _name):
+            ids = self._seed(conn, 3)
+            for query_id in ids:
+                searchqueries.record_run(conn, query_id, "serpapi", 1, now=self.NOW)
+            later = "2026-08-02T02:00:00"
+            self.assertEqual(
+                searchqueries.due_queries(conn, now=later, allowance=10_000), [])
+
+    def test_an_idle_week_catches_up_where_the_old_cadence_could_not(self):
+        # The row's "Done when", end to end and against the schema.
+        #
+        # Ten watched queries, nobody home for a week. On the machine's first
+        # run back, all ten are past the floor -- but under the old rule that
+        # was the whole story and the run could do nothing more until the next
+        # 20-hour window. Now the allowance is what decides, so the elevated
+        # figure an idle week produces (credits did not fall, days did) is
+        # spent on the backlog in the runs that follow, on the same day.
+        with scratchdb.scratch_schema() as (conn, _name):
+            self._seed(conn, 10, first_requested="2026-07-01T00:00:00")
+            idle = searchnorm.run_allowance(250, searchnorm.days_left_in_cycle(
+                "2026-08-24T00:00:00"))          # a week of not spending
+            steady = searchnorm.run_allowance(250, searchnorm.days_left_in_cycle(
+                "2026-08-01T00:00:00"))
+            self.assertGreater(idle, steady)
+            wake = "2026-08-24T00:00:00"
+            dispatched = [q["id"] for q in
+                          searchqueries.due_queries(conn, now=wake, allowance=idle)]
+            self.assertEqual(len(dispatched), 10,
+                             "the elevated allowance covers the whole backlog")
+            self.assertGreater(
+                len(dispatched),
+                len(searchqueries.due_queries(conn, now=wake, allowance=steady)),
+                "and it reaches more than the steady-state figure would")
+
+
+class TestPacingAllowanceReadsThePlan(unittest.TestCase):
+    """searchqueries.pacing_allowance() -- the one place the plan data is
+    fetched, so the two functions above can stay pure."""
+
+    NOW = "2026-08-02T00:00:00"                  # 30 days left on the default
+
+    class _Ledger:
+        def __init__(self, data, config=None):
+            self._data = data
+            self.config = config if config is not None else {"serpapi": {}}
+
+        def account(self, name, *, refresh=False):
+            return self._data
+
+    class _Provider:
+        name = "serpapi"
+
+        def __init__(self, ledger):
+            self.ledger = ledger
+
+    def test_it_divides_the_vendors_own_left_figure(self):
+        provider = self._Provider(self._Ledger({"left": 240}))
+        self.assertEqual(
+            searchqueries.pacing_allowance(provider, now=self.NOW), 8)
+
+    def test_an_unreachable_vendor_is_unpaced_and_not_zero(self):
+        # serp/quota.py:141's account() returns None when it cannot reach the
+        # vendor and that module's docstring says the disposition is ALLOW.
+        # Reading it as 0 would turn a network blip into a night with no
+        # searches, which is the failure that docstring exists to forbid.
+        provider = self._Provider(self._Ledger(None))
+        self.assertIsNone(searchqueries.pacing_allowance(provider, now=self.NOW))
+
+    def test_a_vendor_with_no_left_figure_is_unpaced(self):
+        provider = self._Provider(self._Ledger({"used": 10}))
+        self.assertIsNone(searchqueries.pacing_allowance(provider, now=self.NOW))
+
+    def test_an_exhausted_account_paces_to_zero(self):
+        # Reached, and it said nothing is left. A real 0, distinct from None.
+        provider = self._Provider(self._Ledger({"left": 0}))
+        self.assertEqual(
+            searchqueries.pacing_allowance(provider, now=self.NOW), 0)
+
+    def test_it_reads_the_same_reserve_the_hard_refusal_reads(self):
+        # quota.Ledger.check() raises ProviderRefused when left - reserve <= 0.
+        # Pacing reads the SAME config entry, so the soft cap and the hard
+        # refusal cannot disagree about how much of the account is ours.
+        ledger = self._Ledger({"left": 60}, {"serpapi": {"reserve": 30}})
+        self.assertEqual(
+            searchqueries.pacing_allowance(self._Provider(ledger), now=self.NOW), 1)
+        ledger = self._Ledger({"left": 60}, {"serpapi": {"reserve": 60}})
+        self.assertEqual(
+            searchqueries.pacing_allowance(self._Provider(ledger), now=self.NOW), 0)
+
+    def test_a_provider_without_a_ledger_is_unpaced(self):
+        # serp/dispatch.py's SearchQueryProvider takes `ledger=None` and every
+        # test double in this tree is a bare callable with a `.name`.
+        self.assertIsNone(searchqueries.pacing_allowance(None, now=self.NOW))
+        self.assertIsNone(
+            searchqueries.pacing_allowance(self._Provider(None), now=self.NOW))
+
+    def test_run_due_derives_the_allowance_when_it_is_not_handed_one(self):
+        # The wiring itself: main() derives it so it can print it, but any
+        # other caller handing run_due() a provider and no allowance must get
+        # the same pacing rather than an unpaced run.
+        with scratchdb.scratch_schema() as (conn, _name):
+            for i in range(6):
+                normalized_text, normalized_location = searchnorm.validate(f"q{i}")
+                conn.execute(searchnorm.REGISTER_QUERY_SQL,
+                             (normalized_text, normalized_location, f"q{i}",
+                              searchnorm.DEFAULT_LOCATION, None, "seeded", None,
+                              "2026-07-01T00:00:00"))
+            conn.commit()
+            calls = []
+
+            class Provider(self._Provider):
+                def __call__(self, query):
+                    calls.append(query["id"])
+                    return []
+
+            provider = Provider(self._Ledger({"left": 60}))   # 60/30 == 2
+            dispatched, due = searchqueries.run_due(conn, provider=provider,
+                                                    now=self.NOW)
+            self.assertEqual((dispatched, due), (2, 2))
+            self.assertEqual(len(calls), 2,
+                             "four queries the budget declined must not reach "
+                             "the provider at all -- that is the spend")
+
+
 class TestTheNightlyStepIsWired(unittest.TestCase):
 
     def test_searchqueries_runs_before_extract(self):
@@ -1002,6 +1360,32 @@ class TestTheReconcileStepSitsWhereTheDocstringSaysItDoes(unittest.TestCase):
         recon_line = next(ln for ln in src.splitlines()
                           if "reconcile_contributor_runs(conn)" in ln)
         self.assertIn("args.dry_run", recon_line)
+
+    def test_the_allowance_is_printed_every_run(self):
+        """Same rule as `reconciled=0`. The budget is now what decides whether
+        anything is dispatched, so a run that spent nothing because the cap
+        was 0 must not read as a night when nothing was due."""
+        self.assertIn("allowance=", self._main_source())
+
+    def test_the_allowance_is_derived_once_and_passed_on(self):
+        """main() derives it so it can print it; run_due() derives it when it
+        is handed None. Two derivations in one run could disagree -- the
+        vendor read is cached, but a second call is a second chance to."""
+        src = self._main_source()
+        self.assertEqual(src.count("pacing_allowance("), 1)
+        self.assertIn("allowance=allowance", src)
+
+    def test_an_exhausted_account_says_so_on_stderr(self):
+        """Pacing declines before any query reaches the provider, so
+        serp/__init__.py:231's ledger.check() never raises and the step exits
+        0 where it used to fail. That is deliberate; being quiet about it
+        would not be."""
+        src = self._main_source()
+        self.assertIn("allowance == 0", src,
+                      "`not allowance` would catch None -- unpaced means the "
+                      "vendor was unreachable, not that it reported zero")
+        exhausted = src[src.index("allowance == 0"):]
+        self.assertIn("stderr", exhausted[:exhausted.index("if due and")])
 
 
 if __name__ == "__main__":

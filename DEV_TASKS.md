@@ -26,7 +26,7 @@ than trim. OQ-34 carries the three ways out. Everything cut is in git at 9a05925
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-35`.** Numbers are
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-37`.** Numbers are
 never reused and never renumbered; `OQ-7` is closed and stays in the table so citations resolve.
 
 **Every row here needs you.** A session cannot start any of them: each needs a machine, an account,
@@ -496,6 +496,49 @@ one ambiguous case; `T-47` held the same line on 2026-08-08 while renumbering th
 **Done when:** the answer is a decision in [`docs/adr/`](docs/adr/), since it changes what
 `.claude/CLAUDE.md`'s citation rule means, and `T-46` is edited to match. **If the answer is (1), say
 so explicitly** — an unrecorded status quo is what let this run for five days.
+
+### OQ-36 — The cycle reset date is guessed, and two mechanisms now pace one SerpApi account
+
+Filed by `T-32`, 2026-08-09, which built `0007` decision 4's pacing and could not settle either half.
+
+**Why it is yours:** the first half is a fact about an account only you can log into; the second is a
+decision about which of two schedulers is the authority.
+
+**What, first half.** Decision 4 divides credits remaining by *days left in the cycle*, and **the
+vendor never says when the cycle ends**. `serp/providers/serpapi.py:150`'s `account()` returns
+`used`, `left` and `allowance` and no reset date — so `searchnorm.days_left_in_cycle()`
+(`backend/searchnorm.py:219`) derives the boundary, defaulting to the **1st of the calendar month**
+because that is the vendor's own framing (`this_month_usage`, `searches_per_month`). SerpApi bills
+from the **signup date**, so an account opened on the 12th turns over on the 12th and the default is
+wrong for it by up to a month — pacing too slow for three weeks, then stranding the remainder. The
+anchor is already a parameter (`reset_day`, read from a `cycle_reset_day` key in the provider's
+`config/serp-quota.json` entry, absent today), so the fix is a number, not a change: **log in, read
+the renewal date, and write it.** A wrong guess here is not visible in any test — every case in the
+suite passes under any anchor, because they all pass the anchor in.
+
+**What, second half, and this one is a decision.** `config/serp-quota.json`'s own REJECTED note
+forbids a `daily_budget` in that file, on the grounds that `config/google-queries.json` already
+carries per-bucket daily budgets and "a second daily number in a second file would be two schedulers
+disagreeing". `T-32` did not add one — the allowance is computed per run from the vendor, never
+configured — but the collision the note predicts now exists anyway: those buckets sum to
+`SERPAPI_DAILY_QUERY_BUDGET = 8`, which is `250/31`, **decision 4's own arithmetic computed once by
+hand and frozen**, and it paces `ingest/google-serpapi.py` while `searchqueries.py` paces itself
+dynamically against the same account. `reserve` is `0`, so neither holds anything back from the
+other, and a month that goes dark early is what "they disagreed" looks like.
+
+**Three ways out, and they are not equivalent.** (1) **Set `reserve`** and leave both — cheapest,
+and it makes the nightly bank's fixed 8 a floor the contributor path cannot eat; it is also the
+option `serp-quota.json`'s own `_reserve_comment` already describes ("set it if the month starts
+going dark early"). (2) **Derive the bank's budget too**, retiring `SERPAPI_DAILY_QUERY_BUDGET` in
+favour of `run_allowance()` — one scheduler, and it changes the nightly bank's behaviour, which is a
+second live-pipeline row. (3) **Declare them separate accounts** — the contributor's key is the
+Builder's own, and if the pipeline's key is never a contributor's then there is no collision to
+resolve, only a comment to write saying so. **Which of these is right depends on whether any
+contributor ever runs against the pipeline's own key**, which is a fact about deployment.
+
+**Done when:** the reset date is written into `config/serp-quota.json` (or the calendar-month
+default is confirmed correct for this account and said so in writing), and one of the three is
+chosen — in an ADR if it changes which file owns pacing, in a comment if it only sets a number.
 
 ### OQ-35 — A citation into a sibling repo is unrepresentable, and it is red in your working tree now
 
