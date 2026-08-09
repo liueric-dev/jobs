@@ -8,7 +8,7 @@ budget: 500
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-52`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-54`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -43,19 +43,25 @@ table at the foot of this file. `T-1` and `T-2` set the original ordering: they 
 layer every later row leaned on, and everything since runs against CI rather than a transcribed
 count.
 
-**The five open rows are one project, not a queue.** They cut
+**The four `0007` rows are one project, not a queue.** They cut
 [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md) into buildable
 steps and are listed in dependency order, not priority order: the server side is done, the worker
 can be installed, it can report on itself, and since `T-31` closed the server dictates its poll
 interval and the worker floors it — so the contributor's machine has every part it needs to run,
 and what is left is that nothing can *move* that schedule (`T-41`, gated on `OQ-32`); `T-34`
-… `T-37` are policy that needs both halves in place. **`T-51` closed 2026-08-09 and the citation
+… `T-36` are policy that needs both halves in place. **`T-51` closed 2026-08-09 and the citation
 front is now clear; `T-38` — the one row that was not a `0007` step — closed 2026-08-09 by
-[`0009`](docs/adr/0009-run-statistics-are-reconciled-not-granted.md), so every row left below cuts
-`0007` and the dependency order is the whole order again.**
+[`0009`](docs/adr/0009-run-statistics-are-reconciled-not-granted.md).**
+
+**`T-37` closed 2026-08-09 and filed two rows doing it, so the dependency order is no longer the
+whole order.** `T-52` and `T-53` sit in their own section below and cut nothing: `T-52` is the same
+retarget in the three places that were out of `T-37`'s scope, and `T-53` is a live-behaviour finding
+that `T-37` could only write down. **`T-53` is the one to read before `T-34`** — it is the second
+place a contributor's cap decides what gets spent, and `T-34`'s daily cap is the first.
 
 **`T-32` and `T-33` both closed 2026-08-09, and with them the two rows that changed live pipeline
-behaviour rather than adding to it are done — everything left below is new surface.** They are one
+behaviour rather than adding to it are done — everything left below is new surface, with `T-53`
+the exception that proves it.** They are one
 finding read at two grains: `T-32` made the account's plan decide what a *run* spends, `T-33` made
 the same plan decide what a *watch list* can keep fresh, and `T-33` reuses `T-32`'s arithmetic
 rather than restating it. **What they hand forward is `OQ-36`, and it got worse, not better.** The
@@ -85,8 +91,9 @@ summarised in that file and restating them is how both files got over budget.
 
 ## Contributor pipeline — [`docs/adr/0007`](docs/adr/0007-contributor-credential-opt-in-scheduled-worker.md)
 
-Seven open rows, every one of them cutting `0007` into buildable steps — the two that were
-consequences of closed rows rather than `0007` steps (`T-50`, `T-38`) are both closed. `0007`
+Four open rows, every one of them cutting `0007` into buildable steps — the two that were
+consequences of closed rows rather than `0007` steps (`T-50`, `T-38`) are both closed, and the two
+that `T-37` filed on its way out are in their own section below rather than counted here. `0007`
 supersedes
 [`0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md) decisions 1, 2 and 4;
 `0006` decision 3 — local execution, contributor's own key, own IP, never proxied — stands and is
@@ -257,30 +264,91 @@ nothing; reactivating requires no action on the Builder's machine; and the api s
 
 ---
 
-### T-37 — Rewrite `config/google-queries.json`'s bucket comments for the cohort persona
+## Filed by `T-37`, 2026-08-09 — the retarget it could not finish
 
-`0007`'s last consequence, and `0006`'s unactioned finding. The top-level `_comment`
-(`backend/config/google-queries.json:2`) says the four buckets are "weighted to Eric's actual
-positioning: 5 YOE full-stack SWE, 2.5yr career break, currently 5mo into a prompt/agent engineering
-program." Every per-bucket `_comment` reads the same way. Under `0007` these comments decide what
-~30 Builders' own SerpApi credits get spent on, so they stop being cosmetic.
+Two rows, and only the second is about the product. `T-37` rewrote the five `_comment` fields in
+`config/google-queries.json` for the cohort and was scoped to that one file; both rows below are
+what reading the file's consumers turned up.
 
-**Comments only, in this row.** `_comment` fields in `config/*.json` are decision records that live
-beside the number they explain (`docs/adr/README.md`), so rewriting the rationale is in scope and
-changing a `daily_budget`, a bucket, or a query string is not — that is a re-weighting, and it needs
-`OQ-24`'s census and `OQ-26`'s metric before anyone can say the new weights are better.
+---
+
+### T-52 — The same persona rationale survives in three places `T-37` was not scoped to
+
+`T-37` retargeted `config/google-queries.json`'s comments and nothing else, so the file now
+disagrees with the module that reads it. `ingest/google-serpapi.py`'s docstring still says the four
+buckets are "weighted to Eric's actual positioning: 5 YOE full-stack SWE, 2.5yr career break,
+currently 5mo into a prompt/agent engineering program" (`backend/ingest/google-serpapi.py:26-28`)
+and still explains the per-bucket split as respecting "the fact that some buckets matter more than
+others for this specific candidate" (`:37-38`). `ingest/google-apify.py` says its two-bucket scope
+tracks "this candidate's actual positioning" (`backend/ingest/google-apify.py:16-17`).
+
+**The third is a different question, not the same one, and that is the finding.**
+`config/persona.json`'s `core_swe` description justifies the bucket by "the 5 YOE production
+background" (`backend/config/persona.json:18`) and `config/criteria.json`'s `_archetypes_comment`
+says it "Mirrors the four positioning buckets in persona.json"
+(`backend/config/criteria.json:10`) — but those two are *scoring* inputs, per-profile by
+construction (`docs/adr/0005`), and cohort narratives went live 2026-08-05. A profile legitimately
+describing one person is not drift. **Decide whether each of the two is the active `pursuit` profile
+or a dormant `tech` one before touching it**; `.claude/rules/config.md` warns that the default
+profile resolves to `tech`, which is inactive, and that is the same trap in a different tool.
+
+Not in scope, same as `T-37`: no `daily_budget`, no `PRIORITY_BUCKETS`, no query string.
+[`docs/adr/0006`](docs/adr/0006-contributor-credential-auto-minted-local-daemon.md)`:63` quotes the
+old comment verbatim and is frozen — [`0008`](docs/adr/0008-the-freeze-covers-the-argument-not-the-citations.md)
+covers the citations, not the argument, and a superseded ADR recording what the comment said on the
+day is doing its job. Leave it.
 
 ```bash
 cd backend
-grep -c "Eric's actual positioning\|5 YOE\|career break" config/google-queries.json   # today: 5
-python3 -c "import json; json.load(open('config/google-queries.json')); print('parses')"
-python3 -m unittest tests.test_search_queries    # today: Ran 64 tests, OK
+grep -rn "Eric's actual positioning\|5 YOE\|this specific candidate\|this exact combo" \
+  --include=*.py --include=*.json . | grep -v __pycache__   # today: 4 lines, 2 of them scoring config
+python3 -m unittest tests.test_search_queries    # today: Ran 111 tests, OK
 ```
 
-**Done when:** that grep prints `0`, the file still parses, every bucket's `daily_budget` and query
-list is byte-identical to before (`git diff` touches `_comment` values only), and each rewritten
-comment says what the bucket is for in terms of the cohort — entry-level, AI-adjacent, all
-industries, NYC — rather than one person's résumé.
+**Done when:** the two `ingest/` docstrings describe the cohort, the two scoring configs have been
+read and either retargeted or left with a one-line note saying which profile they serve and why that
+is not drift, and that suite still prints `OK`.
+
+---
+
+### T-53 — A capped contributor drains the least cohort-aligned bucket first
+
+**Found by `T-37`, which could only write it into a comment.** `pick_stale_queries_by_bucket` walks
+buckets in the order they appear in `config/google-queries.json` and breaks out the moment
+`max_queries` is reached (`backend/api/query_claims.py:834-835`, and again inside the per-bucket
+loop at `:850-851`). `max_queries` is `min(req.max, remaining)` where `remaining` comes from
+`MAX_CLAIMS_PER_CONTRIBUTOR_PER_DAY` (`backend/api/app.py:341-344`). The file's first bucket is
+`core_swe`.
+
+**So the smaller a Builder's cap, the more completely their SerpApi credit goes to the one bucket
+`T-37` had to describe as the loosest fit** — generic engineering titles, unqualified by seniority
+— and `ai_integration`, the bucket the cohort's whole premise points at, is reached last or not at
+all. The nightly pipeline does not have this problem: it passes no `max_queries`
+(`backend/ingest/google-serpapi.py:395`), so every bucket gets its budget every run. **This is
+purely a contributor-path effect and it did not exist before `0007`.**
+
+**Do not fix it by reordering the buckets.** That changes what a run spends without evidence, which
+is the re-weighting `T-37` was forbidden — it needs `DEV_TASKS.md`'s `OQ-24` (the census) and
+`OQ-26` (the metric). Two shapes that do not need either, and they are not equivalent: make the walk
+proportional rather than sequential so a cap of 2 draws from the two largest budgets rather than the
+first two buckets, or leave the order alone and have the cap apply per bucket. The first spends a
+small cap the way the budgets say the day should be spent; the second is simpler and gives a cap
+below the bucket count no way to reach every bucket at all.
+
+**Read `T-34` first if both are open.** `T-34` adds a server-side daily cap and a reserve floor —
+two more things that make `max_queries` small, so whichever lands second inherits this. A test here
+that hardcodes 8 will pass today and mislead after `T-34`.
+
+```bash
+cd backend
+grep -n "max_queries" api/query_claims.py api/app.py    # today: 6 lines, all in the claim path
+cd api && .venv/bin/python -m unittest discover -s tests
+```
+
+**Done when:** a contributor whose cap is smaller than the bank's total daily budget receives a
+spread the file's budgets can account for rather than whatever the first bucket holds, a test pins
+the boundary with the cap read from the constant rather than spelled out, the nightly pipeline's
+selection is shown unchanged, and the api suite prints `OK`.
 
 ---
 
@@ -305,6 +373,7 @@ ADR, or a rules file — checked row by row, not assumed.
 
 | # | what it was | outcome |
 |---|---|---|
+| ~~T-37~~ | `0007`'s last consequence and `0006`'s unactioned finding: `config/google-queries.json`'s five `_comment` fields justified the four buckets by one engineer's résumé, and under `0007` they decide what ~30 Builders' own SerpApi credits get spent on | **Closed 2026-08-09. The row's two acceptance criteria contradicted each other and the grep floor is `2`, not `0`** — two of the five matching lines are the query strings `"career break software engineer"` (`backend/config/google-queries.json:54-55`), which the same row's "Done when" required to stay byte-identical. Both remaining hits are query text; no `_comment` matches. Non-comment content verified identical by parsing both revisions and comparing with `_comment` stripped: budgets `2/3/2/1`, sum 8, bucket order unchanged. **Three claims in the old top-level comment were false, not merely dated:** it named `google-jobs-serpapi-ingest.py` and `google-jobs-apify-ingest.py`, neither of which exists (`ingest/google-serpapi.py`, `ingest/google-apify.py`), and it sourced the sum to `SERPAPI_DAILY_QUERY_BUDGET`, **a constant that exists in no module** — so the sum-to-8 rule is a convention this file holds alone and a bucket edit breaking it fails silently, which the new comment says. It also named two consumers when there are three: `api/query_claims.py`'s `load_query_buckets()` has read this bank since `T-26`. `tests.test_search_queries` `Ran 111`, `OK` — the row said 64, one more baseline quoted rather than measured. Filed `T-52` (the same rationale in three places out of scope here) and `T-53` (bucket order is load-bearing on the contributor path). |
 | ~~T-33~~ | `0007`'s first consequence: `MAX_QUERIES_PER_BUILDER = 20` was a promise the free tier cannot keep, enforced as a 4xx at two `webapp/search.py` sites | **Closed 2026-08-09. The constant is gone, not re-derived in place** — `searchnorm.watch_cap()` is `run_allowance()` with different inputs (the plan's full allowance over the cycle's full length, not credits-left over days-left), so the cap and the pacing cannot disagree about one account and the cap does not climb all month and collapse at the reset. **The free tier's answer is 8, and the row's premise was right for a reason it did not give:** 20 was measured against "~280 renewable searches/day", which is the whole cohort's aggregate under full contribution, while one free SerpApi plan supplies 250 a *month*. **It advises and never refuses** (`0007` decision 5), and three things now hold that line — `_cap_warning()` returns a value callers attach rather than branch on, `check_client.mjs` fails if `search.py` raises `too_many_searches` again, and the client's copy is asserted to open with "Saved." **The blast radius was larger than the row's "Done when":** removing the 400 stranded its shipped error fixture (`verify_fixtures.py` reports a fixture whose code is "raised nowhere"), the client's refusal copy, and `CATALOGUE_LIMIT = 50`, which was justified by the very ceiling this row removed and would now silently truncate a long watch list. **Three things it deliberately did not do:** the plan read is the *pipeline's* account and not the Builder's — `T-35` stores a contributor's reported quota and the change then is the argument passed, not the function; `OQ-36`'s guessed cycle boundary is now under a second consumer and still invisible to every test, since they all pass the anchor in; and `search.py`'s dead-code mention of the old raise is spelled without call syntax on purpose, because `check_client.mjs` scans the source for that form |
 | ~~T-38~~ | Nothing advanced a `search_queries` row's run statistics after a contributor submits, filed by `T-26` with three shapes to choose between | **Closed 2026-08-09 by [`docs/adr/0009`](docs/adr/0009-run-statistics-are-reconciled-not-granted.md), which takes the decision the row said would be an ADR rather than this row. The row's stated consequence is not reachable at `HEAD`, and two of its three shapes do not survive being read.** **Not reachable:** all three query routes in `api/app.py` lease a dataset string in `job_ingest_state` via `holds_claim`/`release_claim`/`mark_success`, and nothing in the tree calls `try_claim_search_query`, `holds_search_query_claim` or `release_search_query_claim` — so "a contributor claims a `search_queries` row, spends their credit, submits" describes a path that does not exist. `T-26` built the claim half of per-query dispatch; the **endpoint half is unbuilt too**, which makes this a decision taken before the first writer lands — `T-26`'s own call for `claim_granted_at`, on its own argument that a guard added after the writer is a guard added after the corruption. **Shape (2) is shape (1).** A "narrow server-side writer in `api/` that calls nothing the contributor controls" needs the identical `GRANT UPDATE (last_run_at, …)`; `backend/schema.py:992` says in as many words that the split "is enforced by GRANT, not by comment", so shape (2) buys the same exposure and pays for it with a convention. **Shape (3) named a table that cannot carry the fact.** `jobs_api` holds SELECT on `search_query_results` and nothing else, deliberately (`backend/schema.py:1001`), so a contributor's submit writes no row there at all and reconciling from it would reconcile from a table that is empty for exactly the events being reconciled. **What was built is shape (3) with the correct source:** `submission_log`, which `api/` already holds INSERT on and the pipeline **owns** — checked against the deployed database, not inferred from the provisioning code (`submission_log` is owned by `jobs_pipeline` and readable by it), so **no grant changes in either direction**. Three parts: a fourth `submission_log.action`, `run`, written by the dispatch endpoint `0007` still owes on the branch `mark_success` sits on in the other mode — **not inferred from the existing `submit` row, because the inference is not available**: `api/app.py` writes one on the success path *and* both refusal paths and `reason` does not separate them (`backend/api/app.py:493`), so counting a refused submit as a run is defect `D08` rebuilt one table over; `searchqueries.reconcile_contributor_runs()` as **step 2** of the nightly step, after the seed, before the decay (`should_retire` reads `last_result_at`) and before the dispatch; and one definition of the wire format in `searchqueries.py`, imported by `api/query_claims.py`, which is the only direction `.claude/CLAUDE.md`'s layout rule allows. **`record_run` is still the only writer of all five columns and the docstring says so rather than being amended away** — the reconciler calls it instead of holding an UPDATE, which is what makes the row's second Done-when clause answerable as "still true". **Idempotent with no new state**: a run row counts only if newer than the `last_run_at` it would advance, and advancing writes that row's own `submitted_at`, so the same row cannot count twice, two submits since the last cycle are two runs, and every timestamp comes off the log row rather than this process's clock. **The row's own "Done when" carried a stale number: it says the api suite prints `OK` at `145`, and the baseline was `278`** — off by 133, the same class of stale figure the section preamble above exists to warn about. **The defect is asserted, not just the fix**: `test_the_row_is_still_due_after_a_release` fails if a release alone ever leaves the row not-due, without which every "not due after reconcile" assertion would pass against a query that was never due. **Eight deliberate breakages, each turning exactly the intended tests red** — dropping the watermark comparison (2 red), reconciling `submit` rows instead of `run` (1), writing this process's clock instead of the log row's (3), dropping the dataset-prefix filter (1), spelling the run action as a literal on both sides (1), and widening the documented GRANT (1); plus two against the amended vocabulary guard — a fifth action with neither writer nor reader (2 red) and the reconciler no longer selecting on the action, which is the exemption's own justification (1). **`columns_written()` was written the lazy way first and its own deliberate-breakage test caught it**: one regex per line read only the first assignment, and `release_search_query_claim` writes all three claim columns on one line, so the scanner was reading a third of this service's statements and passing everything anyway — the exact failure the file exists to prevent, found in the file itself. **`test_claim_metering`'s `test_every_action_is_written_by_something` went red and was narrowed rather than relaxed**: `run` is exempted with its justification attached and the justification asserted — one test pins the exemption at exactly one action, another that `reconcile_contributor_runs()` selects on it, a third that `log_submission` accepts it, so the entry is live at both ends and only the route between them is missing (`T-45`'s shape). Suites `1469`/`397`/`306`, no skips; mypy clean; citations `0 new` (3 known-drifted); both frontend checkers pass (57 checks). **Nothing added to `config/citation-baseline.json`.** **ruff is `1006`, and the `+2` is reported rather than dressed up as "baseline held":** both are `RUF100` on the two new `import searchqueries  # noqa: E402` lines in `api/query_claims.py` and `api/tests/test_claim_metering.py`, where `E402` is per-file-ignored so the directive is inert — written anyway to match the six identical ones immediately above each, which `pyproject.toml` says come out as their own commit and not piecemeal. The other **seven** findings this row introduced were fixed: `B905` (`strict=True`, which is a real assertion that the SELECT returns as many columns as `RUN_STATISTICS` names), `UP017`, `RUF015`, `RET503`, a `# noqa: S608` that is per-file-ignored in tests anyway, and two `I001`. **The `I001` fix was a config change, not a reorder**: `searchqueries` was missing from `known-first-party`, so isort read a pipeline module reached by a `sys.path` insert as third-party and proposed splitting it into its own block — the identical wrong reorder `pyproject.toml` already records for `config`, and the reason that list exists. **Verified against a real database**: 14 of the new cases run on a scratch schema on `pg-main`, and the `submission_log` ownership claim above was read off the deployed database. Every citation written here was read at its target — two were wrong on the first pass and corrected: `api/query_claims.py:160` had been moved by this row's own insertions (`:267`), and `schema.py:993` named the "NO UPDATE" line where the claim made was the "enforced by GRANT" sentence one line above (`:992`). No finding filed; the reconciler's producer is `0007`'s dispatch endpoint, which is already scoped by that ADR rather than by a new row |
 | ~~T-32~~ | `0007` decision 4 had no mechanism: `searchnorm.RERUN_HOURS` was the only thing deciding whether a query ran, so a contributor's spending was fixed by a clock rather than by what their plan had left | **Closed 2026-08-09. `RERUN_HOURS` is demoted and the demotion costs nothing, which is the finding the row did not predict.** `is_due()` (`backend/searchnorm.py:281`) takes an `allowance` argument — how many searches this run may still spend, `None` for unpaced — and `searchqueries.due_queries()` counts it down as it accepts rows (`backend/searchqueries.py:391`), so the predicate stays pure and the caller owns the spending. `run_allowance()` (`backend/searchnorm.py:255`) is the whole of the arithmetic and `days_left_in_cycle()` (`backend/searchnorm.py:219`) the boundary it divides by. **The catch-up the row asks for is not the floor relaxing — it is a SECOND RUN the same day reaching what the first run's budget cut off.** Those rows were never run, so the 20-hour floor never sees them and cannot refuse them; the floor goes on refusing a query answered an hour ago no matter how large the budget is, which is asserted at three allowances including `10_000`. That is why demoting the constant changed no existing behaviour, and it was **measured before any test was touched**: the first run after the code change was all 71 pre-existing cases green, one of which the row then required be replaced. `allowance=None` is additionally pinned as identical to the pre-decision-4 predicate across five shapes, so a vendor outage cannot silently change which queries run. **The row's own numbers were three-quarters stale.** `tests.test_search_queries` was `64` in the row and **71** at `HEAD` — `T-38` added seven. `searchqueries.py:327`, given as `is_due()`'s live caller, is a **blank line**; the caller was `:380`, 53 lines off, and it RESOLVES, so `audit-citations.py` was green across it — the documented blindspot, hit again by the row that names it. `tests/test_search_queries.py:271` names the `assertTrue`, not the `RERUN_HOURS == 20` pin one line above it at `:270`. Only `searchnorm.py:183` and `:213` were exactly right. **The insufficient test was replaced, not deleted, as the row asked**, and its replacement says why the old one could not tell a floor from a whole rule: it passes identically under either. **`source='seeded'` throughout the cadence cases**, because an unwatched `builder` query that has already run is never due whatever its statistics say, and writing them against `builder` would have passed for the wrong reason. **The one behaviour change an operator will see is that an exhausted account is now REPORTED rather than RAISED**: pacing declines before any query is dispatched, so `serp/__init__.py:231`'s `ledger.check()` never fires and the step exits 0 where it used to fail. Deliberate — a free tier spent at cycle end is the expected state, and failing the nightly run every night for the last week of the month is noise — but it prints `allowance=0` on stdout every run and a named sentence on stderr, because the alternative is indistinguishable from a night when nothing was due. A **bad key** still raises: `account()` returns `None`, which is unpaced, so the query is dispatched and the vendor refuses it. **Unreachable is `None` and exhausted is `0`, never swapped** — `serp/quota.py`'s own docstring settles that direction (the cost of allowing is one refused search; the cost of refusing is the whole bank) and this inherits it rather than re-deciding it. `reserve` is read from the same config entry `quota.Ledger.check()` reads, so the soft cap and the hard refusal cannot disagree, and it is applied **before** the floor of 1 or "hold 10 back" would drain the reserve it named at one search a run. **Nothing was added to `config/serp-quota.json`**, whose own REJECTED note forbids a `daily_budget` there — the allowance is computed per run from the vendor, never configured. **That note also names the collision this row does not resolve**: `config/google-queries.json`'s buckets sum to `SERPAPI_DAILY_QUERY_BUDGET = 8`, which is `250/31` — decision 4's arithmetic, computed once by hand and frozen — so the nightly bank and this step now pace the same account by two different mechanisms, with `reserve` at `0` between them. Filed as `OQ-36` with the cycle-reset question, not fixed here. **Seven deliberate breakages confirmed the tests bite** — the budget check moved below the never-run shortcut, unknown plan data read as `0`, the floor of 1 removed, the reserve ignored, the caller not counting down, `not allowance` catching `None`, and `main()` deriving the allowance twice — each turning exactly the expected tests red. **An eighth did not, and that is a finding about this row's own test**: swapping the retirement and budget guards changed nothing, because both are refusals, so the test named for the order was renamed to assert what it can actually pin. `100` cases in `tests.test_search_queries`, `+29`. Suites `1498`/`397`/`306`, **no skips, measured in a scratch worktree with `deploy/cloudflared/config.yml` at `HEAD`** — in the working tree the citations test is red for `OQ-35`, which is the owner's and untouched. mypy clean; citations `0 new` (3 known); both frontend checkers pass (57 checks). ruff `1007`, `+1` over the `1006` baseline, per-rule composition otherwise byte-identical: one `DTZ007` from the `strptime` in `days_left_in_cycle()`, the same construct `_hours_between()` already carries twice unsuppressed — **not silenced with a `noqa`, because a directive there would break the pattern the other two follow**. **Verified against a real database: yes** — `searchqueries.py --dry-run` against the live Postgres printed `allowance=unpaced due=9 dispatched=0`; a dry run builds no provider, so there is no ledger to ask and `due` is the unpaced ceiling rather than the estimate, which the printed comment now says outright. One finding filed: `OQ-36` |
