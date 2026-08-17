@@ -54,6 +54,10 @@ Code at the top level is the pipeline — the orchestrator and the three executa
 touching code, `tools/` is measurement that is never part of a run, `migrations/` and `scripts/`
 are run by hand rather than on a timer.
 
+**[`tools/README.md`](tools/) indexes every measurement script** — one line each, generated from
+their own docstrings by `python3 tools/index.py --write` and held current by
+`tests/test_tools_index.py`. To change a line there, change the docstring in the tool.
+
 **Every subdirectory reaches the top level through the same one-line parent `sys.path` insert,
 and nothing is imported by a package path.** That is the invariant behind the 2026-07-26 tidy
 that moved migrations, backfill drivers and documents off the root: nothing was renamed and no
