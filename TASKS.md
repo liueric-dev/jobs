@@ -7,7 +7,7 @@ subject: .
 
 # Session tasks — everything a session can do without the owner
 
-**This file owns the prefix `T-`.** One allocator. **The next free number is `T-65`.** Numbers are
+**This file owns the prefix `T-`.** One allocator. **The next free number is `T-68`.** Numbers are
 never reused and never renumbered, so a citation to a closed row keeps resolving.
 
 **It is the other half of [`DEV_TASKS.md`](DEV_TASKS.md)**, which owns `OQ-` and holds everything
@@ -333,6 +333,95 @@ and the derived form is argued in the commit message rather than defaulted into,
 
 ---
 
+## Built under [`docs/adr/0011`](docs/adr/0011-a-submitted-url-enters-a-queue-not-the-roster.md), 2026-08-18
+
+**Three rows, one project, listed in dependency order rather than priority order** — the same shape
+`0007`'s four rows have. `T-65` makes a database provisioned from nothing hold the roster tables at
+all; `T-66` is the write end; `T-67` is the half that makes a submission compound. **The client
+surface is deliberately not here.** `Contribute` is the one unbuilt screen
+(`.claude/rules/frontend.md`), and a form belongs with that work rather than smuggled into a
+server-side row.
+
+### T-65 — `provision-database.py` creates no ATS roster, and reports on nothing it created
+
+**Decided by `0011`, which is why this is a build and not a question.** `company_ats` and `ats_seed`
+are created by `ensure_ats_schema()` (`backend/migrations/migrate_company_ats.py:85`), called by
+`backend/tools/ats-discover.py:1066` on every run and by nothing in
+`backend/tools/provision-database.py:181-186`. So a fresh database gets the tables on its first
+nightly run and `--verify-only` never mentions them. The function is idempotent and writes no rows,
+which is exactly what makes it a step rather than a migration; the seed rows stay an operator act.
+
+**The second half is a finding, not a build.** `--verify-only` runs `schema_web.verify_schema` and
+`query_claims.verify_schema` (`backend/tools/provision-database.py:230-231`) — the two services' own
+objects. **The pipeline has no `verify_schema` at all**, so every table `ensure_schema` creates is
+unchecked by the tool whose whole job is standing a database up. Do not build one inside this row:
+say in the commit whether it is worth a row of its own, and file it if so.
+
+```bash
+cd backend
+grep -n "ensure_ats_schema" tools/provision-database.py    # expect a STEPS entry
+python3 tools/provision-database.py --verify-only          # names the roster tables, or says why not
+python3 -m unittest discover -s tests
+```
+
+**Done when:** a database provisioned by that script alone holds `company_ats` and `ats_seed` with
+no rows in them, the step list reads as the whole DDL story, and the pipeline-side verify gap is
+either filed or argued closed in the commit.
+
+### T-66 — The submission write end: one table, one endpoint, one cap
+
+**Decided by `0011`.** A pipeline-owned table for what a Builder pasted — the raw URL, the platform
+and token `backend/ats_discovery.py:214` identifies from it, the submitter, the time — plus a
+new `webapp/` router module, beside `contribute.py` rather than inside it, that writes one
+row per paste. **The service holds `SELECT, INSERT` and no `UPDATE`**,
+the `search_queries` shape at `backend/webapp/schema_web.py:117`, so a Builder can add a claim and
+cannot alter one. The identification is offline: `ats_discovery` imports only stdlib and
+`backend/webapp/config.py:31-33`'s `sys.path` insert already reaches it, so nothing is installed and
+`requirements.txt` does not change.
+
+**Two things this row must not do.** It must not write `company_ats` (that is `T-67`, and the grant
+that would allow it is the one `0011` refuses), and it must not fetch the pasted URL — a request
+path that makes an outward request is what the probe's schedule and error accounting exist to avoid.
+The per-Builder daily cap is counted in SQL over this table, the shape `backend/api/app.py:157`
+already meters claims with.
+
+```bash
+cd backend/webapp && .venv/bin/python -m unittest discover -s tests
+cd backend && grep -rn "company_ats" webapp/          # expect nothing
+grep -rln "httpx\|urllib.request" webapp/*.py    # expect auth.py and contribute.py, nothing new
+```
+
+**Done when:** a paste of a Greenhouse, Lever, Ashby or Workday URL stores an identified row and a
+paste of a LinkedIn URL stores an unidentified one; the grant test passes with the new table in
+`REQUIRED_TABLES`; and the cap refuses the (N+1)th submission in a day with a message naming the cap.
+
+### T-67 — The drain: a submitted token reaches the roster the same night
+
+**Decided by `0011`, and this is the half that makes the channel compound.**
+`backend/tools/ats-discover.py` reads unprocessed submission rows and writes them into the roster
+through the shared `TableSpec` it already writes through, `status` `unvalidated` and
+`discovered_via` naming the channel. It is nightly step 1 and runs `--apply --nightly`
+(`backend/run-daily.py:158`), and `backend/ingest/ats_sources.py:83` admits `unvalidated` rows — so a
+token submitted today is pulled tonight, by the two properties that already hold rather than by
+anything new.
+
+**A submitted token is not a validated one, and the report has to keep saying so.** Rows arriving
+this way are counted apart on the summary line, the same way `ats_sources` counts admitted
+`unvalidated` rows apart today. A bad paste costs one row and one 404, and the monthly re-probe marks
+it `dead`, which excludes it — that is the recovery path, and it is the reason no Builder-facing
+delete is needed.
+
+```bash
+cd backend
+python3 tools/ats-discover.py --help                  # the drain is a named phase, not a side effect
+python3 -m unittest discover -s tests
+grep -n "discovered_via" tools/ats-discover.py        # the channel's own value, not "probe"
+```
+
+**Done when:** a row in the submission table with an identified token produces a `company_ats` row on
+the next discovery run and no roster row on a dry run; the summary line distinguishes submitted rows
+from probed ones; and a second run over the same submission is a no-op.
+
 ## Filed out of a review of the redesign prompt set, 2026-08-18
 
 **All three were specified elsewhere as one-line instructions — "restore and retarget", "make
@@ -391,53 +480,6 @@ grep -rn "fit_score" frontend/js/ | grep -v "^\S*: *[/*]"     # expect: comments
 **Done when:** the redesign rows that cite these facts cite them correctly, or this row is closed
 noting which were adopted and which the owner overrode.
 
-### T-63 — The submission channel's compounding half rests on a table nothing provisions
-
-**Filed 2026-08-18 out of the same review. The submissions ADR is not written yet; these are the
-facts it must be written against.**
-
-**`company_ats` is not created by anything that stands a database up.** The channel's second
-mechanism — a pasted URL that resolves to a known ATS slug seeds `company_ats`, which then pulls that
-employer's whole board nightly — is described as the compounding mechanism and the reason the channel
-was chosen over four alternatives. `grep -rn "CREATE TABLE.*company_ats" backend/` returns exactly one
-hit and it is a test fixture, `backend/tests/test_workday_ingest.py:413`. The real DDL is in
-`backend/migrations/migrate_company_ats.py`, a manual one-shot, and
-`backend/tools/provision-database.py:181-186` does not run it. **A database provisioned from nothing
-has no ATS roster, and `ingest/ats.py` is nightly step 2.** Whether `company_ats` joins the
-provisioning path is a decision the ADR should take rather than inherit.
-
-**Slug detection is not in the file the instruction says to reuse.** "Reuse `ats-discover.py`; do not
-reimplement slug detection" points at the CLI. The detection is in `backend/ats_discovery.py` —
-`find_signatures`, `classify_validation`, `careers_url_candidates`, `host_of`, `make_row_id` — which
-`backend/tools/ats-discover.py:94` imports as `ad`. A submission form in `backend/webapp/contribute.py`
-would import that module, **and `webapp/` sets `include-system-site-packages = false` with its own
-venv**, so how it reaches a pipeline module is a real question the ADR must answer. There is
-precedent — `webapp/` already imports `profiles`, `searchnorm` and `evals.labels` — but precedent is
-not a decision.
-
-**The two line numbers the instruction quotes for the exclusion lists are both wrong, and it
-inherited them from the config.** The config is fixed — `T-60`, 2026-08-18 — and
-`backend/config/relevance.json:121` now cites `backend/relevance.py:268`, `:276`, `:297-299` and
-`:331` for `company_exclude`, `description_exclude`, the tier-3 fallthrough and the `union_sql`
-gate. **The instruction still carries the old `:163,168,189,223`, and `:163` was a blank line.** All
-four were in range, so `audit-citations.py` passed them until `0010` snapshotted the spans; this row
-exists so the ADR does not quote the old numbers again.
-
-**Two claims check out.** `weworkremotely` measured `0, 0, 3, 2, 2` over five nights —
-`backend/config/volume-floors.json` records it with the instrument. And the nine-sources figure is
-real but comes from that file's nine `sources` entries, which count `searchqueries` alongside the
-eight `ingest/` scripts; `backend/run-daily.py:126` opens a 14-entry `STEPS` list, of which 8 are
-ingest. Cite `volume-floors.json` for nine, not `run-daily.py`.
-
-```bash
-grep -rn "CREATE TABLE.*company_ats" backend/            # 1 hit, and it is a test
-grep -n "ensure_schema\|ensure_" backend/tools/provision-database.py | sed -n '1,10p'
-grep -n "^def " backend/ats_discovery.py
-```
-
-**Done when:** the submissions ADR is written against these facts, and the `company_ats` provisioning
-question is answered in it rather than left to the first session that provisions a fresh database.
-
 ### T-64 — Nothing checks that a row number is used once
 
 **Filed out of `T-59`, 2026-08-18.** `docs/adr/0010` retired C5, which guarded exactly this shape in
@@ -482,6 +524,7 @@ ADR, or a rules file — checked row by row, not assumed.
 | # | what it was | outcome |
 |---|---|---|
 | ~~T-36~~ | `0007`'s fourth consequence: a dormant account should spend nothing and claim nothing while still checking in, so that status keeps reporting and nothing needs re-enabling when the Builder returns | **Closed 2026-08-09, and it was almost entirely already built — which is the finding, not a shortcut.** `T-34` made `contributors.paused` the mechanism and `T-35` put the check-in above the pause branch, so three of the four Done-when clauses were already true AND already pinned: granted zero queries, no `submission_log` row and the query bank never opened (`TestPause`), and the check-in written anyway (`test_a_paused_poll_still_checks_in`). Padding the row with a second flag would have been inventing work `0007` explicitly did not ask for. **The fourth clause was the real remainder, and nothing reached it**: "reactivating requires no action on the Builder's machine" is a claim about the BUILDER'S machine, and every existing dormancy test asserts something about this service. So the two properties that make reactivation free are now pinned on the worker's own source — a paused poll runs no `serpapi_search`, and its branch neither uninstalls the agent nor exits non-zero into a launchd/cron failure. A worker that tidied itself away while dormant would turn resuming into a support conversation with thirty people. **No production code changed**, deliberately: the behaviour was correct and untested, so the commit is two tests and this row. Both broken to confirm they bite — a search added to the pause branch (3 red), the `return` swapped for `sys.exit(0)` (1). api suite 502, `OK`, nothing skipped. |
+| ~~T-63~~ | The submission channel's compounding half rested on a table nothing provisions, and the reuse instruction named the wrong file | **Closed 2026-08-18 by [`docs/adr/0011`](docs/adr/0011-a-submitted-url-enters-a-queue-not-the-roster.md), which takes the provisioning decision rather than leaving it to whoever next provisions a fresh database.** The row was a fact base and the ADR is what it was for; the build is `T-65`, `T-66` and `T-67`, in dependency order. **Two of the row's own facts were sharper than it knew.** `company_ats` IS created on a fresh database — `ensure_ats_schema()` is import-safe, writes no rows, and `tools/ats-discover.py` calls it as nightly step 1, so what a fresh database lacks is the ROSTER, not the table; and `provision-database.py --verify-only` cannot see it either way, because both `verify_schema` functions it runs belong to the two services and **the pipeline has none at all**. That second finding is `T-65`'s to close or file. **The reuse question answered itself under measurement**: `find_signatures()` is pure and takes text, and a pasted URL is text — checked on eight URL shapes, it returns platform and token for Greenhouse, Lever, Ashby, Workday (all three fields) and iCIMS, and nothing for a careers page or a LinkedIn URL. So detection needs no network, no new module and no dependency: `ats_discovery` imports `json`, `re` and `urllib.parse` only, and `webapp/config.py`'s existing `sys.path` insert already reaches it. **The venv question T-63 called real turned out to be about third-party packages, not sibling modules.** What decided the design was not a measurement but `schema.py:992`'s rule — ownership follows who computes — with `0009` as the worked precedent one table over. `ADMITTING_STATUSES` is why the queue design still compounds overnight: `unvalidated` rows are ingested, so nothing waits on a probe |
 | ~~T-60~~ | § 5 was a landmine list of eleven entries, and the instruction was to empty it permanently | **Closed 2026-08-18. Eight of the eleven moved into `.claude/rules/`, one stays in prose, and two were not landmines at all.** The eight are path-scoped now, so each loads for the session editing the file it bites on: `sql.md` and `ingest.md` already owned four of them, `config.md` takes `criteria.json` being a template and `daily_budget` being per request, and a new `services.md` scoped to `backend/webapp/**` and `backend/api/**` takes the two that can only bite an HTTP service — CORS `allow_methods` and the contributor API's `upsert`. *Silence is this system's failure mode* stays in § 5: it is the only one with no path to scope to, because it is not a property of any one layer. **The two that were not landmines are the finding.** *Ten migrations and nothing records which have been applied* was **15 days stale** — `backend/migrations/runner.py` closed `T-10` on 2026-08-03 and `backend/README.md` asserted the absence too, so a session reading either would have built what exists; both corrected. *`ensure_schema` creates 14 tables, not 13* had the right number and **the wrong instrument**: `grep -c "CREATE TABLE" schema.py` prints 14 through two errors that cancel — `backend/schema.py:1077` is a comment holding the phrase, and `job_ingest_state` is created by `backend/lib/state.py:52` from `backend/schema.py:927`, not in `schema.py` at all. **The row said three live sites still said 13; it was four** (`backend/schema.py:21` as well). The figure is registered in `config/doc-figures.json` **scoped to what `ensure_schema` creates**, keyed on form rather than value, measured at 1 finding over the scanned set — the frozen `0010`, allowed with its reason. **Relocating the eight found three more citations that resolved and no longer said what cited them**, plus `lib/state.py`'s three caller citations, all corrected by reading the target. `config/relevance.json`'s four `relevance.py` numbers and its `extract.py:70` are fixed, and `_max_tier_throughput_note`'s **argument** was rewritten rather than its number: the hard 40/day pipe it reasoned from stopped existing when `extract.py` became a drain loop, so throughput now says yes without a caveat and the decision rests where it always did. `max_tier_to_score` unchanged, deliberately. **A finding worth the row on its own:** an 11-line docstring added to `schema.py` to record the table-count derivation drifted **55 further citations** across fixtures, `.mjs`, a manifest and tests — the cost of a line-number citation into a 1,300-line file, made visible before the commit by the snapshot layer `0010` added, and `OQ-33` is where that question lives. Reverted; the derivation lives with the figure instead. `unknown_penalty` is not a defect but an unfitted, unapplied decision — filed as `OQ-39` |
 | ~~T-59~~ | The restored doc layer red-failed on the tree it was restored for, and none of its seven checks caught the drift the tree actually has | **Closed 2026-08-18 by [`docs/adr/0010`](docs/adr/0010-the-doc-layer-checks-citations-not-documents.md).** Reduced to C3 and C4; C1, C2, C5, C6 and C7 deleted, identifiers not reused. `scanned_files()` now reads `TASKS.md` and `DEV_TASKS.md`, which is what made C3 real — it had reported zero because the only two `kind: rolling` files in the repo were outside its scope, and `test_c3_sees_both_rolling_documents` asserts it is looking rather than trusting the count. Widening scope immediately found the suite-count figure restated in three files as 1047 / 1469 / 1428 against a real 1538; owner moved to `docs/STATE-OF-THE-SYSTEM.md`, which now carries the command instead of the number. **The replacement is the half that pays for the reduction:** `audit-citations.py` snapshots a digest of every cited span and reports the ones that CHANGED — the class that resolved cleanly and stayed green for two sessions under `T-18`. It caught 18 real drifts on its first run, 14 of them caused by this session's own edits, and every one was re-read and repointed rather than refreshed away. C5's live equivalent — nothing guards the `T-`/`OQ-` allocators — is filed as `T-64` rather than built, because `0010` said two checks and a frozen ADR is not amended by the row implementing it. Both checkers now run in CI (`.github/workflows/ci.yml:103-146`). Suite 1538 OK |
 | ~~T-61~~ | The `budget:` field ranked the three files that declared it in the opposite order from their size | **Closed 2026-08-18 by `docs/adr/0010`, delete rather than enforce.** A line was 71 bytes in `docs/STATE-OF-THE-SYSTEM.md` and 352 in `TASKS.md`, so the field called the largest document compliant and sent you to shrink the two smaller ones. The check it needed was never missing — `check_budget`, C7, existed and reported 0, for two compounding reasons worth keeping: it read only `kind: rolling`, and `STATE-OF-THE-SYSTEM.md` declared a budget while being `kind: contract`; and the two rolling files sat outside the scanned set. **A check can be green because it passed or because it never looked, and nothing in its output tells them apart.** The field is gone from all three files; `DEV_TASKS.md`'s BUDGET NOTE keeps the rule that outlives it — move narrative out rather than raise a threshold |

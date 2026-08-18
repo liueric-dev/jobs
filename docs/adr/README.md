@@ -68,3 +68,5 @@ next to the number they explain. Do not migrate them here.
 | [0007](0007-contributor-credential-opt-in-scheduled-worker.md) | Credentials mint at opt-in instead; the worker is OS-scheduled rather than resident, and the server dictates interval, pause and budget — superseding `0006` 1, 2 and 4 |
 | [0008](0008-the-freeze-covers-the-argument-not-the-citations.md) | The freeze protects the claim, not the bookkeeping: a citation may be corrected in place, and a frozen file may not carry a line number into a task file |
 | [0009](0009-run-statistics-are-reconciled-not-granted.md) | `search_queries`' run statistics stay the pipeline's; a contributor's run reaches them as a `submission_log` row the nightly step reconciles, not as a widened GRANT |
+| [0010](0010-the-doc-layer-checks-citations-not-documents.md) | The documentation layer keeps C3 and C4 and snapshots every cited line; the `budget:` field is deleted rather than enforced |
+| [0011](0011-a-submitted-url-enters-a-queue-not-the-roster.md) | A Builder's submitted URL is identified in the request and enters a queue the nightly discovery step drains; the webapp never writes the ATS roster |
