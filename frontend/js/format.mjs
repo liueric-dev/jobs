@@ -70,6 +70,11 @@ export function ageLabel(job, now = new Date()) {
   return {
     text: exact ? `Posted ${when}` : `First seen ${when}`,
     stale: days >= STALE_AFTER_DAYS,
+    // The caller needs the distinction the text already carries: `Posted` is
+    // the employer's own claim, `First seen` is this pipeline's upper bound on
+    // the age. Returning it beats a caller re-deriving it by matching on the
+    // string, which is a copy of this function's wording in another file.
+    exact,
   };
 }
 

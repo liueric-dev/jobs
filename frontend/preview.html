@@ -202,9 +202,10 @@ function render(rows) {
 }
 
 document.getElementById("theme").addEventListener("click", () => {
-  // Cycles the override app.css reads. Until the token layer carries a
-  // [data-theme] arm this button changes nothing, and saying so is better than
-  // a control that looks broken: the OS appearance setting is the switch today.
+  // Cycles the override app.css reads. `system` removes the attribute, so
+  // prefers-color-scheme decides; light and dark pin it. Both arms exist in the
+  // token block, which is why either theme can be reviewed here without
+  // changing the OS setting -- the reason this page needed the token work.
   state.theme = state.theme === "system" ? "light"
     : state.theme === "light" ? "dark" : "system";
   const root = document.documentElement;

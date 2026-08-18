@@ -96,7 +96,7 @@ function paint(root, job) {
     <p class="card-company">${esc(job.company_name)}</p>
 
     <ul class="meta">
-      <li class="age${age.stale ? " is-old" : ""}">${esc(age.text)}</li>
+      <li class="age${age.stale ? " is-old" : ""}${age.exact ? " is-exact" : ""}">${esc(age.text)}</li>
       ${place ? `<li>${esc(place)}</li>` : ""}
       ${comp
         ? `<li>${esc(comp.text)}${comp.estimated

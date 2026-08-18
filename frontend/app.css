@@ -19,36 +19,116 @@
   display: none !important;
 }
 
+/* -- tokens ---------------------------------------------------------------
+
+   EVERY COLOUR VALUE APPEARS EXACTLY ONCE, in the two palettes below, and the
+   theme arms ASSIGN them rather than restate them. A token added to one
+   palette and forgotten in the other then has no value at all in that theme,
+   which is visible the moment you look; the arrangement it replaces let a new
+   token silently keep its light value in the dark, which is not.
+
+   THREE ARMS, NOT ONE. `prefers-color-scheme` stays authoritative and is the
+   default. [data-theme] overrides it in BOTH directions, so a page can be seen
+   in the other theme without changing the OS setting -- frontend/preview.html
+   is the only caller today, and an in-app switch would need no CSS work.
+
+   THE TYPE SCALE IS SIX STEPS AND EVERY ONE HAS A JOB. It replaces nine
+   declarations holding 0.8 / 0.85 / 0.875 / 0.9rem -- four values between
+   12.8px and 14.4px, which no reader can tell apart and every editor has to
+   choose between. --t-h1 is a token rather than a rule so the desktop size
+   lives WITH the scale: it used to be a bare 1.6rem inside the width query at
+   the foot of this file, unreachable from here (T-62). */
+
 :root {
-  --bg: #ffffff;
-  --surface: #f6f7f9;
-  --line: #dfe3e8;
-  --ink: #14171a;
-  --ink-soft: #5b6570;
-  --ink-faint: #8a939c;
-  --accent: #1b4dd8;
-  --accent-ink: #ffffff;
-  --warn-bg: #fff5e6;
-  --warn-ink: #6b4a05;
-  --danger: #a11b1b;
+  /* the light palette: values, once */
+  --l-bg: #ffffff;
+  --l-surface: #f6f7f9;
+  --l-line: #dfe3e8;
+  --l-ink: #14171a;
+  --l-ink-soft: #5b6570;
+  /* 4.75:1 on --l-bg. It was #8a939c, which is 3.12:1 and carries the group
+     caveat and the onboarding step counter at 0.8rem -- small print below the
+     contrast floor is small print that reads as decoration. */
+  --l-ink-faint: #6b747e;
+  /* Petrol, 7.91:1 on white and 7.91:1 under --l-accent-ink, so it is legible
+     as text AND as a filled button. It replaces #1b4dd8, which was the blue
+     every product uses and 6.77:1. */
+  --l-accent: #0e5a61;
+  --l-accent-ink: #ffffff;
+  --l-warn-bg: #fff5e6;
+  --l-warn-ink: #6b4a05;
+  --l-danger: #a11b1b;
+
+  /* the dark palette: values, once */
+  --d-bg: #14171a;
+  --d-surface: #1d2126;
+  --d-line: #2e343b;
+  --d-ink: #eef1f4;
+  --d-ink-soft: #a8b2bc;
+  --d-ink-faint: #78828c;
+  --d-accent: #5fc9d4;
+  --d-accent-ink: #10131a;
+  --d-warn-bg: #33280f;
+  --d-warn-ink: #f0d9a5;
+  --d-danger: #ff8f8f;
+
+  /* type: six steps, root 16px */
+  --t-h1: 1.375rem;      /* the screen's name */
+  --t-title: 1.125rem;   /* a posting's title, a section heading */
+  --t-lead: 1.0625rem;   /* the angle: the one sentence the card exists for */
+  --t-meta: 0.875rem;    /* everything that qualifies a claim */
+  --t-micro: 0.8rem;     /* pills, counters, the caveat under a track */
+  --lh-tight: 1.35;      /* set the lead tighter than the 1.5 body */
+
   --radius: 12px;
   --tap: 44px;
+  /* THE GAP IS LARGER THAN THE PADDING, and it was the other way round: 0.9rem
+     inside, 0.75rem between, so a list of cards read as one striped block
+     rather than as separate postings. */
+  --card-pad: 1rem;
+  --card-gap: 1.25rem;
+
+  --bg: var(--l-bg);
+  --surface: var(--l-surface);
+  --line: var(--l-line);
+  --ink: var(--l-ink);
+  --ink-soft: var(--l-ink-soft);
+  --ink-faint: var(--l-ink-faint);
+  --accent: var(--l-accent);
+  --accent-ink: var(--l-accent-ink);
+  --warn-bg: var(--l-warn-bg);
+  --warn-ink: var(--l-warn-ink);
+  --danger: var(--l-danger);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14171a;
-    --surface: #1d2126;
-    --line: #2e343b;
-    --ink: #eef1f4;
-    --ink-soft: #a8b2bc;
-    --ink-faint: #78828c;
-    --accent: #7ea2ff;
-    --accent-ink: #10131a;
-    --warn-bg: #33280f;
-    --warn-ink: #f0d9a5;
-    --danger: #ff8f8f;
+  :root:not([data-theme="light"]) {
+    --bg: var(--d-bg);
+    --surface: var(--d-surface);
+    --line: var(--d-line);
+    --ink: var(--d-ink);
+    --ink-soft: var(--d-ink-soft);
+    --ink-faint: var(--d-ink-faint);
+    --accent: var(--d-accent);
+    --accent-ink: var(--d-accent-ink);
+    --warn-bg: var(--d-warn-bg);
+    --warn-ink: var(--d-warn-ink);
+    --danger: var(--d-danger);
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--d-bg);
+  --surface: var(--d-surface);
+  --line: var(--d-line);
+  --ink: var(--d-ink);
+  --ink-soft: var(--d-ink-soft);
+  --ink-faint: var(--d-ink-faint);
+  --accent: var(--d-accent);
+  --accent-ink: var(--d-accent-ink);
+  --warn-bg: var(--d-warn-bg);
+  --warn-ink: var(--d-warn-ink);
+  --danger: var(--d-danger);
 }
 
 * { box-sizing: border-box; }
@@ -116,8 +196,8 @@ main {
 
 /* -- generic ------------------------------------------------------------- */
 
-h1 { font-size: 1.35rem; margin: 0.75rem 0 0.25rem; }
-h2 { font-size: 1.05rem; margin: 0; }
+h1 { font-size: var(--t-h1); margin: 0.75rem 0 0.25rem; }
+h2 { font-size: var(--t-title); margin: 0; }
 
 .lede { color: var(--ink-soft); margin: 0 0 1rem; }
 
@@ -167,7 +247,7 @@ button {
 .linkish.wide { width: 100%; }
 
 .muted { color: var(--ink-soft); }
-.small { font-size: 0.85rem; }
+.small { font-size: var(--t-meta); }
 
 /* -- track groups -------------------------------------------------------- */
 
@@ -182,7 +262,7 @@ button {
 .group-head .blurb {
   margin: 0.15rem 0 0;
   color: var(--ink-soft);
-  font-size: 0.9rem;
+  font-size: var(--t-meta);
 }
 
 /* The one sentence that keeps a track from reading as a fact about a posting.
@@ -190,7 +270,7 @@ button {
 .group-caveat {
   margin: 0.35rem 0 0;
   color: var(--ink-faint);
-  font-size: 0.8rem;
+  font-size: var(--t-micro);
 }
 
 /* -- job card ------------------------------------------------------------ */
@@ -198,8 +278,8 @@ button {
 .card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.9rem;
-  margin-bottom: 0.75rem;
+  padding: var(--card-pad);
+  margin-bottom: var(--card-gap);
   background: var(--bg);
 }
 
@@ -213,7 +293,7 @@ button {
 
 .card-title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: var(--t-title);
   font-weight: 700;
   color: var(--ink);
 }
@@ -226,27 +306,80 @@ button {
 .meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 0.75rem;
-  margin: 0.5rem 0 0;
+  gap: 0.15rem 0.5rem;
+  margin: 0.4rem 0 0;
   padding: 0;
   list-style: none;
   color: var(--ink-soft);
-  font-size: 0.875rem;
+  font-size: var(--t-meta);
 }
 
-.age { font-weight: 600; color: var(--ink); }
+/* One line, not a stack of facts. The separator is CSS rather than a string in
+   the markup so that a wrapped row never leaves a dangling bullet in the DOM,
+   and so no screen reader announces it. */
+.meta li + li::before {
+  content: "\00b7";
+  margin-right: 0.5rem;
+  color: var(--ink-faint);
+}
+
+/* -- the age, which is the claim this screen asks to be trusted on --------
+   Set as a stamp rather than as prose: uppercase, tracked, and carrying its own
+   marker, because it is the first thing to read on a card and the one number
+   this client shows at all.
+
+   THE MARKER IS THE EPISTEMIC HALF AND IT IS OPT-IN. Filled means the EMPLOYER
+   said this date; hollow means we are reporting when this pipeline first saw
+   the posting, which is only an upper bound on its age. Unmarked therefore has
+   to be the weaker claim: detail.mjs and onboarding.mjs render `class="age"`
+   with no modifier, so a filled default would have them assert an employer date
+   nobody has. Under-claiming when unsure is the same rule the copy follows.
+
+   The appearance is global because the signal is the same signal wherever it
+   appears; only the SPACING is card-scoped, since on the detail page it still
+   sits inside a meta row. */
+.age {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.age::before {
+  content: "";
+  flex: none;
+  width: 0.45rem;
+  height: 0.45rem;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+
+.age.is-exact::before { background: currentColor; }
+
 .age.is-old { color: var(--danger); }
+
+.card-link > .age { margin: 0 0 0.55rem; }
 
 .estimated {
   background: var(--warn-bg);
   color: var(--warn-ink);
   border-radius: 6px;
   padding: 0.05rem 0.4rem;
-  font-size: 0.8rem;
+  font-size: var(--t-micro);
 }
 
+/* THE SENTENCE THE CARD EXISTS FOR, and now the first prose on it. One step
+   above body, set tighter than body, full-strength ink: it is the transferable-
+   skills story, and js/ui.mjs states why it carries the claim that a score
+   would otherwise have carried. */
 .angle {
-  margin: 0.6rem 0 0;
+  margin: 0 0 0.7rem;
+  font-size: var(--t-lead);
+  line-height: var(--lh-tight);
   color: var(--ink);
 }
 
@@ -263,7 +396,7 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-  margin: 0.6rem 0 0;
+  margin: 0.7rem 0 0;
   padding: 0;
   list-style: none;
 }
@@ -272,14 +405,14 @@ button {
   background: var(--surface);
   border-radius: 999px;
   padding: 0.15rem 0.6rem;
-  font-size: 0.8rem;
+  font-size: var(--t-micro);
   color: var(--ink-soft);
 }
 
 .actions {
   display: flex;
   gap: 0.5rem;
-  margin: 0.75rem 0 0;
+  margin: var(--card-pad) 0 0;
 }
 
 .actions .btn { flex: 1; }
@@ -337,7 +470,7 @@ button {
 .step {
   margin: 0.75rem 0 0;
   color: var(--ink-faint);
-  font-size: 0.8rem;
+  font-size: var(--t-micro);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -375,7 +508,7 @@ button {
 .hint {
   margin: 0.35rem 0 0;
   color: var(--ink-soft);
-  font-size: 0.85rem;
+  font-size: var(--t-meta);
 }
 
 /* The whole row is the target, not the 16px box. */
@@ -416,7 +549,7 @@ button {
   margin: 0;
   text-align: center;
   color: var(--ink-soft);
-  font-size: 0.85rem;
+  font-size: var(--t-meta);
 }
 
 /* A judged card recedes rather than disappears: the list is the record of what
@@ -446,7 +579,7 @@ button {
 }
 
 .sheet h2 { margin: 0 0 0.15rem; }
-.sheet-sub { margin: 0 0 0.75rem; color: var(--ink-soft); font-size: 0.9rem; }
+.sheet-sub { margin: 0 0 0.75rem; color: var(--ink-soft); font-size: var(--t-meta); }
 
 .reasons {
   display: grid;
@@ -524,7 +657,7 @@ button {
 .query-track {
   margin: 0.35rem 0 0;
   color: var(--ink-soft);
-  font-size: 0.875rem;
+  font-size: var(--t-meta);
 }
 
 /* The watcher badge, which is absent far more often than it is present: below
@@ -552,8 +685,10 @@ button {
 /* -- desktop adaptation -------------------------------------------------- */
 
 @media (min-width: 40rem) {
+  /* The screen title's desktop size is a TOKEN OVERRIDE, not a rule: the scale
+     stays in one place and this query says only that the top step grows. */
+  :root { --t-h1: 1.75rem; }
   main { padding: 1rem 1.5rem 4rem; }
-  h1 { font-size: 1.6rem; }
   .actions .btn { flex: 0 1 auto; min-width: 9rem; }
   .detail-actions { position: static; border: 0; }
   .sheet-backdrop { align-items: center; }

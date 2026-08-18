@@ -30,8 +30,19 @@ export function jobCard(job) {
   const reasons = reasonsFor(job);
   const angle = job.gap_bridging_angle;
 
+  // THE AGE IS NOT METADATA, so it is no longer an <li> among the others. It
+  // is the one claim this screen asks to be trusted on, and the two forms it
+  // takes are different claims: `Posted` is the employer's date, `First seen`
+  // is ours and is only an upper bound. The card states which, in the copy and
+  // in the marker. `.is-exact` is the EMPLOYER'S date and it is opt-in, which
+  // is the safe direction: a call site that forgets the modifier under-claims,
+  // where a filled-by-default marker would have it assert an employer date
+  // nobody has. detail.mjs and onboarding.mjs pass it for the same reason.
+  const ageLine =
+    `<p class="age${age.stale ? " is-old" : ""}${age.exact ? " is-exact" : ""}">`
+    + `${esc(age.text)}</p>`;
+
   const meta = [
-    `<li class="age${age.stale ? " is-old" : ""}">${esc(age.text)}</li>`,
     place ? `<li>${esc(place)}</li>` : "",
     comp
       ? `<li>${esc(comp.text)}${comp.estimated
@@ -65,10 +76,11 @@ export function jobCard(job) {
   return `
 <article class="card${job.dismissed ? " is-dismissed" : ""}" data-job-id="${esc(job.id)}" data-rank="${esc(job.rank ?? "")}">
   <a class="card-link" href="#/job/${encodeURIComponent(job.id)}">
+    ${ageLine}
+    ${body}
     <h3 class="card-title">${esc(job.title)}</h3>
     <p class="card-company">${esc(job.company_name)}</p>
     <ul class="meta">${meta}</ul>
-    ${body}
     ${chips}
   </a>
   <div class="actions">

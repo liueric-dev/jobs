@@ -466,7 +466,7 @@ export function seedCard(job) {
   const reasons = reasonsFor(job, 2);
 
   const meta = [
-    `<li class="age${age.stale ? " is-old" : ""}">${esc(age.text)}</li>`,
+    `<li class="age${age.stale ? " is-old" : ""}${age.exact ? " is-exact" : ""}">${esc(age.text)}</li>`,
     place ? `<li>${esc(place)}</li>` : "",
     comp ? `<li>${esc(comp.text)}${comp.estimated
       ? ' <span class="estimated">estimated, not stated by the employer</span>'
