@@ -2,7 +2,7 @@
 """Check this repo's mechanically-checkable documentation rules and exit non-zero.
 
 THIS FILE IS THE AUTHORITY FOR THE RULES IT CHECKS. It used to cite
-`docs/DOCS-POLICY.md`, deleted 2026-08-02 with the 137 documents it governed.
+`git show refactor-freeze-2026-08-02:docs/DOCS-POLICY.md`, deleted 2026-08-02 with the 137 documents it governed.
 `.claude/CLAUDE.md`'s ceiling forbids a replacement document, and code that
 enforces a rule is the right owner of the rule's text -- see
 `docs/adr/0010-the-doc-layer-checks-citations-not-documents.md`, which also
@@ -146,8 +146,10 @@ SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 #: doing exactly that (measured 2026-08-02 with this regex; `grep -o '~~'` counts 470,
 #: which is the same 235 spans seen as opening and closing markers -- a marker count is
 #: not a span count and the two get quoted interchangeably).
-#: `.claude/CLAUDE.md:190` reads `~~**1182** as of
-#: 2026-07-31~~` and the sentence around it exists to say the number was wrong. A check
+#: `.claude/CLAUDE.md` then read `~~**1182** as of 2026-07-31~~`, and the sentence
+#: around it existed to say the number was wrong. NO LINE NUMBER: that file has been
+#: rewritten since and the struck text is gone, so the quoted string identifies the
+#: case and a line number would only point somewhere arbitrary. A check
 #: that reports a figure whose own sentence disowns it is penalising the behaviour the
 #: policy requires, which is the one way to make people stop doing it.
 #:
@@ -387,8 +389,8 @@ def figure_hits(pattern, lines):
     matches while clearing 10.
 
     AND BOTH INVENTED MATCHES ARE REAL, which is the part worth the next reader's
-    time. `29-labelling-session.md:792` is the webapp suite count with `backend/webapp/`
-    ending the line above it, and `LABELLING-NIGHT.md:508-509` is the labelling rate
+    time. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_five/29-labelling-session.md:792` is the webapp suite count with `backend/webapp/`
+    ending the line above it, and `git show refactor-freeze-2026-08-02:docs/tasks/refactor/LABELLING-NIGHT.md:508-509` is the labelling rate
     split as `93` / `s/posting` across the wrap. So the line scope has false NEGATIVES
     of exactly the shape it has false positives, and widening the match body would find
     two of them -- both in files these rows already allow, so neither is a finding

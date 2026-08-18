@@ -119,10 +119,23 @@ SKIP_PATHS = {os.path.join("docs", "orientation-2026-08-02")}
 #:
 #: Found the honest way: by committing them, at which point `git ls-files` began
 #: listing them and the checker reported 300-odd findings against itself.
+#: citation-snapshots.json joined this list the moment it existed, and the way it
+#: announced itself is worth keeping. It stores one entry per citation, and each
+#: KEY quotes the citation it vouches for -- so the file is 1123 citation-shaped
+#: strings, and scanning it made every one of them a second, self-referential
+#: citation. The count went 1123 -> 2022 in a single run, and because
+#: --update-snapshots then records THOSE too, every refresh would have roughly
+#: doubled the file. Same reason as the baseline directly above it: a file whose
+#: subject is citations necessarily contains citations.
 SELF = {
     "backend/config/citation-baseline.json",
+    "backend/config/citation-snapshots.json",
     "backend/tools/audit-citations.py",
     "backend/tests/test_citations.py",
+    #: Same reason as test_citations.py: its synthetic trees are built from
+    #: citation-shaped paths -- docs/owner.md, docs/other.md, file.py -- which
+    #: are fixtures for the checks, never claims that a file exists.
+    "backend/tests/test_docs_policy.py",
 }
 
 
