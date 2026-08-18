@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<!--
+  THE CARD, IN EVERY STATE THAT MATTERS. A design harness, not a route.
+
+     python3 -m http.server 8000 --directory frontend
+     # then open preview.html on http://localhost:8000
+
+  WHY THIS EXISTS. app.css cannot be judged against fixtures/shipped/ alone:
+  that file holds four rows; the longest title in it is 44 characters; its dates
+  are ABSOLUTE (2026-07-24..30), so what it shows drifts a day further into the
+  past every day and will cross STALE_AFTER_DAYS with nobody editing it; and
+  `estimated, not stated by the employer` lives only in
+  fixtures/contract/edge-cases/. Neither the stale state nor the no-date state
+  appears in that file at all. A stylesheet reviewed against those four rows is
+  a stylesheet reviewed against four happy paths. T-62 is the row that measured
+  this.
+
+  WHY IT IS NOT A SECOND CLIENT. It imports js/ui.mjs and js/format.mjs -- the
+  real ones, the same functions index.html renders through -- so a card that
+  looks right here looks right in the app or the harness is broken and says so.
+  It never imports js/app.mjs, registers no routes and calls no endpoint: every
+  specimen is a local JSON file, so this page works with no server, no session,
+  no database and no node.
+
+  EVERY SPECIMEN IS A REAL FIXTURE ROW WITH NAMED OVERRIDES, which is the rule
+  that keeps this file from drifting into fiction. The base row is always one
+  the contract already blesses; the override is one or two fields, and the
+  label says which. Nothing here invents a row shape, so a field renamed in
+  webapp/jobs.py breaks this page the same way it breaks the app.
+
+  NO BUILD STEP, per .claude/rules/frontend.md. Plain ES modules, one stylesheet
+  (the product's own), and the harness's own styling inline below so it cannot
+  leak into app.css.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Card specimens</title>
+  <link rel="stylesheet" href="./app.css">
+  <link rel="icon" href="data:,">
+  <style>
+    /* Harness chrome only. Deliberately unlike the product: this must never be
+       mistaken for a screen, and it must not compete with what it frames. */
+    .harness {
+      max-width: 46rem;
+      margin: 0 auto;
+      padding: 1rem 1rem 4rem;
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .harness-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.75rem;
+      border-bottom: 2px solid currentColor;
+      padding-bottom: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .harness-head h1 { flex: 1; margin: 0; font-size: 1.1rem; letter-spacing: 0.02em; }
+    .harness-head p { margin: 0; font-size: 0.8rem; opacity: 0.7; }
+    .harness button {
+      font: inherit;
+      font-size: 0.8rem;
+      padding: 0.3rem 0.7rem;
+      border: 1px solid currentColor;
+      border-radius: 4px;
+      background: none;
+      color: inherit;
+    }
+    .specimen { margin: 0 0 2rem; }
+    .specimen-label {
+      font: 600 0.7rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.75;
+      margin: 0 0 0.1rem;
+    }
+    .specimen-note {
+      font: 0.8rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      opacity: 0.6;
+      margin: 0 0 0.5rem;
+    }
+    .specimen-note code { font-size: inherit; }
+    .harness-error {
+      border: 2px solid currentColor;
+      padding: 0.75rem;
+      font: 0.85rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .stack { display: flex; flex-direction: column; }
+  </style>
+</head>
+<body>
+
+<div class="harness">
+  <div class="harness-head">
+    <h1>Card specimens</h1>
+    <p id="count"></p>
+    <button type="button" id="theme">Theme: system</button>
+  </div>
+  <div id="sheet" class="stack"></div>
+</div>
+
+<script type="module">
+import { jobCard } from "./js/ui.mjs";
+import { parseJobRow } from "./js/api.mjs";
+
+/**
+ * Every specimen: a base fixture row, the fields overridden, and why.
+ *
+ * `base` is an index into fixtures/shipped/GET_v1_jobs.json unless `file`
+ * names another fixture. `over` is applied after parseJobRow, so an override
+ * carries the PARSED type (an array for key_technologies, not a JSON string) --
+ * the same thing the render sees when the network path has run.
+ */
+const SPECIMENS = [
+  { label: "shipped row 1 — scored, banded comp",
+    note: "the common case, exactly as the fixture states it. It comes back saved:true, so the Save action reads 'Saved' here and on every specimen built from this row",
+    base: 0 },
+  { label: "shipped row 2 — no comp at all",
+    note: "comp_min, comp_max and salary are ALL null on this row: the null-comp and no-salary cases are one row and one condition",
+    base: 1 },
+  { label: "shipped row 4 — unscored",
+    note: "fit_score, primary_track, gap_bridging_angle and key_technologies null together; the summary carries the card, marked as the posting's own words",
+    base: 3 },
+  { label: "a fresh employer date",
+    note: "posted_at_ts pinned 3 days back — 'Posted', the employer's own claim. The shipped rows carry absolute dates, so this is the only specimen that stays fresh as real time passes",
+    base: 0, over: () => ({ posted_at_ts: daysAgo(3) }) },
+  { label: "stale, employer's date",
+    note: "STALE_AFTER_DAYS is 30 and this is 45: the one state the card colours differently",
+    base: 0, over: () => ({ posted_at_ts: daysAgo(45) }) },
+  { label: "stale, our observation",
+    note: "first_seen only, and old: an upper bound on the age, never the employer's claim. Row 2 is the only shipped row with no employer date, which is the branch check_client pins",
+    base: 2, over: () => ({ posted_at_ts: null, first_seen: daysAgo(52, true) }) },
+  { label: "no date on either field",
+    note: "neither posted_at_ts nor first_seen; the quietest form the age line takes",
+    base: 1, over: () => ({ posted_at_ts: null, first_seen: null }) },
+  { label: "estimated comp",
+    note: "comp_is_estimated true. The case has its own file at fixtures/contract/edge-cases/03, not loaded here: contract/ and shipped/ have different shapes (frontend/README.md), and mixing dialects in one sheet would make a difference between them read as a difference in the CSS",
+    base: 0, over: () => ({ comp_is_estimated: true }) },
+  { label: "60-character title",
+    note: "the longest shipped title is 44; this is the wrap the criterion asks for and the fixture cannot supply",
+    base: 0,
+    over: () => ({ title: "Associate Program Coordinator, Clinical AI Enablement" }) },
+  { label: "long everything",
+    note: "a long employer name beside a long title, which is where a two-column card layout gives up",
+    base: 2,
+    over: () => ({ title: "Data Operations and Reporting Analyst I, Grid Reliability",
+                   company_name: "New York City Health and Hospitals Corporation" }) },
+  { label: "no angle, no summary",
+    note: "both null: the card is identifier and meta only, and must not look broken",
+    base: 3, over: () => ({ summary: null }) },
+  { label: "saved, flipped from unsaved",
+    note: "base row 2 is saved:false, so this is the flip rather than the fixture's own state: aria-pressed is the only per-Builder state the card carries",
+    base: 1, over: () => ({ saved: true }) },
+  { label: "dismissed",
+    note: "is-dismissed dims the card in place; the undo lives in the toast, not here",
+    base: 1, over: () => ({ dismissed: true }) },
+  { label: "hostile strings",
+    note: "titles and employer names are third-party text off a job board; esc() is the only thing between them and innerHTML",
+    base: 0,
+    over: () => ({ title: '<img src=x onerror="alert(1)"> & "quoted"',
+                   company_name: "A & B <b>Bold</b>" }) },
+];
+
+const state = { theme: "system" };
+
+function daysAgo(n, naive = false) {
+  // first_seen is TEXT with no zone (schema.py:495); posted_at_ts carries one.
+  // The two are formatted differently on purpose -- format.mjs reads them that
+  // way, and a specimen that fed both the same string would prove nothing.
+  const t = new Date(Date.now() - n * 86400000).toISOString().slice(0, 19);
+  return naive ? t : `${t}Z`;
+}
+
+async function fixture(name) {
+  const res = await fetch(`./fixtures/shipped/${name}`);
+  if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
+  return res.json();
+}
+
+function render(rows) {
+  const sheet = document.getElementById("sheet");
+  sheet.innerHTML = SPECIMENS.map((spec) => {
+    const row = parseJobRow({ ...rows[spec.base] });
+    Object.assign(row, spec.over ? spec.over() : {});
+    return `<section class="specimen">
+      <p class="specimen-label"></p>
+      <p class="specimen-note"></p>
+      ${jobCard(row)}
+    </section>`;
+  }).join("");
+  // textContent, not innerHTML: the labels are this file's own prose, but the
+  // habit is the point -- nothing on this page reaches innerHTML unescaped.
+  sheet.querySelectorAll(".specimen").forEach((el, i) => {
+    el.querySelector(".specimen-label").textContent = SPECIMENS[i].label;
+    el.querySelector(".specimen-note").textContent = SPECIMENS[i].note;
+  });
+  document.getElementById("count").textContent =
+    `${SPECIMENS.length} specimens · js/ui.mjs · fixtures/shipped/`;
+}
+
+document.getElementById("theme").addEventListener("click", () => {
+  // Cycles the override app.css reads. Until the token layer carries a
+  // [data-theme] arm this button changes nothing, and saying so is better than
+  // a control that looks broken: the OS appearance setting is the switch today.
+  state.theme = state.theme === "system" ? "light"
+    : state.theme === "light" ? "dark" : "system";
+  const root = document.documentElement;
+  if (state.theme === "system") root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", state.theme);
+  document.getElementById("theme").textContent = `Theme: ${state.theme}`;
+});
+
+try {
+  const body = await fixture("GET_v1_jobs.json");
+  render(body.jobs);
+} catch (e) {
+  document.getElementById("sheet").innerHTML =
+    `<div class="harness-error"></div>`;
+  document.querySelector(".harness-error").textContent =
+    `${e.message}\n\nServe the directory rather than opening the file: ` +
+    `python3 -m http.server 8000 --directory frontend`;
+}
+</script>
+</body>
+</html>

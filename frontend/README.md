@@ -559,6 +559,24 @@ cd backend/webapp && .venv/bin/python ../../frontend/serve.py
 cd backend/webapp && .venv/bin/python ../../frontend/serve.py --host 0.0.0.0
 ```
 
+### Looking at the card without a server
+
+`preview.html` renders `js/ui.mjs` against `fixtures/shipped/` plus the states that
+file cannot express — the stale age, the missing date, an estimated comp, a title
+long enough to wrap, a posting with no angle and no summary, and hostile strings.
+It calls no endpoint and needs no venv, no database and no node:
+
+```bash
+python3 -m http.server 8000 --directory frontend
+# then open preview.html on http://localhost:8000
+```
+
+It imports the real render functions rather than copying them, so a card that
+looks right there looks right in the app or the harness is broken and says so.
+Every specimen is a shipped row with one or two named overrides; nothing in it
+invents a row shape. **It is a design harness, not a route** — `app.mjs` does not
+know it exists and `check_client.mjs` does not read it.
+
 **`--host` defaults to `127.0.0.1` and that default does not move.** It binds this
 machine only unless you ask otherwise, because opening a listener on an app running
 with no TLS and `SESSION_COOKIE_SECURE=false` should be typed rather than inherited.

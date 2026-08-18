@@ -25,6 +25,7 @@ session cookie and returns 401, which renders as the sign-in screen with no erro
 
 ```bash
 cd backend/webapp && .venv/bin/python ../../frontend/serve.py   # then http://localhost:8421/
+python3 -m http.server 8000 --directory frontend   # preview.html: every card state, no venv
 python3 frontend/verify_fixtures.py    # fixtures still describe the server
 node frontend/check_client.mjs         # client still agrees with the fixtures
 ```
