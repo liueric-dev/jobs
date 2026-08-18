@@ -20,10 +20,11 @@ frontend's no-build-step constraint (`frontend.md`) — loading only when a sess
 matching path, so this file stays the part every session pays for.
 
 **What is left to do lives in exactly two files, and between them that is the whole list.**
-`TASKS.md` (`T-`) holds everything a session can do unaided; `DEV_TASKS.md` (`OQ-`) holds
-everything needing a machine, an account, a device, other people, or a decision only the owner can
-take. A decision, once taken, goes to [`docs/adr/`](../docs/adr/) — one file per decision, frozen
-on write, never into prose here. Work tracked in neither file is not tracked.
+[`TASKS.md`](../TASKS.md) (`T-`) holds everything a session can do unaided;
+[`DEV_TASKS.md`](../DEV_TASKS.md) (`OQ-`) holds everything needing a machine, an account, a device,
+other people, or a decision only the owner can take. A decision, once taken, goes to
+[`docs/adr/`](../docs/adr/) — one file per decision, frozen on write, never into prose here. Work
+tracked in neither file is not tracked.
 
 **What this is:** a job discovery and tracking pipeline, retargeted from one software engineer's job
 search to the Pursuit AI-Native cohort — ~30 Builders, entry-level, AI-adjacent roles, all
@@ -58,15 +59,16 @@ cd backend/webapp && .venv/bin/python -m unittest discover -s tests
 cd backend/api    && .venv/bin/python -m unittest discover -s tests
 ```
 
-**Standing a database up from nothing is one command** — the DDL lives in five functions across
-four modules and nothing else invokes all five. **Read the banner at the top of the file before
-running it against anything populated**: step 3's fallback DROPs a view and takes every GRANT with
-it (`backend/schema.py:1313`, fixed by `T-13`, re-grant not re-decision — see
+**Standing a database up from nothing is one command** — the DDL lives in six functions across four
+modules (`tools/provision-database.py:181-186`) and nothing else invokes all six. **Read the banner
+at the top of the file before running it against anything populated**: step 3's fallback DROPs a
+view and takes every GRANT with it (`backend/schema.py:1313`, fixed by `T-13`, re-grant not
+re-decision — see
 [`docs/adr/0004`](../docs/adr/0004-provision-database-issues-no-grants.md)).
 
 ```bash
 cd backend
-python3 tools/provision-database.py                 # all five, in the one order that works
+python3 tools/provision-database.py                 # all six, in the one order that works
 python3 tools/provision-database.py --verify-only   # report, change nothing
 .venv-dev/bin/ruff check . --statistics    # dev-only linter; run it for the number, don't quote one
 .venv-dev/bin/mypy                          # dev-only, config-driven, scoped to lib/, schema.py, score_job()

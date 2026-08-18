@@ -10,7 +10,8 @@ that citations have drifted and that there is no checker. A rule with no
 enforcement is how `docs/` accumulated 168 contradictions before anyone
 counted them.
 
-The bar is the one `docs/DOCS-POLICY.md` rule 7 set before it was deleted:
+The bar is the one `git show refactor-freeze-2026-08-02:docs/DOCS-POLICY.md`
+rule 7 set before it was deleted:
 "fails a suite someone is already running", not "has a script". A checker
 wired into nothing is a checker that runs once, on the day it is written --
 which is exactly what `frontend/verify_fixtures.py` was, and what
@@ -46,6 +47,7 @@ way a person runs it is the honest test.
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -167,3 +169,97 @@ class TestTheTreeHasNoNewDrift(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCitedLinesAreSnapshotted(unittest.TestCase):
+    """The content check `docs/adr/0010` added, and the limit it must keep stating.
+
+    The older half of this tool asks whether a citation RESOLVES. That is
+    mechanical and it is not the failure this repo has: a review on 2026-08-18
+    found four citations that resolved perfectly and named the wrong line, one of
+    them blank. Every one passed, because the line was in range.
+
+    So a digest of each cited span is recorded, and a run reports the ones that
+    CHANGED. What that cannot do is decide whether the claim was right when it
+    was confirmed -- a citation written wrong is snapshotted wrong and stays
+    green. `test_the_docstring_still_states_the_limit` exists because that
+    sentence is the difference between a useful checker and one people trust
+    further than it deserves.
+    """
+
+    def setUp(self):
+        self.mod = _load_tool()
+
+    def test_a_changed_line_is_reported_as_drifted(self):
+        current = {"a.md -> x.py:1": "aaaaaaaaaaaa"}
+        stored = {"a.md -> x.py:1": "bbbbbbbbbbbb"}
+        drifted, unconfirmed = self.mod.check_snapshots(current, stored)
+        self.assertEqual([("a.md -> x.py:1", "bbbbbbbbbbbb", "aaaaaaaaaaaa")],
+                         drifted)
+        self.assertEqual([], unconfirmed)
+
+    def test_an_unchanged_line_is_not_reported(self):
+        same = {"a.md -> x.py:1": "aaaaaaaaaaaa"}
+        drifted, unconfirmed = self.mod.check_snapshots(same, dict(same))
+        self.assertEqual([], drifted)
+        self.assertEqual([], unconfirmed)
+
+    def test_an_unconfirmed_citation_is_counted_but_does_not_fail(self):
+        """A new citation has never been read by anyone in this role.
+
+        Failing on it would fail the commit that writes a CORRECT citation, and
+        the only fix would be to run --update-snapshots, which must stay a
+        deliberate act rather than a reflex for clearing red.
+        """
+        drifted, unconfirmed = self.mod.check_snapshots(
+            {"a.md -> x.py:1": "aaaaaaaaaaaa"}, {})
+        self.assertEqual([], drifted)
+        self.assertEqual(["a.md -> x.py:1"], unconfirmed)
+
+    def test_the_digest_ignores_reindentation_and_nothing_else(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rel = "f.py"
+            with open(os.path.join(tmp, rel), "w") as fh:
+                fh.write("    x = 1\n")
+            self.mod.REPO, saved = tmp, self.mod.REPO
+            try:
+                indented = self.mod.digest_of(rel, "1", None, {})
+                with open(os.path.join(tmp, rel), "w") as fh:
+                    fh.write("\t\tx = 1\n")
+                reindented = self.mod.digest_of(rel, "1", None, {})
+                with open(os.path.join(tmp, rel), "w") as fh:
+                    fh.write("    x = 2\n")
+                changed = self.mod.digest_of(rel, "1", None, {})
+            finally:
+                self.mod.REPO = saved
+        self.assertEqual(indented, reindented)
+        self.assertNotEqual(indented, changed)
+
+    def test_the_tree_has_snapshots_and_none_of_them_have_drifted(self):
+        """The gate. Deleted citations are NOT a gate -- see the next test."""
+        confirmed = self.mod.load_snapshots()
+        self.assertTrue(confirmed, "no snapshots recorded")
+        digests = {}
+        self.mod.scan(digests)
+        drifted, _ = self.mod.check_snapshots(digests, confirmed)
+        self.assertEqual([], [k for k, _, _ in drifted])
+
+    def test_a_deleted_citation_is_housekeeping_rather_than_a_failure(self):
+        """An orphan must not turn a paragraph deletion into a red suite.
+
+        The refresh is the one command here that has to stay a deliberate act,
+        so nothing may make running it a reflex. `check_snapshots` reports drift
+        and unconfirmed only; an orphaned snapshot is neither, and `main()`
+        prints it the way it already prints a baselined finding that has started
+        resolving.
+        """
+        drifted, unconfirmed = self.mod.check_snapshots(
+            {}, {"gone.md -> x.py:1": "aaaaaaaaaaaa"})
+        self.assertEqual([], drifted)
+        self.assertEqual([], unconfirmed)
+
+    def test_the_docstring_still_states_the_limit(self):
+        with open(TOOL, encoding="utf-8") as fh:
+            head = fh.read(6000)
+        self.assertIn("wrong when it", head)
+        self.assertIn("--update-snapshots", head)

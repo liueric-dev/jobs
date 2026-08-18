@@ -115,13 +115,26 @@ jobs:
           node-version: "22"
 
       # Two things and only two: the path exists, and the line is inside the
-      # file. It cannot tell you whether the line still says what you claim.
-      # A green run means citations RESOLVE, never that they are RIGHT.
-      # `0 new` is the gate; the known-drifted count is meant to shrink (T-18)
-      # and must never be added to in order to silence a finding.
-      - name: Citations resolve
+      # file, AND -- since docs/adr/0010 -- whether the cited line still says
+      # what it said when a person confirmed it. That second half is the one
+      # that catches real drift; the first only ever proved a path existed.
+      # A green run still never means the citations are RIGHT: a citation
+      # written wrong is snapshotted wrong. `0 new` and `0 drifted` are the
+      # gates; the known-drifted count is meant to shrink (T-18) and must never
+      # be added to in order to silence a finding.
+      - name: Citations resolve, and cited lines have not moved
         working-directory: backend
         run: python tools/audit-citations.py
+
+      # docs/adr/0010 cut this from seven checks to two: C3 (a kind: rolling
+      # document has not sat still while its subject moved) and C4 (one figure,
+      # one owner). It is here rather than only in the suite because the August
+      # deletion is what happens when nothing fails.
+      - name: Documentation checks
+        working-directory: backend
+        run: |
+          python tools/audit-docs.py
+          python tools/audit-doc-links.py
 
       # No build step, no npm, no package.json -- and that is a constraint to
       # keep. check_client.mjs runs on plain node against the shipped fixtures.

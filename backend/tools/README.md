@@ -23,6 +23,8 @@ takes command-line options; run one with `--help` for its own.
 | [`ats-discover.py`](ats-discover.py) | Find which NYC employers run which ATS, and confirm every token against the live feed before believing it. |
 | [`audit-citations.py`](audit-citations.py) | Do the repo's `file:line` citations still point at anything? |
 | [`audit-description-markup.py`](audit-description-markup.py) | Sweep extract.py's input-sanity gate over the whole jobs table, and clean up after it. |
+| [`audit-doc-links.py`](audit-doc-links.py) | Resolve every relative Markdown link under docs/ and report the broken ones. |
+| [`audit-docs.py`](audit-docs.py) | Check this repo's mechanically-checkable documentation rules and exit non-zero. |
 | [`calibrate-match.py`](calibrate-match.py) | Is the free rules ranking good enough to gate the paid narrative tier? |
 | [`claude-bench.py`](claude-bench.py) | Benchmark the Claude Code CLI as a scoring backend before committing to it. |
 | [`claude-ceiling-test.py`](claude-ceiling-test.py) | Batch ceiling + token budget experiment for the Claude scoring backend. |

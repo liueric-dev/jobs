@@ -2,7 +2,6 @@
 kind: contract
 written: 2026-08-02
 generator: none
-budget: 400
 ---
 
 # State of the system
@@ -158,7 +157,7 @@ screen — indistinguishable from being logged out, with no error text anywhere.
 
 | suite | command | result |
 |---|---|---|
-| pipeline | `cd backend && python3 -m unittest discover -s tests` | `Ran 1428`, OK, 0 skipped |
+| pipeline | `cd backend && python3 -m unittest discover -s tests` | read `Ran N`; OK, 0 skipped |
 | webapp | `cd backend/webapp && .venv/bin/python -m unittest discover -s tests` | `Ran 352`, OK, 0 skipped |
 | api | `cd backend/api && .venv/bin/python -m unittest discover -s tests` | `Ran 117`, OK, 0 skipped |
 
