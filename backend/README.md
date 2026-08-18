@@ -180,11 +180,25 @@ database.
 
 ### 4. Upgrading an existing database
 
-Ten migrations exist in `migrations/`. Nothing records which have been applied —
-there is no `schema_migrations` table and no runner. The oldest is for databases
-that predate `job_scores` (scores used
+Ten migrations exist in `migrations/`, and `migrations/runner.py` records which
+of them have been applied — a `schema_migrations` table and a thin CLI over it,
+stdlib only (`T-10`, 2026-08-03). Read it before running any script here:
+
+```bash
+python3 migrations/runner.py                    # --status, the default
+python3 migrations/runner.py --apply migrate_scores
+```
+
+**`--status` reports what this runner has done, not what is true of the
+database.** Nine of the ten predate it and were run by hand, so on a box with
+that history the table starts empty and says so; `--mark-applied NAME --note
+"..."` is how a checked claim gets recorded. There is deliberately no
+`--apply-all` — several of the ten do something real on a bare re-run, each an
+operator decision its own docstring calls out (`migrations/runner.py:26-38`).
+
+The oldest migration is for databases that predate `job_scores` (scores used
 to be eight columns on `jobs`). It's a no-op on a fresh install and safe to
-run twice:
+run twice, either through the runner or directly:
 
 ```bash
 python3 migrations/migrate_scores.py                       # dry run — reports, changes nothing

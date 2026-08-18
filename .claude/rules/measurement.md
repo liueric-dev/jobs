@@ -31,4 +31,5 @@ five days later disagrees by up to 9.6 points (`remote_policy`). **OQ-9 decided 
 both as a range and act on the lower bound** — neither run supersedes the other, each carries a
 `_comment` saying so, and `docs/STATE-OF-THE-SYSTEM.md` § 6 has the per-field floors.
 
-`docs/STATE-OF-THE-SYSTEM.md` § 5 carries the rest, several of which will bite before these do.
+The rest of the landmines are path-scoped beside this file in `.claude/rules/`, so they load when
+you touch what they bite; `docs/STATE-OF-THE-SYSTEM.md` § 5 keeps only the one that has no path.

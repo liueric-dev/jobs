@@ -17,7 +17,7 @@ rewritten and never deleted — the reason it existed is the thing worth keeping
 **An ADR records why, not what the code does today.** This is the one rule that decides whether
 this directory survives. Every one of the 137 documents deleted on 2026-08-02 failed the same way:
 each described a state of the world, the world changed, and nothing brought the document forward.
-Not one of them had been false when written (`../STATE-OF-THE-SYSTEM.md:458-463`). A file that says
+Not one of them had been false when written (`../STATE-OF-THE-SYSTEM.md:474-479`). A file that says
 *why we chose this and what we gave up* cannot go stale that way, because the choice was made once
 and stays made.
 

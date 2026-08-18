@@ -16,8 +16,9 @@ the state, the landmines and the open questions.
 
 **Path-scoped landmines live in `.claude/rules/`, not here** — SQL/`\y` (`sql.md`), ingest failure
 modes (`ingest.md`), eval discipline (`measurement.md`), config JSON conventions (`config.md`), the
-frontend's no-build-step constraint (`frontend.md`) — loading only when a session touches a
-matching path, so this file stays the part every session pays for.
+two HTTP services' CORS and `upsert` traps (`services.md`), the frontend's no-build-step constraint
+(`frontend.md`) — loading only when a session touches a matching path, so this file stays the part
+every session pays for. A landmine goes where the session that can act on it loads it.
 
 **What is left to do lives in exactly two files, and between them that is the whole list.**
 [`TASKS.md`](../TASKS.md) (`T-`) holds everything a session can do unaided;

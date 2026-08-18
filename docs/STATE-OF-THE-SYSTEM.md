@@ -363,36 +363,41 @@ numbers here are kept only so a citation to e.g. item 4 still resolves to someth
 
 ## 5. Landmines
 
-The ones that cost something. `.claude/CLAUDE.md` owns the short list; this is the rest.
+**Eight of the eleven entries this section carried moved into `.claude/rules/` on 2026-08-18
+(`T-60`).** They are path-scoped there, so each one loads for the session editing the file it bites
+on and for no other: `sql.md` has `\y` and the WHERE-clause splice; `ingest.md` has Workday's
+`limit`, the throttled page and the reconciliation tolerance; `config.md` has `--profile pursuit`,
+`criteria.json` being a template rather than live configuration, and `daily_budget` being per
+request; `services.md` — new, scoped to `backend/webapp/**` and `backend/api/**` — has CORS
+`allow_methods` and the contributor API's `upsert`. **Two of the eight cited a line in
+`backend/api/query_claims.py` that no longer carried the claim** — one naming a function that now
+sits 800 lines further down, the other landing in schema DDL rather than on the constant it named —
+and a third named the Workday reconciliation argument but not the ALERT it described. All three
+still resolved, and were invisible to `tools/audit-citations.py` for that reason until `0010`. Each
+entry was re-derived from the code before it moved, and the rule files carry the corrected numbers.
 
-- **Postgres word boundary is `\y`, not `\b`.** In Postgres `\b` is BACKSPACE, so the pattern
-  silently matches nothing. Run `backend/tools/relevance-report.py --dead` after any pattern edit —
-  **but pass `--profile pursuit`**: the default resolves to `tech`, which the tool itself reports as
-  INACTIVE, so the default invocation reports on a projection
-  (`backend/tools/relevance-report.py:146,163-166`).
-- **Workday `limit` cannot exceed 20.** Ask for 100 and it returns an empty array with no error.
-- **A throttled page is not the end of a list.** Reconcile against the `total` the API returned.
-  Workday's own tolerance means a deficit of up to 19 postings is never fatal, reported as a
-  printed ALERT rather than an exit code (`backend/ingest/workday.py:521-533`).
-- **Silence is this system's failure mode.** Exhausted keys, revoked keys, blocked scrapers and
-  changed endpoints all return zero rows rather than raising. Alert on volume, not errors.
-- **CORS `allow_methods` is the literal list `['GET','POST','OPTIONS']`.** Any DELETE route added
-  later fails at preflight with no message anyone sees (`backend/webapp/app.py:84`).
-- **SQL fragments are spliced ahead of the WHERE clause and their parameters must lead the params
-  list.** Getting the order wrong does not raise — it compares a user id against a profile name,
-  matches nothing, and reports every Builder as having no state
-  (`backend/webapp/jobs.py:303-324`; `search.py:102-110`).
-- **`api/query_claims.py:614` defines a function named `upsert` returning an `UpsertResult`**, whose
-  docstring says "It still unpacks to (new, updated, unchanged)". It is safe today, but it is the
-  exact shape of the historical defect and a `grep` audit hits it first.
-- **`daily_budget` in `config/google-queries.json` is enforced per request, not per day.** What
-  actually limits a slug to one fetch a day is `MIN_HOURS_BETWEEN_RUNS=20`
-  (`backend/api/query_claims.py:494-505`).
-- **`config/criteria.json`'s `unknown_penalty` block is inert.** `jobs.profiles.criteria_json` is
-  authoritative; editing the file changes nothing observable until `migrate_profiles.py --apply`.
-- **Ten migrations exist and nothing records which have been applied.** No `schema_migrations`
-  table, no runner.
-- **`ensure_schema` creates 14 tables**, not the 13 its own docstring and `lib/dbconn.py` claim.
+**One has no path to scope to, so it stays here.** **Silence is this system's failure mode.**
+Exhausted keys, revoked keys, blocked scrapers and changed endpoints all return zero rows rather
+than raising. Alert on volume, not errors. `ingest.md` states it for ingest, where it bites most
+often, but it is not an ingest property: it is what every layer of this system does when it fails.
+
+**Two of the eleven were not landmines at all, which is the finding this row turned up.**
+
+- ***Ten migrations exist and nothing records which have been applied*** was 15 days stale.
+  `backend/migrations/runner.py` — a `schema_migrations` table and a CLI over it, stdlib only —
+  closed `T-10` on 2026-08-03, and `backend/README.md` asserted the absence too until this row
+  corrected both. **A landmine that has been fixed is worse than no entry**, because it sends the
+  next session to build something that exists.
+- ***`ensure_schema` creates 14 tables, not 13*** had the right number and the wrong instrument.
+  The four sites saying 13 are corrected (`backend/schema.py:21`, `backend/lib/dbconn.py:29` and
+  `:62`, `backend/tests/test_lib_dbconn.py:84`); § 6 registers the figure with what actually
+  produces it, and `config/doc-figures.json` holds it **scoped to what `ensure_schema` creates**,
+  because a provisioned database has more tables than that.
+
+**Still open, and now a row rather than a bullet:** `config/criteria.json`'s `unknown_penalty`
+magnitudes are unfitted and unapplied — `OQ-39`. The landmine half (editing that file changes
+nothing observable) is in `config.md`; the decision half is not a landmine and was never actionable
+from a bullet.
 
 **Closed, contrary to long-standing belief:** the bare-`upsert()` three-tuple unpack. All nine
 ingest writes use `upsert_checked` and seven read `.errors`; `grep -rn '= upsert(' backend/ingest/`
@@ -446,6 +451,20 @@ printed threshold of ≥100 from ≥5 (`backend/evals/__main__.py:455-456`). The
 **Never evaluate on the layer you trained on.** L0 human labels (never train), L1 `fit_score`,
 L2 `job_events`. Report average precision as the measurement, precision@20 as the objective — a
 count of twenty cannot resolve the differences being decided on.
+
+**`ensure_schema` creates 14 tables, and the obvious instrument is right by accident.**
+`grep -c "CREATE TABLE" backend/schema.py` prints 14 because two errors cancel: `backend/schema.py:1077`
+is a comment containing the phrase, and `job_ingest_state` is not created in that file at all —
+`backend/lib/state.py:52` creates it, called from `backend/schema.py:927`. The count that holds is
+13 statements in `schema.py` (9 in `ensure_schema`, 4 in `ensure_search_query_schema`, which
+`backend/schema.py:962` calls) plus `job_ingest_state`. **The figure is scoped to what
+`ensure_schema` creates and to nothing else**: `backend/tools/provision-database.py:181-186` runs
+six DDL functions across four modules, and `company_ats` is a fifteenth table in a provisioned
+database that no step in that list creates (`T-63`).
+
+```bash
+grep -c "        CREATE TABLE IF NOT EXISTS" backend/schema.py   # 13, plus job_ingest_state
+```
 
 ## 7. What the deleted documents claimed that the code does not support
 

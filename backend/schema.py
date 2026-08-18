@@ -18,7 +18,7 @@ DATABASE, NOT SCHEMA
     What that trades away is a mistake that used to be harmless. The two
     applications are now distinguished ONLY by the database named in
     DATABASE_URL, and both put unqualified tables in `public`. Point this
-    pipeline at the events database and nothing would stop it creating all 13
+    pipeline at the events database and nothing would stop it creating all 14
     tables next to `public.events` -- so ensure_schema() refuses to run when
     `public.events` exists. That guard, and the fact that no non-superuser
     role can connect to nyc_events, are what make a half-finished rollback

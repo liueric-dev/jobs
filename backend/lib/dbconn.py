@@ -26,7 +26,7 @@ FOOTGUN 2 -- the wrong DATABASE_URL is silent, and is now destructive.
     What replaced it is sharper. The two applications are now told apart ONLY
     by the database named in DATABASE_URL, and both use unqualified table
     names in `public`. Point the jobs pipeline at the events database and it
-    will not error: it will create its 13 tables alongside `public.events`.
+    will not error: it will create its 14 tables alongside `public.events`.
     So jobs/schema.py's ensure_schema() refuses to run when `public.events`
     exists, and no non-superuser role can connect to nyc_events at all.
 
@@ -59,7 +59,7 @@ import psycopg
 #: here. Read FOOTGUN 2 above: the two applications are told apart only by the
 #: database named in DATABASE_URL, and both use unqualified names in `public`.
 #: A jobs process that fell back to that default would not error -- it would
-#: connect to the events database and start creating its 13 tables alongside
+#: connect to the events database and start creating its 14 tables alongside
 #: `public.events`.
 #:
 #: Owning this file outright is what makes deleting it possible: while one

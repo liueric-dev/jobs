@@ -48,7 +48,7 @@ worked example. `audit-citations.py` does not validate the line behind a tag —
 ## Consequences
 
 Four citations are corrected by this ADR's landing, none of them a decision: `README.md:20` and
-`0002-task-51-deleted-instead-of-git-mv.md:54`, both `../STATE-OF-THE-SYSTEM.md:442-447` (the
+`0002-task-51-deleted-instead-of-git-mv.md:54`, both `../STATE-OF-THE-SYSTEM.md:444-449` (the
 inter-annotator ceiling, a different subject) → `:459-464`; the same file's `:21`,
 the `DEV_TASKS.md` line range → the `## Tranche nine` section named rather than numbered, per
 decision 2; and `0004-provision-database-issues-no-grants.md:50` → `backend/schema.py:1313`, with

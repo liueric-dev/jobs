@@ -81,7 +81,7 @@ class TestNoDatabaseUrlDefault(unittest.TestCase):
     DIFFERENT application's database. Applications on this Postgres instance
     are told apart only by the database in DATABASE_URL, and all of them use
     unqualified table names in `public`, so a process falling back to the
-    wrong one would not error -- it would create its 13 tables inside
+    wrong one would not error -- it would create its 14 tables inside
     somebody else's database.
     """
 

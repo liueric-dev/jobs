@@ -26,7 +26,7 @@ exists to stop that.
 `extract.py:70` for a constant at `:115`, `tools/provision-database.py` and `.claude/CLAUDE.md` both
 saying five DDL functions where the list has six, and three live sites saying `ensure_schema` creates
 13 tables where it creates 14. Every one is one shape: **a citation that still resolves and no longer
-says what the citing text claims.** `.claude/CLAUDE.md:135-136` names that shape;
+says what the citing text claims.** `.claude/CLAUDE.md:136-137` names that shape;
 `tools/audit-citations.py` names it as its own blind spot and calls it *"not checkable here."*
 
 Half right. Whether a claim is *correct* is not mechanically checkable. Whether the cited line has

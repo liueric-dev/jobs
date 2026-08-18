@@ -52,6 +52,6 @@ delete was the better call.
 - The citation checker `backend/tools/audit-citations.py` treats a bare `docs/…` path as a finding
   and the `git show refactor-freeze-2026-08-02:<path>` form as valid, deliberately. It does not
   validate the path behind the tag, so get it right by hand.
-- The durable lesson, from `../STATE-OF-THE-SYSTEM.md:458-463`: every high-severity finding was a
+- The durable lesson, from `../STATE-OF-THE-SYSTEM.md:474-479`: every high-severity finding was a
   document describing a state of the world that had since changed. **Not one had ever been false
   when written.** That is the argument for few documents, and for rationale over description.

@@ -22,3 +22,11 @@ letting a future edit override `PAGE_LIMIT` upward.
 **A throttled page is not the end of a list.** Reconcile collected counts against the `total` the
 API returned rather than trusting an empty page. One published account lost 1,960 of 2,000 jobs to
 this exact failure on Workday's CXS endpoint.
+
+**The reconciliation cannot be an equality, and the tolerance is one page, not a number.**
+`ingest/workday.py:520-537` is the argument: a board changes while it is being walked — Nordstrom
+answered `total=867` and yielded 865 over the next 100 seconds — so a strict check would cost the
+largest boards whole nights for nothing. A deficit smaller than `limit` cannot be a lost page and
+does not raise (`:538-540`); it is still reported, as a printed `workday-ingest: ALERT` line rather
+than an exit code (`:1189-1193`, printed at `:1202-1203`). **A run that alerts and exits 0 is the
+designed path, so a green exit is not evidence a board came back whole.**

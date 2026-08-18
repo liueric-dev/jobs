@@ -39,8 +39,8 @@ def ensure_state_schema(conn: psycopg.Connection, watermark_table: str = "ingest
     parameter rather than becoming unconditional because ALTER TABLE takes an
     ACCESS EXCLUSIVE lock, and a *pending* exclusive lock queues ahead of new
     readers -- one blocked ALTER makes the whole table unreadable for
-    everyone behind it. Every caller here passes it (schema.py:448,
-    ingest/google-serpapi.py:294, ingest/google-apify.py:202), but issuing
+    everyone behind it. Every caller here passes it (schema.py:927,
+    ingest/google-serpapi.py:381, ingest/google-apify.py:209), but issuing
     DDL should stay something a caller asks for rather than something this
     function does on its own. See dbconn.add_missing_columns for the
     idle-transaction incident that lesson comes from.

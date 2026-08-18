@@ -35,7 +35,7 @@ than trim. OQ-34 carries the three ways out. Everything cut is in git at 9a05925
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-39`.** Numbers are
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-40`.** Numbers are
 never reused and never renumbered; `OQ-7` is closed and stays in the table so citations resolve.
 
 **Every row here needs you.** A session cannot start any of them: each needs a machine, an account,
@@ -558,6 +558,39 @@ it.
 than assumed, a body larger than it is refused from outside (checked with `curl`, not inferred), and
 either the proxy config carries the line or the row records why Cloudflare's own limit makes it
 unnecessary.
+
+### OQ-39 — `criteria.json`'s `unknown_penalty` magnitudes are unfitted, and applying them restages the corpus
+
+Filed by `T-60`, 2026-08-18, which found this listed as a landmine in `docs/STATE-OF-THE-SYSTEM.md`
+§ 5 and concluded it is not one. The landmine half — **editing `config/criteria.json` changes
+nothing observable** — moved to [`.claude/rules/config.md`](.claude/rules/config.md), where the
+session editing that file loads it. What is left is a decision, and it was never actionable from a
+bullet.
+
+**Why it is yours:** a database, and a re-ranking. `jobs.profiles.criteria_json` is authoritative;
+the file is a template imported once by `migrations/migrate_profiles.py`. Until someone runs
+`migrate_profiles.py --apply --bump`, every live profile carries no `unknown_penalty` block,
+`backend/match.py:198`'s lookups return 0, and `score_job()` returns byte-identical scores. The
+`--bump` is the expensive half: `criteria_version` restages every match row in the corpus.
+
+**What the file already decided, so this row does not relitigate it.** The magnitudes are
+**provisional and unfitted** and say so at `backend/config/criteria.json:107` — placed by reasoning
+about each rule's delta range, not measured. The same note names the principled target,
+`E[delta | field present]`, and says why it is computable: `score_job()` is pure, so running it over
+the rows where a field IS present gives that rule's mean delta directly. The rates note at `:109`
+adds the constraint that matters — `role_archetype`, `ai_involvement`, `remote_policy` and all four
+booleans are NULL on **zero** rows today, an artefact of `extract.py`'s `normalize()` substituting
+sentinels, so **these penalties are dormant until that changes** and the true absence rate is
+unknown rather than zero.
+
+**The two questions.** (1) Fit them, or leave them dormant and delete the block? `CLAUDE.md` forbids
+re-tuning on a provisional number, and a dormant block that looks live is the same hazard one level
+down. (2) If fitted: `--apply --bump` against the deployed database is a corpus-wide re-ranking, and
+whether that lands during a cohort's search is a scheduling call, not a technical one.
+
+**Done when:** either the magnitudes are fitted against the frozen fixtures with the instrument
+recorded and applied deliberately, or the block is removed and `.claude/rules/config.md` loses the
+example — and in both cases the sentinel-substitution question is answered rather than inherited.
 
 ### OQ-34 — This file cannot reach its own 450-line budget, and the three ways out are all yours
 
