@@ -567,9 +567,22 @@ long enough to wrap, a posting with no angle and no summary, and hostile strings
 It calls no endpoint and needs no venv, no database and no node:
 
 ```bash
-python3 -m http.server 8000 --directory frontend
+python3 -m http.server 8000 --bind 127.0.0.1 \
+    --directory "$(git rev-parse --show-toplevel)/frontend"
 # then open preview.html on http://localhost:8000
 ```
+
+**`--directory` is resolved against the shell's cwd, and a wrong one does not
+error.** It serves 404 for every path including `/`, which reads exactly like a
+missing file rather than a missing directory — so the path is written absolute
+here. **`--bind` is explicit for the same reason `serve.py`'s is**: `http.server`
+listens on every interface by default, and this one is deliberately local. Drop
+the flag to reach it from a phone on the same network, which is the one case
+worth opening it for.
+
+**`/` is not the harness.** It is `index.html`, the real client, which will look
+broken here: there is no API behind a static server, so every request 404s and
+the app renders its signed-out state. `preview.html` calls nothing.
 
 It imports the real render functions rather than copying them, so a card that
 looks right there looks right in the app or the harness is broken and says so.

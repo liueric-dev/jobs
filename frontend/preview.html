@@ -2,8 +2,14 @@
 <!--
   THE CARD, IN EVERY STATE THAT MATTERS. A design harness, not a route.
 
-     python3 -m http.server 8000 --directory frontend
+     python3 -m http.server 8000 --bind 127.0.0.1 \
+         --directory "$(git rev-parse --show-toplevel)/frontend"
      # then open preview.html on http://localhost:8000
+
+  `--directory` resolves against the shell's cwd and a WRONG ONE DOES NOT ERROR:
+  every path 404s, `/` included, which reads like a missing file rather than a
+  missing directory. Write it absolute. And `/` is not this page -- it is
+  index.html, the real client, which has no API behind a static server.
 
   WHY THIS EXISTS. app.css cannot be judged against fixtures/shipped/ alone:
   that file holds four rows; the longest title in it is 44 characters; its dates
