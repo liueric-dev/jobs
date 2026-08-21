@@ -35,6 +35,21 @@ industries, NYC.
 
 Everything resolves relative to `backend/`, never the repo root. `cd backend` first.
 
+**`python3` below means 3.14, and on a Mac it is 3.9 — check before believing an error.** The repo
+pins 3.14 in three places (`backend/pyproject.toml:25`, `backend/pyproject.toml:177`,
+`.github/workflows/ci.yml:53`) and every command here is written `python3` because on the server
+that is what `python3` is. On macOS it is not, by two independent routes: `/usr/bin/python3` is the
+3.9 the OS ships, and a `pyenv` whose global is unset falls through to that same 3.9 via its shim.
+Homebrew's `python3` **is** 3.14 and loses both races. The failure does not mention versions — it is
+`TypeError: unsupported operand type(s) for |` from `backend/lib/timeparse.py:52`, a PEP 604
+annotation evaluated at import, and it reads like broken code rather than a wrong interpreter.
+
+**The fix is a venv, not a PATH edit, and Homebrew forces it**: its Python is PEP 668
+externally-managed, so `pip install --user psycopg` is refused outright. `backend/.venv` is
+therefore a fourth venv beside the three below, holding the same `requirements.txt` — the pipeline
+is still one third-party dependency, it is just not reachable from a bare `python3` on every
+machine. Where a command below says `python3`, that machine reads `.venv/bin/python`.
+
 ```bash
 # Tests. No pytest in any interpreter; unittest is stdlib and works.
 python3 -m unittest discover -s tests            # whole suite

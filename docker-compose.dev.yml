@@ -1,0 +1,76 @@
+# A local Postgres for development, and nothing else.
+#
+#     docker compose -f docker-compose.dev.yml up -d
+#     docker compose -f docker-compose.dev.yml down          # keeps the data
+#     docker compose -f docker-compose.dev.yml down -v       # discards it
+#
+# WHY 5433 AND NOT 5432. This machine already runs Homebrew `postgresql@16` as a
+# launch agent listening on 5432. Binding there would either fail outright or --
+# worse -- appear to work while `psql` talks to the other server, which is the
+# exact class of confusion `lib/dbconn.py` exists to prevent one layer up. 5433
+# is chosen so both can run at once and neither is ambiguous.
+#
+# WHY THE PORT IS PINNED TO 127.0.0.1. A bare "5433:5432" publishes on every
+# interface, and this host is on a tailnet -- a dev database with a guessable
+# password would be reachable from every other node on it. The loopback prefix
+# is the whole of the fix.
+#
+# WHY ONE ROLE WHERE PRODUCTION HAS THREE. Production separates jobs_pipeline,
+# jobs_api and jobs_web, and that separation is a security boundary
+# (`backend/api/README.md` "Database privileges"). It is deliberately NOT
+# reproduced here: `tools/provision-database.py` issues no GRANTs at all
+# (docs/adr/0004), and every startup check in all three processes asks
+# `has_table_privilege(current_user, ...)`, which ownership satisfies. So a
+# single owning role makes the pipeline, the api and the webapp all start.
+#
+#   THE COST, STATED RATHER THAN DISCOVERED LATER: this database cannot tell you
+#   whether production's GRANTS are right. A privilege bug of the OQ-29 shape --
+#   the documented narrow GRANT being unreachable by the check demanding it --
+#   is invisible where the connecting role owns everything. Grants are verified
+#   against the deployed database, by hand, and nowhere else.
+#
+# BUT THAT ROLE IS NOT A SUPERUSER, AND THE DIFFERENCE IS LOAD-BEARING. See
+# dev-initdb/01-dev-role.sh: POSTGRES_USER is created by initdb as the bootstrap
+# superuser, and a superuser makes has_table_privilege() and
+# has_column_privilege() answer TRUE unconditionally -- which silently guts the
+# two api tests that measure the difference between them. `jobs_dev` is an
+# ordinary CREATEDB role that owns the database, so those tests measure
+# something. Connecting as `postgres` here would be the easier setup and would
+# report two green tests that had checked nothing.
+#
+# postgres:16 matches `.github/workflows/ci.yml`'s service image on purpose, so
+# "green locally" and "green in CI" are claims about the same server version.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: jobs-dev-pg
+    restart: unless-stopped
+    environment:
+      # The bootstrap superuser, used by nothing. Applications connect as
+      # jobs_dev -- see dev-initdb/01-dev-role.sh for why that distinction is
+      # not cosmetic.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: jobs
+      # Deterministic collation, so an ORDER BY here matches production rather
+      # than matching this laptop's locale.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - jobs-dev-pgdata:/var/lib/postgresql/data
+      # Runs ONLY on an empty data directory. `down -v` to re-run it.
+      - ./dev-initdb:/docker-entrypoint-initdb.d:ro
+    # scripts/pull-prod-snapshot.sh waits on this before it drops anything: a
+    # restore that races initdb fails halfway and leaves no usable database.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d jobs"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  jobs-dev-pgdata:
+    name: jobs-dev-pgdata
