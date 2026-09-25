@@ -69,7 +69,7 @@ def get_bytes(url: str, *, headers: dict[str, str] | None = None,
         get_text() and asking it to `.encode()` the result back would round-
         trip through `errors="replace"` below, so the bytes it parses would
         no longer be the bytes the server sent -- which is the failure
-        `evals/cassettes.py:_body_fields` documents as worse than no fixture
+        `testsupport/cassettes.py:_body_fields` documents as worse than no fixture
         at all. So the loop returns what it read, and decoding is a layer.
     """
     hdrs = {"User-Agent": DEFAULT_USER_AGENT}
@@ -118,7 +118,8 @@ def get_text(url: str, **kwargs: Any) -> str:
 
     `errors="replace"` rather than strict: an ingest run that dies on one
     stray byte in one description has lost the whole source for the day, and
-    a replacement character in prose the scorer reads costs nothing.
+    a replacement character in normalized prose is preferable to losing
+    the whole posting.
     """
     return get_bytes(url, **kwargs).decode("utf-8", errors="replace")
 

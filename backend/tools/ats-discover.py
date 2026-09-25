@@ -1,77 +1,11 @@
 #!/usr/bin/env python3
-"""
-Find which NYC employers run which ATS, and confirm every token against the
-live feed before believing it.
+"""Discover and validate employer ATS boards.
 
-Task 16. Blocks 17 (retargeted ats.py), 18 (Workday CXS) and 20 (iCIMS).
-
-WHAT IT DOES
-    1. Reads employers from `ats_seed` (created and populated by
-       migrations/migrate_company_ats.py).
-    2. Fetches each careers page and regexes it for the ATS URL signatures in
-       ats_discovery.SIGNATURES.
-    3. VALIDATES every signature by calling the ATS's own endpoint and
-       checking for a 200 with a non-empty job list. A signature found in a
-       stale footer link is common, and an unvalidated token contributes zero
-       rows forever -- which looks exactly like a quiet employer.
-    4. Upserts the results into `company_ats` through upsert_checked.
-
-THE FAILURE MODE THIS IS BUILT AGAINST
-    Not "the probe crashes". A probe that is blocked at the front door by
-    every host finds zero tokens, exits 0, and writes an empty table that the
-    next run reads as settled fact. CLAUDE.md: "Silence is this system's
-    failure mode ... Alert on volume, not errors."
-
-    Three mechanisms, in increasing order of how loud they are:
-
-      * Every employer carries an OUTCOME, not a boolean. `not_found` (page
-        read, no ATS) and `blocked` (403/429/WAF) are different rows in
-        ats_seed.last_probe_outcome and different lines in the summary. Only
-        `not_found` may write status='never_found'.
-
-      * A token that was found but could not be checked is
-        status='unvalidated', never 'valid' and never 'dead'. Task 16's
-        three-value status enum has no such value; see ats_discovery.py.
-
-      * A CIRCUIT BREAKER. If the blocked fraction of the probes attempted so
-        far exceeds --max-blocked-frac once at least --breaker-after probes
-        have run, the run aborts with a non-zero exit rather than finishing
-        and reporting a clean, empty result.
-
-POLITENESS
-    This is outward-facing traffic against several hundred hosts that never
-    asked for it, so:
-      * one global request every --delay seconds (default 1.5) AND at most
-        one request per host every --host-delay seconds (default 5),
-      * an honest User-Agent that names the project, not a browser string,
-      * NO retries, ever. lib/http.py retries 429 with backoff, which is
-        right for a known API and wrong here -- retrying into a rate limit is
-        how a probe turns into an incident. It is deliberately not used.
-      * a host that answers 403 or 429 is added to a blocklist and receives
-        no further request this run, including the validation request,
-      * at most --max-url-candidates URLs per employer (default 3),
-      * --max-requests as a hard ceiling on the whole run.
-
-WHAT IS NOT WIRED UP
-    Adzuna `top_companies` (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/16-ats-token-discovery.md:32`) is a named discovery
-    source and is STUBBED -- see adzuna_top_companies() below. Task 15 is
-    blocked on an Adzuna app_id/app_key that requires registering an account.
-    The function is the seam: fill it in, and its employers flow into ats_seed
-    with no other change.
-
-USAGE
-    python3 tools/ats-discover.py                        # dry run, 20 employers
-    python3 tools/ats-discover.py --apply --limit 50
-    python3 tools/ats-discover.py --apply --all
-    python3 tools/ats-discover.py --apply --due-only     # monthly re-probe
-    python3 tools/ats-discover.py --apply --all --revalidate   # tokens only
-    python3 tools/ats-discover.py --report               # no network at all
-    python3 tools/ats-discover.py --add-employer "Foo Inc" \\
-        --careers-url https://foo.com/careers --sector health
-
-SCHEDULE
-    run-daily.py runs `--apply --due-only`, which exits immediately on 29 days
-    out of 30. See the ats-discovery watermark in job_ingest_state.
+Scheduled runs use --nightly --known-only to revalidate existing tokens when
+their 30-day watermark is due. Adding or probing a new employer is an explicit
+operator action. Probes respect global and per-host delays, make no retries
+against blocked employers, and preserve the distinction between a missing
+board and an unreachable one.
 """
 
 import argparse
@@ -129,9 +63,7 @@ MAX_BYTES = 2_000_000
 #: and a large hospital system's board is larger. At the 2 MB page cap that
 #: body arrives truncated, json.loads fails, and classify_validation reports
 #: "200 but the response was not a recognisable job feed" -- so the BIGGEST
-#: and healthiest boards, the ones most worth ingesting, are exactly the ones
-#: that read as unverifiable. Measured, not hypothesised; see the note in
-#: `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md`.
+#: and healthiest boards can otherwise read as unverifiable.
 VALIDATION_MAX_BYTES = 40_000_000
 
 #: Bodies that mean "refused" behind a 200. lib/http.py documents the same
@@ -174,8 +106,8 @@ class Fetcher:
     Deliberately not lib/http.py: that module retries 429 with exponential
     backoff, which is correct against an API you own a key for and is the
     wrong instinct entirely when probing several hundred strangers. lib/ is
-    also vendored byte-identical to another repo (CLAUDE.md), so changing its
-    retry policy to suit this caller is not an option and should not be.
+    changing its shared retry policy for employer discovery would affect
+    all ingestion sources.
     """
 
     def __init__(self, delay=1.5, host_delay=5.0, max_requests=2000,
@@ -277,38 +209,6 @@ class Fetcher:
 
 # -- discovery sources -------------------------------------------------------
 
-def adzuna_top_companies(query="artificial intelligence", where="new york",
-                         app_id=None, app_key=None):
-    """STUB -- Adzuna `top_companies`, task 15's discovery source.
-
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/16-ats-token-discovery.md:32` lists this as a seed source. It is not wired
-    up because task 15 is BLOCKED: the endpoint
-
-        GET https://api.adzuna.com/v1/api/jobs/us/top_companies
-            ?app_id=...&app_key=...&what=...&where=...
-
-    needs an app_id/app_key pair that requires registering an Adzuna account,
-    and nobody has. That is a credentials problem, not a design one, so this
-    stays a seam rather than a hole: it returns the same shape
-    `insert_discovered_employers()` takes from any other source, so switching
-    it on is filling in this function and adding the two keys to .env --
-    nothing else in this file changes.
-
-    Returns [] and says so on stderr, rather than raising. A discovery source
-    being unavailable must not take the other 376 employers down with it.
-    """
-    app_id = app_id or os.environ.get("ADZUNA_APP_ID")
-    app_key = app_key or os.environ.get("ADZUNA_APP_KEY")
-    if not (app_id and app_key):
-        print("ats-discover: adzuna top_companies skipped -- ADZUNA_APP_ID/"
-              "ADZUNA_APP_KEY not set (task 15 is blocked on registering an "
-              "account). Seed list is the hand-assembled roster only.",
-              file=sys.stderr)
-        return []
-    raise NotImplementedError(
-        "Adzuna credentials are present but the client is not written -- "
-        "finish task 15 and call insert_discovered_employers() with the "
-        "`display_name` values from the top_companies response.")
 
 
 def insert_discovered_employers(conn, employers, source, now=None):
@@ -316,8 +216,7 @@ def insert_discovered_employers(conn, employers, source, now=None):
 
     `employers` is an iterable of dicts with at least employer_name;
     careers_url, sector and is_non_tech are optional. The insertion point for
-    adzuna_top_companies(), for the Apify bootstrap actors the task mentions,
-    and for --add-employer.
+    a manual --add-employer entry, or another explicitly chosen source.
     """
     now = now or utc_now_str()
     added = 0
@@ -531,8 +430,8 @@ def flush(conn, records, now, verbose=False):
     """Write a batch of discovered rows. Returns an UpsertResult.
 
     upsert_checked, never a bare `upsert()` three-tuple unpack: UpsertResult
-    yields (new, updated, unchanged) and NOT .errors, which is the defect
-    task 03 existed to remove and CLAUDE.md names a landmine. It also emits
+    yields (new, updated, unchanged) and NOT .errors; discarding the latter
+    would hide failed records. It also emits
     the `upsert-summary:` line run-daily.py parses, so this step appears in
     the nightly written/dropped record instead of being invisible.
     """
@@ -887,11 +786,8 @@ def print_report(conn):
                   f"subset alone overstates roster coverage by "
                   f"{nt_seeded / nt_probed:.1f}x.")
         if nt_public / nt_probed < 0.20:
-            print("\n  SIGNAL (git show refactor-freeze-2026-08-02:"
-                  "docs/tasks/refactor/tranche_three/16-ats-token-discovery.md:98-100): public-feed "
-                  "coverage of the non-tech seed list is under 20%. Task 18 "
-                  "(Workday) carries most of the plan's weight and should be "
-                  "resourced accordingly.")
+            print("\n  SIGNAL: public-feed coverage of the non-tech seed "
+                  "list is under 20%; review employer discovery coverage.")
     stale = stale_tokens(conn)
     if stale:
         print(f"\n-- {len(stale)} token(s) with an unchanged job count for "
@@ -1030,7 +926,11 @@ def main():
     p.add_argument("--nightly", action="store_true",
                    help="the scheduled shape: re-validate every known token "
                         "if the monthly cadence is due, then probe up to "
-                        "--limit employers that have no conclusive answer yet")
+                        "--limit employers that have no conclusive answer yet; "
+                        "scheduled runs also pass --known-only")
+    p.add_argument("--known-only", action="store_true",
+                   help="with --nightly, perform only the periodic known-board "
+                        "re-validation; discover new employers manually")
     p.add_argument("--due-only", action="store_true",
                    help="exit 0 immediately unless the monthly re-probe is due")
     p.add_argument("--interval-days", type=int, default=DEFAULT_INTERVAL_DAYS)
@@ -1132,6 +1032,9 @@ def main():
                         print(f"ats-discover: STALE -- {row[0]} {row[1]}:"
                               f"{row[2]} has reported {row[3]} open jobs "
                               f"unchanged since {row[4]}; review.")
+        if args.known_only:
+            conn.close()
+            return
         # Phase 2 falls through into the ordinary probe path below, restricted
         # to employers with no conclusive answer yet.
 
@@ -1161,9 +1064,6 @@ def main():
                         "The tokens are unchanged in company_ats; the next "
                         "re-validation retries them.")
         return
-
-    # Discovery sources beyond the seeded roster. Stubbed, and loud about it.
-    insert_discovered_employers(conn, adzuna_top_companies(), "adzuna")
 
     employers = select_employers(conn, limit=args.limit, all_rows=args.all,
                                  only=args.only,

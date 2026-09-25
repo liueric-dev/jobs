@@ -1,19 +1,7 @@
-"""Unit tests for the relevance tiering SQL.
+"""Unit tests for the shared PostgreSQL-regex filter compiler.
 
-Run:  python3 tests/test_relevance.py
-
-These assert on the generated SQL and params rather than against a database,
-because the property that matters is structural: which predicates end up in the
-tier-1/tier-2 arms, and whether an absent config key adds a predicate at all.
-
-WHY THE "PERMISSIVE WHEN ABSENT" TESTS MATTER MOST
-    This module fails silently in the direction that hurts. A filter that
-    accidentally matches everything sends good postings to tier 3, where
-    max_tier_to_score means nothing scores them and nobody looks. There is no
-    error and no empty result -- just a ranking that quietly stops containing
-    the jobs you wanted. So the defaults are pinned: a config without
-    company_exclude must not emit a company predicate, and a NULL description
-    must not be treated as matching an exclusion.
+The Workday ingestion gate uses this SQL to limit detail requests. Tests pin
+which predicates enter each tier and ensure omitted settings stay permissive.
 """
 
 import os
@@ -45,9 +33,8 @@ class TestDisabledDefaults(unittest.TestCase):
         self.assertEqual(relevance.DISABLED["description_include"], [])
         self.assertEqual(relevance.DISABLED["platform_exclude"], [])
 
-    def test_profile_override_starts_from_disabled_not_the_file(self):
-        """A profile specifying only title_include must get the permissive
-        default for the keys it omitted, not the shared file's answers."""
+    def test_explicit_override_starts_from_disabled_not_the_file(self):
+        """An explicit override gets permissive defaults for omitted keys."""
         cfg = relevance.load(cfg={"title_include": ["engineer"]})
         self.assertEqual(cfg["company_exclude"], [])
         self.assertEqual(cfg["description_exclude"], [])
@@ -67,7 +54,7 @@ class TestCompanyExclude(unittest.TestCase):
         self.assertIn("company_name !~*", sql)
         self.assertEqual(params["rel_coexcl"], "\\yremote zest\\y")
         # It must gate BOTH tier arms, or an excluded company would merely drop
-        # from tier 1 to tier 2 and still be scored.
+        # from tier 1 to tier 2 and still be fetched.
         self.assertEqual(sql.count("company_name !~*"), 2)
 
     def test_alternation_joins_patterns(self):
@@ -95,24 +82,7 @@ class TestDescriptionExclude(unittest.TestCase):
 
 
 class TestDescriptionIncludeIsInert(unittest.TestCase):
-    """THE INVARIANT: adding description_include changed nothing for anyone
-    who does not set it.
-
-    The author's `frontend` and `tech` profiles both have relevance_json NULL,
-    so they run on config/relevance.json, which has no description_include.
-    Their tier assignments are unchanged iff tier_sql emits the same SQL and
-    the same params for a config without the key. That is a property of the
-    generated string, so it is checked as one -- byte equality, not
-    "semantically similar". A tier count diff against the live table is the
-    other half of the check and lives in `git show refactor-freeze-2026-08-02:docs/pursuit-description-gate.md`;
-    this is the half that runs in CI.
-
-    THE GOLDEN STRING IS THE POINT
-        Pinning the exact SQL is deliberately brittle. Anything that changes
-        it changes which postings the pipeline extracts, and that should never
-        happen as a side effect of an unrelated edit -- it should require
-        someone to look at this string and decide.
-    """
+    """An absent description_include must leave generated SQL unchanged."""
 
     PRODUCTION_SQL = (
         "CASE WHEN (j.title ~* %(rel_include)s"
@@ -128,7 +98,7 @@ class TestDescriptionIncludeIsInert(unittest.TestCase):
         "     ELSE 3 END"
     )
 
-    #: Every shape the shared config and the two existing profiles can take.
+    #: Representative shared and override configuration shapes.
     SHAPES = {
         "disabled": {},
         "include only": {"title_include": ["engineer"]},
@@ -169,15 +139,6 @@ class TestDescriptionIncludeIsInert(unittest.TestCase):
                 self.assertNotIn("platform", sql)
                 self.assertNotIn("rel_pfexcl", params)
 
-    def test_union_sql_is_unchanged_for_configs_without_the_key(self):
-        """extract.py gates on union_sql across all active profiles. Both
-        current profiles resolve to the shared config, so the union must be
-        exactly the one-profile predicate it was before this key existed."""
-        cfg = relevance.load()
-        sql, params = relevance.union_sql([cfg, cfg])
-        self.assertNotIn("description_text, '') ~*", sql)
-        self.assertNotIn("rel0_dincl", params)
-        self.assertNotIn("rel1_dincl", params)
 
 
 class TestDescriptionInclude(unittest.TestCase):
@@ -263,34 +224,8 @@ class TestPlatformExclude(unittest.TestCase):
         self.assertEqual(sql.count("j.platform !~*"), 2)
         self.assertEqual(params["rel_pfexcl"], "^builtin$|^weworkremotely$")
 
-    def test_prefixes_do_not_collide(self):
-        _, params = relevance.union_sql([
-            {**self.BASE, "platform_exclude": ["^a$"]},
-            {**self.BASE, "platform_exclude": ["^b$"]},
-        ])
-        self.assertEqual(params["rel0_pfexcl"], "^a$")
-        self.assertEqual(params["rel1_pfexcl"], "^b$")
 
 
-class TestParamPrefixIsolation(unittest.TestCase):
-    def test_prefixes_do_not_collide_across_profiles(self):
-        """union_sql embeds one tier_sql per profile in a single statement. A
-        shared param name would not error -- it would apply one profile's regex
-        under another's name."""
-        cfgs = [
-            {**relevance.DISABLED, "title_include": ["engineer"],
-             "company_exclude": ["\\yaaa\\y"]},
-            {**relevance.DISABLED, "title_include": ["designer"],
-             "company_exclude": ["\\ybbb\\y"]},
-        ]
-        _, params = relevance.union_sql(cfgs)
-        self.assertEqual(params["rel0_coexcl"], "\\yaaa\\y")
-        self.assertEqual(params["rel1_coexcl"], "\\ybbb\\y")
-
-    def test_empty_profile_list_is_false_not_true(self):
-        sql, params = relevance.union_sql([])
-        self.assertEqual(sql, "FALSE")
-        self.assertEqual(params, {})
 
 
 class TestSharedConfigFile(unittest.TestCase):

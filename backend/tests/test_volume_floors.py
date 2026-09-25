@@ -20,12 +20,8 @@ to be worthless, and a test suite that checks one of them is worse than none:
      on 2026-08-02 -- the same numbers config/volume-floors.json was calibrated
      from, reproduced in _REAL_RUNS below -- must produce no findings at all.
 
-WHY THE REAL NUMBERS ARE COPIED IN HERE rather than read from a live journal or
-a database: this suite runs offline and must never be a flake. They are a
-`record` in the DOCS-POLICY sense -- frozen at their date, with the command that
-produced them written beside them in config/volume-floors.json's `_instrument`.
-If the floors are re-derived from a longer history later, this fixture is
-evidence of what they used to pass against and should be added to, not replaced.
+The measured run samples are copied here rather than read from a live journal
+so the suite runs offline without timing-dependent failures.
 
 Everything here is pure: volume_floors.check_floors() takes the history, the
 floors and `now`, so there is no clock, no filesystem and no database in any of
@@ -55,20 +51,15 @@ NOW = datetime(2026, 8, 2, 9, 0, tzinfo=timezone.utc)
 #: ats-discover's monthly phase was not due -- which is deliberately not zero.
 _REAL_RUNS = [
     {"tools/ats-discover": 94, "ats": 671, "workday": None, "builtin-nyc": 67,
-     "nyc-open-data": 354, "weworkremotely": 0, "hn-hiring": 0,
-     "google-serpapi": 68, "google-apify": 5},
+     "nyc-open-data": 354, "weworkremotely": 0, "hn-hiring": 0},
     {"tools/ats-discover": 29, "ats": 1058, "workday": None, "builtin-nyc": 61,
-     "nyc-open-data": 0, "weworkremotely": 0, "hn-hiring": 0,
-     "google-serpapi": 56, "google-apify": 7},
+     "nyc-open-data": 0, "weworkremotely": 0, "hn-hiring": 0},
     {"tools/ats-discover": 19, "ats": 1143, "workday": None, "builtin-nyc": 69,
-     "nyc-open-data": 0, "weworkremotely": 3, "hn-hiring": 0,
-     "google-serpapi": 62, "google-apify": 8},
+     "nyc-open-data": 0, "weworkremotely": 3, "hn-hiring": 0},
     {"tools/ats-discover": None, "ats": 955, "workday": 73, "builtin-nyc": 63,
-     "nyc-open-data": 0, "weworkremotely": 2, "hn-hiring": 0,
-     "google-serpapi": 59, "google-apify": 5},
+     "nyc-open-data": 0, "weworkremotely": 2, "hn-hiring": 0},
     {"tools/ats-discover": None, "ats": 105, "workday": 29, "builtin-nyc": 57,
-     "nyc-open-data": 0, "weworkremotely": 2, "hn-hiring": 0,
-     "google-serpapi": 57, "google-apify": 7},
+     "nyc-open-data": 0, "weworkremotely": 2, "hn-hiring": 0},
 ]
 
 

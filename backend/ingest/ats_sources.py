@@ -1,63 +1,8 @@
-"""Where `ingest/ats.py` gets its company list: the `company_ats` table.
+"""Load deduplicated ATS board tokens from company_ats.
 
-WHAT CHANGED, AND WHY IT IS A TABLE NOW
-    `ats.py` used to read `config/companies.json` -- 68 hand-verified tech
-    tokens -- on every run. Task 16 built `company_ats` (see
-    `migrations/migrate_company_ats.py:113-141` for the DDL and
-    `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md` for what is in it), and
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/16-ats-token-discovery.md:34`
-    states the rule this module implements:
-    "store as a simple seeded table, not a config file -- it will grow
-    continuously." Adding an employer is an INSERT, never a deploy.
-
-    `config/companies.json` is therefore RETIRED as a runtime input. It is
-    now a one-time seed corpus, loaded by `ingest/ats.py --seed-from-json`,
-    in exactly the relationship `data/nyc-employer-seed.json` has to
-    `ats_seed`. Nothing reads it on a nightly run. There is one roster and it
-    lives in Postgres.
-
-WHICH STATUSES ADMIT A TOKEN -- AND WHY IT IS NOT JUST 'valid'
-    `company_ats.status` is a four-value vocabulary, not a boolean
-    (`ats_discovery.py:77-80`): `valid`, `dead`, `never_found`,
-    `unvalidated`.
-
-      valid        the ATS answered and listed jobs. Ingest it.
-
-      unvalidated  a token was found and the ATS did NOT answer -- 403, 429,
-                   5xx, a network failure, or a 200 whose body was not a
-                   recognisable feed (`ats_discovery.py:353-384`). Task 16
-                   added this value precisely so that "we could not check"
-                   would stop being recorded as either `valid` or `dead`.
-                   INGEST IT ANYWAY, for the platforms below. The cost of
-                   trying is one request that either works or lands in the
-                   per-company error list this script already keeps; the cost
-                   of not trying is that a token blocked once at validation
-                   time is never pulled again, which is the same silence
-                   `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md:177-186` is about. Rows
-                   admitted this way are counted separately on the summary
-                   line so the decision stays visible.
-
-      dead         the endpoint 404'd or returned an empty list
-                   (`ats_discovery.py:369,383`). Excluded: that is a
-                   conclusive negative from the vendor's own API.
-
-      never_found  an employer with NO token at all -- `ats=''`, `token=''`
-                   (`ats_discovery.py:490-491`). Excluded by the platform
-                   filter before status is even considered.
-
-    Read `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md:35-60` before treating any of this as a
-    coverage measurement: task 16's positive control found 0 of 4 known-good
-    tokens because those boards render client-side, so absence from this
-    table is not evidence of absence in the world.
-
-DEDUPLICATION IS NOT OPTIONAL
-    Two employers can share one board -- a health system and its physician
-    group, a parent and its subsidiary. `company_ats` keys on
-    (ats, token, workday_site) (`ats_discovery.py:457-473`), so that is
-    already one row there; but a roster assembled from several statuses, or
-    later from several sources, can still hand `ats.py` the same board twice.
-    Pulling it twice would double every request and make `close_missing`
-    run twice over the same rows. Deduplicated here, once.
+The runtime roster is the table, not config/companies.json. Valid and
+temporarily unvalidated tokens are attempted; conclusively dead or absent
+tokens are skipped. Seed imports are insert-only.
 """
 
 import json
@@ -72,8 +17,8 @@ from lib.upsert import TableSpec, upsert_checked  # noqa: E402
 
 ATS_TABLE = "company_ats"
 
-#: The platforms `ingest/ats.py` can fetch. Workday is task 18's and iCIMS is
-#: task 20's; both have rows in this table and neither is pulled here.
+#: The platforms `ingest/ats.py` can fetch. Workday uses its own fetcher;
+#: unsupported platforms are excluded here.
 HANDLED_PLATFORMS = ("greenhouse", "lever", "ashby", "workable", "recruitee",
                      "smartrecruiters")
 
@@ -130,12 +75,10 @@ def load_companies(conn, platforms=HANDLED_PLATFORMS,
 # the one-time seed
 # ---------------------------------------------------------------------------
 
-#: The date `config/companies.json`'s own `_comment` records as when every
-#: token in it was confirmed live by a direct HTTP call. Used as
+#: Date the original seed tokens were confirmed by direct HTTP calls. Used as
 #: first/last_validated_at on a seeded row rather than "now", because
 #: stamping today's date on a check made in July is how a 60-day staleness
-#: rule gets quietly disarmed
-#: (`git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md:344-350`).
+#: rule gets quietly disarmed.
 COMPANIES_JSON_VERIFIED_AT = "2026-07-23T00:00:00Z"
 
 SEED_DISCOVERED_VIA = "companies-json-seed"
@@ -189,8 +132,8 @@ def seed_from_companies_json(conn, path, table=ATS_TABLE, debug=False):
     `validation_note` with the seed file's stale opinion. Same rule, and the
     same reason, as `migrations/migrate_company_ats.py:165-171`.
 
-    Goes through `upsert_checked` rather than `upsert` -- CLAUDE.md's
-    landmine, and it is also what puts this step in run-daily.py's nightly
+    Goes through `upsert_checked` rather than `upsert`, so dropped rows are
+    counted in run-daily.py's nightly
     written/dropped accounting via the `upsert-summary:` line.
     """
     rows = companies_json_rows(path)

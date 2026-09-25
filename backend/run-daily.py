@@ -1,97 +1,11 @@
 #!/usr/bin/env python3
-"""
-Single daily entry point for the jobs pipeline -- runs ingest/ats.py
-(Greenhouse/Lever/Ashby), ingest/builtin-nyc.py (Built In NYC scrape),
-ingest/weworkremotely.py (WWR category RSS feeds), ingest/hn-hiring.py
-(HN "Who is hiring?" monthly thread) and the other ingest steps in STEPS.
-Google Jobs is NOT among them: the SerpApi and Apify steps are disabled, and
-the former contributor API has been removed. The actor is dormant pending
-redesign. Then the three scoring stages --
-extract.py (one LLM call per new posting, shared by every profile),
-match.py (free per-profile ranking) and score.py (narratives for the top
-of each active profile's ranking) -- one after another, in that order, in
-the same process tree.
+"""Run ATS validation and the independent raw-posting ingestion sources.
 
-WHY A WRAPPER: every step in STEPS writes to the same Postgres instance on the
-same machine and shouldn't run concurrently. An earlier version solved that
-with a flock-based lock shared between independently-scheduled cron jobs --
-correct, but more machinery than the problem needed, since they should
-always run together once a day anyway. A single entry point that calls them
-in sequence guarantees the same non-overlap with nothing to reason about.
-
-AND WHY THERE IS A LOCK ANYWAY, in the systemd unit rather than here: the
-argument above says a single *trigger* needs no lock, and that is still
-true of timer-vs-timer -- systemd already serialises one unit. It does not
-cover a hand-run overlapping the scheduled one, and two things now make that
-overlap expensive rather than merely untidy. Some ingest steps claim shared
-state, and metered sources can double-spend quota. So
-jobs-ingest.service wraps this in `flock -n -E 0`, where -E 0 makes "already
-running" a silent success rather than a false alarm. The lock lives in the
-unit, not here, so a deliberate manual run can still bypass it.
-
-NOTE ON RUNTIME: exactly two steps make LLM calls and dominate the
-wall clock. extract.py makes one per newly-ingested posting -- flat in the
-number of profiles, since the facts it produces are shared. score.py makes
-at most daily_narrative_budget per ACTIVE profile. The other seven steps
-are plain HTTP/RSS fetches or, in match.py's case, arithmetic.
-
-Each sub-script still works fine run standalone for manual testing
-(python3 ingest/ats.py) -- this wrapper is just the one path that runs
-them automatically together.
-
-BEHAVIOR: all steps always run, even if an earlier one fails -- they're
-independent data sources (same reasoning ingest/ats.py itself uses for
-per-company failures: one source being down isn't a reason to skip
-another). Exit code is non-zero if any sub-script failed.
-
-The final summary reports written/dropped record counts PER STEP, not just
-how many steps exited non-zero. An exit code answers "did it run"; it cannot
-tell "ran and wrote nothing" from "ran and dropped everything", and those two
-need opposite responses -- the first is a quiet Tuesday, the second is data
-loss. The counts come from the `upsert-summary:` line lib.upsert.upsert_checked
-logs on every call; see parse_upsert_summaries() below.
-
-THOSE COUNTS ARE ALSO APPENDED to .run-volumes.jsonl, and that file is what
-turns the summary from something a human might read into something that fires.
-tools/volume-check.py runs on its own timer, reads the history back, and alerts
-when a source has written less than its floor over its window
-(config/volume-floors.json) -- or when the newest entry is too old, which is how
-a run that never happened gets noticed. The check is deliberately NOT here: a
-check inside the run cannot report the run's absence, and a low-volume night
-must not turn this script's exit code red, because "a step crashed" and "a
-source went quiet" need different responses.
-
-ENVIRONMENT: this script establishes its own environment from ./.env rather
-than assuming the caller did. The 2026-07-25 00:00 scheduled run failed all
-seven steps at once on missing DATABASE_URL and missing API keys, because
-`hermes cron` sanitises secrets out of the subprocess environment and nothing
-had put the file back. Anything already exported takes precedence over the
-file, so the unit's EnvironmentFile= wins and a one-off run can still
-override a single key. See lib/envfile.py.
-
-The .env file is read by both systemd and lib.envfile, which do not parse
-identically -- stay inside the intersection documented in .env.example.
-
-INSTALL: lives at ~/apps/jobs/backend alongside the scripts listed in STEPS.
-    python3 -m pip install --user 'psycopg[binary]'
-    Nothing else. lib/ is part of this repo, not an installed package.
-
-SCHEDULE: a systemd user timer, not `hermes cron`. The Hermes scheduler
-resolves the script path and requires path.relative_to(HERMES_HOME/scripts),
-naming symlink escape as a case it deliberately blocks, so this pipeline
-became unschedulable there the moment it left ~/.hermes/scripts. Units are in
-~/.config/systemd/user: jobs-ingest.{service,timer} plus jobs-failure@.service,
-which replaces the `--deliver origin` notification the old scheduler gave free.
-
-    systemctl --user enable --now jobs-ingest.timer
-    systemctl --user list-timers jobs-ingest.timer
-    journalctl --user -u jobs-ingest.service -n 50
-
-TEST BEFORE SCHEDULING:
-    python3 run-daily.py
-    DEBUG_PRINT_KEYS=1 python3 run-daily.py
-    JOBS_ENV_FILE=/dev/null python3 run-daily.py   # must fail with one line
-    systemctl --user start jobs-ingest.service
+Known ATS boards are revalidated on their existing 30-day watermark. New
+employers are added explicitly with tools/ats-discover.py. Each ingest source
+runs even if another fails, and any failure makes the wrapper exit nonzero.
+Per-step upsert counts are recorded for tools/volume-check.py. This wrapper
+does not extract facts, match profiles, score jobs, or serve a web app.
 """
 
 import os
@@ -116,118 +30,17 @@ ENV_FILE = os.environ.get("JOBS_ENV_FILE", os.path.join(SCRIPT_DIR, ".env"))
 #: printing its own version of the same failure -- which is exactly what the
 #: 2026-07-25 run did (see envfile.py).
 REQUIRED_ENV = ("DATABASE_URL",)
-#: A step is a script name, or a script name plus arguments. Order matters
-#: after ingest: extract turns new postings into shared facts, match turns
-#: facts into per-profile rankings, and only then does score spend a call on
-#: the top of each ranking. Running score before match would write narratives
-#: for yesterday's ordering.
+#: A step is a script name, or a script name plus arguments.
 STEPS = [
-    # -- ATS token discovery (task 16) ------------------------------------
-    #
-    # Both entries are discovery, not ingest, and both run BEFORE ingest/ats.py
-    # so a token learned this morning is pulled the same night.
-    #
-    # ONE step, two phases -- `--nightly` runs both in a single process. They
-    # answer different questions at very different costs, but they cannot be
-    # two STEPS entries: `volumes` below is keyed by script name, so a second
-    # entry for the same script would overwrite the first's written/dropped
-    # counts and report one line for both. That is precisely the "ran and
-    # wrote nothing" vs "ran and dropped everything" distinction this summary
-    # exists to preserve.
-    #
-    #   MONTHLY, and only when the ats-discovery watermark says it is due:
-    #     re-validate every known token. "Are the boards we know about still
-    #     alive, and has anything gone stale?" -- ONE request per token,
-    #     against APIs that expect programmatic traffic. This is the monthly
-    #     re-probe task 16 asks for, and the only thing that catches the
-    #     failure it is designed against: not a 404, but a feed still serving
-    #     postings filled six months ago.
-    #
-    #   NIGHTLY: probe up to --limit employers that have no conclusive answer
-    #     yet -- newly seeded ones, and ones a WAF refused last time. Capped
-    #     so the nightly cost is a few minutes, least-recently-probed first,
-    #     so the backlog drains over successive nights and the step then goes
-    #     quiet on its own.
-    #
-    # A full careers-page sweep of the whole roster (`--apply --all`) is ~50
-    # minutes of outward HTTP against several hundred employer sites. It is
-    # deliberately NOT scheduled: that is a first-run and occasional-refresh
-    # operation, run by hand, not something to spend every month unattended.
-    ["tools/ats-discover.py", "--apply", "--nightly", "--limit", "40"],
+    # Known ATS boards are revalidated when the 30-day watermark is due.
+    # New company boards are discovered by an explicit operator run.
+    ["tools/ats-discover.py", "--apply", "--nightly", "--known-only"],
     "ingest/ats.py",
-    # After ats-discover.py, so a tenant discovered this morning is pulled the
-    # same night, and beside ats.py because the two are the same shape of
-    # source. ~8 minutes of nightly window at four tenants -- and that is WITH
-    # the upstream gate: without it the same run is 1,366 detail requests and
-    # 34 minutes. See `git show refactor-freeze-2026-08-02:docs/ingest/workday.md`.
     "ingest/workday.py",
     "ingest/builtin-nyc.py",
-    # With the other NYC-scoped source, and before extract.py -- which is the
-    # only ordering constraint that matters. Yields ~1.8 relevant postings/day
-    # against the task file's 20-60 estimate; kept because it is one documented
-    # JSON API with an explicit close date per posting, not because of volume.
-    # See `git show refactor-freeze-2026-08-02:docs/ingest/nyc-open-data.md`.
     "ingest/nyc-open-data.py",
     "ingest/weworkremotely.py",
     "ingest/hn-hiring.py",
-    # -- Google Jobs: DISABLED pending source/actor redesign ------------------
-    #
-    # ingest/google-serpapi, ingest/google-apify and searchqueries are retained
-    # but not scheduled. The former contributor actor cannot submit without
-    # its retired API. No Google Jobs source is currently active here.
-    #
-    # searchqueries went too because its provider defaults to SerpApi
-    # (serp/__init__.py resolve()). Re-adding it means adding it BEFORE
-    # extract.py, the ordering its old comment explained: an ingest-shaped
-    # step whose rows have to reach extract the same night. That comment,
-    # and the one for each Google step, is in git at the commit before 0012.
-    #
-    # The names are written without quotes on purpose.
-    # tests/test_volume_floors.py collects quoted script names from this list,
-    # and a disabled step must not look like a live one to it. For the same
-    # reason config/volume-floors.json moved their floors to `unfloored`: a
-    # floor for a step that no longer runs would breach every night.
-    #
-    "extract.py",
-    "match.py",
-    # The warm pass: prepare narratives for profiles that have been active in
-    # the last week, so a returning user finds them already written. Dormant
-    # profiles cost nothing here -- their narratives are generated on login
-    # instead, which is what keeps spend tracking engagement rather than
-    # registration. (That login path is documented but not yet built -- nothing
-    # under webapp/ calls run_for_profile today.)
-    #
-    # IT PASSES NO --rescore-* FLAG, AND THAT IS THE DECISION, NOT AN OMISSION.
-    # job_scores now carries version columns, so a persona edit or a prompt
-    # bump can mark stored narratives stale. Acting on that costs LLM calls, so
-    # it never happens on a schedule: re-scoring is opt-in, needs an explicit
-    # --limit, and is something an operator runs having first read
-    # `score.py --stale-report`. This line is the single place the nightly
-    # spend is decided, which is why a test asserts it verbatim.
-    ["score.py", "--active-within-days", "7"],
-    # The cohort badge (tranche_five/28). LAST, and it is the only step whose
-    # input is the USERS rather than the postings -- it folds yesterday's saves
-    # out of job_events into cohort_signal, from which webapp/ reads a bucket
-    # and never an exact count.
-    #
-    # ORDER IS NOT LOAD-BEARING HERE, unlike extract -> match -> score. It reads
-    # job_events, which only webapp/ writes, and jobs.id, which the ingest steps
-    # settle. It sits at the end because it is the cheapest step and because a
-    # failure in it should not delay the ranking; run-daily runs every step
-    # regardless of what failed earlier, so nothing depends on that.
-    #
-    # NIGHTLY RATHER THAN AT READ TIME IS THE PRIVACY DESIGN, not an
-    # optimisation to revisit. A badge recomputed live flips within a session
-    # and tells an observer that somebody in the room just saved something,
-    # which is the recency channel the suppression rule exists to close. See
-    # cohort.py.
-    #
-    # IT WILL WRITE ZERO ROWS ON A HEALTHY RUN for as long as the cohort is
-    # smaller than the floor of three -- two Builders today. Its summary line
-    # prints the builder count and the floor beside the posting count for
-    # exactly that reason: "0 postings" alone cannot tell a quiet Tuesday from
-    # a broken fold, which is the distinction this whole summary exists for.
-    "cohort.py",
 ]
 
 
@@ -260,7 +73,7 @@ def parse_upsert_summaries(text):
     that re-saw everything and wrote nothing new is a normal quiet day, and
     folding it in would hide exactly the case this summary exists to expose.
 
-    Steps that never upsert (extract, match, score) produce no such lines and
+    Steps that never upsert (such as ATS validation) produce no such lines and
     come back (None, None), which the summary reports as "-" rather than as a
     zero they would be indistinguishable from.
     """

@@ -1,4 +1,4 @@
-# cloudflared ingress for the webapp and a separate application.
+# cloudflared ingress for bankan, a separate application.
 #
 # TEMPLATE. Every ANGLE-BRACKETED value below is the owner's to fill in and none
 # of them can be filled in from this repository -- they come from a Cloudflare
@@ -14,8 +14,7 @@
 #
 # WHAT THIS DOES NOT DO, said plainly because it is easy to assume otherwise:
 # the tunnel authenticates the ORIGIN to Cloudflare, not the USER to the app.
-# Anyone on the internet can reach the hostnames below. The webapp's Google
-# OAuth session is what keeps strangers out of it. A tunnel is not an
+# Anyone on the internet can reach the hostname below. A tunnel is not an
 # authorization layer and must never be treated as one.
 #
 # INSTALL: this file is the tracked copy. cloudflared reads
@@ -24,7 +23,7 @@
 #
 #     ln -s ~/apps/jobs/deploy/cloudflared/config.yml ~/.cloudflared/config.yml
 #     cloudflared tunnel ingress validate    # parses this file, no traffic
-#     cloudflared tunnel ingress rule https://jobs.etotheric.com/v1/health
+#     cloudflared tunnel ingress rule https://bankan.etotheric.com/
 
 tunnel: 726fa841-8945-4e06-bb06-f241cbbe30dc
 
@@ -34,35 +33,11 @@ tunnel: 726fa841-8945-4e06-bb06-f241cbbe30dc
 # so that a copy made "just to test" cannot be committed.
 credentials-file: /home/eric/.cloudflared/726fa841-8945-4e06-bb06-f241cbbe30dc.json
 
-# Cloudflare's edge already has the request for a while before the origin
-# answers; a slow LLM-backed page is not a reason to give up on the origin.
 originRequest:
   connectTimeout: 10s
   noTLSVerify: false
 
 ingress:
-  # ---- the webapp: what the ~30 Builders actually use --------------------
-  #
-  # Port 8421, confirmed at backend/webapp/config.py:124 (`PORT = _int("PORT",
-  # 8421)`). frontend/serve.py mounts
-  # the client on this same origin deliberately -- the session cookie is the
-  # client's only credential, and a third origin that neither FRONTEND_ORIGIN
-  # nor ALLOWED_ORIGINS names gets its cookie dropped by the browser silently.
-  # So ONE hostname serves both the page and the API it calls, and CORS stops
-  # being involved at all.
-  #
-  # Three settings have to move together the moment this hostname is live, and
-  # each fails in a different, confusing place if it does not:
-  #   SESSION_COOKIE_SECURE=true      -- default is already true
-  #   GOOGLE_REDIRECT_URI=https://jobs.etotheric.com/v1/auth/callback
-  #                                   -- and the SAME string in the Google
-  #                                      console, byte for byte, or the user
-  #                                      gets a Google error page rather than
-  #                                      an error from this service
-  #   FRONTEND_ORIGIN=https://jobs.etotheric.com
-  - hostname: jobs.etotheric.com
-    service: http://localhost:8421
-
   # ---- bankan: separate app, separate systemd unit, separate Postgres role -
   #
   # Port 3011 matches bankan's systemd unit in a sibling repo. Shared tunnel,

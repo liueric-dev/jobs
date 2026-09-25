@@ -1,209 +1,11 @@
 #!/usr/bin/env python3
-"""
-ATS job-board ingestion -- Postgres edition.
+"""Ingest complete public ATS boards into normalized jobs rows.
 
-Pulls current open job postings directly from each employer's public ATS
-job-board API, normalizes into a common schema, and upserts into Postgres.
-Six platforms: Greenhouse, Lever, Ashby, Workable, Recruitee, SmartRecruiters.
-
-WHERE THE COMPANY LIST COMES FROM -- NOT A CONFIG FILE ANY MORE
-    The roster is the `company_ats` table (task 16). See ingest/ats_sources.py
-    for which statuses admit a token and why `valid` is not the only one.
-    `config/companies.json` is retired as a runtime input and survives only as
-    the one-time seed corpus behind `--seed-from-json`; adding an employer is
-    an INSERT, never a deploy.
-
-    This script pulls an employer's ENTIRE board, deliberately. It is why
-    `config/relevance.json:_why` records that "~87% of the table is roles this
-    persona will never apply to" -- and that property is the point now rather
-    than a cost: pulling a hospital system's whole board is exactly how the
-    AI-operations coordinator buried in it gets found. Filtering by profile
-    happens at the relevance gate, never by removing rows here.
-
-WHY DIRECT ATS APIS INSTEAD OF SCRAPING LINKEDIN/INDEED
-    Every platform here exposes a public, unauthenticated JSON endpoint per
-    company -- the same one that company's own /careers page calls to render
-    its listings. Querying it isn't scraping in the adversarial sense (no
-    login wall, no bot detection), it is the intended public embed mechanism.
-    LinkedIn/Indeed have no such API and scraping them violates their ToS with
-    real ban risk -- deliberately out of scope, and forbidden by CLAUDE.md.
-
-CLOSURE IS FREE HERE, AND IT IS NOT FREE ANYWHERE ELSE
-    Every endpoint below returns the COMPLETE current set of open postings for
-    a company. So a posting present yesterday and absent today is closed: no
-    re-crawl, no `validThrough` parsing, no inference. `close_missing()` in
-    schema.py is the single implementation and every platform reaches closure
-    through it -- there is no per-platform copy of this logic, on purpose.
-
-    This does NOT hold for the sources in tasks 19-21 (JSON-LD, Firecrawl,
-    aggregators), which see a *page* of a result set rather than an
-    employer's whole board. When someone is deciding which source to trust
-    for a staleness signal, that is the difference.
-
-    Two guards stand in front of it:
-
-      1. An empty fetch never closes anything. schema.close_missing() raises
-         on an empty seen_ids rather than closing every open row for the
-         company, and the loop below skips the call entirely. A genuine
-         zero-postings company is rare and not urgent; silently closing an
-         employer's whole board because of a transient empty response is a
-         much worse failure than missing it for a day.
-
-      2. An INCOMPLETE fetch never closes anything either. See RECONCILING
-         AGAINST THE API'S OWN TOTAL below. A throttled or truncated page is
-         not the end of a list, and treating it as one is how a published
-         account lost 1,960 of 2,000 jobs.
-
-RECONCILING AGAINST THE API'S OWN TOTAL -- per platform, measured 2026-07-28
-    "A throttled page is not the end of a list" (CLAUDE.md). Where a platform
-    reports how many postings it thinks there are, `Fetched.reported_total`
-    carries it and `Fetched.complete` refuses closure when the collected count
-    falls short.
-
-    | platform        | pagination        | server-side total          |
-    |-----------------|-------------------|----------------------------|
-    | greenhouse      | none, one call    | YES -- `meta.total`        |
-    | lever           | `limit` + `skip`  | no                         |
-    | ashby           | none, one call    | no                         |
-    | workable        | none (widget)     | YES -- v3 `total`          |
-    | recruitee       | none, one call    | no                         |
-    | smartrecruiters | `limit`+`offset`  | YES -- `totalFound`        |
-
-    Four of six offer no total. For those, a short page is still read as the
-    end of the list -- which is what this script has always done and what the
-    endpoints' own semantics support (they return the whole board in one
-    response). Lever is the exception that needs a rule of its own; see
-    LEVER_SKIP_CEILING.
-
-DELTA SYNC -- what the platforms actually support, measured 2026-07-28
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:46` says "Both Greenhouse and Lever expose
-    update timestamps. Poll with `updated_at` filtering rather than full
-    re-pulls." Probed against the live APIs, that is not true of either:
-
-      greenhouse   `?updated_after=2030-01-01T00:00:00Z` on the job-board API
-                   returns the SAME 5 postings as no filter at all (probed
-                   against `kickstarter`). The parameter is accepted and
-                   silently ignored -- CLAUDE.md's silence landmine in its
-                   purest form. `updated_after` belongs to the authenticated
-                   Harvest API, not to this public board API. Each posting
-                   does carry an `updated_at` FIELD, which is a different
-                   thing and is already hashed into `posted_at`.
-      lever        no update timestamp exists at all. A posting carries
-                   `createdAt` and nothing else -- there is no `updatedAt`
-                   key in the payload to filter on, server-side or client-side.
-      ashby        no.
-      workable     no.
-      recruitee    postings carry `updated_at`, but the endpoint takes no
-                   filter for it.
-      smartrecruiters
-                   YES, one: `releasedAfter=<ISO8601>`. Probed: with
-                   `releasedAfter=2030-01-01T00:00:00Z`, `totalFound` drops
-                   from 4,755 to 0, so the filter is real and server-side. It
-                   filters on `releasedDate` -- PUBLICATION, not last update
-                   -- so it will not surface an edit to an older posting.
-
-    So `--delta` exists, applies to SmartRecruiters only, and DISABLES CLOSURE
-    for the platforms it applies to. That is not a limitation to work around,
-    it is arithmetic: closure here is derived from absence from the complete
-    set, and a delta response is by construction not the complete set. A
-    nightly run must be a full pull. `--delta` is for an intra-day catch-up.
-
-REQUEST COUNT
-    Every outward call goes through _get_json/_post_json, which count per
-    platform, and an `ats-requests:` line is printed to stderr on EVERY run --
-    including a quiet one, for the same reason lib/upsert.py:311-314 gives for
-    `errors=0`: a number that only appears when it is interesting is a number
-    nobody notices has stopped appearing. Task 04's nightly budget can be
-    checked against this rather than against an estimate.
-
-    It counts requests THIS SCRIPT ISSUES. lib/http.py retries a 429 or a 5xx
-    underneath (up to lib.http.DEFAULT_MAX_RETRIES) and those retries are not
-    visible here; the number is a floor on wire traffic and an exact count of
-    intended calls.
-
-DEPENDENCY (the one exception to "stdlib only" -- there's no reasonable
-stdlib Postgres client):
-    pip install "psycopg[binary]"
-    (add --break-system-packages if your system Python is externally managed)
-
-DATABASE:
-    The `jobs` database, in its `public` schema. See ../schema.py's
-    "DATABASE, NOT SCHEMA".
-
-CONFIG:
-    DATABASE_URL              -- postgres connection string
-    JOB_SOURCES_FILE          -- path to the RETIRED seed file, read only by
-                                 --seed-from-json (default: alongside this
-                                 script, config/companies.json)
-    ATS_SR_DETAIL_BUDGET      -- max SmartRecruiters detail requests per
-                                 company per run (default 200); see
-                                 SMARTRECRUITERS_DETAIL_BUDGET
-
-SCHEDULE: not scheduled directly -- see run-daily.py, which is the single
-cron entry point and calls this script as a subprocess.
-
-TEST BEFORE SCHEDULING:
-    python3 ingest/ats.py
-    python3 ingest/ats.py --seed-from-json     # one-time, idempotent
-    DEBUG_PRINT_KEYS=1 python3 ingest/ats.py
-    systemctl --user start jobs-ingest.service   # the whole nightly run
-
-HEURISTICS -- both are best-effort tags stored alongside each row, not hard
-filters. Query them (WHERE seniority_guess != 'senior' etc.) rather than
-trusting the ingest to have already dropped the wrong rows -- keyword
-matching on a job title is inherently approximate.
-
-    seniority_guess: 'senior' | 'entry' | 'mid_or_unspecified' | 'unknown'
-        Titles matching senior-signal words (senior, staff, principal,
-        director, lead, manager, ...) are tagged 'senior'. Titles matching
-        entry-signal words (junior, associate, new grad, intern, ...) are
-        tagged 'entry'. Everything else defaults to 'mid_or_unspecified'
-        rather than guessing -- an unqualified "Software Engineer" could be
-        either, and mislabeling it 'entry' would be worse than leaving it
-        ambiguous for a human to skim.
-
-    location_is_nyc / location_is_remote: regex match against the posting's
-        own location text (NOT the employer's HQ).
-
-    company_is_nyc_hq / company_is_ai_focused: now always None. They came
-        from `config/companies.json`, `company_ats` has no column for them,
-        and adding one is a schema change out of scope here. Nothing reads
-        them -- verified 2026-07-28: the only references anywhere in the repo
-        are the writes in the six ingest scripts and the DDL at
-        schema.py:295-296. Four of the six other sources already hardcode
-        None (`builtin-nyc.py:364-365`, `hn-hiring.py:322-323`,
-        `weworkremotely.py:178-179`, `google_jobs.py:116-117`), so this makes
-        the column uniformly "unknown from this source" rather than
-        half-populated from one. They are NOT in HASH_FIELDS_ATS
-        (schema.py:131-132), so no existing row's content hash moves.
-
-INCREMENTAL BEHAVIOR -- see DELTA SYNC above: no platform but SmartRecruiters
-offers a server-side "changed since" filter, and using it forfeits closure.
-job_ingest_state still records last_success_at per company, purely for
-observability, not to shrink the fetch. Change detection is client-side:
-
-    1. content_hash per job -- a row's last_seen is bumped without a write
-       if nothing about it actually changed.
-    2. Jobs that disappear from a company's feed are marked status='closed'
-       rather than deleted. Rows closed for more than PRUNE_CLOSED_AFTER_DAYS
-       are hard-deleted each run so the table doesn't grow unbounded.
-
-CONCURRENCY -- this script is not scheduled directly. run-daily.py is the
-actual cron entry point and runs the ingest scripts sequentially via
-subprocess, so they never run concurrently on the same machine.
-
-ERROR HANDLING -- deliberately different from ingest/builtin-nyc.py. This
-script hits dozens of independent company APIs per run; one flaky/renamed/down
-company endpoint is expected background noise, not a signal anything is
-broken. So: per-company fetch failures are logged and skipped, other companies
-still run, and the run only exits non-zero if EVERY company failed (which
-points at something systemic -- DB down, network outage -- worth paging on).
-That is volume-based alerting, which is what CLAUDE.md asks for: "Alert on
-volume, not errors."
-
-POLITENESS -- these are real employers' boards. REQUEST_DELAY_SECONDS between
-outward calls, an honest User-Agent from lib/http.py, and no endpoint is
-called more than its own pagination requires.
+Supports Greenhouse, Lever, Ashby, Workable, Recruitee, and SmartRecruiters.
+The runtime company roster comes from company_ats; config/companies.json is an
+optional one-time seed. Boards are fetched whole so close_missing can safely
+close postings absent from a complete response. Per-company failures are
+isolated and reported rather than interpreted as empty boards.
 """
 
 import argparse
@@ -224,7 +26,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # ...and this file's OWN directory, so `import ats_sources` resolves when this
 # module is loaded by path rather than run as a script -- which is exactly what
-# evals/ingest_modules.py:40-55 does for every cassette test.
+# testsupport/ingest_modules.py:40-55 does for every cassette test.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ats_sources  # noqa: E402
@@ -247,7 +49,7 @@ PRUNE_CLOSED_AFTER_DAYS = 30
 REQUEST_DELAY_SECONDS = 0.5
 
 #: Prefix of the per-run request-count line. Stable format -- anything parsing
-#: it (task 04's budget check) reads `total=` and the per-platform keys.
+#: it reads `total=` and the per-platform keys.
 REQUEST_SUMMARY_PREFIX = "ats-requests:"
 
 #: platform -> outward calls issued this run. Module-level so a cassette test
@@ -355,7 +157,7 @@ def fetch_greenhouse(token):
 #: (limit=3/skip=3 returns a disjoint set of ids).
 LEVER_PAGE_LIMIT = 100
 
-#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:41-42`: "pagination truncates at 250, so a company
+#: : "pagination truncates at 250, so a company
 #: with more roles needs slicing by team or location". This script does not
 #: slice -- it records that it could not see the whole board and declines to
 #: close anything for that company. Past 250 a short page is indistinguishable
@@ -395,7 +197,7 @@ def fetch_lever(token):
 def fetch_ashby(token):
     """One call. `includeCompensation=true` is what fills salary_text.
 
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:31` -- "cleanest salary support of any public
+     -- "cleanest salary support of any public
     feed", and it is: the field is a rendered range string the employer chose
     to publish, not a number this pipeline has to infer from prose. It costs
     nothing extra, and boards that do not publish compensation return the key
@@ -410,11 +212,11 @@ def fetch_ashby(token):
 
 #: Workable is TWO endpoints, and the reason is worth stating.
 #:
-#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:33` names `/api/v3/accounts/{slug}/jobs`. That
+#: The endpoint is `/api/v3/accounts/{slug}/jobs`. That
 #: endpoint is authoritative about the SET -- it reports `total` and pages by
 #: an opaque `nextPage` token -- and it carries no descriptions at all. It
 #: also pages ten at a time, so reading a whole board through it costs
-#: ceil(n/10) requests for postings that `extract.py` could not use anyway.
+#: ceil(n/10) requests for postings without full descriptions.
 #:
 #: The v1 widget with `details=true` returns every posting WITH its full
 #: description in ONE request. What it does not return is a total, and it
@@ -470,7 +272,7 @@ SMARTRECRUITERS_BASE = "https://api.smartrecruiters.com/v1/companies"
 #: SmartRecruiters clamps `limit` to 100 AND REPORTS THE CLAMP BACK -- asked
 #: for 200 it answers `"limit":100` with 100 items (verified 2026-07-28
 #: against `BoschGroup`, totalFound 4,755). That is the honest behaviour
-#: Workday does not have: CLAUDE.md's landmine is that Workday answers
+#: Workday does not have: landmine is that Workday answers
 #: limit>20 with an EMPTY array and no error, indistinguishable from the end
 #: of the list. Both were probed rather than assumed, because the trap
 #: generalises even where this particular vendor avoids it.
@@ -595,7 +397,7 @@ def smartrecruiters_description(job):
 
     Returns None -- not "" -- when the posting has no jobAd, so a row whose
     detail call has not been spent yet is distinguishable from a posting whose
-    ad is genuinely empty. `extract.py`'s selector keys on that difference.
+    ad is genuinely empty. That distinction is retained in the normalized row.
     """
     sections = ((job.get("jobAd") or {}).get("sections") or {})
     parts = []

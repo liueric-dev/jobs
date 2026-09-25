@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily job-discovery ingest and scoring
+Description=Daily job-posting ingestion
 Documentation=file:///home/eric/apps/jobs/backend/README.md
 # BROUGHT IN-TREE BY TASK 33, VERBATIM from ~/.config/systemd/user/. It ran for
 # a week as a REGULAR FILE there -- not a symlink, unlike every garmin unit --
@@ -31,17 +31,12 @@ EnvironmentFile=/home/eric/apps/jobs/backend/.env
 # flock is not for timer-vs-timer -- systemd already serialises a single unit.
 # It is for a hand-run overlapping the nightly one. run-daily.py's docstring
 # argues against a lock and is right about the single-trigger case; two things
-# it predates make the overlap expensive. api/ and this pipeline coordinate
-# through the same job_ingest_state claim row, so two concurrent runs stop
-# serialising; and the Google steps spend a metered SerpApi budget, which a
-# double run double-spends. -E 0 makes "already running" a silent success
+# it predates make the overlap expensive: two runs can duplicate fetches and
+# contend on the same rows. -E 0 makes "already running" a silent success
 # rather than a false alarm.
 ExecStart=/usr/bin/flock -n -E 0 /home/eric/apps/jobs/backend/.run.lock \
-          /usr/bin/python3 /home/eric/apps/jobs/backend/run-daily.py
-# Exactly two steps make LLM calls and dominate the wall clock: extract.py
-# makes one per newly-ingested posting and score.py runs a per-profile budget.
-# Generous compared to events' 5400 for that reason -- 3 hours is a hang, not a
-# slow night.
+          /home/eric/apps/jobs/backend/.venv/bin/python /home/eric/apps/jobs/backend/run-daily.py
+# Allows for slow third-party boards without affecting other sources.
 TimeoutStartSec=10800
 StandardOutput=journal
 StandardError=journal

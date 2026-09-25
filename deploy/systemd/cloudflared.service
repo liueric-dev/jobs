@@ -1,5 +1,5 @@
 [Unit]
-Description=Cloudflare Tunnel for the jobs webapp
+Description=Shared Cloudflare Tunnel (Bankan route)
 Documentation=file:///home/eric/apps/jobs/deploy/README.md
 # A USER unit, not a system one, matching every other unit this project owns.
 # The system-wide `cloudflared service install` would run as root and read

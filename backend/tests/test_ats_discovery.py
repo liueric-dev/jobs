@@ -2,8 +2,8 @@
 
 WHAT THIS PINS
 
-Task 16 exists because there is no public directory of ATS board tokens, and
-its whole method rests on two properties that are easy to break silently:
+There is no public directory of ATS board tokens. Discovery depends on two
+properties that are easy to break silently:
 
   1. A regex that reads the WRONG token out of a careers page produces a row
      that validates as `dead` and is then indistinguishable from a company
@@ -11,7 +11,7 @@ its whole method rests on two properties that are easy to break silently:
      the two that get this wrong in practice, so both have tests here.
 
   2. "Found nothing" and "was not allowed to look" must never collapse into
-     each other. CLAUDE.md names silence this pipeline's failure mode, and a
+     each other. A
      discovery pass is the worst place for it: a blocked run writes an empty
      table that the next run reads as settled fact. So the tests assert that
      only a CONCLUSIVE outcome can produce a `never_found` row, and that a
@@ -19,9 +19,8 @@ its whole method rests on two properties that are easy to break silently:
      either `valid` or `dead`.
 
 No network and no database. The signature and classification halves of
-discovery are pure by construction (ats_discovery.py holds no I/O), which is
-what makes them testable here rather than only against live hosts -- the same
-split score.score_job() has, and for the same reason.
+discovery are pure by construction (ats_discovery.py holds no I/O), making
+them testable without live hosts.
 """
 
 import os
@@ -72,7 +71,7 @@ class SignatureTests(unittest.TestCase):
         self.assertEqual(hits, [("greenhouse", {"token": "cityhall"})])
 
     def test_workday_captures_tenant_dc_and_site(self):
-        """All three, separately. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:54` forbids guessing
+        """Capture all three rather than guessing
         the data centre, because wd1 vs wd5 is a 404 and a 404 there is
         indistinguishable from a tenant with no open roles."""
         hits = self.find(
@@ -82,7 +81,7 @@ class SignatureTests(unittest.TestCase):
             "workday_site": "MSHSCareers"})])
 
     def test_workday_locale_segment_is_not_the_site(self):
-        """The one that silently breaks task 18.
+        """A token error that silently breaks Workday ingest.
 
         Workday URLs are optionally /{locale}/{site}. Capturing the first path
         segment records `en-US` as the site for every employer that includes
@@ -159,7 +158,7 @@ class SignatureTests(unittest.TestCase):
 class ValidationEndpointTests(unittest.TestCase):
 
     def test_workday_limit_is_twenty(self):
-        """CLAUDE.md's landmine. Workday returns an empty jobPostings array
+        """landmine. Workday returns an empty jobPostings array
         with no error for limit>20 -- byte-identical to "no more results", so
         asking for 100 would validate every live tenant as dead."""
         method, url, body = ad.validation_request(
@@ -304,7 +303,7 @@ class RowTests(unittest.TestCase):
     def test_never_found_row_carries_every_column(self):
         """lib/upsert binds COMPANY_ATS_COLUMNS as named parameters, so a
         record missing one fails that record rather than the batch
-        (schema.py:118-120) -- and would do it silently before task 03."""
+        (schema.py:118-120) -- and would otherwise do it silently."""
         row = ad.never_found_row("Acme", "https://acme.org/careers", "T")
         self.assertEqual(set(ad.COMPANY_ATS_COLUMNS) - set(row), set())
         self.assertEqual(row["status"], ad.STATUS_NEVER_FOUND)

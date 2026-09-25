@@ -8,8 +8,8 @@ WHY THIS FILE EXISTS SEPARATELY FROM test_workday_fixtures.py
     is not in the task file at all. It was found live on 2026-07-28 and until
     now the only fixture for it was one the pipeline wrote itself.
 
-    `git show refactor-freeze-2026-08-02:docs/ingest/workday.md:553-557` asked for a recording that closes that
-    gap. `evals/record_cassettes.py record_workday_cxs()` makes it; this
+     asked for a recording that closes that
+    gap. `testsupport/record_cassettes.py record_workday_cxs()` makes it; this
     replays it.
 
 WHAT THE BYTES SAY (recorded 2026-07-28, msk.wd108/MSKCC_Careers_Primary)
@@ -31,8 +31,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evals import cassettes  # noqa: E402
-from evals.ingest_modules import load as load_ingest  # noqa: E402
+from testsupport import cassettes  # noqa: E402
+from testsupport.ingest_modules import load as load_ingest  # noqa: E402
 
 CASSETTE = "workday-cxs"
 TENANT, DC, SITE = "msk", "wd108", "MSKCC_Careers_Primary"
@@ -40,7 +40,7 @@ TENANT, DC, SITE = "msk", "wd108", "MSKCC_Careers_Primary"
 
 @unittest.skipUnless(cassettes.available(CASSETTE),
                      f"no {CASSETTE} cassette; record it with "
-                     f"`python3 evals/record_cassettes.py {CASSETTE}`")
+                     f"`python3 testsupport/record_cassettes.py {CASSETTE}`")
 class WorkdayCxsCassette(unittest.TestCase):
 
     @classmethod
@@ -79,7 +79,7 @@ class WorkdayCxsCassette(unittest.TestCase):
     def test_every_recorded_page_was_asked_for_at_the_production_limit(self):
         """The limit<=20 landmine, checked from the REQUEST side.
 
-        CLAUDE.md: "Workday `limit` cannot exceed 20. Ask for 100 and it
+        : "Workday `limit` cannot exceed 20. Ask for 100 and it
         returns an empty array with no error." The recorded response bodies
         cannot show that -- an over-limit request and an exhausted board
         return the same bytes. What CAN show it is what was sent, and a POST
@@ -88,7 +88,7 @@ class WorkdayCxsCassette(unittest.TestCase):
         each offset the walk would use, and require the recording to hold
         exactly those digests.
 
-        Same technique `git show refactor-freeze-2026-08-02:docs/ingest/workday.md:542-547` used to establish that
+        Same technique  used to establish that
         `recorded_list_page()` is the request ats.py actually makes.
         """
         import hashlib

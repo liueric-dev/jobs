@@ -3,7 +3,7 @@
 WHAT THIS COVERS AND WHY IT IS A NEW MODULE
 
 Defects D18, D19 and D21 (in the defect register, deleted 2026-08-02:
-`git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`) are all the same
+) are all the same
 sentence said three ways: work that can fail is done OUTSIDE the block that
 would have contained
 the failure, so one bad unit ends the run instead of ending itself.
@@ -46,8 +46,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import relevance                                              # noqa: E402
 import schema                                                 # noqa: E402
-from evals import scratchdb                                   # noqa: E402
-from evals.ingest_modules import load as load_ingest          # noqa: E402
+from testsupport import scratchdb                                   # noqa: E402
+from testsupport.ingest_modules import load as load_ingest          # noqa: E402
 from lib import envfile                                       # noqa: E402
 
 #: Same reason tests/test_ingest_cassettes.py:47-50 does it: the DB-backed
@@ -177,97 +177,10 @@ class TestBuiltInPerPageIsolation(unittest.TestCase):
 # D19 -- the two Google scripts, normalize outside the per-query try
 # ---------------------------------------------------------------------------
 
-class _GoogleIsolationCase(unittest.TestCase):
-    """Shared body: both scripts call the same normalize_job()."""
-
-    module = None          #: set by the subclass
-    fetch_attr = None      #: the per-query fetch the subclass fakes
-    platform = "google_jobs"
-
-    QUERIES = [
-        {"slug": "alpha", "query": "a", "location": "NYC", "mode": "ai_integration"},
-        {"slug": "beta", "query": "b", "location": "NYC", "mode": "ai_integration"},
-    ]
-
-    def _run(self, conn, normalize_job):
-        mod = self.mod
-        picked = [(q, None) for q in self.QUERIES]
-        out, err = io.StringIO(), io.StringIO()
-        with mock.patch.object(mod, self.fetch_attr,
-                               lambda *a, **k: [{"slug_echo": "x"}]), \
-             mock.patch.object(mod, "normalize_job", normalize_job), \
-             mock.patch.object(mod, "log_query_stats", lambda *a, **k: None), \
-             mock.patch.object(mod.state, "mark_success", lambda *a, **k: None), \
-             mock.patch.object(mod.state, "release_claim", lambda *a, **k: None), \
-             mock.patch.object(mod.schema, "close_stale", lambda *a, **k: 0), \
-             mock.patch.object(mod.dbconn, "connect_or_exit",
-                               lambda *a, **k: _NoClose(conn)), \
-             mock.patch.object(mod, self.pick_attr, lambda *a, **k: picked):
-            with redirect_stdout(out), redirect_stderr(err):
-                mod.main()
-        return out.getvalue(), err.getvalue()
-
-    def _assert_one_bad_query_costs_one_query(self, conn):
-        calls = {"n": 0}
-
-        def normalize_job(item, mode):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                raise KeyError("title")
-            return record(platform=self.platform, source_id="ok",
-                          title="Engineer", job_url="https://example/ok")
-
-        out, err = self._run(conn, normalize_job)
-        self.assertEqual(
-            count_rows(conn, self.platform), 1,
-            "the second query normalized cleanly; the first one's failure "
-            "must not have ended the run before it was reached")
-        self.assertIn("did not normalize", err)
-        self.assertIn("1/2 queries succeeded (1 failed)", out,
-                      "a query lost to normalization is a failed query in "
-                      "the summary, not an invisible one")
 
 
-class TestSerpApiQueryIsolation(_GoogleIsolationCase):
-    """D19 at `ingest/google-serpapi.py:335` (the register said `:324`), and
-    its guard is the fetch-only `try` at `:325-333` (the register said
-    `:314-322`)."""
-
-    fetch_attr = "serpapi_search"
-    pick_attr = "pick_stale_queries_by_bucket"
-
-    @classmethod
-    def setUpClass(cls):
-        cls.mod = load_ingest("google-serpapi")
-
-    @requires_db
-    def test_one_query_that_does_not_normalize_costs_one_query(self):
-        with mock.patch.object(self.mod, "SERPAPI_API_KEY", "test-key"):
-            with scratchdb.scratch_schema() as (conn, _name):
-                self._assert_one_bad_query_costs_one_query(conn)
 
 
-class TestApifyQueryIsolation(_GoogleIsolationCase):
-    """D19 at `ingest/google-apify.py:241` (the register said `:231`), guarded
-    by the fetch-only `try` at `:231-239` (the register said `:221-229`)."""
-
-    fetch_attr = "run_actor_query"
-    pick_attr = "pick_stale_queries"
-
-    @classmethod
-    def setUpClass(cls):
-        cls.mod = load_ingest("google-apify")
-
-    @requires_db
-    def test_one_query_that_does_not_normalize_costs_one_query(self):
-        with mock.patch.object(self.mod, "APIFY_API_TOKEN", "test-token"):
-            with scratchdb.scratch_schema() as (conn, _name):
-                self._assert_one_bad_query_costs_one_query(conn)
-
-
-# ---------------------------------------------------------------------------
-# D19 + D18 -- ingest/ats.py, per-company isolation
-# ---------------------------------------------------------------------------
 
 class TestAtsPerCompanyIsolation(unittest.TestCase):
     """D19's ats.py site is no longer where the register puts it.
@@ -375,107 +288,6 @@ class TestAtsPerCompanyIsolation(unittest.TestCase):
                          set(self.mod.NORMALIZERS))
 
 
-# ---------------------------------------------------------------------------
-# D18 -- ingest/google-serpapi.py, per-bucket keys read after the guard
-# ---------------------------------------------------------------------------
-
-class TestQueryBucketsAreCheckedInsideTheGuard(unittest.TestCase):
-    """D18's second site: `bucket["queries"]` / `bucket["daily_budget"]` at
-    `ingest/google-serpapi.py:221-222` (the register said `:213-214`), read
-    inside `pick_stale_queries_by_bucket` -- which runs at `:314`, after the
-    guarded `load_query_buckets()` at `:307-312` (the register said `:300`)
-    has already returned.
-
-    The `q[...]` subscripts are the same defect one level down and are checked
-    here too: `q["mode"]` is not touched until after the query's SerpApi
-    credit has been spent.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        cls.mod = load_ingest("google-serpapi")
-
-    def _load(self, config):
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-            json.dump(config, f)
-            path = f.name
-        try:
-            with mock.patch.object(self.mod, "GOOGLE_JOBS_QUERIES_FILE", path):
-                return self.mod.load_query_buckets()
-        finally:
-            os.unlink(path)
-
-    def _bucket(self, **overrides):
-        b = {"daily_budget": 2,
-             "queries": [{"slug": "a", "query": "q", "location": "NYC",
-                          "mode": "ai_integration"}]}
-        b.update(overrides)
-        return b
-
-    def test_a_well_formed_config_still_loads(self):
-        buckets = self._load({"buckets": {"one": self._bucket()}})
-        self.assertEqual(list(buckets), ["one"])
-
-    def test_a_bucket_with_no_daily_budget_fails_at_the_load(self):
-        b = self._bucket()
-        del b["daily_budget"]
-        with self.assertRaises(KeyError) as cm:
-            self._load({"buckets": {"one": b}})
-        self.assertIn("one", str(cm.exception))
-        self.assertIn("daily_budget", str(cm.exception))
-
-    def test_a_bucket_with_no_queries_fails_at_the_load(self):
-        b = self._bucket()
-        del b["queries"]
-        with self.assertRaises(KeyError) as cm:
-            self._load({"buckets": {"one": b}})
-        self.assertIn("queries", str(cm.exception))
-
-    def test_a_query_missing_mode_fails_at_the_load_not_after_the_credit(self):
-        b = self._bucket()
-        del b["queries"][0]["mode"]
-        with self.assertRaises(KeyError) as cm:
-            self._load({"buckets": {"one": b}})
-        self.assertIn("mode", str(cm.exception))
-        self.assertIn("one", str(cm.exception))
-
-    def test_a_query_missing_slug_fails_at_the_load(self):
-        b = self._bucket()
-        del b["queries"][0]["slug"]
-        with self.assertRaises(KeyError):
-            self._load({"buckets": {"one": b}})
-
-    def test_buckets_that_are_not_an_object_fail_at_the_load(self):
-        with self.assertRaises(TypeError):
-            self._load({"buckets": [self._bucket()]})
-
-    def test_the_shipped_config_passes_its_own_check(self):
-        """The check is worthless if the real file does not satisfy it."""
-        self.assertTrue(self.mod.load_query_buckets())
-
-    def test_mains_guard_names_every_exception_the_load_can_raise(self):
-        """D18's whole point: the failure must arrive where it is reported.
-
-        Read off the source rather than asserted behaviourally, because
-        reaching main()'s guard needs a database and this claim does not.
-        """
-        path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "ingest", "google-serpapi.py")
-        with open(path) as f:
-            src = f.read()
-        guard = src[src.index("buckets = load_query_buckets()"):]
-        guard = guard[:guard.index("conn.close()")]
-        for exc in ("OSError", "json.JSONDecodeError", "KeyError", "TypeError"):
-            self.assertIn(exc, guard,
-                          f"load_query_buckets() can raise {exc} and main()'s "
-                          f"guard does not name it")
-
-
-# ---------------------------------------------------------------------------
-# D21 -- ingest/hn-hiring.py, relevance.load() at import time
-# ---------------------------------------------------------------------------
-
 class TestRoleVocabularyLoadIsGuarded(unittest.TestCase):
     """D21 at `ingest/hn-hiring.py:151`, into module-level `ROLE_PATTERN` at
     `:163` (the register said `:90`, `:152`, `:164`).
@@ -529,7 +341,7 @@ class TestRoleVocabularyLoadIsGuarded(unittest.TestCase):
     def test_importing_the_module_survives_a_malformed_config(self):
         """The defect proper: this runs in the MODULE BODY.
 
-        `evals/ingest_modules.py`'s docstring states as a precondition that
+        `testsupport/ingest_modules.py`'s docstring states as a precondition that
         importing an ingest script runs its body "and nothing else... none of
         them connects, fetches or writes". This one read a config file, and an
         unreadable one made the import itself the failure -- before main(), and

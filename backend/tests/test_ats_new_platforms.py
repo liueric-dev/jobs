@@ -1,14 +1,14 @@
-"""ingest/ats.py after task 17: six platforms, one roster, one closure call.
+"""ingest/ats.py: supported platforms, one roster, one closure call.
 
 WHAT THIS PINS, AND WHY EACH ONE
 
   * The roster is `company_ats`, and an empty roster is a FAILURE, not a
     quiet night. `ats.py` used to read a 68-entry JSON file that could not be
     empty; a table can be, and "silence is this system's failure mode"
-    (CLAUDE.md) means the empty case has to exit non-zero rather than report
+    means the empty case has to exit non-zero rather than report
     a clean run over nothing.
 
-  * `unvalidated` admits a token. Task 16's fourth status means "we found a
+  * `unvalidated` admits a token. This status means "we found a
     token and could not check it" -- a 403 at validation time. Excluding it
     would mean a board blocked once is never pulled again, which is the same
     silence one layer up. The choice is data (ats_sources.ADMITTING_STATUSES)
@@ -31,7 +31,7 @@ WHAT THIS PINS, AND WHY EACH ONE
     Ashby is asked for `includeCompensation=true`, that SmartRecruiters is
     asked for `limit=100`, and that Workable costs exactly two calls are
     claims about what this pipeline SENDS -- the same reason
-    evals/cassettes.py exposes `Player.requests`.
+    testsupport/cassettes.py exposes `Player.requests`.
 
 No network. Every test replays a committed cassette or builds one in memory.
 """
@@ -44,9 +44,9 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema                                                 # noqa: E402
-from evals import cassettes                                   # noqa: E402
-from evals.cassettes import Cassette, Interaction             # noqa: E402
-from evals.ingest_modules import load as load_ingest          # noqa: E402
+from testsupport import cassettes                                   # noqa: E402
+from testsupport.cassettes import Cassette, Interaction             # noqa: E402
+from testsupport.ingest_modules import load as load_ingest          # noqa: E402
 
 ats = load_ingest("ats")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
@@ -60,7 +60,7 @@ INGEST_DIR = os.path.join(os.path.dirname(os.path.dirname(
 def require(name):
     return unittest.skipUnless(
         cassettes.available(name),
-        f"cassette {name} not recorded -- `python3 evals/record_cassettes.py "
+        f"cassette {name} not recorded -- `python3 testsupport/record_cassettes.py "
         f"{name}`")
 
 
@@ -246,8 +246,8 @@ class TestSmartRecruiters(NormalizedRecord):
         self.assertTrue(described,
                         "no description survived the merge, so the section "
                         "extraction is not reaching the real bytes")
-        # An ad whose sections are all empty is None, not "". extract.py's
-        # selector keys on NULL, so "" would enqueue a prompt over nothing.
+        # An ad whose sections are all empty is None, not "", preserving the
+        # distinction between missing and empty source content.
         for rec in records:
             self.assertIn(rec["description_text"], [None, *[
                 r["description_text"] for r in described]])
@@ -298,7 +298,7 @@ class TestSmartRecruiters(NormalizedRecord):
         self.assertEqual(postings.requests, 2)
 
     def test_a_throttled_page_is_not_the_end_of_the_list(self):
-        """CLAUDE.md's landmine, as arithmetic.
+        """landmine, as arithmetic.
 
         The API says three; a page comes back empty after one. Reading that
         as "no more results" is how a published account lost 1,960 of 2,000
@@ -464,7 +464,7 @@ class TestLeverPagination(unittest.TestCase):
         self.assertEqual(jobs.requests, 2)
 
     def test_past_the_documented_ceiling_the_board_is_not_closeable(self):
-        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:41-42` -- Lever truncates at 250.
+        """ -- Lever truncates at 250.
 
         Past that point "the next page was empty" and "the API stopped
         answering" are the same bytes, so absence stops being evidence and
@@ -538,7 +538,7 @@ class TestRoster(unittest.TestCase):
         platforms, statuses = conn.params[0]
         self.assertEqual(sorted(platforms),
                          sorted(ats_sources.HANDLED_PLATFORMS))
-        # Task 18 owns workday and task 20 owns icims. Both have rows in this
+        # Workday and iCIMS both have rows in this
         # table; neither is pulled here.
         self.assertNotIn("workday", platforms)
         self.assertNotIn("icims", platforms)
@@ -546,7 +546,7 @@ class TestRoster(unittest.TestCase):
     def test_unvalidated_admits_a_token_and_dead_does_not(self):
         """The status decision, as data rather than as a literal in a query.
 
-        `unvalidated` is task 16's fourth value: a token was found and the
+        `unvalidated` means a token was found and the
         ATS did not answer (403/429/5xx/unparseable). Dropping those rows
         would mean a board blocked once at validation time is never pulled
         again, which is the failure this whole vocabulary exists to prevent.
@@ -596,7 +596,7 @@ class TestRoster(unittest.TestCase):
             self.assertIn(row["ats"], ats_sources.HANDLED_PLATFORMS)
             self.assertEqual(row["status"], ats_sources.STATUS_VALID)
             self.assertTrue(row["first_validated_at"])
-            # Not NULL: `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md:344-350` -- a NULL here
+            # Not NULL:  -- a NULL here
             # disarms the 60-day stale-feed check for exactly these rows.
             self.assertTrue(row["open_jobs_changed_at"])
 
@@ -655,7 +655,7 @@ class TestFileShape(unittest.TestCase):
         self.assertNotIn("json.load(", self.source)
 
     def test_every_upsert_goes_through_upsert_checked(self):
-        """CLAUDE.md's landmine: `upsert()`'s three-tuple drops .errors."""
+        """landmine: `upsert()`'s three-tuple drops .errors."""
         for module in ("ats.py", "ats_sources.py"):
             with open(os.path.join(INGEST_DIR, module), encoding="utf-8") as fh:
                 body = fh.read()
@@ -684,7 +684,7 @@ class TestFileShape(unittest.TestCase):
 
 
 class TestRequestCount(unittest.TestCase):
-    """Task 04's budget needs a measured number, not an estimate."""
+    """The request budget needs a measured number, not an estimate."""
 
     def setUp(self):
         ats.reset_requests()

@@ -1,4 +1,4 @@
-"""The task-16 validator, replayed against real ATS vendor bytes.
+"""Replay ATS validation against recorded vendor responses.
 
 WHY THIS EXISTS SEPARATELY FROM tests/test_ats_discovery.py
 
@@ -9,24 +9,24 @@ WHY THIS EXISTS SEPARATELY FROM tests/test_ats_discovery.py
     classifier was written to expect.
 
     The validator's whole job is to stop the pipeline trusting a regex match
-    found in a stale footer link (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/16-ats-token-discovery.md:51-54`). A
+    found in a stale footer link. A
     validator exercised only against boards that resolve would pass every test
     while being unable to tell a live board from a dead one -- so the
     non-resolving probes in this cassette are the ones that make the rest of
     it mean anything.
 
     And it must not be exercised against the LIVE endpoints, for the reason
-    task 09's harness exists: a test that reaches the network fails on the day
+    the cassette harness exists: a test that reaches the network fails on the day
     a vendor changes something, weeks after the commit that actually caused
     the failure, and passes on a laptop with no network only by accident.
 
 WHAT IS RECORDED
-    `evals/record_cassettes.py record_ats_validation()` -- ten probes across
+    `testsupport/record_cassettes.py record_ats_validation()` -- ten probes across
     the eight ATS platforms `ats_discovery.VALIDATABLE` lists, driven through
     tools/ats-discover.py's OWN validate(), so the recorded request is by
     construction the request the discovery tool makes. Re-record with:
 
-        python3 evals/record_cassettes.py ats-validation
+        python3 testsupport/record_cassettes.py ats-validation
 
 FOUR SHAPES WORTH THE DISK SPACE
     * a live board (greenhouse/lever/ashby/workday) -> valid, with a count
@@ -46,7 +46,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ats_discovery as ad  # noqa: E402
-from evals import cassettes  # noqa: E402
+from testsupport import cassettes  # noqa: E402
 
 CASSETTE = "ats-validation"
 
@@ -63,7 +63,7 @@ def _load_cli():
 
 @unittest.skipUnless(cassettes.available(CASSETTE),
                      f"cassette {CASSETTE} not recorded; "
-                     f"python3 evals/record_cassettes.py {CASSETTE}")
+                     f"python3 testsupport/record_cassettes.py {CASSETTE}")
 class AtsValidationCassetteTests(unittest.TestCase):
     """Replay the recorded vendor responses through the real validator."""
 
@@ -103,7 +103,7 @@ class AtsValidationCassetteTests(unittest.TestCase):
         self.assertGreater(jobs, 0)
 
     def test_live_workday_tenant_reports_the_server_side_total(self):
-        """NVIDIA is the tenant CLAUDE.md's throttling landmine is about --
+        """NVIDIA is the tenant throttling landmine is about --
         "one published account lost 1,960 of 2,000 jobs". The count recorded
         here is `total`, not the length of the returned page, which is the
         whole point: reconciling against the number the API reported is what
@@ -156,7 +156,7 @@ class AtsValidationCassetteTests(unittest.TestCase):
         self.assertIn("empty", note)
 
     def test_wrong_workday_data_centre_is_unvalidated_not_dead(self):
-        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:54` forbids guessing the data centre. The
+        """ forbids guessing the data centre. The
         recorded refusal is 422, not the 404 one would assume -- and 422 lands
         as `unvalidated`, which is the safe side: a guessed dc must never be
         able to mark a real tenant `dead` and retire it."""
@@ -169,7 +169,7 @@ class AtsValidationCassetteTests(unittest.TestCase):
     # -- claims about the REQUEST, not the response --------------------------
 
     def test_the_recorded_workday_request_asked_for_twenty(self):
-        """CLAUDE.md's landmine, pinned at the byte level.
+        """landmine, pinned at the byte level.
 
         Workday returns an empty jobPostings array with NO error for
         limit > 20 -- byte-identical to "no more results" -- so an edit

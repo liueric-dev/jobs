@@ -155,7 +155,7 @@ def _python_role_pattern():
         (relevance.py:95-96), so that case was never the problem; a file that
         is present and unreadable, or present and not parseable JSON, or
         parseable but not an object, raised straight out of the module body and
-        took the import down. It also broke evals/ingest_modules.py's stated
+        took the import down. It also broke testsupport/ingest_modules.py's stated
         precondition that a module body neither connects nor fetches nor reads.
 
         The fallback is the same one the re.error branch relies on, so the

@@ -371,7 +371,7 @@ class TestEnsureStateSchema(unittest.TestCase):
 
 class TestUpsertResult(unittest.TestCase):
     def test_unpacks_as_new_updated_unchanged(self):
-        """api/query_claims.py returns this tuple straight to a caller."""
+        """The result's historical three-value unpacking contract remains."""
         r = upsert.UpsertResult()
         r.new, r.updated, r.unchanged = 1, 2, 3
         new, updated, unchanged = r

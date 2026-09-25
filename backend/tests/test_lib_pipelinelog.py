@@ -1,12 +1,7 @@
-"""Tests for lib/pipelinelog.py -- T-12's shared stderr format.
+"""Verify that pipeline logging follows the current sys.stderr.
 
-The one behaviour worth pinning is the reason this module exists instead of
-`logging.basicConfig()` at each call site: a plain `logging.StreamHandler()`
-captures `sys.stderr` at construction time, so once any script has logged
-once, `contextlib.redirect_stderr` and `mock.patch.object(sys, "stderr",
-...)` -- both used throughout tests/test_match.py and tests/test_score.py --
-would silently stop capturing anything. If this file's tests ever fail
-because output "goes missing" under a redirect, that regression is back.
+A normal StreamHandler captures the stream at construction and breaks later
+redirects; the shared logger must preserve redirected test output.
 """
 
 import sys, os
@@ -27,8 +22,7 @@ class TestRedirectCompatibility(unittest.TestCase):
         # per process, but the test suite imports this module once and would
         # otherwise share state across cases. Root handlers are restored
         # afterward -- leaving an extra one attached would double-emit every
-        # later logging call in the SAME process, including the ones
-        # tests/test_match.py and tests/test_score.py count exactly.
+        # later logging call in the SAME process.
         root = logging.getLogger()
         original_handlers = list(root.handlers)
         original_installed = pipelinelog._installed
@@ -56,8 +50,7 @@ class TestRedirectCompatibility(unittest.TestCase):
         self.assertIn("second logger, later redirect", stream.getvalue())
 
     def test_mock_patch_object_sys_stderr_is_also_honoured(self):
-        """tests/test_score.py's TestPerJobIsolation patches sys.stderr this
-        way rather than with redirect_stderr; both must work identically."""
+        """mock.patch and redirect_stderr must behave identically."""
         log = pipelinelog.get_logger("test.mockpatch")
         fake = io.StringIO()
         patcher = mock.patch.object(sys, "stderr", fake)

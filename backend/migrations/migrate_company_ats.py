@@ -1,52 +1,10 @@
 #!/usr/bin/env python3
-"""
-Create `ats_seed` and `company_ats`, and load the NYC employer seed list.
+"""Create ATS discovery tables and optionally seed NYC employers.
 
-WHAT THESE TWO TABLES ARE
-
-    ats_seed     WHO to probe. One row per employer: a display name, a
-                 starting careers URL, a sector, and the outcome of the last
-                 probe. Grows continuously and is the thing task 16 means by
-                 "store as a simple seeded table, not a config file" -- adding
-                 an employer is an INSERT, never a deploy.
-
-    company_ats  WHAT was found. One row per (ats, token) -- plus one row per
-                 employer conclusively found to run no public-feed ATS. This
-                 is what tasks 17, 18 and 20 read instead of
-                 config/companies.json.
-
-WHY TWO TABLES AND NOT ONE
-    They have opposite lifecycles and opposite cardinalities. An employer is
-    seeded once and probed forever; a token is discovered, validated monthly,
-    and may go dead or be replaced when the employer migrates ATS. One
-    employer can also yield several tokens (a hospital system with a separate
-    board for its physician group is normal). Folding them together would mean
-    either losing the seed row when a token dies or losing the token history
-    when the seed is re-probed.
-
-WHY A MIGRATION AND NOT schema.ensure_schema()
-    Same reasoning as migrate_scores.py and migrate_profiles.py: this writes
-    ROWS, not just structure, and the rows it writes decide what the probe
-    will spend several hundred outward HTTP requests on. The DDL half is
-    additive and idempotent; the seed half is opt-in. Dry run is the default.
-
-    The DDL is nonetheless re-run on every invocation of tools/ats-discover.py
-    via ensure_ats_schema() below, which is import-safe and does no row writes
-    -- so the discovery tool cannot run against a half-created schema, and
-    nothing has to remember to run this first.
-
-USAGE
-    python3 migrations/migrate_company_ats.py                 # report only
-    python3 migrations/migrate_company_ats.py --apply         # create + seed
-    python3 migrations/migrate_company_ats.py --apply --seed-file other.json
-    python3 migrations/migrate_company_ats.py --apply --refresh-urls
-
-IDEMPOTENT. Re-running inserts only employers absent from the table and
-leaves every probe result alone. It deliberately does NOT overwrite
-careers_url on an existing row -- the probe corrects that column when it
-follows a redirect or a fallback path, and a stale hand-written value in the
-seed FILE must not clobber a live one learned from the network. Pass
---refresh-urls when the file is genuinely the better source.
+ats_seed records employers to probe and the outcome of each attempt.
+company_ats records discovered board tokens and validation status. The DDL is
+additive and idempotent; loading seed rows requires --apply. Existing probe
+results are not overwritten unless --refresh-urls is requested.
 """
 
 import argparse
@@ -65,12 +23,7 @@ import schema  # noqa: E402
 from lib import dbconn, envfile  # noqa: E402
 from lib.timeparse import utc_now_str  # noqa: E402
 
-# Unlike the other migrations, this one establishes its own environment. Those
-# were run by hand in a shell that had already sourced .env; this one is also
-# the documented first step of a task whose second step (tools/ats-discover.py)
-# loads .env itself, and having the two disagree about where DATABASE_URL comes
-# from is exactly the confusion run-daily.py's docstring records from the
-# 2026-07-25 run. Already-exported values still win -- see envfile.load().
+# Load the same environment file as ATS discovery; exported values still win.
 envfile.load(os.path.join(_REPO_ROOT, ".env"))
 
 SEED_TABLE = "ats_seed"
@@ -119,7 +72,7 @@ def ensure_ats_schema(conn):
             ats TEXT NOT NULL,
             token TEXT NOT NULL,
             -- Workday needs all three of tenant/dc/site and they are stored
-            -- separately on purpose: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md:54` forbids
+            -- separately on purpose. Do not
             -- guessing the data centre, because wd1 vs wd5 is a 404 and a 404
             -- there looks exactly like a tenant with no open roles.
             workday_site TEXT,
@@ -140,8 +93,7 @@ def ensure_ats_schema(conn):
         )
     """)
     conn.commit()
-    # Task 17's query is "every valid row for the platforms I handle"; task
-    # 18's is the same restricted to workday. Both are (status, ats)-first.
+    # Runtime roster queries filter by status and ATS platform first.
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_company_ats_status "
                  f"ON {ATS_TABLE}(status, ats)")
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_company_ats_employer "

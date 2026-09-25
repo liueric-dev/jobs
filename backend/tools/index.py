@@ -1,28 +1,8 @@
 #!/usr/bin/env python3
-"""Generate tools/README.md from the docstrings already in tools/*.py.
+"""Generate tools/README.md from the current tools' module docstrings.
 
-WHY GENERATED AND NOT WRITTEN
-    A hand-maintained list of this directory is right the day it is written
-    and wrong three tools later. This repo has already paid that bill once -- 137
-    files under docs/ deleted on 2026-08-02 after an audit found 168 places
-    they contradicted the code -- so an index that a human has to remember to
-    update is the one shape this tree should not add.
-
-    Every tool in this directory already opens with a one-line summary, and
-    most of them are phrased as the question the tool answers. That IS the
-    index; it just needed printing. The docstring is the contract, so the
-    place to fix a wrong line is the tool, never the README.
-
-THE TEST IS THE POINT
-    tests/test_tools_index.py fails when the checked-in README does not match
-    what this script would write. Without it this is just a different way to
-    go stale -- with it, drift is a red run rather than a rumour, which is the
-    same standard CLAUDE.md applies to citations and to CI.
-
-USAGE
-    python3 tools/index.py             # print, change nothing
-    python3 tools/index.py --write     # rewrite tools/README.md
-    python3 tools/index.py --check     # exit 1 if README.md is out of date
+Use --write after adding, removing, or renaming a tool. --check and the test
+suite catch a stale index.
 """
 
 import argparse
@@ -43,8 +23,8 @@ generator: tools/index.py
 
 # backend/tools/
 
-**Measurement and one-off investigation. Nothing here runs as part of the nightly
-pipeline** -- `run-daily.py`'s 14 steps touch none of it. Each entry below is the
+**Operational tools and one-off investigation.** `run-daily.py` invokes
+`ats-discover.py --nightly --known-only`; the other tools are operator-run. Each entry below is the
 first line of that file's own docstring; open the file for the full one, which is
 where the caveats live (what it costs, what it writes, what it must not be trusted
 for).
@@ -61,11 +41,7 @@ takes command-line options; run one with `--help` for its own.
 """
 
 FOOTER = """
-Two of these cannot run on a clean checkout or against every machine, and the
-reasons are in their docstrings rather than repeated here:
-`learned-ranker-probe.py` needs numpy and sklearn, which are deliberately in no
-`requirements.txt`, and `provision-database.py` has a banner to read before it is
-pointed at a populated database.
+`provision-database.py` changes schema. Check its target URL before running it.
 """
 
 

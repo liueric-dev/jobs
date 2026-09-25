@@ -121,37 +121,6 @@ class TestContentHash(unittest.TestCase):
             blanked, ids.content_hash(self.JOBS_REC, self.JOBS_FIELDS))
 
 
-class TestGoogleIdentity(unittest.TestCase):
-    """Google posting identity -- jobs-only, absent from the events copy."""
-
-    JOB_ID_BLOB = ("eyJqb2JfdGl0bGUiOiAiU1dFIiwgImNvbXBhbnlfbmFtZSI6ICJBY21lIi"
-                   "wgImh0aWRvY2lkIjogIjVwNjloeE16Rm1RcmxMcWlBQUFBQUE9PSIsICJm"
-                   "YyI6ICJyb3RhdGVzIn0")
-
-    NORMALIZE_VECTORS = [
-        ("https://ex.com/apply/?utm_campaign=google_jobs_apply&id=7",
-         "https://ex.com/apply?id=7"),
-        ("https://ex.com/apply/?gclid=x&b=2&a=1", "https://ex.com/apply?a=1&b=2"),
-        ("https://ex.com/apply#frag", "https://ex.com/apply"),
-        ("", ""),
-        (None, ""),
-    ]
-
-    def test_normalize_apply_url_frozen(self):
-        for url, expected in self.NORMALIZE_VECTORS:
-            self.assertEqual(ids.normalize_apply_url(url), expected,
-                             f"normalize_apply_url drift for {url!r}")
-
-    def test_htidocid_wins(self):
-        job = {"job_id": self.JOB_ID_BLOB, "title": "SWE",
-               "apply_options": [{"link": "https://ex.com/a?utm_source=g"}]}
-        self.assertEqual(ids.google_source_id(job, "acme"),
-                         "5p69hxMzFmQrlLqiAAAAAA==")
-
-    def test_fingerprint_fallback_frozen(self):
-        job = {"job_id": None, "title": "  Senior   Backend Engineer ",
-               "apply_options": [{"link": "https://ex.com/a/?utm_source=g&x=1"}]}
-        self.assertEqual(ids.google_source_id(job, "acme"), "fp:aa84fae9ae4d7563")
 
 
 class TestStripHtml(unittest.TestCase):
@@ -199,7 +168,7 @@ class TestStripHtml(unittest.TestCase):
 
         The old `<[^>]+>` stopped at the ">" inside the class attribute and
         emitted `*]:mt-2">` and everything after it as prose. Six live rows
-        were written that way; tests/test_extract.py's cassette classes hold
+        were written that way; the retained cassette tests hold
         the real bytes, and this is the same defect at one line so that a
         reader of THIS file can see what changed without a network fixture.
         """

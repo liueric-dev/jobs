@@ -290,7 +290,7 @@ SUMMARY_PREFIX = "upsert-summary:"
 #: Default per-run failure rate above which upsert_checked raises. 5% is a
 #: starting guess, not a measurement -- there has never been a run with the
 #: error count recorded, so there is no distribution to pick from yet. Tune
-#: it once task 04's baseline exists.
+#: it once a measured baseline exists.
 DEFAULT_THRESHOLD = 0.05
 
 

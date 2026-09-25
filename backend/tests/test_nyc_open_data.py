@@ -7,7 +7,7 @@ WHAT IS PINNED HERE AND WHY EACH ONE EARNS ITS PLACE
     for. The whole design answer is reconcile(), so it is tested three ways
     -- as pure arithmetic, against the real recorded crawl, and against a
     DERIVED cassette in which the middle page comes back empty. That last
-    one is the failure CLAUDE.md's landmine describes ("one published
+    one is the failure landmine describes ("one published
     account lost 1,960 of 2,000 jobs"), reproduced rather than argued.
 
   * **A 429 mid-crawl must not end the crawl.** lib/http.py retries it, but
@@ -38,10 +38,10 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema                                                  # noqa: E402
-from evals import cassettes, scratchdb                         # noqa: E402
-from evals.cassettes import Cassette, Interaction              # noqa: E402
-from evals.ingest_modules import load as load_ingest           # noqa: E402
-from evals.record_cassettes import (NYC_OPEN_DATA_PAGE_SIZE,   # noqa: E402
+from testsupport import cassettes, scratchdb                         # noqa: E402
+from testsupport.cassettes import Cassette, Interaction              # noqa: E402
+from testsupport.ingest_modules import load as load_ingest           # noqa: E402
+from testsupport.record_cassettes import (NYC_OPEN_DATA_PAGE_SIZE,   # noqa: E402
                                     NYC_OPEN_DATA_WHERE)
 from lib import envfile                                        # noqa: E402
 from lib.upsert import upsert_checked                          # noqa: E402
@@ -66,7 +66,7 @@ requires_db = unittest.skipUnless(
 require_cassette = unittest.skipUnless(
     cassettes.available(CASSETTE),
     f"cassette {CASSETTE} not recorded -- "
-    f"`python3 evals/record_cassettes.py {CASSETTE}`")
+    f"`python3 testsupport/record_cassettes.py {CASSETTE}`")
 
 _ANNOUNCED = set()
 
@@ -141,7 +141,7 @@ class TestReconcile(NYCOpenDataTest):
 
     def test_zero_rows_against_a_real_count_is_the_loudest_failure(self):
         """The shape a revoked endpoint or a renamed dataset takes: 200 OK,
-        empty array, no exception anywhere. CLAUDE.md: "Silence is this
+        empty array, no exception anywhere. : "Silence is this
         system's failure mode."."""
         self.assertFalse(self.nyc.reconcile(0, 2376, 2376).ok)
 
@@ -184,16 +184,8 @@ class TestParsing(NYCOpenDataTest):
                          "python, prompt engineering"):
             self.assertIn(fragment, text)
 
-    def test_preferred_skills_survives_extract_pys_3000_char_cut(self):
-        """The reordering argued for at DESCRIPTION_PARTS, asserted.
-
-        extract.py:180 caps its prompt at 3,000 characters and extract.py:257
-        applies it. Measured over 400 External postings, `job_description`
-        alone has a median of 3,946 characters -- so under the field order
-        the task file states, `preferred_skills` lands past the cut on 83% of
-        the postings that have one, and the field the concatenation exists to
-        capture never reaches the model.
-        """
+    def test_preferred_skills_come_before_long_narrative(self):
+        """Keep useful skills near the front of stored description text."""
         text = self.nyc.description_of({
             "job_description": "narrative " * 1000,
             "minimum_qual_requirements": "quals",
@@ -239,9 +231,7 @@ class TestParsing(NYCOpenDataTest):
             self.assertTrue(record["location_is_nyc"])
 
     def test_career_level_is_carried_but_never_written_as_a_column(self):
-        """The task file is explicit: career_level is a free independent
-        label on a field task 06 found unstable, and is worth more to task 07
-        as a check on extract.py than as a shortcut around it."""
+        """Retain the source label without treating it as inferred seniority."""
         record = self.nyc.normalize({"job_id": "1", "agency": "DDC",
                                      "business_title": "Analyst",
                                      "career_level": "Entry-Level"})
@@ -367,7 +357,7 @@ class TestRecordedCrawl(NYCOpenDataTest):
 
     def test_a_null_post_until_normalizes_to_no_deadline_and_never_expires(self):
         """The recorded slice IS the null-post_until slice, so this is the
-        edge case task 14 asks for, on real bytes rather than invented ones.
+        edge case on real bytes rather than invented ones.
         These rows fall through to disappearance-based closure."""
         with replaying():
             _before, fetched, _after = crawl(self.nyc)
@@ -473,7 +463,7 @@ class TestWriteAndClose(NYCOpenDataTest):
     """Closure is a claim about UPDATE statements, so it needs a server.
 
     Written into a throwaway `scratch_<hex>` schema built by the REAL
-    schema.ensure_schema() -- evals/scratchdb.py. Nothing here touches the
+    schema.ensure_schema() -- testsupport/scratchdb.py. Nothing here touches the
     production table.
     """
 

@@ -1,32 +1,8 @@
-"""The six non-LLM fetchers, replayed against real recorded upstream bytes.
+"""Replay ingestion fetchers against recorded upstream responses.
 
-WHAT MAKES THIS DIFFERENT FROM THE TESTS ALREADY HERE
-
-`tests/test_upsert_checked.py:20-24` says it plainly: the ingest scripts
-"cannot be imported (five of six have hyphens in their filenames)", so it
-tests the TableSpec each script writes through, and notes that "the fetch and
-parse halves are task 09's cassette harness, and these become cassette-backed
-there." This is that. `evals/ingest_modules.py` imports them by path, and
-every assertion below runs the script's OWN fetch and normalize functions
-over bytes the real endpoint really sent -- no hand-written sample payloads,
-because the audit defects (register deleted 2026-08-02:
-`git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`) live in shapes
-nobody would think to write down.
-
-THE CONTRACT EVERY SOURCE OWES. `schema.py:118-120`: "Every normalize_*
-function must supply every key here: upsert binds them as named parameters,
-so a missing one fails that record." That is asserted once, for all six, in
-`assert_normalizes`. It is the cheapest possible regression net for the seven
-new ingest scripts Phase 3 adds from these templates.
-
-PROVENANCE IS PRINTED, NOT ASSUMED. Each cassette's recording date is printed
-once per run. A fixture recorded in July is the specification in December
-whether anyone meant it to be or not; the least this can do is say how old it
-is out loud.
-
-OFFLINE. Every test here replays. `cassettes.CassetteMiss` is fatal, so a
-request this suite does not have recorded fails rather than silently going
-back to the network.
+Tests exercise each source's own fetch and normalize functions, check that
+normalized records contain the required schema keys, and print cassette age.
+Missing cassette requests fail rather than reaching the network.
 """
 
 import json
@@ -38,8 +14,8 @@ from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import schema                                                 # noqa: E402
-from evals import cassettes, scratchdb                        # noqa: E402
-from evals.ingest_modules import load as load_ingest          # noqa: E402
+from testsupport import cassettes, scratchdb                        # noqa: E402
+from testsupport.ingest_modules import load as load_ingest          # noqa: E402
 from lib import envfile                                       # noqa: E402
 from lib.upsert import upsert_checked                         # noqa: E402
 
@@ -50,10 +26,10 @@ envfile.load(os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), ".env"))
 
 #: Fixtures that are not cassettes -- a shape a recording cannot express.
-#: See evals/fixtures/builtin-nyc-desync.html's own header for why it exists
+#: See testsupport/fixtures/builtin-nyc-desync.html's own header for why it exists
 #: and why it is not a re-recording.
 FIXTURE_DIR = os.path.join(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))), "evals", "fixtures")
+    os.path.abspath(__file__))), "testsupport", "fixtures")
 
 requires_db = unittest.skipUnless(
     scratchdb.available(),
@@ -77,7 +53,7 @@ def replaying(name):
 def require(name):
     return unittest.skipUnless(
         cassettes.available(name),
-        f"cassette {name} not recorded -- `python3 evals/record_cassettes.py "
+        f"cassette {name} not recorded -- `python3 testsupport/record_cassettes.py "
         f"{name}`")
 
 
@@ -158,7 +134,7 @@ class TestATS(NormalizerContract):
 
     @require("ats-greenhouse-no-content")
     def test_a_payload_with_no_content_field_loses_descriptions_silently(self):
-        """The third awkward response from `git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:73-76`.
+        """The third awkward response from .
 
         Recorded from the same board with `?content=true` dropped, which is
         the real shape ats.py:152 would receive if that parameter were ever
@@ -446,7 +422,7 @@ class TestWeWorkRemotely(NormalizerContract):
 
         The summary used to print `len(all_records)` and nothing else, so an
         exclude-pattern edit that started eating real engineering titles
-        "would produce no signal at all" (`git show refactor-freeze-2026-08-02:docs/ingest/weworkremotely.md:309-312`). The
+        "would produce no signal at all" (). The
         counters make the difference between items offered and rows produced
         add up -- which is the only thing that can turn that edit into a
         number somebody sees.
@@ -574,7 +550,9 @@ class TestBuiltInNYC(NormalizerContract):
         """
         with replaying("builtin-nyc"):
             page = self.builtin.fetch_page(1)
-        body = self._desync_fixture().split("-->\n", 1)[1]
+        # apply_patch's file move supplied a terminal newline absent from the
+        # original recorded slice; it is not part of the upstream HTML.
+        body = self._desync_fixture().split("-->\n", 1)[1].removesuffix("\n")
         self.assertIn(
             body, page,
             "the fixture is no longer a slice of the recording it documents")
@@ -698,123 +676,3 @@ class TestBuiltInNYC(NormalizerContract):
         self.assertTrue(description,
                         "no description parsed out of the recorded detail page")
         self.assertNotIn("<", description, "markup survived into the text")
-
-
-# ---------------------------------------------------------------------------
-# google-serpapi.py
-# ---------------------------------------------------------------------------
-
-class TestGoogleSerpApi(NormalizerContract):
-
-    @classmethod
-    def setUpClass(cls):
-        cls.serp = load_ingest("google-serpapi")
-
-    @require("google-serpapi")
-    def test_search_and_normalize(self):
-        with replaying("google-serpapi"):
-            results = self.serp.serpapi_search(
-                "AI engineer", "New York, New York, United States",
-                date_chip="week")
-        from google_jobs import normalize_job
-        records = [normalize_job(j, "nyc") for j in results]
-        self.assert_normalizes(records, platform="google_jobs")
-        self.assert_ids_unique(records, "google_jobs")
-
-    @require("google-serpapi")
-    def test_the_recording_replays_under_any_api_key(self):
-        """The credential is not part of the cache key -- rotating it must
-        not discard the corpus (`docs/ingestion_tests/README.md:86-87`)."""
-        original = self.serp.SERPAPI_API_KEY
-        try:
-            self.serp.SERPAPI_API_KEY = "a-completely-different-key"
-            with replaying("google-serpapi"):
-                results = self.serp.serpapi_search(
-                    "AI engineer", "New York, New York, United States",
-                    date_chip="week")
-            self.assertTrue(results)
-        finally:
-            self.serp.SERPAPI_API_KEY = original
-
-
-# ---------------------------------------------------------------------------
-# google-apify.py
-# ---------------------------------------------------------------------------
-
-def _immediate_success(cassette):
-    """The recorded run, with a start POST that already says SUCCEEDED.
-
-    DERIVED IN CODE, NOT COMMITTED AS A SECOND FILE. Apify's start endpoint
-    and its run endpoint return the same `{"data": {...}}` run resource, so
-    the awkward case -- a run that finished before the first poll -- is the
-    recorded run object served as the start response. Committing that as its
-    own cassette would be committing a copy that silently stops matching the
-    recording it came from the first time either is re-recorded.
-
-    This is `apify-immediate-success.json` from
-    `git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:68`, built rather than stored.
-    """
-    from evals.cassettes import Cassette, Interaction
-    run = next(i for i in cassette.interactions if "/actor-runs/" in i.url)
-    start = Interaction(
-        method="POST",
-        url="https://api.apify.com/v2/acts/"
-            "johnvc~google-jobs-scraper---pay-per-result/runs?token=REDACTED",
-        status=201, headers={"Content-Type": "application/json"},
-        body=run.body)
-    return Cassette(name=cassette.name + "+immediate-success",
-                    source=cassette.source, recorded_at=cassette.recorded_at,
-                    note="derived: the recorded SUCCEEDED run served as the "
-                         "start response",
-                    interactions=[start, *cassette.interactions])
-
-
-class TestGoogleApify(NormalizerContract):
-
-    @classmethod
-    def setUpClass(cls):
-        cls.apify = load_ingest("google-apify")
-
-    @require("google-apify")
-    def test_dataset_items_normalize(self):
-        with replaying("google-apify") as player:
-            run = self.apify.http.get_json(player.cassette.interactions[0].url)
-            items = self.apify.http.get_json(
-                f"https://api.apify.com/v2/datasets/"
-                f"{run['data']['defaultDatasetId']}/items?token=x")
-        from google_jobs import normalize_job
-        records = [normalize_job(j, "nyc") for j in items]
-        self.assert_normalizes(records, platform="google_jobs")
-        self.assert_ids_unique(records, "google_jobs")
-
-    @require("google-apify")
-    def test_an_immediately_successful_run_returns_its_dataset(self):
-        """Audit item 1 / D17 -- FIXED 2026-07-31, and this is the flip.
-
-        `run_actor_query` used to bind `run` only inside the `while` body. A
-        start response that is already SUCCEEDED skips the loop entirely,
-        passes the `status != "SUCCEEDED"` check, and then read
-        `run["data"]["defaultDatasetId"]` -- a name that was never assigned.
-        The result was a paid actor run whose results are never collected,
-        reported as one failed query among many.
-
-        The previous version of this test asserted the UnboundLocalError on
-        purpose, as the reproduction `DEFECTS.md` D17 said was blocked on this
-        harness. `run = start` before the loop is the whole fix; this asserts
-        the rows instead, which is what the assertion was left here to become.
-
-        The cassette is unchanged -- `_immediate_success()` rewrites the start
-        response's status, so the same recorded bytes drive both the old
-        failure and the new success.
-        """
-        announce("google-apify")
-        cassette = _immediate_success(cassettes.Cassette.load("google-apify"))
-        with cassettes.replay(cassette=cassette):
-            items = self.apify.run_actor_query("AI engineer", "New York")
-        self.assertTrue(items, "an immediately-SUCCEEDED run returned no items")
-        records = [self.apify.normalize_job(j, "nyc") for j in items]
-        self.assert_normalizes(records, platform="google_jobs")
-
-
-if __name__ == "__main__":
-    unittest.main()

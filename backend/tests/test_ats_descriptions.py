@@ -1,26 +1,7 @@
-"""Unit tests for ATS description extraction.
+"""Regression tests for normalized ATS description text.
 
-Run:  python3 tests/test_ats_descriptions.py
-
-stdlib unittest, same as tests/test_match.py.
-
-WHY THESE TESTS EXIST
-    Every one of these pins a bug that was live in the database, not a
-    hypothetical. 7,182 Greenhouse rows -- 65% of the whole table -- stored
-    their entire description as escaped markup (`&lt;div class=&quot;...`),
-    and 1,521 Ashby rows stored `&amp;` where `&` belonged.
-
-    The failure mode is what makes it worth a test: nothing errored. The
-    ingest reported success, the row count was right, `description_text` was
-    non-empty and passed every not-null check. It was simply unreadable, and
-    it stayed that way through two ingest runs because no assertion ever
-    looked at the *content* of the field.
-
-    The Greenhouse case is also the one a future reader is most likely to
-    "simplify" back into a bug, because a single unescape looks obviously
-    sufficient and is measurably not (277 of 300 sampled rows still held
-    literal entities after one pass). test_single_unescape_is_insufficient
-    exists to fail loudly when someone tries.
+Greenhouse's escaped content requires a different decoding path from the
+normal HTML returned by Lever and Ashby. These tests pin the stored text shape.
 """
 
 import os
@@ -110,10 +91,9 @@ class TestRealHtmlSources(unittest.TestCase):
 
 
 class TestDescriptionCap(unittest.TestCase):
-    def test_storage_cap_is_display_sized_not_prompt_sized(self):
-        """The cap governs what is STORED. extract.py and score.py each
-        truncate to 3,000 before building a prompt, so this number must stay
-        comfortably above a real posting (~6.3k chars average on Greenhouse)
+    def test_storage_cap_retains_full_posting_text(self):
+        """The cap should stay comfortably above a typical full posting
+        (~6.3k chars average on Greenhouse)
         without anyone worrying about token spend."""
         self.assertGreaterEqual(text.MAX_DESCRIPTION_CHARS, 12000)
 

@@ -1,107 +1,11 @@
 #!/usr/bin/env python3
-"""
-Built In NYC daily job listings scraper -- Postgres edition.
+"""Ingest Built In NYC's server-rendered job listings.
 
-Scrapes https://www.builtinnyc.com/jobs (server-rendered HTML, no
-JS/headless browser needed) and upserts into the same `jobs` table
-ingest/ats.py writes to, tagged platform='builtin'. This is a genuine
-Tier-3 scraping source, not a public API -- see EXTRACTION METHOD below
-for what was actually verified before writing this.
-
-EXTRACTION METHOD -- confirmed by loading the page in a real browser and
-checking DevTools network traffic: ZERO XHR/fetch calls fire to load job
-listings. Despite being a React-driven page, Built In renders the full
-job list server-side into the initial HTML response -- title, company,
-location, salary (when disclosed), and Built In's own seniority
-classification are all present in one plain GET, extractable with regex
-against consistent `data-id="..."` attributes. No API, no JSON-LD, no
-headless browser required. (An earlier pass at this wrongly concluded it
-needed JS rendering -- that was a wrong regex for the job-detail URL
-pattern, not an actual site limitation.)
-
-DESCRIPTIONS -- the listing page carries no description, so each posting
-needs one extra GET of its /job/... detail page. Those pages embed
-schema.org JobPosting JSON, which is where the text comes from.
-
-Worth knowing, because it cost 187 unusable rows: the detail pages write
-the MIME type HTML-escaped, `type="application/ld&#x2B;json"`. A selector
-written for a literal "ld+json" therefore matches nothing, finds no
-description, and reports no error -- the rows just arrive empty.
-Every builtin row in the database had description_text = '' while every
-other source averaged ~4,900 chars, and because scoring orders tier 1 by
-first_seen DESC these newest-first rows sorted straight to the top and
-consumed scoring calls on title alone. LD_JSON_PATTERN accepts both
-spellings.
-
-Detail fetches are bounded (BUILTIN_DETAIL_LIMIT, default 60/run), paced
-(BUILTIN_DETAIL_DELAY, default 2.0s) and skipped for rows that already
-have a description, so the backfill spreads across runs instead of
-becoming one long crawl.
-
-ROBOTS.TXT / POLITENESS: builtinnyc.com's robots.txt explicitly Allows
-crawling of /jobs?page=1, ?page=2, and ?page=3, then Disallows deeper
-pagination generally. Pages 4+ were confirmed to still return valid data
-when requested directly (nothing technically enforces the cutoff), but
-that Allow/Disallow split is the site owner's stated crawl preference, so
-MAX_PAGES defaults to 3 (~60 listings/run) rather than paging further.
-REQUEST_DELAY_SECONDS adds a pause between page fetches -- this is a
-scrape against real page loads, not a purpose-built API, so it doesn't
-get hit back-to-back the way ingest/ats.py's ATS calls do.
-
-LIMITATION -- this is a bounded sample (most-recent ~60 NYC listings
-across ALL companies per run), not an exhaustive list the way Tier 1's
-per-company ATS pulls are. Two consequences:
-    1. No cross-source dedup: a company already covered by
-       ingest/ats.py's ATS pull (e.g. Datadog via Greenhouse) may also
-       appear here under platform='builtin' with a different company_token
-       (derived from Built In's own /company/{slug} URL, not the ATS
-       token). These are NOT merged -- querying across both sources means
-       accepting some duplication, or de-duplicating at query time
-       (e.g. DISTINCT ON company_name, title). Merging robustly would need
-       fuzzy company-name matching that doesn't exist yet.
-    2. NO close-missing logic (unlike ingest/ats.py). A job absent from
-       this run's ~60-listing sample doesn't mean it closed -- it may have
-       simply been pushed past page 3 by newer postings. Applying an
-       exact-diff close would falsely close jobs that are still open.
-       Instead, builtin-sourced rows are closed by STALENESS: not re-seen
-       in BUILTIN_STALE_AFTER_DAYS days. That's a proxy, not a certainty,
-       but it's the honest signal actually available from a sampled feed.
-
-DEPENDENCY: none beyond psycopg (same as ingest/ats.py) -- stdlib `re`
-handles the HTML parsing, no BeautifulSoup needed; the markup is regular
-enough that regex against the site's `data-id` attributes is reliable
-(verified against 4 separate live pages before writing this).
-
-INSTALL: lives in ~/apps/jobs/backend alongside the rest of the jobs pipeline
-
-DATABASE: same Postgres instance/database/schema as ingest/ats.py
-(the `jobs` table) -- see that script's docstring for the database
-reasoning. This script creates the schema defensively too, so it works
-even if run before ingest/ats.py ever has.
-
-CONFIG:
-    DATABASE_URL -- postgres connection string (same default as ingest/ats.py)
-
-SCHEDULE: not scheduled directly -- see run-daily.py, which is the
-single cron entry point and calls this script as a subprocess.
-
-TEST BEFORE SCHEDULING:
-    python3 ingest/builtin-nyc.py
-    DEBUG_PRINT_KEYS=1 python3 ingest/builtin-nyc.py
-
-CONCURRENCY: this script is not scheduled directly -- see
-run-daily.py, which runs this and ingest/ats.py sequentially via
-subprocess so they never run at the same time on this machine.
-
-SENIORITY MAPPING: Built In supplies its own classification per posting
-("Junior", "Mid level", "Senior level", "Entry level", "Expert/Leader")
-rather than requiring the title-keyword guess ingest/ats.py has to make.
-Mapped onto the same seniority_guess vocabulary used there (entry / senior /
-mid_or_unspecified) so both sources are queryable together consistently:
-    Entry level, Junior  -> entry
-    Mid level             -> mid_or_unspecified
-    Senior level, Expert/Leader -> senior
-    (missing/unrecognized) -> unknown
+The list pages provide posting metadata; detail pages contain JobPosting JSON
+with full descriptions. Crawl only the first three pages by default, matching
+the site's robots.txt preference, and pace detail requests. Because those
+pages are a bounded sample rather than a complete board, postings close by
+staleness rather than by an exact list diff.
 """
 
 import os
@@ -153,7 +57,7 @@ GEO_PATTERN = re.compile(r'fa-location-dot[^>]*></i></div>\s*<div><span[^>]*>([^
 #: work type (`fa-house-building`) patterns above, so the fix is to read it
 #: the same way the two fields either side of it are already read.
 #:
-#: The recorded page (evals/fixtures/cassettes/builtin-nyc.json, 2026-07-28)
+#: The recorded page (testsupport/fixtures/cassettes/builtin-nyc.json, 2026-07-28)
 #: holds 23 cards; scoped and unscoped agree on all 23 and both find 20
 #: salaries, so this changes nothing about that capture -- the false positive
 #: is a shape the recording happens not to contain, which is exactly why the
@@ -215,7 +119,7 @@ def extract_description(page_html):
     Built In embeds schema.org JobPosting inside an "@graph" array rather
     than as a bare top-level object, so both shapes are handled. The
     description itself is HTML, which is unescaped and stripped to text --
-    the scorer reads prose, and markup is just tokens it pays for.
+    normalized descriptions should be prose rather than markup.
     """
     for block in LD_JSON_PATTERN.findall(page_html):
         try:
@@ -253,7 +157,7 @@ def fetch_description(job_url):
     A posting whose detail page 404s or times out must not fail the whole
     ingest: the listing row is still worth having, and the description is
     additive. Returning None leaves the row eligible for a retry next run,
-    which is the same deferral logic scoring uses for transient errors.
+    which preserves retries after transient fetch errors.
 
     429 is the exception -- see RateLimited.
 
@@ -374,10 +278,10 @@ def parse_page(page_html, stats=None):
         such span belongs to no card and is now ignored instead of consumed,
         and a card with no anchor in its own span drops ONLY ITSELF.
 
-        The recorded page (evals/fixtures/cassettes/builtin-nyc.json) has 23
+        The recorded page (testsupport/fixtures/cassettes/builtin-nyc.json) has 23
         titles and 23 anchors interleaved one for one, so index-zip and
         containment agree on it exactly -- which is why this needed the
-        desync fixture beside it (evals/fixtures/builtin-nyc-desync.html) to
+        desync fixture beside it (testsupport/fixtures/builtin-nyc-desync.html) to
         have anything to prove.
     """
     stats = Counter() if stats is None else stats

@@ -1,14 +1,6 @@
 {
-  "_comment": "Decides which jobs are worth an LLM scoring call, and in what order. See jobs/relevance.py. This is the ONLY file that knows this pipeline is currently pointed at software roles -- relevance.py itself contains no domain terms, so retargeting at a different field means rewriting this file and config/persona.json, not touching code.",
-
-  "_why": "ingest/ats.py pulls entire company job boards, so ~87% of the table is roles this persona will never apply to (compliance, enterprise sales, clinical, tax). Scoring used to be the only filter, which meant paying an LLM call to conclude that a Chief Compliance Officer posting is not a software job.",
-
-  "_tiers": "1 = title matches and location is acceptable. 2 = title matches, location unknown or elsewhere. 3 = everything else. Nothing is ever deleted; max_tier_to_score just decides how deep today's budget reaches, so raising it backfills previously-skipped rows with no re-ingest.",
-
-  "_regex_dialect": "These are POSTGRES regexes (~*), not Python ones. Word boundary is \\y -- in Postgres \\b means BACKSPACE, so a \\b pattern silently matches nothing and quietly demotes everything it was meant to catch to tier 3. This was not hypothetical: the first version of this file used \\b throughout and buried 'ML / LLM Engineer' and 'Senior / Staff Fullstack Engineer' in tier 3. Always re-run tools/relevance-report.py after editing.",
-
-  "_dead_patterns_note": "tools/relevance-report.py --dead lists patterns matching zero rows. That report exists to catch \\b-instead-of-\\y mistakes, NOT to prune correct-but-currently-unused terms. '\\yattorney\\y' and '\\ywarehouse\\y' match nothing today and are kept on purpose: both were verified to match a synthetic title in Postgres, so they are working exclusions waiting for their first posting. Deleting an exclusion because the role has not appeared yet is how it appears in tier 1 next week.",
-
+  "_comment": "Shared PostgreSQL-regex configuration used by the Workday list-to-detail fetch gate. This does not rank or score stored jobs.",
+  "_regex_dialect": "PostgreSQL regexes use \\\\y for word boundaries; \\\\b means backspace.",
   "title_include": [
     "\\yengineer",
     "\\yengineering\\y",
@@ -45,9 +37,6 @@
     "security engineer",
     "infrastructure"
   ],
-
-  "_title_include_note": "Deliberately wider than 'engineer'. The persona's strongest bucket (bridge_solutions) is customer-facing implementation work -- Forward Deployed Engineer, Solutions Engineer, Technical Account Manager -- which a narrow engineering regex would push to tier 3 and never score. Better to spend a few calls on near-misses than to silently lose the best-fit bucket.",
-
   "title_exclude": [
     "\\yaccount executive\\y",
     "sales development",
@@ -82,9 +71,6 @@
     "\\yvp,?\\y",
     "vice president"
   ],
-
-  "_title_exclude_note": "Narrow and specific on purpose. Broad words that merely CO-OCCUR with unwanted roles -- 'manager', 'lead', 'director', 'specialist' -- are absent deliberately: they also appear in Engineering Manager and Technical Lead. An over-eager exclude is worse than no exclude, because tier 3 is where things go to be forgotten. Exclude only what is unambiguous.",
-
   "company_exclude": [
     "\\yremote zest\\y",
     "\\yremote click\\y",
@@ -93,32 +79,13 @@
     "\\ybrighthush\\y",
     "\\yjobgether\\y"
   ],
-
-  "_company_exclude_note": "Matched against company_name, not title. These six are relist sites that Google Jobs reports AS the employer, so the actual employer is unknown and an app would display the job board's name in the company field. 113 rows as of 2026-07-26. Their titles are keyword-stuffed in exactly the way title_include rewards, which is how 19 of them reached match_score >= 90 -- one at match 99 against an LLM fit of 15. Four of the six scrub the employer out of the body entirely (see description_exclude): remote zest 50/50, remote click 23/23, vacancy global 5/5, BrightHush 3/3.",
-
-  "_company_exclude_scope_note": "Deliberately does NOT list bebee, jobleads, learn4good, whatjobs, jooble, lensa, theladders, dailyremote, salutemyjob, remotejobs.org or jobright.ai, even though 150+ job_url values point at them. For those rows company_name holds the REAL employer and only the apply link is routed through the aggregator -- annoying to click, but a genuine posting, and excluding by company_name would match zero of them anyway. Add a pattern here only after confirming the name actually appears in company_name.",
-
-  "_company_exclude_rejected_note": "Rejected alternative: flag rows where SerpApi's `via` field matches company_name. It catches 160 rows but false-positives on every company posting to its own careers site -- via='Cisco Careers'/company='Cisco', 'Snowflake Careers'/'Snowflake', Capital One, Deloitte, ServiceNow, Citadel, D. E. Shaw. Those are the BEST rows in the table. Measured on all 632 Google rows, then rejected; do not revive it without re-running that check.",
-
   "description_exclude": [
     "reputed company"
   ],
-
-  "_description_exclude_note": "Some relisters scrub the employer's name out of the body and substitute a placeholder, leaving text like 'reputed company is redefining IT operations for the modern reputed company'. 82 rows read that way. A posting whose employer has been deleted cannot be applied to no matter how good the title looks, and unlike company_exclude this catches the same spam when it arrives under a fresh company name. Keep this list tiny and literal -- it scans description_text, so a loose pattern here could bury thousands of legitimate rows.",
-
-  "location_columns": ["location_is_nyc", "location_is_remote"],
-
-  "_location_note": "Any-of. These are heuristic tag columns set at ingest; NULL (source could not tell) reads as tier 2, not tier 3, so an undetectable location never buries a good posting. Set to [] to ignore location entirely.",
-
+  "location_columns": [
+    "location_is_nyc",
+    "location_is_remote"
+  ],
   "max_tier_to_score": 2,
-
-  "_max_tier_note": "2 means tier-3 rows are not extracted or scored. Reviewed 2026-07-28 against the throughput baseline (docs/SCORING.md, 'What it actually spends') and the corpus measurement (`git show refactor-freeze-2026-08-02:docs/pursuit-gate-volume.md`), and DELIBERATELY LEFT AT 2. The note this replaces said 'set to 3 to open the floodgates once throughput allows'. Throughput now allows. It is still the wrong move, and the reason is not throughput.",
-
-  "_max_tier_throughput_note": "Throughput says yes, and the constraint this note used to raise against it no longer exists. Extraction measures 7.7s p50 / 13.1s p95 per call at EXTRACT_MAX_WORKERS=3, 2.85s/call effective, on deepseek-v4-flash against the frozen corpus-v1 fixture. So the 6,183 open+described tier-3 rows (6,075 with no current-version facts) are a ~4.8-hour one-time backfill costing $1.73, and ongoing tier 3 adds 86 rows/day against tier 1+2's 66 -- both by posted_at_ts over 2026-06-28..2026-07-27. Nothing there is near a provider limit: DeepSeek publishes no daily request ceiling and 3 concurrent calls is 0.1% of the 2,500-concurrent one. REWRITTEN 2026-08-18 (T-60): THE CONSTRAINT THIS PARAGRAPH NAMED IS GONE, AND THE CONCLUSION SURVIVES IT. It used to argue that EXTRACT_BATCH_SIZE=40 against run-daily.py's single nightly invocation was a hard 40/day pipe, so tier 3's 152/day would mean 'the backlog never closes and ORDER BY first_seen DESC decides which postings are never looked at'. extract.py no longer works that way: it loops batches until the backlog is empty or EXTRACT_DEADLINE_SECS passes, and stops on a batch that makes no progress (extract.py:76-84, the loop at extract.py:1163-1188, EXTRACT_BATCH_SIZE at extract.py:115, the deadline at extract.py:136). The binding constraint is now the nightly deadline, 3600s by default, which at 2.85s/call effective is roughly 1,260 calls a night -- so ongoing tier-3 intake at 152/day is nowhere near it, and the 6,075-row backfill is about five nights rather than never. THROUGHPUT NOW SAYS YES WITHOUT A CAVEAT. That changes nothing here: the decision rests on _max_tier_quality_note and _max_tier_exclusion_note below, and it never rested on throughput. Do not read a cleared objection as an argument for raising it.",
-
-  "_max_tier_quality_note": "Quality says no, which settles it. Measured in `git show refactor-freeze-2026-08-02:docs/pursuit-gate-volume.md`, 2026-07-28: of the 2,975 tier-3 rows matching AI vocabulary, a hand-checked sample of 30 was 6.7% genuine -- 93% junk -- and the population-level check agrees (4.3% have any AI signal in the TITLE, 59.5% are senior/lead/director/VP, 23.5% are sales-shaped). The junk is not 'automation' pulling in manufacturing, as was assumed. It is company boilerplate: Pinterest, Brex, Braze, Notion, Wiz, ElevenLabs, Anthropic and OpenAI all ship an AI blurb in the header of EVERY requisition, so the pattern selects for the employer being AI-ish rather than the role. And the premise that tier 3 hides the target population is false: title_include already carries 34 terms including \\yai\\y and \\yllm\\y, so 34 of the 43 titles that are both entry-level-signalled and AI-signalled are ALREADY at tier 1 or 2. Nine are at tier 3. Widening the gate buys 9 on-target postings for 6,183 rows of noise. The bottleneck is sourcing, not gating.",
-
-  "_max_tier_exclusion_note": "The decisive objection, and the one easiest to miss from the config alone: TIER 3 IS WHERE THE EXCLUSION LISTS SEND THINGS. tier_sql folds company_exclude (relevance.py:268) and description_exclude (relevance.py:276) into the same row_ok predicate that title_include and title_exclude drive, and anything failing row_ok falls to tier 3 (relevance.py:297-299). union_sql then admits a row on `tier <= max_tier_to_score` (relevance.py:331), so max_tier_to_score=3 is an UNCONDITIONAL PASS -- it does not widen the gate, it removes it. Counted 2026-07-28 over open, described rows: 180 tier-3 rows are there because of company_exclude, 147 because of description_exclude (182 unique), and 1,906 because of title_exclude -- account executive, recruiter, nurse, controller, VP. All of them come back. Worse, they come back at the TOP: see _company_exclude_note, where 19 of these relist rows reached match_score >= 90 and one hit 99 against an LLM fit of 15, precisely because their titles are keyword-stuffed in the way title_include rewards. Setting this to 3 is a one-character change that silently disables four exclusion lists.",
-
-  "_max_tier_rejected_note": "Rejected alternatives, both measured before rejecting. (1) Raise to 3 and rely on match.py's MATCH_FLOOR to suppress the junk -- no: the relist rows are the ones that score HIGHEST, so the floor filters the wrong end. (2) Subdivide tier 2 as the task file suggested, on the theory that a widened gate would be too large to score in one pass -- no: the widened gate is not too large for the endpoint, and subdividing a tier that is already fully extracted (2,313 of 2,313 open+described rows have current facts) solves nothing. What WOULD change this decision is task 10's description-first gate making the provenance exclusions a separate predicate that no tier number can switch off. Until that lands, this stays at 2. Do not raise it on a throughput argument; throughput was never the objection."
+  "_max_tier_note": "Legacy key name retained for compatibility with Workday's gate. Tier 3 includes excluded rows; keep the threshold at 2."
 }

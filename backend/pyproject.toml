@@ -12,9 +12,8 @@ line-length = 100
 extend-exclude = [
     ".venv",
     ".venv-dev",
-    "webapp/.venv",
-    # Recorded third-party responses and evaluation fixtures are not source code.
-    "evals/fixtures",
+    # Recorded third-party responses are not source code.
+    "testsupport/fixtures",
 ]
 
 [tool.ruff.lint]
@@ -96,24 +95,9 @@ ignore = [
 "migrations/*" = ["S608"]
 
 [tool.ruff.lint.isort]
-# `config` and `schema_web` are here for a reason worth recording, because it is
-# the first case where ruff's autofix WOULD HAVE BROKEN THE PROGRAM.
-#
-# webapp/ is reached by a sys.path insert, not installed, so isort may read
-# `config` as third-party and `schema_web` as first-party and wanted schema_web
-# moved ABOVE config. Every webapp module imports `config` first
-# precisely because that module performs the insert -- reorder it and the next
-# import fails. `ruff check --fix` on tools/provision-database.py proposed
-# exactly that swap. Naming them first-party makes isort's order (config, then
-# schema_web) agree with the one the code requires.
-#
-# This is the argument for the recorded baseline in [tool.ruff.lint]: a linter is
-# a source of findings, not of edits, until each rule has been looked at once.
 known-first-party = [
-    "lib", "evals", "ingest", "serp", "tools", "migrations",
-    "config", "schema", "schema_web", "profiles", "searchnorm",
-    # The search-query admin tool imports this top-level module directly.
-    "searchqueries",
+    "lib", "testsupport", "ingest", "tools", "migrations",
+    "config", "schema", "relevance", "volume_floors",
 ]
 
 [tool.ruff.format]
@@ -127,19 +111,10 @@ indent-style = "space"
 # mypy configuration. T-17 in ../TASKS.md: "gradual typing on the seams only".
 #
 # WHY THESE FILES AND NO OTHERS. `files` below is the closed list T-17 names --
-# backend/lib/, schema.py, and match.py's score_job() -- the boundaries where a
-# wrong shape travels furthest, not a partial sweep of the whole tree. match.py
-# itself is NOT fully typed; only score_job() carries annotations, and
-# `check_untyped_defs = false` (mypy's own default, restated here so a future
-# mypy release changing its default cannot silently widen this file's claim)
-# means every other function in match.py is skipped rather than checked with
-# inferred Any types. Widening `files` to a directory this row did not type is
-# the same mistake ruff's own baseline section warns against: a claim of
-# cleanliness this repo cannot back up.
+# backend/lib/ and schema.py remain the typed seams.
 #
 # WHY follow_imports = "silent". Every seam file imports untyped siblings --
-# schema.py imports lib.*, match.py imports extract/llm/profiles/relevance/
-# schema. Without this, mypy would also analyse and report on those files,
+# schema.py imports lib.*. Without this, mypy would also analyse and report on those files,
 # which is the opposite of "on the seams only": it would make the boundary
 # everything a seam file happens to import, decided by import graph rather than
 # by this row.
@@ -148,7 +123,6 @@ python_version = "3.14"
 files = [
     "lib",
     "schema.py",
-    "match.py",
 ]
 follow_imports = "silent"
 ignore_missing_imports = true

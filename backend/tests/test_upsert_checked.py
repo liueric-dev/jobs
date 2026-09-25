@@ -1,43 +1,8 @@
-"""upsert_checked: the per-record error count is never discarded again.
+"""Verify ingestion upserts report per-record errors and enforce thresholds.
 
-WHAT THIS PINS
-
-`lib/upsert.py`'s UpsertResult.__iter__ yields (new, updated, unchanged) and
-NOT .errors, so `n, u, unc = upsert(...)` reads naturally and silently threw
-away every per-record failure. It did so at eight call sites -- all six ingest
-scripts and both API write paths (D01 in the defect register, deleted
-2026-08-02: `git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`). A run
-that dropped a hundred records reported success: no alert, no non-zero exit,
-no log line, and a corpus quietly smaller than it should be, which looks exactly like
-a slow hiring week.
-
-So this file asserts, for the spec each of those eight paths actually writes
-through, that a deliberately malformed record
-
-  1. lands in `.errors` rather than vanishing,
-  2. is logged even when the count is zero, and
-  3. raises UpsertErrorRate once the rate passes the threshold.
-
-WHY THE SPEC AND NOT THE SCRIPT. Importing them would buy nothing here: what
-varies between the eight paths is the TableSpec and the record shape, and those
-are what these tests parametrise over. The fetch and parse halves are task 09's
-cassette harness, and these become cassette-backed there.
-
-(This paragraph used to say the scripts *cannot* be imported, five of six
-having hyphens in their filenames. Task 09 removed that obstacle --
-evals/ingest_modules.py imports them by path -- so the reason is gone while
-the conclusion stands on its own.)
-
-WHAT COUNTS AS MALFORMED. schema.py:118-120 states the contract these tests
-break on purpose: "Every normalize_* function must supply every key here:
-upsert binds them as named parameters, so a missing one fails that record". A
-record missing a column is therefore not an invented failure -- it is the
-documented one, and the one D19's normalization-outside-the-try defect
-produces.
-
-No network and no database: _FakeConn below is the same shape as
-tests/test_lib_contract.py's _Conn, plus the transaction() and bound-parameter
-checking that upsert() needs.
+An UpsertResult can be unpacked without its error count, so tests supply a
+record missing a required column and assert that the error is logged and
+counted. A fake connection exercises the table specs without network or DB.
 """
 
 import io
@@ -119,9 +84,7 @@ def _malformed(**overrides):
     return rec
 
 
-#: (path, spec) for all eight call sites in D01. Four distinct specs; the
-#: paths sharing one share it deliberately -- google_spec() exists precisely so
-#: the two Google ingests and the contributor API cannot drift (schema.py:222).
+#: Active ingestion paths and their table specs.
 PATHS = [
     ("ingest/ats.py", lambda: schema.spec(schema.HASH_FIELDS_ATS)),
     ("ingest/builtin-nyc.py",
@@ -129,10 +92,6 @@ PATHS = [
                          blank_if_falsy=("salary_text",))),
     ("ingest/weworkremotely.py", lambda: schema.spec(schema.HASH_FIELDS_WWR)),
     ("ingest/hn-hiring.py", lambda: schema.spec(schema.HASH_FIELDS_SHORT)),
-    ("ingest/google-serpapi.py", schema.google_spec),
-    ("ingest/google-apify.py", schema.google_spec),
-    ("api/app.py", schema.google_spec),
-    ("api/query_claims.py", schema.google_spec),
 ]
 
 
@@ -198,7 +157,7 @@ class TestTheCountIsAlwaysLogged(unittest.TestCase):
     def test_summary_is_logged_when_there_are_no_errors_at_all(self):
         conn = _FakeConn()
         logged = []
-        upsert_checked(conn, schema.google_spec(), [_record()],
+        upsert_checked(conn, schema.spec(schema.HASH_FIELDS_ATS), [_record()],
                        schema.make_job_id, logger=logged.append)
 
         summaries = [ln for ln in logged if ln.startswith(SUMMARY_PREFIX)]
@@ -210,7 +169,7 @@ class TestTheCountIsAlwaysLogged(unittest.TestCase):
         still say so rather than logging nothing at all."""
         conn = _FakeConn()
         logged = []
-        upsert_checked(conn, schema.google_spec(), [], schema.make_job_id,
+        upsert_checked(conn, schema.spec(schema.HASH_FIELDS_ATS), [], schema.make_job_id,
                        logger=logged.append)
 
         self.assertTrue(any(ln.startswith(SUMMARY_PREFIX) for ln in logged))
@@ -222,7 +181,7 @@ class TestTheCountIsAlwaysLogged(unittest.TestCase):
         conn = _FakeConn()
         err = io.StringIO()
         with redirect_stderr(err):
-            upsert_checked(conn, schema.google_spec(), [_record()],
+            upsert_checked(conn, schema.spec(schema.HASH_FIELDS_ATS), [_record()],
                            schema.make_job_id)
         self.assertIn(SUMMARY_PREFIX, err.getvalue())
 

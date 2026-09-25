@@ -80,8 +80,8 @@ class TestStripHtmlAndSlug(unittest.TestCase):
     def test_unescape_variants_are_both_preserved(self):
         """The two implementations that existed must both remain reachable.
 
-        weworkremotely/google-serpapi/google-apify unescaped entities before
-        stripping tags; ats did not. description_text feeds content_hash, so
+        Ingest sources historically differed in entity decoding.
+        description_text feeds content_hash, so
         collapsing these silently rewrites one group's rows -- it reported
         217 of 242 weworkremotely rows as updated when nothing had changed.
         """

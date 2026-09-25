@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
 # Dump the `jobs` database, verifiably.
 #
-# THE CORPUS IS THE ASSET. Every row carries an LLM extraction that cost a real
-# call to produce, and job_facts is written ONCE PER POSTING, EVER -- that is the
-# property that makes cost flat in users, and it is also what makes the table
-# expensive to lose. Re-extraction is possible and slow; a posting whose source
-# has since delisted it is not re-extractable at all, because the description
-# text is gone from the internet. Task 12's snapshot discipline is worthless if
-# the whole database sits on one disk.
+# The normalized postings are the asset. A source may delist a posting before
+# it can be fetched again, so a database on one disk is not sufficient.
 #
 # Shell rather than a Python entry point, deliberately, and the reason is the
 # same one backup-garmin.sh gives: this runs `docker exec` and touches no
@@ -28,13 +23,8 @@ CONTAINER=${JOBS_BACKUP_CONTAINER:-pg-main}
 DEST=${JOBS_BACKUP_DIR:-$HOME/backups/jobs}
 KEEP_DAYS=${JOBS_BACKUP_KEEP_DAYS:-14}
 
-# -U nyc_events, the cluster owner, not jobs_pipeline and emphatically not
-# jobs_api. Two reasons. The restore rehearsal needs CREATEDB, which the
-# application roles deliberately do not have; and a dump taken as a restricted
-# role silently omits every object that role cannot read, producing a file that
-# looks like a backup and restores a subset. jobs_api can see six tables out of
-# the fifteen-ish in this database -- a dump taken as jobs_api would be a
-# catastrophe that reported success.
+# Use the cluster owner so the dump includes every table and the restore
+# rehearsal can create its throwaway database.
 PGUSER=${JOBS_BACKUP_USER:-nyc_events}
 
 stamp=$(date +%Y%m%d-%H%M%S)
@@ -65,11 +55,7 @@ docker exec "$CONTAINER" pg_dump -U "$PGUSER" -d "$DB" -Fc >"$dump.tmp"
 mv "$dump.tmp" "$dump"
 
 # Roles live in the CLUSTER, not in a per-database dump, so a restore onto a
-# fresh cluster fails on missing jobs_pipeline and jobs_api without this. It
-# matters more here than in most projects: backend/api/README.md's privilege
-# table is a security boundary, not a convenience, and restoring the data
-# without the roles would mean recreating those grants from memory under
-# pressure -- which is how a service comes back as a superuser.
+# fresh cluster may need the database roles restored separately.
 docker exec "$CONTAINER" pg_dumpall -U "$PGUSER" --roles-only >"$roles.tmp"
 mv "$roles.tmp" "$roles"
 
@@ -117,7 +103,7 @@ else
   echo "WARNING: JOBS_BACKUP_REMOTE is unset -- this dump is on the same disk" \
        "as the database it came from, and protects against DROP TABLE and" \
        "nothing else. See 'Where the backups are' in:" \
-       "git show refactor-freeze-2026-08-02:docs/RUNBOOK.md" >&2
+       "" >&2
 fi
 
 # Prune. -mtime is applied to the dumps and their sidecars by globs that move

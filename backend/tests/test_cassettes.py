@@ -1,4 +1,4 @@
-"""evals/cassettes.py: the record/replay harness itself.
+"""testsupport/cassettes.py: the record/replay harness itself.
 
 WHAT THIS PINS, AND WHY EACH ONE
 
@@ -15,7 +15,7 @@ WHAT THIS PINS, AND WHY EACH ONE
 
   * No credential reaches disk and no credential is part of the key.
     Rotating SERPAPI_API_KEY must not invalidate the recorded corpus --
-    `evals/cache.py:31-36` made the same choice for the LLM half and this is
+    `testsupport/cache.py:31-36` made the same choice for the LLM half and this is
     the same rule one layer down.
 
   * No cassette carries a duration. A replayed response has the latency of a
@@ -34,8 +34,8 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evals import cassettes                                   # noqa: E402
-from evals.cassettes import (Cassette, CassetteMiss,          # noqa: E402
+from testsupport import cassettes                                   # noqa: E402
+from testsupport.cassettes import (Cassette, CassetteMiss,          # noqa: E402
                              Interaction, Player)
 
 
@@ -166,26 +166,26 @@ class TestNoCredentialReachesDiskOrTheKey(unittest.TestCase):
 
     def test_secret_query_parameters_are_scrubbed(self):
         self.assertEqual(
-            cassettes.scrub_url("https://serpapi.com/s?q=ai&api_key=sk-abc123"),
-            "https://serpapi.com/s?q=ai&api_key=REDACTED")
+            cassettes.scrub_url("https://example.test/s?q=ai&api_key=sk-abc123"),
+            "https://example.test/s?q=ai&api_key=REDACTED")
         self.assertEqual(
-            cassettes.scrub_url("https://api.apify.com/v2/x?token=apify_tok"),
-            "https://api.apify.com/v2/x?token=REDACTED")
+            cassettes.scrub_url("https://example.test/v2/x?token=secret_tok"),
+            "https://example.test/v2/x?token=REDACTED")
 
     def test_non_secret_parameters_survive_untouched(self):
         """The scrubber must not normalise the url: it is the lookup key, and
         two callers spelling the same request differently would not match."""
-        url = "https://serpapi.com/s?engine=google_jobs&q=AI+engineer&hl=en"
+        url = "https://example.test/s?q=AI+engineer&hl=en"
         self.assertEqual(cassettes.scrub_url(url), url)
 
     def test_the_key_survives_a_credential_rotation(self):
-        """The property `evals/cache.py:35` states for the LLM cache, here."""
-        cas = _cassette(_ok("https://serpapi.com/s?q=ai&api_key=REDACTED", "{}"))
+        """The property `testsupport/cache.py:35` states for the LLM cache, here."""
+        cas = _cassette(_ok("https://example.test/s?q=ai&api_key=REDACTED", "{}"))
         with cassettes.replay(cassette=cas):
             for key in ("old-key-11111", "new-key-22222"):
                 self.assertEqual(
                     urllib.request.urlopen(
-                        f"https://serpapi.com/s?q=ai&api_key={key}").read(),
+                        f"https://example.test/s?q=ai&api_key={key}").read(),
                     b"{}")
 
     def test_secret_env_values_are_scrubbed_out_of_recorded_bytes(self):
@@ -210,9 +210,9 @@ class TestNoCredentialReachesDiskOrTheKey(unittest.TestCase):
 
 
 class TestTimingIsNeverReplayed(unittest.TestCase):
-    """Restated from the evals harness rather than rediscovered.
+    """Restated from the testsupport harness rather than rediscovered.
 
-    `docs/ingestion_tests/README.md:80-84`: a replayed response carries the
+    A replayed response carries the
     latency of a call made months ago, so the rule is enforced where the
     number would be read.
     """

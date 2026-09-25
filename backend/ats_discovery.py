@@ -1,52 +1,8 @@
-"""Which NYC employer runs which ATS -- signatures, validators, outcomes.
+"""Recognize ATS links on employer career pages and validate board tokens.
 
-The endpoints in ingest/ats.py are trivial. Knowing that Mount Sinai's
-Greenhouse token is `mountsinai` and not `mount-sinai` is the actual work, and
-there is no public directory of board tokens. This module is the half of that
-work with no I/O in it: the regexes that read a token out of a careers page,
-the URL builders that ask the ATS to confirm it, and the vocabulary the probe
-uses to say *why* it found nothing.
-
-WHY PROBING WORKS AT ALL
-    A company with no Greenhouse board returns 404 for one HTTP request, so
-    precision comes from validation rather than from curating the seed list.
-    A big, dumb list of employers is therefore fine as an input -- which is
-    what makes `data/nyc-employer-seed.json` a flat data file that anyone can
-    append to, and what makes `ats_seed` a table rather than a config.
-
-THE DISTINCTION THIS MODULE EXISTS TO PRESERVE
-    "Found no token" and "was not allowed to look" are the same observation to
-    a naive probe: zero rows either way. CLAUDE.md names that this pipeline's
-    failure mode, and a discovery pass is the worst possible place for it --
-    a run blocked at the front door writes an empty table, and the next run
-    reads that table as settled fact.
-
-    So every probe records an OUTCOME from the closed set below, and the two
-    are never conflated:
-
-      FOUND         page fetched, at least one ATS signature matched
-      NOT_FOUND     page fetched, parsed, no signature -- a real negative
-      BLOCKED       403/429/WAF body -- we were refused; says NOTHING about
-                    the employer, and never writes a company_ats row
-      UNREACHABLE   DNS failure, timeout, connection reset, 5xx
-      MISSING_PAGE  404/410 on every candidate careers URL we know
-      NO_URL        the seed row has no careers_url to probe
-      SKIPPED       budget exhausted or host already blocked this run
-
-    Only NOT_FOUND may become `status='never_found'`. BLOCKED and UNREACHABLE
-    leave the employer un-probed as far as company_ats is concerned, stay
-    counted in ats_seed.last_probe_status, and get retried next month.
-
-STATUS VALUES, AND THE ONE THE TASK DID NOT HAVE
-    16-ats-token-discovery.md lists `valid | dead | never_found`. There is no
-    value there for "a token was found but we could not reach the ATS to check
-    it", which collapses back into the same silence problem one level down: an
-    unvalidated token that gets written as `valid` contributes zero rows
-    forever and looks healthy, and one written as `dead` is deleted evidence.
-    STATUS_UNVALIDATED is that fourth value. It is also what platforms with no
-    public JSON feed (Taleo, Oracle, SuccessFactors ...) carry, since detecting
-    them is real information for tasks 18 and 20 even though this module cannot
-    confirm them.
+Discovery produces explicit outcomes (valid, unvalidated, dead, never found)
+so blocked probes are not mistaken for employers with no ATS. This module
+contains signatures and validation helpers used by tools/ats-discover.py.
 """
 
 import json
@@ -114,12 +70,12 @@ _NOT_A_TOKEN = {
 #:     https://{tenant}.wd{N}.myworkdayjobs.com/{locale}/{site}
 #: where {locale} ("en-US", "fr-CA", ...) is OPTIONAL. A pattern that captures
 #: the first path segment as the site records `en-US` for every employer that
-#: includes it, and task 18 then POSTs to /wday/cxs/{tenant}/en-US/jobs and
+#: includes it, and Workday ingestion then POSTs to /wday/cxs/{tenant}/en-US/jobs and
 #: gets a 404. The locale group below is non-capturing and optional, which is
 #: the whole reason it is written out rather than `([\w-]+)`.
 #:
 #: Getting wd1 vs wd5 wrong is likewise a 404, so the data centre is captured
-#: as its own group and stored in its own column -- task 18 reads it from
+#: as its own group and stored in its own column -- the fetcher reads it from
 #: there and is forbidden to guess.
 SIGNATURES = (
     ("greenhouse",
@@ -249,7 +205,7 @@ def find_signatures(page_text):
 # forever -- which, again, is indistinguishable from a quiet employer.
 #
 # The Greenhouse URL is deliberately the one ingest/ats.py:152 already calls,
-# not the boards-api host `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/17-retarget-ats-ingest.md:38` names. Validating
+# not the boards-api host. Validating
 # against a different host than the ingest will use means validating something
 # other than the thing that has to work.
 
@@ -279,7 +235,7 @@ def validation_request(platform, token, workday_site=None, workday_dc=None):
             return None
         # limit=20 and not one more. Workday returns an empty jobPostings
         # array with NO error for limit>20, byte-identical to "no results" --
-        # CLAUDE.md's landmine, and asking for 100 here would validate every
+        # landmine, and asking for 100 here would validate every
         # live Workday tenant as dead.
         return ("POST",
                 f"https://{token}.{workday_dc}.myworkdayjobs.com/wday/cxs/"
@@ -287,7 +243,7 @@ def validation_request(platform, token, workday_site=None, workday_dc=None):
                 {"appliedFacets": {}, "limit": 20, "offset": 0,
                  "searchText": ""})
     if platform == "icims":
-        # iCIMS publishes no JSON feed (which is why task 20 reaches for
+        # iCIMS publishes no JSON feed (which is why a future adapter may need
         # Firecrawl). The search page is the only public surface, so
         # `open_jobs` stays None for this platform and validity means "the
         # portal exists and lists jobs".
@@ -505,6 +461,6 @@ def never_found_row(employer_name, careers_url, now, discovered_via="probe"):
         # served", and tasks 17/18/20 must not read it as "no ATS".
         "validation_note": ("no ATS URL in the served HTML -- NOT evidence "
                             "the employer has no ATS; see the false-negative "
-                            "rate in `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md`"),
+                            "rate in "),
         "discovered_via": discovered_via,
     }

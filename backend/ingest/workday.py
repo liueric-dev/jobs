@@ -1,187 +1,14 @@
 #!/usr/bin/env python3
-"""
-Workday CXS ingest -- the large non-tech NYC employers, with the relevance
-gate moved UPSTREAM into ingest.
+"""Ingest Workday CXS postings from company_ats tenants.
 
-Task 18 (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`). Reads
-tenant/data-centre/site out of `company_ats` (task 16), walks each tenant's
-public CXS list endpoint, and fetches a detail page ONLY for the postings that
-survive an upstream filter. Writes `platform='workday'` rows to `jobs`.
+Workday lists can contain thousands of jobs, so list pages are filtered before
+fetching detail pages. The shared PostgreSQL-regex config in relevance.py is
+used only to avoid unnecessary detail requests; accepted postings are stored
+as normalized rows in jobs. The complete list still determines closures.
 
-WHY THE GATE MOVED UPSTREAM, AND WHY THAT IS THE WHOLE DESIGN
-    A hospital system runs 2,000 open requisitions. One detail request per
-    posting is 2,000 requests per tenant per night; across the tenants this
-    plan expects, the detail fetches dominate the entire nightly window
-    (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:63-73).
-    Every other source in this pipeline ingests whole and
-    filters afterwards, because whole boards are cheap there. Here they are
-    not.
-
-    So the list response -- which carries title and location and nothing else
-    -- decides who gets a detail request. `upstream_survivors()` is that
-    decision and `RATIO_ALARM` is what tells you when it has stopped working.
-
-    ONE IMPLEMENTATION, TWO CALLERS. CLAUDE.md forbids reimplementing
-    relevance matching in Python, and `relevance.py` compiles config to
-    POSTGRES regexes. Those are not Python regexes: `\\y` is a word boundary in
-    Postgres and an error in Python's `re`, and `\\b` is a word boundary in
-    Python and BACKSPACE in Postgres -- so a Python evaluator of
-    `config/relevance.json` would not merely duplicate the matcher, it would
-    disagree with it, silently, on the exact patterns CLAUDE.md names a
-    landmine. This module therefore evaluates `relevance.tier_sql` in Postgres
-    against the list rows, before they are a table (`_tiers()`). No second
-    copy of the matching logic exists, in any language.
-
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:77-79
-    asks instead for "a function that evaluates a
-    title/location pair in Python against the same config". That would be the
-    second copy, in the wrong dialect, and `relevance.py` is owned elsewhere
-    this session in any case. The deviation is deliberate and is recorded in
-    `git show refactor-freeze-2026-08-02:docs/ingest/workday.md`.
-
-WHY THE UPSTREAM FILTER IS DELIBERATELY LOOSE
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:80-85:
-    task 10's gate is description-first and at list time there
-    is no description, so filtering tightly here "would discard exactly the
-    postings this refactor exists to find, since their titles are the
-    uninformative part". "Operations Coordinator" at a hospital is the target
-    population; `title_include` will never match it.
-
-    So the upstream filter drops a posting only on evidence that survives
-    having no description:
-
-      * an EXCLUSION fired -- `title_exclude`, `company_exclude`. Those lists
-        are "narrow and specific on purpose" and "unambiguous"
-        (`config/relevance.json` _title_exclude_note), which is exactly what
-        makes them safe to apply to a bare title.
-      * the location is KNOWN and is not one this deployment accepts.
-
-    It never requires `title_include` to match. `_loose_cfg()` is how that is
-    expressed without editing `relevance.py`: substitute a title pattern that
-    matches everything, so `tier_sql` compiles the exclusion half of its
-    `row_ok` predicate on its own. Tier 3 then means "excluded", tier 1 means
-    "kept, location accepted", tier 2 means "kept, location not accepted" --
-    and tier 2 survives only when the LIST RESPONSE could not say where the
-    job is (see `location_flags()`), which is
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:83's
-    "neither-but-unknown".
-
-ONLY DETAIL-FETCHED POSTINGS ARE STORED
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:110-113 settles this: "a posting you never detail-fetched is
-    still a posting you *saw*, so track seen-set membership from the list
-    response, not from what you stored." Closure detection therefore feeds
-    `close_missing()` the FULL seen set while the upsert carries only the
-    survivors.
-
-    The alternative -- store every listing row and fill descriptions later --
-    was rejected for a concrete reason, not a stylistic one: a listing-only
-    record has `description_text=None` and `posted_at=None`, and re-writing it
-    over a row that was detail-fetched on an earlier night would blank both.
-    Both are in `HASH_FIELDS_ATS` (`schema.py:131`), so the row would also
-    churn between the two shapes forever.
-
-THE FOUR SILENT FAILURES, AND WHERE EACH IS HANDLED
-    Every one of these returns success and loses data (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:39-59). Each
-    has a fixture in `evals/workday_fixtures.py` and a test in
-    `tests/test_workday_fixtures.py` that drives THIS module through it.
-
-    1. `limit` cannot exceed 20. Ask for 100 and Workday returns an empty
-       `jobPostings` with HTTP 200 and no error field -- byte-identical to "no
-       more results". `_check_page_limit()` raises, and it is called from
-       `list_body()` so every request path goes through it rather than only
-       the ones a future editor remembers. `PAGE_LIMIT` is not a default
-       argument anybody can override upward.
-
-    2. A throttled page reads as the end of the list. `lib/http.py:75-81`
-       retries 429 and 5xx with backoff, so the cheap half of the fix is
-       simply using it. The other half is `collect_postings()` reconciling
-       what it collected against the `total` the API returned and raising
-       `Shortfall` -- `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:52, "a mismatch is an error, not a shrug". One
-       published account lost 1,960 of NVIDIA's 2,000 jobs to this.
-
-    3. The data-centre prefix varies -- wd1, wd5, wd108, wd501. It is read
-       from `company_ats.workday_dc` and there is NO default anywhere in this
-       file; `load_workday_tenants()` skips a row that lacks one rather than
-       guessing. A wrong prefix answers 404/422 and reads as one more
-       unreachable tenant in a fifty-tenant loop.
-
-    4. The 10,000-result cap. A single query cannot enumerate past it however
-       long the loop runs, so reconciliation DETECTS it and cannot fix it.
-       `collect_tenant()` slices by `appliedFacets` using the facet values the
-       response itself advertises, and merges. If no facet partitions the
-       board finely enough, it raises rather than returning a short list.
-
-A FIFTH, WHICH THE TASK FILE DOES NOT LIST AND WHICH BIT THIS CODE FIRST
-    Found by running the loop above against the four live tenants in
-    `company_ats` on 2026-07-28, not by reading anything. Two halves:
-
-      * `total` IS REPORTED ON THE FIRST PAGE ONLY. Every later page answers
-        `total: 0`. msk.wd108 returns total=88 at offset 0 and total=0 at
-        offsets 20, 40, 60 and 80. So `total = payload.get("total", total)` --
-        the obvious spelling, and the first one written here -- reconciles a
-        complete walk against zero. All four tenants failed with "collected 40
-        of 0" before this was understood. Both the constructed fixtures and
-        NVIDIA's real recorded page repeat `total` on every page, so nothing
-        in the test suite could have caught it.
-
-      * AN OFFSET PAST THE END WRAPS. It does not return an empty array; it
-        returns the FIRST page again. offset=100 against msk's 88 postings
-        answers with postings 1-20 and total=88. So the textbook "loop until a
-        page comes back empty" never terminates against a live tenant.
-
-    Both are handled in `collect_postings` and both have tests. The first is
-    the more dangerous: it turns a correct walk into a Shortfall, and a
-    Shortfall is a tenant this script deliberately declines to write.
-
-TWO MORE THINGS ONLY A LIVE RUN COULD SAY, AND THEY BOTH CHANGED THE DESIGN
-    * `locationsText` IS NOT ALWAYS A LOCATION. NewYork-Presbyterian's is a
-      facility hierarchy -- "NYP/Weill Cornell Medical Center",
-      "NYP/Columbia University Irving Medical Center". Two of its three
-      commonest values name New York hospitals without naming New York, so
-      `text.classify_location` answers (False, False) and the first version of
-      the upstream gate dropped most of a New York hospital system's board on
-      the strength of its own internal naming convention -- silently, and
-      exactly the mistake
-      `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:80-85
-      warns against. `location_flags()` now
-      answers "unknown" for anything that is not recognisably a place; see
-      `_PLACE_SHAPED`.
-
-    * A BOARD MOVES WHILE IT IS BEING WALKED. Nordstrom answered total=867 and
-      yielded 865 distinct postings across the 100 seconds that followed. Under
-      a strict equality that is a Shortfall, and a Shortfall means the tenant
-      is not written at all -- so the largest boards would lose whole nights at
-      random for doing nothing wrong. The reconciliation threshold is one PAGE,
-      which is the unit of the failure it exists to catch; smaller
-      disagreements are reported as `drift` and never suppressed.
-
-SILENCE IS THE FAILURE MODE, SO THE SUMMARY IS UNCONDITIONAL
-    CLAUDE.md: "blocked scrapers and changed endpoints all return zero rows
-    rather than raising. Alert on volume, not errors." Unlike ats.py this
-    script prints its summary on EVERY run, including a quiet one, and prints
-    a `workday-ingest: ALERT` line for a valid tenant that returned zero
-    postings, for a detail-fetch ratio approaching 1.0, and for any tenant
-    refused at the front door. A run where every tenant failed exits 1.
-
-POLITENESS
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:90-98. Plain HTTP from this host's own IP, sequential, one
-    request per `REQUEST_DELAY_SECONDS`. No scraping service. Tenants that
-    answer 401/403/451 are counted as blocked and NOT retried -- retrying into
-    a refusal is how a probe becomes an incident, the same rule
-    `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md` "Politeness" adopted for the discovery pass.
-
-CONFIG
-    DATABASE_URL                    postgres connection string
-    WORKDAY_REQUEST_DELAY           seconds between requests (default 1.5)
-    WORKDAY_MAX_DETAIL_PER_TENANT   hard ceiling on detail fetches (default 400)
-    WORKDAY_MAX_TENANTS             stop after N tenants (default: all)
-    DEBUG_PRINT_KEYS=1              per-tenant tracing on stderr
-
-SCHEDULE: not scheduled directly. See run-daily.py, which is the single cron
-entry point and calls this script as a subprocess. This script is NOT yet in
-its STEPS list -- see
-`git show refactor-freeze-2026-08-02:docs/ingest/workday.md` for the line to
-add and where.
+The fetcher checks Workday's page limit, reconciles list totals, retries
+transient failures, and partitions boards that exceed the 10,000-result cap.
+Each tenant is isolated so one failure does not hide another's data.
 """
 
 import json
@@ -196,7 +23,6 @@ from urllib.parse import quote
 # (schema, relevance, llm, ...). Same insert as ingest/ats.py:129.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import profiles  # noqa: E402
 import relevance  # noqa: E402
 import schema  # noqa: E402
 from lib import dbconn, http, state, text  # noqa: E402
@@ -206,8 +32,7 @@ from lib.upsert import (UpsertErrorRate, UpsertResult, check_error_rate,  # noqa
 
 PLATFORM = "workday"
 
-#: THE LANDMINE. CLAUDE.md, `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:44, and `ats_discovery.py:280-283` all say
-#: the same thing: Workday's CXS endpoint accepts `limit` up to 20 and answers
+#: Workday's CXS endpoint accepts `limit` up to 20 and answers
 #: anything larger with an empty `jobPostings` array, HTTP 200, no error field.
 #: That response is byte-identical to "no more results", so a single wrong
 #: constant here ingests nothing and looks like a quiet night.
@@ -218,11 +43,10 @@ MAX_PAGE_LIMIT = 20
 PAGE_LIMIT = MAX_PAGE_LIMIT
 
 #: A single Workday query cannot enumerate past this, whatever `total` says.
-#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:56-59. Detected by reconciliation, fixed only by slicing.
+#: Detected by reconciliation, handled by facet slicing.
 RESULT_CAP = 10000
 
-#: Seconds between outward requests. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:97 -- "Start plain: 1-2s between
-#: requests, ~50 tenants, sequential."
+#: Seconds between outward requests.
 REQUEST_DELAY_SECONDS = float(os.environ.get("WORKDAY_REQUEST_DELAY", "1.5"))
 
 #: Ceiling on detail fetches per tenant. Not a filter -- a fuse. If the
@@ -231,8 +55,7 @@ REQUEST_DELAY_SECONDS = float(os.environ.get("WORKDAY_REQUEST_DELAY", "1.5"))
 #: reported as an ALERT, never as a normal night.
 MAX_DETAIL_PER_TENANT = int(os.environ.get("WORKDAY_MAX_DETAIL_PER_TENANT", "400"))
 
-#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:86-88: "If detail-fetched/seen creeps toward 1.0, the upstream
-#: filter has stopped working and the window is about to blow."
+#: A high detail-fetched/seen ratio means the upstream gate stopped filtering.
 RATIO_ALARM = 0.80
 
 #: Fraction of a tenant's detail fetches that may fail before it is an alert.
@@ -253,9 +76,7 @@ PRUNE_CLOSED_AFTER_DAYS = 30
 DEBUG_PRINT_KEYS = os.environ.get("DEBUG_PRINT_KEYS", "") == "1"
 
 #: Workday writes this instead of a place when a requisition spans several.
-#: It is the "neither-but-unknown" case at
-#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:83,
-#: and it is why
+#: It is the "neither-but-unknown" case and why
 #: location_flags() returns None rather than False: FALSE would read as "known
 #: not to be in New York" and the upstream filter would drop it.
 MULTI_LOCATION = re.compile(r"^\s*\d+\s+locations?\s*$", re.I)
@@ -267,8 +88,7 @@ MULTI_LOCATION = re.compile(r"^\s*\d+\s+locations?\s*$", re.I)
 #: geography. `text.classify_location` returns (False, False) for the first two
 #: because they contain no city token, and reading that as "known not to be in
 #: New York" would drop most of a New York hospital system's board on the
-#: strength of its internal naming convention. That is precisely the failure
-#: `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:80-85 says this filter must not commit.
+#: strength of its internal naming convention.
 #:
 #: The comma is the discriminator, and it is the shape every real place in this
 #: data has: "New York, NY", "Boise, ID", "US, CA, Santa Clara", "Israel,
@@ -287,9 +107,8 @@ class LimitTooLarge(ValueError):
 class Shortfall(RuntimeError):
     """Collected fewer postings than the API's own `total` said existed.
 
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:52: "a mismatch is an error, not a shrug." Raised rather than
-    returned, because every caller that could ignore a return value has, at
-    least once, in a published account that cost 1,960 postings.
+    Raised rather than returned so callers cannot silently ignore an
+    incomplete board.
     """
 
 
@@ -319,7 +138,7 @@ def _check_page_limit(limit):
             f"Above {MAX_PAGE_LIMIT} the endpoint returns an EMPTY jobPostings "
             f"array with HTTP 200 and no error -- byte-identical to 'no more "
             f"results', so the run would report success and ingest nothing. "
-            f"See CLAUDE.md's Landmines and `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:44.")
+            f"Use a page size of 1..{MAX_PAGE_LIMIT}.")
     return limit
 
 
@@ -328,12 +147,12 @@ def host(tenant, dc):
 
 
 def jobs_url(tenant, dc, site):
-    """The list endpoint. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:21."""
+    """The tenant's CXS list endpoint."""
     return f"{host(tenant, dc)}/wday/cxs/{tenant}/{site}/jobs"
 
 
 def detail_url(tenant, dc, site, external_path):
-    """The detail endpoint. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:34.
+    """The tenant's CXS detail endpoint.
 
     `externalPath` arrives already url-shaped ("/job/New-York-NY/Foo_98479")
     and is quoted with `/` safe so a title containing a space or a `#` does not
@@ -345,7 +164,7 @@ def detail_url(tenant, dc, site, external_path):
 
 
 def public_url(tenant, dc, site, external_path):
-    """The human-facing url, per `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:37.
+    """The human-facing URL fallback.
 
     Used only as a fallback: a detail response carries `externalUrl`, which is
     Workday's own canonical spelling and omits the `/en-US/` locale segment
@@ -356,9 +175,9 @@ def public_url(tenant, dc, site, external_path):
 
 
 def list_body(offset, limit=PAGE_LIMIT, facets=None, search=""):
-    """The POST body, as documented at `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:24.
+    """Build a stable JSON POST body for the list endpoint.
 
-    `sort_keys=True` because `evals/cassettes.py:374` keys a POST interaction
+    `sort_keys=True` because `testsupport/cassettes.py:374` keys a POST interaction
     on the sha256 of its body: two callers spelling the same request with
     different key order would be two different requests, and a cassette
     recorded by one would be a miss for the other.
@@ -387,7 +206,7 @@ def fetch_list_page(tenant, dc, site, offset, *, limit=PAGE_LIMIT, facets=None,
 
 
 def fetch_detail(tenant, dc, site, external_path, *, timeout=30):
-    """The detail document for one posting. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:31-35."""
+    """Fetch the detail document for one posting."""
     return json.loads(http.get_text(
         detail_url(tenant, dc, site, external_path),
         headers={"Accept": "application/json"},
@@ -549,8 +368,8 @@ def facet_slices(page, cap=RESULT_CAP):
 
     The list response advertises its own facets -- `facetParameter`, and
     `values` each with an `id` and a `count` (verified against the recorded
-    NVIDIA response in `evals/fixtures/cassettes/ats-validation.json`). So the
-    slicing `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:57-59 prescribes needs no hardcoded facet name and no
+    NVIDIA response in `testsupport/fixtures/cassettes/ats-validation.json`). So the
+    slicing needs no hardcoded facet name and no
     per-tenant configuration: pick the parameter whose value counts add up to
     `total` (i.e. it partitions the board) and whose largest value is under the
     cap.
@@ -602,7 +421,7 @@ def collect_tenant(tenant, dc, site, *, delay=REQUEST_DELAY_SECONDS,
             f"{tenant}@{dc}: total={total} exceeds the {cap}-result cap and no "
             f"advertised facet partitions it below the cap. "
             f"{total - cap} postings are unreachable by any single query; "
-            f"`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:56-59. Refusing to return a short list.")
+            f"Refusing to return a short list.")
 
     merged, by_path = [], set()
     for facets in slices:
@@ -705,14 +524,11 @@ def normalize_listing(employer, posting):
 def apply_detail(rec, detail, listing=None):
     """Fill in what only the detail document carries. Returns a new record.
 
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:27-30 states that the LIST response carries `startDate` and
-    `jobRequisitionLocation`. It does not -- measured against msk.wd108 and
-    against the recorded NVIDIA page, the list carries only title,
+    The list response does not carry `startDate` or
+    `jobRequisitionLocation`; recorded pages carry title,
     externalPath, locationsText, postedOn, remoteType and bulletFields, and
     `startDate` / `jobRequisitionLocation` / `location` live on the DETAIL
-    document. That is the difference between an absolute date and "Posted
-    Yesterday", so it is not cosmetic; see
-    `git show refactor-freeze-2026-08-02:docs/ingest/workday.md`.
+    document. Detail dates are preferred over relative "Posted Yesterday" text.
     """
     info = (detail or {}).get("jobPostingInfo") or {}
     out = dict(rec)
@@ -866,11 +682,10 @@ def upstream_survivors(conn, cfgs, records):
 def full_gate_count(conn, cfgs, records):
     """How many records clear the REAL gate -- the third ratio number.
 
-    `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:86-88 asks for "postings seen, postings detail-fetched, postings
-    surviving the full gate". This is the last of the three, and it is the
+    This is the last of "postings seen, postings detail-fetched, postings
+    surviving the full gate". It uses the
     unmodified config: `title_include` back in force, descriptions present,
-    `tier <= max_tier_to_score` exactly as `relevance.union_sql` would ask it
-    once the rows are in the table.
+    configured tier threshold. This is a diagnostic, not a stored ranking.
     """
     if not records or not cfgs:
         return 0
@@ -887,13 +702,12 @@ def full_gate_count(conn, cfgs, records):
 def load_workday_tenants(conn, limit=None):
     """Valid Workday rows from `company_ats`, as tenant/dc/site triples.
 
-    NEVER ASSUME, NEVER DEFAULT (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:52-55). A row missing `workday_dc` or
+    Never assume a data center. A row missing `workday_dc` or
     `workday_site` is skipped and reported, not filled in with `wd1`: the four
-    tenants task 16 found use wd1, wd108 and wd501, and a wrong prefix answers
+    known tenants use wd1, wd108 and wd501, and a wrong prefix answers
     404 or 422 -- indistinguishable from a tenant with no open roles.
 
-    `status='valid'` only. `git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md` is emphatic that the
-    other six statuses are not booleans and not settled: `never_found` means
+    `status='valid'` only. Other statuses are not booleans: `never_found` means
     "no ATS URL in the bytes we were served" and its positive control failed
     4 of 4, while `unvalidated` means the token was never checked. None of them
     carries a tenant/dc/site triple this endpoint could be called with anyway,
@@ -923,25 +737,11 @@ def load_workday_tenants(conn, limit=None):
     return tenants, incomplete
 
 
-def active_relevance_cfgs(conn):
-    """The relevance configs the upstream gate answers to.
+def shared_relevance_cfgs(conn):
+    """Use the shared ingest gate before fetching Workday detail pages.
 
-    Mirrors extract.py:800-806 -- `profiles.load_active` then
-    `relevance.for_profile` -- with one deliberate divergence. `union_sql`
-    returns FALSE for an empty profile list, on the argument that "no active
-    profiles means nobody is waiting for this work" and an LLM call on their
-    behalf is the expensive way to be wrong (relevance.py:288-292). That is
-    right for extraction and wrong here: ingest spends HTTP, and a night this
-    source does not pull is a night whose postings are gone from the board
-    before anyone asks for them. So with no active profiles this falls back to
-    the shared config and says so.
+    This preserves the detail-request budget without user-specific settings.
     """
-    active = profiles.load_active(conn)
-    cfgs = [relevance.for_profile(p) for p in active]
-    if cfgs:
-        return cfgs, [p.profile for p in active]
-    print("workday-ingest: no active profiles; gating on the shared "
-          "config/relevance.json instead of ingesting nothing", file=sys.stderr)
     return [relevance.load()], ["<shared>"]
 
 
@@ -1035,7 +835,7 @@ def ingest_tenant(conn, employer, cfgs, run_started_at, *,
     #: here, so "the board moved under us" is visible without being fatal.
     out.drift = (total - len(postings)) if total is not None else 0
     listings = [normalize_listing(employer, p) for p in postings]
-    # The SEEN set, not the stored set. `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:110-113: a posting that was
+    # The SEEN set, not the stored set. : a posting that was
     # gated out was still observed, and closing it because we chose not to
     # fetch its description would be a lie about the employer's board.
     seen_ids = [r["source_id"] for r in listings if r["source_id"]]
@@ -1068,7 +868,7 @@ def ingest_tenant(conn, employer, cfgs, run_started_at, *,
 
     if out.status == "ok" and out.seen == 0:
         # A tenant company_ats validated as live returning nothing is the shape
-        # of a changed endpoint, not of a quiet week. CLAUDE.md: alert on
+        # of a changed endpoint, not of a quiet week. : alert on
         # volume, not errors.
         out.status = "empty"
     out.seconds = time.monotonic() - started
@@ -1112,11 +912,11 @@ def main():
     max_tenants = os.environ.get("WORKDAY_MAX_TENANTS")
     tenants, incomplete = load_workday_tenants(
         conn, limit=int(max_tenants) if max_tenants else None)
-    cfgs, profile_names = active_relevance_cfgs(conn)
+    cfgs, gate_names = shared_relevance_cfgs(conn)
 
     if not tenants:
         # Not an error and not a success. company_ats having no valid Workday
-        # row is a fact about task 16's coverage, and saying "0 new" without
+        # row is a fact about discovery coverage, and saying "0 new" without
         # saying why would read as an empty market.
         print(f"workday-ingest: ALERT no valid workday rows in company_ats "
               f"({len(incomplete)} row(s) missing dc/site). Nothing to ingest; "
@@ -1161,7 +961,7 @@ def main():
           f"{totals.unchanged} unchanged, "
           f"{sum(o.closed for o in outcomes)} closed, {pruned} old-closed "
           f"pruned, {len(totals.errors)} record(s) dropped, {elapsed:.1f}s "
-          f"wall-clock, profiles={','.join(profile_names)}")
+          f"wall-clock, gate={','.join(gate_names)}")
     for o in outcomes:
         print(f"workday-ingest:   {o.line()}")
 
@@ -1194,7 +994,7 @@ def main():
         if o.seen and o.ratio >= RATIO_ALARM:
             alerts.append(f"{o.employer['employer_name']}: detail-fetched "
                           f"{o.ratio:.0%} of what it saw -- the upstream gate "
-                          f"has stopped filtering (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:86-88)")
+                          f"has stopped filtering")
     if incomplete:
         alerts.append(f"{len(incomplete)} company_ats workday row(s) have no "
                       f"dc/site and were skipped rather than guessed: "
@@ -1206,7 +1006,7 @@ def main():
         print(f"workday-ingest: block-rate this run "
               f"{len(blocked)}/{len(outcomes)} blocked, "
               f"{len(shortfalls)}/{len(outcomes)} shortfall. One run is not a "
-              f"rate; `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:128 requires a week before any "
+              f"rate; review a week of runs before any "
               f"escalation to a scraping service.")
 
     if len(ok) == 0:

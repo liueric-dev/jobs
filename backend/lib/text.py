@@ -40,7 +40,7 @@ ENTRY_PATTERN = re.compile(
 #: "51 Minutes Ago". The bare a/an and minute alternatives only ADD matches for
 #: inputs that previously returned None; every string that matched before still
 #: parses to the same instant, which matters because posted_at feeds
-#: content_hash for the Google Jobs sources.
+#: content_hash for sources with relative posting dates.
 RELATIVE_TIME_PATTERN = re.compile(
     r"(?:(\d+)\+?|\b(an?)\b)\s*(minute|hour|day|week|month)s?\s*ago",
     re.IGNORECASE,
@@ -57,9 +57,8 @@ ISO_DATE_PREFIX = re.compile(r"^\s*\d{4}-\d{2}-\d{2}")
 #: Storage cap for description_text. Raised from 5000 on 2026-07-26: measured
 #: over 400 Greenhouse postings, real text averages 6,269 chars (median 6,056,
 #: p90 8,970, max 12,816), so 5000 captured only 75.6% of the text and cut off
-#: 72% of rows mid-sentence. This is a DISPLAY cap, not a prompt budget --
-#: extract.py and score.py each truncate to 3,000 independently before building
-#: a prompt, so raising it costs disk (~70 MB across 11k rows) and no LLM spend.
+#: 72% of rows mid-sentence. The cap bounds stored normalized text; raw_json
+#: retains the upstream source where available.
 MAX_DESCRIPTION_CHARS = 20000
 
 
@@ -67,12 +66,8 @@ def bounded_json(obj: dict[str, Any], limit: int, long_field: str = "description
     """json.dumps(obj) kept under `limit` chars and still VALID JSON.
 
     `json.dumps(obj)[:limit]` is not this. Slicing serialized JSON cuts
-    mid-string and produces a value json.loads cannot read at all -- the Google
-    ingests did exactly that and 10 rows in the live table are unparseable
-    stumps ending at character 20000. raw_json is meant to be the untouched
-    original that anything needing precision falls back to (see this module's
-    docstring), and jobs/migrate_ats_descriptions.py rebuilds descriptions from
-    it, so "valid" is the whole point of storing it.
+    mid-string and produces a value json.loads cannot read. raw_json remains
+    usable by readers that need the original source fields.
 
     Shrinking the single biggest field instead keeps the envelope -- ids,
     urls, company, dates, apply_options -- intact, which is the part worth
@@ -106,9 +101,8 @@ def bounded_json(obj: dict[str, Any], limit: int, long_field: str = "description
 #:
 #:     stripped to `*]:pointer-events-auto"> ` and the rest of the tag --
 #:     attribute names, CSS custom properties, `data-testid=` -- was emitted as
-#:     prose and stored in description_text. Task 35 (`303f7b9`) built
-#:     extract.is_unusable_input() to REJECT such a posting before it costs an
-#:     LLM call; it never stopped the bytes being written.
+#:     prose and stored in description_text. The quote-aware tag pattern
+#:     prevents that malformed text from reaching normalized rows.
 #:
 #: THE FIRST ALTERNATIVE treats a double-quoted run as opaque, so a ">" inside
 #: one no longer ends the tag. The second is the old pattern, unchanged, kept
@@ -162,25 +156,14 @@ def strip_html(markup: str | None, unescape: bool = True) -> str | None:
     preserves the untouched original for anything that needs it.
 
     `unescape` decodes HTML entities ("&amp;" -> "&") before stripping tags.
-    It is parameterised because the six copies of this function had drifted:
-    weworkremotely, google-serpapi and google-apify unescaped, ats did not.
-    That difference is not cosmetic -- it changes description_text, which
-    feeds content_hash, so unifying on either behaviour silently rewrites
-    every row belonging to the sources that used the other one. (Measured:
+    It is parameterised because sources differ in their stored hash contract.
+    Changing this behavior can rewrite description_text and content_hash for
+    existing rows. (Measured:
     unifying on the ats variant reported 217 of 242 weworkremotely rows as
     updated when nothing upstream had changed.)
 
-    True is the default because decoding entities is the correct behaviour
-    and three of the four callers already did it. ats.py passes False to
-    preserve its stored hashes; switching it costs a one-time rewrite of
-    its rows and would be an improvement, just not a silent one.
-
-    (That last sentence is now history rather than description: no caller in
-    this repo passes unescape=False any more -- migrate_ats_descriptions.py
-    moved ats.py onto the default and re-hashed its rows. The parameter and
-    its two frozen vectors in tests/test_row_identity.py:174-177 stay because
-    the stored hashes it produced are still what a re-ingest is compared
-    against.)
+    True is the current default. Keep the parameter because changing it can
+    alter stored description hashes; row-identity tests pin both behaviors.
 
     Tag stripping is _TAG above, not `<[^>]+>`. Read its note before changing
     it: it is a superset of that pattern by construction, and that property is

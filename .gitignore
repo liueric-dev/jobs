@@ -8,27 +8,17 @@ venv/
 *.egg-info/
 build/
 dist/
+node_modules/
 
-# Secrets. Since slice D these live IN this tree, not in ~/.hermes/.env: ./.env
-# for the pipeline and api/.env for the service, which holds a deliberately
-# different, restricted credential. Both are mode 600 with a tracked
-# .env.example beside them. This repository is cloned to several machines and
-# hosted remotely: a credential committed here is a credential on all of them,
-# and in the host's history permanently.
+# Secrets and machine-local environment files.
 .env
 .env.*
 !.env.example
 *.pem
 *.key
 secrets.json
-# T-28: the contributor worker reads a config.json beside itself, and that file
-# holds a minted API key. Not a .env, so the rules above miss it; scoped to the
-# one directory because config.json is an ordinary name elsewhere.
+# Keep legacy local credentials and state ignored after the code removal.
 backend/api/contributor-worker/config.json
-# T-35: the outbox beside the same script -- what a run learned, waiting for the
-# next poll to report it. It holds NO credential, so this is not the rule above
-# repeated: it is a per-machine working file, and a committed one would ship one
-# Builder's last error to every other Builder's checkout.
 backend/api/contributor-worker/worker-state.json
 credentials.json
 
@@ -51,16 +41,9 @@ backup*.tar.gz
 *.log
 tmp/
 
-# Cached model responses (backend/evals). Large, worthless to anyone else, and
-# they hold the full text of postings -- not something to put in git history by
-# accident. evals/cache.py also drops a .gitignore in the directory itself, so
-# a relocated EVAL_CACHE_DIR stays covered too.
+# Legacy local caches may contain private or metered response data.
 evals/.cache/
 backend/evals/.cache/
-
-# Cached SERP responses (backend/serp, task 23). Same argument one word over:
-# they are third-party job postings fetched from a metered account. serp/cache.py
-# writes its own .gitignore too, so a relocated SERP_CACHE_DIR stays covered.
 serp/.cache/
 backend/serp/.cache/
 

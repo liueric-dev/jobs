@@ -57,24 +57,15 @@ trap cleanup EXIT
 cleanup
 docker exec "$CONTAINER" createdb -U "$PGUSER" "$SCRATCH"
 
-# --no-owner because the restore runs as the cluster owner into a scratch
-# database, and reproducing jobs_pipeline's and jobs_api's ownership is not what
-# is being tested here.
-#
-# STATE THE CONSEQUENCE HONESTLY: this rehearsal verifies DATA, NOT ACLs. That
-# gap is larger for this database than for most, because backend/api/README.md's
-# privilege table is a security boundary -- jobs_api's six grants are what stop
-# a leaked bearer token reaching the pipeline's tables. Those grants ride in the
-# separate roles-only dump that backup-jobs.sh takes, and NOTHING REHEARSES IT.
-# A real restore must re-verify the grants by hand; `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md` says how.
+# --no-owner because this rehearsal checks data, not production ownership or
+# grants. Roles are dumped separately by backup-jobs.sh.
 docker exec -i "$CONTAINER" pg_restore -U "$PGUSER" -d "$SCRATCH" --no-owner <"$dump"
 
 if [ "$self_test" = 1 ]; then
-  # job_facts, not an arbitrary table: it is the one holding the LLM extractions
-  # that cost real calls, so if the comparison is going to be blind to any table
-  # it must not be blind to this one.
-  echo "SELF-TEST: truncating job_facts in the restored copy; this run must FAIL"
-  psql_scratch "TRUNCATE job_facts CASCADE;" >/dev/null
+  rows=$(psql_scratch "SELECT count(*) FROM jobs;")
+  [ "$rows" -gt 0 ] || { echo "SELF-TEST needs at least one jobs row" >&2; exit 1; }
+  echo "SELF-TEST: truncating jobs in the restored copy; this run must FAIL"
+  psql_scratch "TRUNCATE jobs CASCADE;" >/dev/null
 fi
 
 live=$(docker exec -i "$CONTAINER" psql -U "$PGUSER" -d "$DB" -At -c "$count_sql")

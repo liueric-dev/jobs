@@ -1,25 +1,7 @@
-"""The part of task 18 that is not one of the four silent failures.
+"""Test Workday gating, normalization, tenant selection, and run accounting.
 
-`tests/test_workday_fixtures.py` drives `ingest/workday.py` through the four
-documented ways the CXS endpoint loses data. This file covers the rest of the
-Definition of done (`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:114-131): the UPSTREAM GATE, which
-is what makes this source affordable, plus normalization, tenant selection and
-the seen/fetched/surviving accounting.
-
-WHY THE GATE TESTS NEED A DATABASE
-
-Because the gate IS a database. CLAUDE.md forbids reimplementing relevance
-matching in Python, and `relevance.py` compiles `config/relevance.json` to
-POSTGRES regexes -- a dialect in which `\\y` is a word boundary and `\\b` is
-BACKSPACE, both the opposite of Python's `re`. So `ingest/workday.py` gates
-list rows by running `relevance.tier_sql` against them in Postgres before they
-are a table (`_tiers()`), and a test that evaluated the same config in Python
-would be testing the second implementation this design exists to avoid.
-
-`scratchdb.available()` gates those tests, so a developer with no Postgres sees
-skips rather than green -- the same rule `tests/test_scratchdb.py:47` adopted.
-The gate query touches no table (`FROM unnest(...) WITH ORDINALITY`), so the
-scratch schema is used for a connection and nothing else.
+Gate tests use PostgreSQL because relevance patterns use its regex dialect.
+They run against a disposable scratch schema when a database is available.
 """
 
 import json
@@ -32,9 +14,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import relevance                                              # noqa: E402
 import schema                                                 # noqa: E402
-from evals import cassettes, scratchdb                        # noqa: E402
-from evals import workday_fixtures as wf                      # noqa: E402
-from evals.ingest_modules import load as load_ingest          # noqa: E402
+from testsupport import cassettes, scratchdb                        # noqa: E402
+from testsupport import workday_fixtures as wf                      # noqa: E402
+from testsupport.ingest_modules import load as load_ingest          # noqa: E402
 from lib import envfile                                       # noqa: E402
 
 envfile.load(os.path.join(os.path.dirname(os.path.dirname(
@@ -50,7 +32,7 @@ EMPLOYER = {"employer_name": "Acme Hospital", "token": wf.TENANT,
             "dc": wf.DC, "site": wf.SITE}
 
 #: A relevance config in the shape config/relevance.json uses, small enough to
-#: reason about. Postgres dialect: `\y`, never `\b` (CLAUDE.md's landmine).
+#: reason about. Postgres dialect: `\y`, never `\b` (landmine).
 CFG = relevance.load(cfg={
     "title_include": ["\\yengineer", "\\ydata scien"],
     "title_exclude": ["\\ynurse\\y", "\\yaccount executive\\y"],
@@ -284,7 +266,7 @@ class TestTheGateSuppliesEveryColumnTierSqlCanReference(unittest.TestCase):
 
 @requires_db
 class TestTheUpstreamGate(unittest.TestCase):
-    """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:61-88, the architectural half of this task."""
+    """, the architectural half of this task."""
 
     @classmethod
     def setUpClass(cls):
@@ -302,7 +284,7 @@ class TestTheUpstreamGate(unittest.TestCase):
     def test_an_uninformative_title_in_the_right_place_survives(self):
         """The whole reason the upstream filter is loose. "Operations
         Coordinator" at a hospital is the target population and no
-        title_include regex will ever match it -- `git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:80-85."""
+        title_include regex will ever match it -- ."""
         self.assertEqual(
             self.survivors([listing("Operations Coordinator")]),
             ["Operations Coordinator"])
@@ -320,7 +302,7 @@ class TestTheUpstreamGate(unittest.TestCase):
             [])
 
     def test_an_unknown_location_does(self):
-        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:83's "neither-but-unknown". "2 Locations" is a placeholder
+        """'s "neither-but-unknown". "2 Locations" is a placeholder
         and dropping on it would discard whatever the requisition really is."""
         self.assertEqual(
             self.survivors([listing("Operations Coordinator", "2 Locations")]),
@@ -360,8 +342,8 @@ class TestTheUpstreamGate(unittest.TestCase):
         """union_sql returns FALSE for an empty profile list, which is right
         for extraction and wrong for ingest: a night this source does not pull
         is a night whose postings are gone before anyone asks. The divergence
-        is deliberate and announced -- ingest/workday.py:active_relevance_cfgs."""
-        cfgs, names = workday.active_relevance_cfgs(self.conn)
+        is deliberate and announced by the shared ingest gate."""
+        cfgs, names = workday.shared_relevance_cfgs(self.conn)
         self.assertEqual(len(cfgs), 1)
         self.assertEqual(names, ["<shared>"])
 
@@ -452,8 +434,8 @@ class TestTenantSelection(unittest.TestCase):
         self.assertEqual(incomplete, ["No Data Centre"])
 
     def test_a_missing_data_centre_is_reported_and_never_guessed(self):
-        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:52-55, "never assume, never default". wd1/wd108/wd501 are
-        all in use among the four tenants task 16 found; a wrong prefix answers
+        """, "never assume, never default". wd1/wd108/wd501 are
+        all used by known tenants; a wrong prefix answers
         404 or 422 and reads as a tenant with no open roles."""
         _, incomplete = workday.load_workday_tenants(self.conn)
         self.assertIn("No Data Centre", incomplete)
@@ -468,7 +450,7 @@ class TestTenantSelection(unittest.TestCase):
             "nordstrom_careers/jobs")
 
     def test_never_found_does_not_mean_no_ats(self):
-        """`git show refactor-freeze-2026-08-02:docs/ats-token-discovery.md`'s headline result: the positive control
+        """'s headline result: the positive control
         found 0 of 4 known-good tokens, so `not_found`/`never_found` means "no
         ATS URL in the bytes we were served" and nothing stronger. This ingest
         must therefore filter on status='valid' PLUS the triple, never on the
@@ -480,7 +462,7 @@ class TestTenantSelection(unittest.TestCase):
 
 @requires_db
 class TestTheRatioIsAccounted(unittest.TestCase):
-    """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:86-88: "Log the ratio: postings seen, postings detail-fetched,
+    """: "Log the ratio: postings seen, postings detail-fetched,
     postings surviving the full gate. If detail-fetched/seen creeps toward 1.0,
     the upstream filter has stopped working and the window is about to blow."
     """
@@ -488,7 +470,7 @@ class TestTheRatioIsAccounted(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # scratch_schema() has already run the real ensure_schema() against
-        # the fresh schema (evals/scratchdb.py:145).
+        # the fresh schema (testsupport/scratchdb.py:145).
         cls._ctx = scratchdb.scratch_schema()
         cls.conn, _ = cls._ctx.__enter__()
 
@@ -531,7 +513,7 @@ class TestTheRatioIsAccounted(unittest.TestCase):
         self.assertEqual(out.fetched, 2)
 
     def test_a_blocked_tenant_is_counted_not_retried(self):
-        """`git show refactor-freeze-2026-08-02:docs/tasks/refactor/tranche_three/18-ingest-workday-cxs.md`:104-106: inaccessible tenants are skipped and counted.
+        """: inaccessible tenants are skipped and counted.
         A 403 is a datum, not an obstacle to route around."""
         cas = wf.prefix_assumed()
         cas.interactions = [wf._post(0, {"error": "forbidden"}, status=403,
@@ -563,11 +545,11 @@ class TestTheRatioIsAccounted(unittest.TestCase):
 
 
 class TestTheHouseRules(unittest.TestCase):
-    """Two things CLAUDE.md names that a reviewer should not have to grep for."""
+    """Check two safety properties of the source implementation."""
 
     def test_upsert_is_never_unpacked_as_a_bare_three_tuple(self):
         """UpsertResult.__iter__ yields three values and NOT .errors, which is
-        the defect task 03 existed to remove. This module calls upsert_checked
+        a previous source of dropped-error reports. This module calls upsert_checked
         and never upsert()."""
         path = os.path.join(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__))), "ingest", "workday.py")
@@ -579,7 +561,7 @@ class TestTheHouseRules(unittest.TestCase):
 
     def test_no_llm_module_is_imported(self):
         """Ingest is HTTP and arithmetic by design; extract and score are the
-        two stages that cost calls (CLAUDE.md, Architecture invariants)."""
+        two stages that cost calls (, Architecture invariants)."""
         self.assertNotIn("llm", dir(workday))
 
 

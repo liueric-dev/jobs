@@ -3,7 +3,7 @@
 WHAT THIS FILE IS FOR
 
 D31 (in the defect register, deleted 2026-08-02:
-`git show refactor-freeze-2026-08-02:docs/ingest/DEFECTS.md`) sat open for
+) sat open for
 weeks because it was a decision rather than a bug: three of the six ingest
 scripts imported `lib.http` solely
 for `DEFAULT_TIMEOUT` and then called `urllib.request.urlopen` directly, and
@@ -38,9 +38,9 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evals import cassettes                                    # noqa: E402
-from evals.cassettes import Cassette, Interaction              # noqa: E402
-from evals.ingest_modules import load as load_ingest           # noqa: E402
+from testsupport import cassettes                                    # noqa: E402
+from testsupport.cassettes import Cassette, Interaction              # noqa: E402
+from testsupport.ingest_modules import load as load_ingest           # noqa: E402
 
 
 def _cassette(*interactions, name="unit"):
@@ -158,90 +158,6 @@ class TestBuiltInListingPageRetries(unittest.TestCase):
         self.assertEqual(seen["ua"], self.builtin.USER_AGENT)
 
 
-class TestSerpApiSearchRetries(unittest.TestCase):
-    """`serpapi_search`. The query bank runs ~8 searches a day, so a query
-    lost to a transient 429 is a day of coverage for that slug."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.serp = load_ingest("google-serpapi")
-
-    KEY = "sk-live-abcdef0123456789"
-
-    def _url(self):
-        """The url the player matches on, scrubbed the way a recording would
-        be. `api_key` is a SECRET_PARAM, so the stored key carries REDACTED
-        and a rotated key still finds its cassette -- which is the property
-        `evals/cassettes.py` § THE KEY IS SCRUBBED exists to give."""
-        import urllib.parse
-        params = {"engine": "google_jobs", "q": "ai engineer",
-                  "location": "New York", "hl": "en", "gl": "us",
-                  "api_key": self.KEY}
-        return cassettes.scrub_url("https://serpapi.com/search.json?"
-                                   + urllib.parse.urlencode(params))
-
-    def test_a_429_with_retry_after_is_retried(self):
-        url = self._url()
-        cas = _cassette(_resp(url, "rate limited", status=429,
-                              headers={"Retry-After": "1"}),
-                        _resp(url, '{"jobs_results": [{"title": "AI Engineer"}]}'))
-        with mock.patch.object(self.serp, "SERPAPI_API_KEY", self.KEY):
-            with cassettes.no_sleep(), cassettes.replay(cassette=cas) as player:
-                with redirect_stderr(io.StringIO()):
-                    results = self.serp.serpapi_search("ai engineer", "New York")
-        self.assertEqual(len(player.requests), 2)
-        self.assertEqual([r["title"] for r in results], ["AI Engineer"])
-
-    def test_the_retry_log_cannot_leak_the_api_key(self):
-        """The key travels in the query string, and going through `lib.http`
-        is what put a logger anywhere near it. `lib/http.py:59` tags each
-        retry with `url.split("?")[0]`; `git show refactor-freeze-2026-08-02:docs/ingest/google-serpapi.md` raised
-        this as an open question while the script still used raw urlopen.
-        """
-        url = self._url()
-        cas = _cassette(_resp(url, "rate limited", status=429),
-                        _resp(url, '{"jobs_results": []}'))
-        err = io.StringIO()
-        with mock.patch.object(self.serp, "SERPAPI_API_KEY", self.KEY):
-            with cassettes.no_sleep(), cassettes.replay(cassette=cas):
-                with redirect_stderr(err):
-                    self.serp.serpapi_search("ai engineer", "New York")
-        self.assertIn("[retry]", err.getvalue(),
-                      "this test is vacuous unless a retry line was printed")
-        self.assertNotIn(self.KEY, err.getvalue())
-        self.assertNotIn("api_key", err.getvalue())
-
-    def test_a_200_carrying_an_error_key_is_not_retried(self):
-        """SerpApi signals most failures with HTTP 200 and an `error` body,
-        and most of those are permanent -- a bad key, or an exhausted monthly
-        allowance. Handing them to `body_is_transient` would retry a metered
-        account's way through five of them."""
-        url = self._url()
-        cas = _cassette(_resp(url, '{"error": "Invalid API key"}'))
-        with mock.patch.object(self.serp, "SERPAPI_API_KEY", self.KEY):
-            with cassettes.no_sleep(), cassettes.replay(cassette=cas) as player:
-                with self.assertRaises(RuntimeError):
-                    self.serp.serpapi_search("ai engineer", "New York")
-
-    def test_a_200_saying_no_results_is_an_answer_not_a_failure(self):
-        """OQ-15, decided 2026-08-03. Before the fix, ANY `error` key raised --
-        including SerpApi's "found nothing" wording, which is an answer, not a
-        failure. The caller (main()) treats a raise as a query failure: it
-        releases the claim so the query is retried immediately, and
-        last_success_at never advances, even though the query had, in fact,
-        just succeeded with zero results."""
-        url = self._url()
-        cas = _cassette(_resp(
-            url, '{"error": "Google hasn\'t returned any results for this query."}'))
-        with mock.patch.object(self.serp, "SERPAPI_API_KEY", self.KEY):
-            with cassettes.no_sleep(), cassettes.replay(cassette=cas):
-                results = self.serp.serpapi_search("ai engineer", "New York")
-        self.assertEqual(results, [])
-
-
-# ---------------------------------------------------------------------------
-# the one that deliberately does not
-# ---------------------------------------------------------------------------
 
 class TestBuiltInDetailFetchDoesNotRetry(unittest.TestCase):
     """D31's deliberate quarter, pinned.
@@ -275,7 +191,7 @@ class TestBuiltInDetailFetchDoesNotRetry(unittest.TestCase):
 
     def test_a_transient_5xx_costs_one_posting_and_one_request(self):
         """The deferral, not a retry: None leaves the row eligible next run,
-        which is the same shape score.py uses for a transient LLM failure."""
+        which represents a transient upstream failure."""
         cas = _cassette(_resp(self.URL, "unwell", status=503))
         with cassettes.no_sleep(), cassettes.replay(cassette=cas) as player:
             with redirect_stderr(io.StringIO()):

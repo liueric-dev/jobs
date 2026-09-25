@@ -1,10 +1,8 @@
 [Unit]
 Description=Dump the jobs database
-Documentation=file:///home/eric/apps/jobs/docs/STATE-OF-THE-SYSTEM.md
-# The corpus is the asset. job_facts holds one LLM extraction per posting and is
-# written once per posting ever -- the property that keeps cost flat in users is
-# also what makes the table expensive to lose. Re-extraction is slow, and a
-# posting whose source has delisted it is not re-extractable at all.
+Documentation=file:///home/eric/apps/jobs/deploy/README.md
+# Historical postings may no longer be available from their sources, so the
+# normalized corpus needs a verified, off-machine backup.
 #
 # No After=network-online.target: this talks to a container on localhost. Adding
 # it would delay the unit waiting for something it does not use -- unless

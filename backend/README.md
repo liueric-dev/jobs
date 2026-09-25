@@ -1,13 +1,9 @@
-# Backend pipeline
+# Backend ingestion
 
-The pipeline ingests job postings, extracts facts once per posting, matches them
-to profiles, and generates narratives for the top matches. `run-daily.py` runs
-the stages in order. The browser reads results through `webapp/`.
+Python 3.14 and a dedicated Postgres database are required. This code only
+creates ingestion-owned tables; it does not drop old product tables or rows.
 
-## Setup
-
-Use Python 3.14 and a Postgres database dedicated to this project. The
-pipeline has its own environment:
+## Local Development
 
 ```bash
 cd backend
@@ -16,29 +12,21 @@ python3.14 -m venv .venv
 cp .env.example .env && chmod 600 .env
 ```
 
-Set `DATABASE_URL` in `.env`. It has no fallback. Add the source and scoring
-keys you intend to use; `.env.example` lists them. For a fresh development
-database, create all three components' schema with:
+Set `DATABASE_URL` in `.env`; there is no default. Before connecting a new
+database, verify the URL and run `.venv/bin/python tools/provision-database.py`.
+That command changes schema. Never use the local development database for
+investigation writes; use a throwaway database or reversible seed instead.
 
-```bash
-.venv/bin/python tools/provision-database.py
-```
+The full pipeline is `.venv/bin/python run-daily.py`. Each `ingest/*.py` source
+can also run independently. Known ATS board tokens are checked about every 30
+days. To investigate a new employer, run `.venv/bin/python
+tools/ats-discover.py --help` and add/probe it explicitly. `config/companies.json`
+is the initial board-token seed; `config/relevance.json` limits Workday detail
+fetches and does not rank postings. Query `jobs` for the raw normalized rows.
 
-That command issues DDL against the configured database. Check the URL before
-running it. The pipeline's configuration files are under `config/`.
-
-## Run and inspect
-
-```bash
-.venv/bin/python run-daily.py
-.venv/bin/python ingest/ats.py
-.venv/bin/python match.py
-```
-
-Each ingest script can run independently. Scheduled runs use
-`deploy/systemd/jobs-ingest.timer`. Query `jobs_app` for listings; `jobs` is
-the unfiltered ingestion table. `docs/` and the older task plans are available
-through the recovery tag named in the root README.
+Before verifying a local server, check `lsof -i :8000` and `lsof -i :3000` and
+clear stale processes or choose another port. There is no server in this reset.
+Use the matching component venv; never invoke the backend with system Python.
 
 ## Checks
 
@@ -48,10 +36,7 @@ through the recovery tag named in the root README.
 .venv-dev/bin/mypy
 ```
 
-For the optional development tools, create `.venv-dev` with Python 3.14 and
-install `ruff`, `mypy`, and `psycopg[binary]` into it.
-
-The test suite uses temporary Postgres schemas when a scratch database is
-available. Set `JOBS_SCRATCH_DATABASE_URL` to a disposable database for DB
-tests. Ruff currently has an existing nonblocking backlog; mypy is a blocking
-check in CI. `webapp/` has a separate environment and test suite.
+Set `JOBS_SCRATCH_DATABASE_URL` to a disposable Postgres database for DB-backed
+tests. This Python project has no build step. Ruff has a pre-existing nonblocking
+backlog; mypy checks the typed seams. The earlier app/docs remain available at
+the recovery tag in the root README.

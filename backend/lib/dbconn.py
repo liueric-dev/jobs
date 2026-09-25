@@ -1,46 +1,9 @@
-"""Postgres connections, with the two footguns both pipelines hit.
+"""PostgreSQL connection helpers for the ingestion pipeline.
 
-FOOTGUN 1 -- the DATABASE_URL default had drifted.
-    Eight scripts hardcoded a fallback pointing at the nyc_events database
-    and ticketmaster-seatgeek-ingest.py hardcoded
-        postgresql://nycevents:nycevents@localhost:5432/nycevents
-    which matches no database that has ever existed here -- docker-compose.yml
-    creates the first. That script could not connect even once, which is why
-    its `fetch_progress` table was still missing. One default, defined here.
-
-    There is no default at all here -- see the note below. The real
-    connection strings live in this application's own .env files,
-    ~/apps/jobs/backend/.env for the pipeline and ~/apps/jobs/backend/api/.env for the
-    service, which is also where each reads its API keys from. A credential
-    baked into a source file goes stale the moment the password is rotated,
-    and then reports itself as an authentication error rather than as a
-    configuration one.
-
-FOOTGUN 2 -- the wrong DATABASE_URL is silent, and is now destructive.
-    This used to say something else. Until the database split, jobs/ lived in a
-    `jobs` schema inside the events database and depended on
-    `SET search_path TO jobs, public`; a connection that forgot it read and
-    wrote `public` without erroring. That footgun is gone -- jobs owns the
-    `jobs` database and its tables sit in that database's `public`.
-
-    What replaced it is sharper. The two applications are now told apart ONLY
-    by the database named in DATABASE_URL, and both use unqualified table
-    names in `public`. Point the jobs pipeline at the events database and it
-    will not error: it will create its 14 tables alongside `public.events`.
-    So jobs/schema.py's ensure_schema() refuses to run when `public.events`
-    exists, and no non-superuser role can connect to nyc_events at all.
-
-    search_path is still per-connection, which is why connect() applies it to
-    every connection it returns rather than trusting a role default --
-    jobs/score.py:417 re-issues it inside each ThreadPoolExecutor worker, and
-    doing it here makes the threaded case correct by construction instead of
-    by remembering. connect() does NOT create the schema: that is DDL, it
-    would demand CREATE on the database from every connection including
-    read-only ones, and Postgres checks that privilege before `IF NOT EXISTS`
-    can short-circuit. Schema creation belongs to ensure_schema().
-
-Credentials never reach a log: scrub_url() reduces a connection string to
-its host/database tail, which is what the existing scripts print on failure.
+DATABASE_URL is required and has no fallback. The jobs database shares a
+cluster with an unrelated application, so guessing a URL risks writing to the
+wrong database. schema.ensure_schema() rejects the unrelated events database.
+Connections may set search_path but never create schema as a side effect.
 """
 
 import os
@@ -48,31 +11,7 @@ from collections.abc import Iterable
 
 import psycopg
 
-#: THERE IS NO DEFAULT HERE, AND THAT IS DELIBERATE.
-#:
-#: The shared library this module was copied from carried one default, and it
-#: named the EVENTS database, because that library served that pipeline too:
-#:
-#:     postgresql://nyc_events@localhost:5432/nyc_events
-#:
-#: which was correct for the pipeline that owned it and actively dangerous
-#: here. Read FOOTGUN 2 above: the two applications are told apart only by the
-#: database named in DATABASE_URL, and both use unqualified names in `public`.
-#: A jobs process that fell back to that default would not error -- it would
-#: connect to the events database and start creating its 14 tables alongside
-#: `public.events`.
-#:
-#: Owning this file outright is what makes deleting it possible: while one
-#: shared file served both pipelines the default had to be right for the other
-#: one, and this pipeline had to remember never to rely on it. Now it simply
-#: cannot. An unset DATABASE_URL fails loudly at the point of the mistake
-#: instead of connecting to something plausible.
-#:
-#: Everything that runs here sets it explicitly: the systemd unit via
-#: EnvironmentFile=~/apps/jobs/backend/.env, run-daily.py via lib.envfile, and api/
-#: from its own .env. api/query_claims.py additionally keeps a jobs-shaped
-#: literal for manage_users.py's admin path, where being wrong is caught by
-#: the role having no rights on the other database.
+#: DATABASE_URL has no default because this cluster hosts an unrelated database.
 
 
 def database_url() -> str:
@@ -84,11 +23,9 @@ def database_url() -> str:
     url = os.environ.get("DATABASE_URL")
     if not url:
         raise RuntimeError(
-            "DATABASE_URL is not set. It belongs in this application's own "
-            ".env (~/apps/jobs/backend/.env for the pipeline, ~/apps/jobs/backend/api/.env "
-            "for the service). There is deliberately no built-in default: "
-            "the only one that ever existed named the events database, and "
-            "falling back to it would create the jobs tables there.")
+            "DATABASE_URL is not set. Set it in backend/.env or the process "
+            "environment. There is deliberately no built-in default because "
+            "this cluster also hosts an unrelated database.")
     return url
 
 
@@ -109,13 +46,11 @@ def connect(schema: str | None = None, url: str | None = None,
             autocommit: bool = False) -> psycopg.Connection:
     """Open a connection, optionally scoped to a Postgres schema.
 
-    `schema="public"` issues `SET search_path TO public`. Pass it on EVERY
-    connection, including per-thread ones -- search_path is per-connection, so
-    setting it here is what makes the threaded case in jobs/score.py correct
-    without each worker having to remember.
+    `schema="public"` issues `SET search_path TO public`. Search path is
+    per-connection, so callers cannot rely on an earlier connection's setting.
 
     This creates no schema. Passing `schema=` asserts where to look, it does
-    not ask for DDL rights; see FOOTGUN 2 above. jobs/schema.py's
+    not ask for DDL rights; schema.py's
     ensure_schema() is the one place that creates.
 
     `autocommit=True` exists for callers whose writes must survive
@@ -199,9 +134,7 @@ def connect_or_exit(label: str, schema: str | None = None, url: str | None = Non
         print(f"{label} FAILED: could not connect to Postgres "
               f"({scrub_url(url)}): {e}")
         if not os.environ.get("DATABASE_URL"):
-            print("  DATABASE_URL is not set -- it belongs in this "
-                  "application's own .env (~/apps/jobs/backend/.env or "
-                  "~/apps/jobs/backend/api/.env). This copy of dbconn has no "
-                  "built-in default on purpose: the only one that ever "
-                  "existed named the events database.")
+            print("  Set DATABASE_URL in backend/.env or the process "
+                  "environment. No built-in fallback is used because the "
+                  "cluster also hosts an unrelated database.")
         sys.exit(1)

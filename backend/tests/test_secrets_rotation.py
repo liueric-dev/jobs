@@ -1,36 +1,7 @@
-"""Secrets: gitignored, absent from the tree, and rotatable without a redeploy.
+"""Check that ingestion credentials remain untracked and environment-based.
 
-WHY "ROTATABLE WITHOUT A REDEPLOY" IS A TESTABLE PROPERTY AND NOT A SLOGAN
-
-Free-tier keys accumulate here -- the LLM key, SerpApi, Apify, Socrata, Adzuna,
-plus Google OAuth -- and free-tier keys are rotated often, by whoever is holding
-the pager, under time pressure. The property that makes that safe is narrow and
-mechanical:
-
-    NO CREDENTIAL IS A LITERAL IN TRACKED CODE, AND NO CREDENTIAL IS READ FROM
-    ANYWHERE BUT THE PROCESS ENVIRONMENT.
-
-If both hold, rotation is `edit .env` plus, for the two long-lived services, a
-`systemctl --user restart`. Nothing is rebuilt, no file under version control
-changes, and no commit is needed -- so a rotation at 23:00 cannot become a
-deploy at 23:00. If either fails, rotating a key means editing code, which means
-a commit, a review and a push, which means it does not happen.
-
-THE ASYMMETRY WORTH KNOWING, and it is recorded here rather than smoothed over:
-the pipeline needs no restart AT ALL, because run-daily.py:237 calls
-envfile.load() at the top of every run and every step is a fresh subprocess
-inheriting that environment (run-daily.py:253). The next nightly run picks up a
-new key on its own. The webapp is a long-lived uvicorn process that reads
-config at import, so it needs a restart -- which is still not a redeploy, and
-`git show refactor-freeze-2026-08-02:docs/RUNBOOK.md` says which is which.
-
-WHAT THIS DOES NOT CHECK. Whether the key in `.env` is valid, whether it has
-quota left, or whether the provider has revoked it. Those are silent failures
-that return zero rows, and they are caught by volume, not here --
-tests/test_volume_floors.py and config/volume-floors.json.
-
-Offline: reads tracked files and runs `git check-ignore`. No network, no
-database, no live credential.
+The scheduled pipeline loads .env on each run, so rotating a key does not
+require a code change or redeploy. These tests inspect files only.
 """
 
 import os
@@ -82,17 +53,13 @@ class TestNoSecretIsCommittable(unittest.TestCase):
     because what matters is git's answer after every pattern, negation and
     precedence rule has been applied -- and this repo has already been bitten
     once by a pattern that matched at a depth nobody intended (`scripts/`, fixed
-    by task 33)."""
+    in the past)."""
 
     def test_env_files_are_ignored_and_examples_are_not(self):
         cases = [
             ("backend/.env", True),
             ("backend/.env.local", True),
-            ("backend/api/.env", True),
-            ("backend/webapp/.env", True),
             ("backend/.env.example", False),
-            ("backend/api/.env.example", False),
-            ("backend/webapp/.env.example", False),
             # cloudflared's two credentials. The tunnel JSON is a bearer
             # credential for the tunnel itself: whoever holds it can run the
             # tunnel and receive traffic for its hostnames.
@@ -122,7 +89,7 @@ class TestNoSecretIsCommittable(unittest.TestCase):
         self.assertEqual(bad, [])
 
     def test_backend_scripts_is_not_ignored(self):
-        """The landmine task 33 found. `scripts/` unanchored matched at every
+        """An unanchored `scripts/` pattern matched at every
         depth, so backend/scripts/ was ignored; the four files already there
         were unaffected (tracking beats .gitignore) and nothing was red. What
         broke was the next file added -- a backup script that silently was not
@@ -142,7 +109,7 @@ class TestKeysAreRotatableWithoutARedeploy(unittest.TestCase):
         which is the way a check like this dies quietly."""
         names = _credential_names()
         self.assertTrue(names)
-        for expected in ("SERPAPI_API_KEY", "APIFY_API_TOKEN", "DATABASE_URL"):
+        for expected in ("DATABASE_URL",):
             self.assertIn(expected, names)
 
     def test_every_credential_is_read_from_the_environment_only(self):

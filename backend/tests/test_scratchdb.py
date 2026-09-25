@@ -1,4 +1,4 @@
-"""evals/scratchdb.py, and the two things only a real Postgres can prove.
+"""testsupport/scratchdb.py, and the two things only a real Postgres can prove.
 
 WHY THESE TESTS NEED A DATABASE AND THE OTHERS DO NOT
 
@@ -15,11 +15,11 @@ _FakeConn keeps going after a raise whether or not the SAVEPOINT exists, so
 that suite passes either way. Delete `with conn.transaction():` from
 upsert() and only `test_a_bad_row_does_not_take_the_rest_of_the_batch` below
 notices. That is the whole argument for a scratch database, and it is audit
-items 2 and 3 (`git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:42-43`).
+items 2 and 3 ().
 
 THE OPEN QUESTION, SETTLED
 
-`git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:77-84` asks whether to write concurrency tests for
+ asks whether to write concurrency tests for
 `lib/upsert.py` and the Google claim SQL now that a scratch database makes
 them possible. The answer taken here is **the claim SQL yes, upsert no**, and
 the reason is that only one of them has a contract that exists only under
@@ -60,7 +60,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import psycopg                                                # noqa: E402
 import schema                                                 # noqa: E402
-from evals import scratchdb                                   # noqa: E402
+from testsupport import scratchdb                                   # noqa: E402
 from lib import envfile, state, upsert                        # noqa: E402
 from lib.upsert import upsert_checked                         # noqa: E402
 
@@ -95,15 +95,12 @@ class TestTheSchemaIsTheRealSchema(unittest.TestCase):
     def test_every_table_the_pipeline_names_exists(self):
         """Asserted through schema.py's own constants, not a copied list.
 
-        `git show 68f026f:docs/tasks/refactor/tranche_two/09-fetcher-harness.md:55`: make schema creation share the real path
+        : make schema creation share the real path
         "rather than a hand-maintained DDL copy, or the harness will silently
         test a schema that no longer exists." A literal list of table names
         here would be exactly that copy, one level up.
         """
-        wanted = {schema.TABLE, schema.SCORES_TABLE, schema.FACTS_TABLE,
-                  schema.MATCHES_TABLE, schema.EVENTS_TABLE,
-                  schema.PROFILES_TABLE, schema.WATERMARK_TABLE,
-                  "hn_seen_comments", "google_jobs_query_stats"}
+        wanted = {schema.TABLE, schema.WATERMARK_TABLE, "hn_seen_comments"}
         with scratchdb.scratch_schema() as (conn, name):
             present = {r[0] for r in conn.execute(
                 "SELECT table_name FROM information_schema.tables "
@@ -155,7 +152,7 @@ class TestTheGuards(unittest.TestCase):
     def test_ensure_schema_still_refuses_the_events_database(self):
         """`lib/dbconn.py:19` FOOTGUN 2, kept rather than worked around.
 
-        `git show refactor-freeze-2026-08-02:docs/ingestion_tests/05-fetcher-harness.md:20-22` calls this refusal "a feature here; keep
+         calls this refusal "a feature here; keep
         it". A scratch schema pointed at the events database must fail as
         loudly as a production run would, so this asserts the guard fires --
         with a stub connection, because provoking it for real would mean
@@ -244,7 +241,7 @@ class TestPerRecordIsolationAgainstRealPostgres(unittest.TestCase):
 
     @requires_db
     def test_the_summary_line_still_reports_the_real_counts(self):
-        """Task 03's `upsert-summary:` line, over a real server rather than a
+        """The `upsert-summary:` line, over a real server rather than a
         fake connection -- run-daily.py parses this to tell "wrote nothing"
         apart from "dropped everything"."""
         logged = []
@@ -292,7 +289,7 @@ class TestTheClaimSQLUnderConcurrency(unittest.TestCase):
         behaviour the SerpApi and Apify budgets rest on, and until now
         nothing asserted it.
         """
-        dataset = "google_jobs:query:ai-engineer-nyc"
+        dataset = "ats:company:acme"
         with scratchdb.scratch_schema() as (conn, name):
             with scratchdb.second_connection(name) as other:
                 first = state.try_claim(conn, dataset,
@@ -307,7 +304,7 @@ class TestTheClaimSQLUnderConcurrency(unittest.TestCase):
     def test_a_released_claim_is_takeable_by_the_other_session(self):
         """mark_success drops the claim so nobody waits out the TTL for a
         result that is already known (lib/state.py:133-137)."""
-        dataset = "google_jobs:query:ai-engineer-nyc"
+        dataset = "ats:company:acme"
         with scratchdb.scratch_schema() as (conn, name):
             with scratchdb.second_connection(name) as other:
                 self.assertTrue(state.try_claim(

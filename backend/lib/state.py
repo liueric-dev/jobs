@@ -1,27 +1,8 @@
-"""Run state: watermarks and TTL claims.
+"""Ingestion watermarks and optional TTL claims stored in job_ingest_state.
 
-Two mechanisms, both answering "what do I not need to fetch again?".
-
-  * Watermarks (`job_ingest_state`) -- "dataset X last succeeded at T".
-
-  * TTL claims -- a lease so two overlapping runs don't spend the same
-    metered API budget twice. This is what protects the SerpApi and Apify
-    quotas when a scheduled run and a manual one overlap, and it is the half
-    api/query_claims.py extends with claimed_by and claim_granted_at to
-    answer "does this contributor still own the claim they are submitting
-    against?".
-
-WHAT IS NOT HERE, AND WHY IT LOOKS HALF-FINISHED
-    The shared library this module came from also carried a resumable-pager
-    half -- get_progress, resume_page, save_progress, complete_progress,
-    is_fresh, the STATUS_* constants and an `ingest_progress` table -- for a
-    consumer whose sources offered no "only what changed" filter, where a full
-    run walked every page and a run killed midway had to resume rather than
-    restart.
-
-    Every source here is either watermarked or fully re-fetched, so nothing in
-    this pipeline ever called any of it, and that half was dropped when the
-    module was brought in. It is not missing; it was never used.
+Watermarks record a source's last successful run. Claims are an atomic lease
+mechanism for coordinating overlapping workers; current scheduled ingestion
+uses the watermarks.
 """
 
 from datetime import timedelta
@@ -39,14 +20,11 @@ def ensure_state_schema(conn: psycopg.Connection, watermark_table: str = "ingest
     parameter rather than becoming unconditional because ALTER TABLE takes an
     ACCESS EXCLUSIVE lock, and a *pending* exclusive lock queues ahead of new
     readers -- one blocked ALTER makes the whole table unreadable for
-    everyone behind it. Every caller here passes it (schema.py:927,
-    ingest/google-serpapi.py:381, ingest/google-apify.py:209), but issuing
+    everyone behind it. The ingestion schema requests it explicitly, but issuing
     DDL should stay something a caller asks for rather than something this
     function does on its own. See dbconn.add_missing_columns for the
     idle-transaction incident that lesson comes from.
 
-    The `ingest_progress` table the shared version also created is gone with
-    the pager half -- see the module docstring.
     """
     conn.execute(f"""
         CREATE TABLE IF NOT EXISTS {watermark_table} (
