@@ -1,0 +1,24 @@
+{
+  "name": "pursuit-jobs-google-actor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claims Google Jobs queries from the jobs API, scrapes them in the runner's own Apify account, and submits the results back. See docs/adr/0012.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "apify": "^3.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
+  }
+}

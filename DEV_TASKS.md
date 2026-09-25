@@ -35,7 +35,7 @@ than trim. OQ-34 carries the three ways out. Everything cut is in git at 9a05925
 
 # Dev tasks — everything that is on the owner
 
-**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-40`.** Numbers are
+**This file owns the prefix `OQ-`.** One allocator. **The next free number is `OQ-42`.** Numbers are
 never reused and never renumbered; `OQ-7` is closed and stays in the table so citations resolve.
 
 **Every row here needs you.** A session cannot start any of them: each needs a machine, an account,
@@ -624,6 +624,47 @@ means, in the BUDGET NOTE if it only moves the number — and this file is insid
 answer makes its budget.
 
 ---
+
+### OQ-40 — The Apify actor exists in code and nowhere else: create it, share it, turn signup on
+
+Filed 2026-09-24 by the session that built `actor/` under
+[`docs/adr/0012`](docs/adr/0012-contributor-scrape-runs-as-apify-actor.md). **Why it is yours:** an
+Apify account, a Google Workspace domain, and the deployed server's `.env`.
+
+1. **Create the actor.** From `actor/`, run `npx apify-cli login` and then `npx apify-cli push`. Or, in
+   Apify Console, create an actor from this repo's Git URL with `actor/` as the source directory.
+2. **Share it.** Actor → Share → add each classmate with *run* permission. It stays private. Their
+   runs, and the nested Google Jobs actor it calls, bill to their own account.
+3. **Turn on signup.** In `backend/webapp/.env`, set `ALLOWED_SIGNUP_DOMAIN=pursuit.org` and
+   `SIGNUP_PROFILE=<the cohort profile>`, then restart. Leaving either one unset keeps the webapp
+   allowlist-only.
+4. **Check Google's side.** While the OAuth consent screen is unverified, Google refuses any address
+   not on its test-user list, whatever this app allows. Either publish the consent screen or make
+   it *Internal* to the Workspace.
+5. **Unblock the API.** The mint secret has to be set on both services (`OQ-30`), and `api/` has to
+   start against the deployed database (`OQ-31`). Opt-in returns 503 or 502 until both are done.
+6. **Do one live run first.** Run it on your own account with `maxQueries=1`, before sharing (about
+   $0.15). Confirm the run log says `1/1 queries submitted`, and that `submission_log` has a
+   `submit` row for your contributor.
+
+### OQ-41 — The SerpApi paths are disabled, not decided: restore them or delete them
+
+Filed 2026-09-24. `docs/adr/0012` decision 4 took three steps out of `run-daily.py`: the SerpApi
+ingest, the operator-billed Apify ingest, and `searchqueries.py`. Their files, tests and cassettes
+were kept. It also stopped surfacing the SerpApi contributor worker (`backend/api/contributor-worker/`).
+
+**Why it is yours:** the owner asked to review the SerpApi integration before deciding. **The
+options:**
+- **(a)** Restore `ingest/google-serpapi.py` as a second Google source beside the actor. The free
+  tier is shared across machines.
+- **(b)** Delete it, the Apify ingest, the worker, and `serp/`'s SerpApi provider. Then decide what
+  `searchqueries.py` dispatches through, if anything.
+- **(c)** Keep `searchqueries.py` only, with Builder-initiated searches. It could claim through the
+  actor by way of `api/`'s `search_queries` claim mode (ADR 0009).
+
+Restoring any of them means putting its `STEPS` entry back before `extract.py` and its floor back in
+`config/volume-floors.json` (the `unfloored` note names the numbers). Flip
+`tests/test_search_queries.py`'s absence test back into an ordering test.
 
 ## Closed — kept so citations resolve
 

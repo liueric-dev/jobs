@@ -1,0 +1,10 @@
+{
+    "actorSpecification": 1,
+    "name": "pursuit-jobs-google",
+    "title": "Pursuit jobs: Google Jobs contributor",
+    "description": "Claims Google Jobs searches from the Pursuit jobs server, runs them in your own Apify account, and submits the results back.",
+    "version": "0.1",
+    "buildTag": "latest",
+    "input": "./input_schema.json",
+    "dockerfile": "../Dockerfile"
+}

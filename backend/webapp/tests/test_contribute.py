@@ -249,6 +249,9 @@ class TestTheRawKeyIsUnrecoverable(unittest.TestCase):
         result = run_opt_in(conn, mint)
 
         self.assertEqual(result["config"]["JOBS_API_KEY"], "the-one-and-only-key")
+        # docs/adr/0012: the actor's token is the same credential, not a
+        # second one. Two keys per Builder would mean two things to revoke.
+        self.assertEqual(result["actor_token"], "the-one-and-only-key")
         # THE READ-BACK ATTEMPT: everything this service wrote.
         self.assertNotIn("the-one-and-only-key", repr(conn.updates))
         # And not the hash either -- see schema_web._ensure_contributor_link.

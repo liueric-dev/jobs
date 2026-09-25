@@ -174,11 +174,11 @@ class TestTheAlarmCanFire(unittest.TestCase):
         returning zero. A global floor over the run total cannot see this,
         because ats alone outweighs everything else by an order of magnitude."""
         written = {s: spec["floor"] * 10 for s, spec in self.floors["sources"].items()}
-        written["google-serpapi"] = 0
+        written["builtin-nyc"] = 0
         history = _full_history(self.floors, written)
         findings, _ = vf.check_floors(history, self.floors, NOW)
         self.assertEqual([f.source for f in findings if f.kind == "below_floor"],
-                         ["google-serpapi"])
+                         ["builtin-nyc"])
 
     def test_a_run_that_never_happened_is_reported(self):
         """The easiest failure in the system to miss, and the reason the check

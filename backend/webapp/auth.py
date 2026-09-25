@@ -2,8 +2,8 @@
 Google SSO, and the sessions it mints. The only way into this application.
 
 THE DIVISION OF LABOUR: Google authenticates, the app_users allowlist
-authorises. A valid Google login for an address with no row is refused with 403
-and creates nothing. See manage_app_users.py for why that is deliberate.
+authorises. A Google login with no row is refused with 403 and creates nothing
+(manage_app_users.py says why), unless docs/adr/0012's _signup_allowed() admits it.
 
 THE FLOW is OAuth 2.0 Authorization Code with PKCE, driven entirely
 server-side. The browser never receives a token -- only an opaque cookie whose
@@ -270,7 +270,7 @@ def login(request: Request, next: str = "/"):
         # Without this, a browser already signed into one Google account skips
         # the chooser entirely -- which on a shared machine silently signs in
         # the wrong person, and there is no UI here to notice with.
-        "prompt": "select_account",
+        "prompt": "select_account", **_signup_hint(),
     }
     return RedirectResponse(
         f"{config.GOOGLE_AUTH_ENDPOINT}?{urllib.parse.urlencode(params)}",
@@ -388,10 +388,10 @@ def _resolve_user(claims):
                 conn.execute("UPDATE app_users SET google_sub = %s WHERE id = %s",
                              (sub, row[0]))
 
+        if row is None and _signup_allowed(claims):
+            row = _signup(conn, claims, sub, email)  # docs/adr/0012
         if row is None:
-            # No row is created. The allowlist IS the access control -- see
-            # manage_app_users.py. 403 rather than 401: they authenticated
-            # fine, they are simply not allowed in, and retrying will not help.
+            # Allowlist is the access control (manage_app_users.py); 403: retry won't help.
             log.info("refused sign-in for un-allowlisted address %s", email)
             raise HTTPException(
                 status_code=403,
@@ -472,3 +472,71 @@ def me(user: User = Depends(require_user)):
         "profile": user.profile,
         "is_admin": user.is_admin,
     }
+
+
+# --------------------------------------------------------------------------
+# Self-serve signup, docs/adr/0012
+#
+# Down here and not beside _resolve_user, so the lines above keep the numbers
+# that other files cite (tools/audit-citations.py).
+# --------------------------------------------------------------------------
+
+def _signup_allowed(claims):
+    """Whether a login with no app_users row may create one.
+
+    Pure, so it is testable without a database. It is ALWAYS called on claims
+    _claims_from_id_token() has already validated, and that is what makes the
+    `hd` claim trustworthy here: it came from Google's own token endpoint, not
+    from the browser. `hd` is carried only by a Workspace account. A personal
+    Google account can hold any address, including one ending in the domain, so
+    the suffix alone would not be enough.
+
+    email_verified is checked again even though _claims_from_id_token()
+    already refuses unverified addresses. This function lets through the
+    one thing that creates rows, so it does not borrow that guarantee from a
+    function that could change without anyone looking here.
+    """
+    if not config.signup_configured():
+        return False
+    domain = config.ALLOWED_SIGNUP_DOMAIN
+    email = (claims.get("email") or "").strip().lower()
+    return (claims.get("email_verified") is True
+            and (claims.get("hd") or "").lower() == domain
+            and email.endswith("@" + domain))
+
+
+def _signup(conn, claims, sub, email):
+    """Create the row _signup_allowed() admitted. Returns (id, active) or None.
+
+    The row is created already bound to `sub`, and attached to the EXISTING
+    cohort profile config.SIGNUP_PROFILE names. It never creates a profile,
+    which is the part that costs (manage_app_users.py).
+
+    ON CONFLICT DO NOTHING covers two first logins racing each other. It also
+    covers an address an operator already bound to a DIFFERENT sub, such as a
+    recycled Workspace address. That row is left alone, the lookup by this sub
+    then finds nothing, and the caller refuses.
+    """
+    conn.execute(
+        """
+        INSERT INTO app_users (id, email, google_sub, display_name, profile,
+            prior_domain, is_admin, active, created_at, last_login_at)
+        VALUES (%s, %s, %s, %s, %s, NULL, FALSE, TRUE, %s, NULL)
+        ON CONFLICT DO NOTHING
+        """,
+        (f"u_{secrets.token_hex(6)}", email, sub, claims.get("name"),
+         config.SIGNUP_PROFILE, utc_now_str()),
+    )
+    row = conn.execute(
+        "SELECT id, active FROM app_users WHERE google_sub = %s", (sub,)
+    ).fetchone()
+    if row is not None:
+        log.info("self-served signup for %s", email)
+    return row
+
+
+def _signup_hint():
+    """login()'s `hd` parameter, which narrows Google's account chooser to the
+    signup domain. It is a HINT and nothing more: anyone can strip it from the
+    URL, and _signup_allowed() is the check."""
+    return {"hd": config.ALLOWED_SIGNUP_DOMAIN} if config.signup_configured() else {}

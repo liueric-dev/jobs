@@ -56,7 +56,7 @@ python3 -m unittest discover -s tests            # whole suite
 python3 -m unittest tests.test_match             # one module
 
 # The nightly run, and any step standalone.
-python3 run-daily.py                             # 14 steps, in order
+python3 run-daily.py                             # 11 steps, in order
 python3 ingest/ats.py                            # every ingest script runs alone
 DEBUG_PRINT_KEYS=1 python3 ingest/google-serpapi.py   # verbose, convention everywhere
 
@@ -123,8 +123,8 @@ column.
 
 **There are three executable stages: `extract.py` → `match.py` → `score.py`.** `relevance.py` is a
 pure SQL-fragment builder — no database access, no `main()`, not in the nightly step list. Extract
-and score cost LLM calls; match is free arithmetic. **`run-daily.py` runs 14 steps** — any comment
-saying nine is stale; runtime output is correct because it uses `len(STEPS)`.
+and score cost LLM calls; match is free arithmetic. **`run-daily.py` runs 11 steps** (14 before
+`docs/adr/0012` disabled the Google/SerpApi steps) — any comment saying nine is stale; runtime output is correct because it uses `len(STEPS)`.
 
 **`job_facts` is shared; scores are per profile.** One extraction per posting, ever. `job_matches`
 and `job_scores` are keyed `(job_id, profile)` — the property that makes cost flat in users. Do not

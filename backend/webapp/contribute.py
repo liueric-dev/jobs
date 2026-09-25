@@ -178,9 +178,15 @@ def opt_in(user: User = Depends(require_user)):
         conn.commit()
 
     return {
+        # docs/adr/0012: the value a Builder pastes into the Apify actor's
+        # secret `apiKey` input. It is the SAME credential as config.json's
+        # JOBS_API_KEY, returned in the SAME one response, so there is still
+        # exactly one key per Builder and one moment it can be read.
+        "actor_token": api_key,
         "filename": "config.json",
         # The file itself, as an object rather than a pre-serialised string, so
         # the client decides the indentation it writes and there is no second
-        # opinion about it here.
+        # opinion about it here. It is kept for the SerpApi worker, which
+        # 0012 disables pending review rather than deletes.
         "config": build_config(api_key),
     }

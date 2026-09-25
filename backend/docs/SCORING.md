@@ -214,7 +214,7 @@ headline is the line under it:
 
 > **The pipeline cannot process 43/day. `EXTRACT_BATCH_SIZE` is 40
 > (`extract.py:70`) and `run-daily.py` invokes `extract.py` exactly once
-> (`run-daily.py:201`), so the ceiling is 40 postings a night regardless of
+> (`run-daily.py:203`), so the ceiling is 40 postings a night regardless of
 > how fast a call is. At 43/day the backlog grows 3/day; at 80/day — what the
 > last seven complete days actually ran — it grows 40/day, forever.**
 

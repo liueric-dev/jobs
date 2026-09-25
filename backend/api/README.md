@@ -232,9 +232,12 @@ own server-to-server secret, for the one route in the second.
 | `POST /v1/queries/{dataset}/release` | give a claim back after a failed fetch, watermark untouched |
 | `GET /v1/health` | liveness |
 
-Only SerpApi-backed buckets are offered. The Apify source bills the operator's
-own account per result, so it stays in the private pipeline — contributors
-spend their own SerpApi quota, which is the point.
+Every bucket is offered. Since [ADR 0012](../../docs/adr/0012-contributor-scrape-runs-as-apify-actor.md),
+the main client is [`actor/`](../../actor/), an Apify actor that classmates run
+in their own Apify accounts. They pay for their own scraping, and the operator
+pays for none. The submit body takes raw Google Jobs objects. The shape SerpApi
+returns and the shape the Apify Google Jobs actor returns are the same, field for
+field, so `submit` doesn't care which one produced it.
 
 ### Contributor settings — the server holds desired state
 

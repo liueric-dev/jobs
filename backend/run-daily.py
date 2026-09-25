@@ -3,10 +3,10 @@
 Single daily entry point for the jobs pipeline -- runs ingest/ats.py
 (Greenhouse/Lever/Ashby), ingest/builtin-nyc.py (Built In NYC scrape),
 ingest/weworkremotely.py (WWR category RSS feeds), ingest/hn-hiring.py
-(HN "Who is hiring?" monthly thread), ingest/google-serpapi.py,
-ingest/google-apify.py (Google Jobs via a rotating query bank -- the
-Apify step deliberately depends on the SerpApi step running first, see
-ingest/google-apify.py's docstring), then the three scoring stages --
+(HN "Who is hiring?" monthly thread) and the other ingest steps in STEPS.
+Google Jobs is NOT among them: docs/adr/0012 disabled the SerpApi and
+Apify steps, and it now arrives through api/ from classmates' Apify
+actor runs (actor/), outside this process. Then the three scoring stages --
 extract.py (one LLM call per new posting, shared by every profile),
 match.py (free per-profile ranking) and score.py (narratives for the top
 of each active profile's ranking) -- one after another, in that order, in
@@ -172,34 +172,34 @@ STEPS = [
     "ingest/nyc-open-data.py",
     "ingest/weworkremotely.py",
     "ingest/hn-hiring.py",
-    "ingest/google-serpapi.py",
-    "ingest/google-apify.py",
-    # Searches (tranche_four/25): seed the role_track catalogue, fold watcher
-    # counts into the suppressed bucket, retire abandoned queries, dispatch the
-    # due ones.
+    # -- Google Jobs: DISABLED 2026-09-24, docs/adr/0012 ---------------------
     #
-    # HERE, AND NOT AFTER match.py, because it is an INGEST-SHAPED step: what it
-    # dispatches produces `jobs` rows, so it has to run before extract turns new
-    # postings into facts. Placed at the END of ingest rather than the start so
-    # a Builder's query and the ATS sweep land in the same nightly window and
-    # the same extract pass -- a search whose results waited a day for facts
-    # would take two nights to reach a Builder, not one.
+    # Three steps used to sit here: ingest/google-serpapi, ingest/google-apify
+    # and searchqueries. All three are out of the nightly run, and their files
+    # are kept, unchanged, pending the owner's review of the SerpApi path.
     #
-    # ~~IT DOES NOT FETCH ANYTHING TODAY~~ IT FETCHES, as of 2026-08-02
-    # (tranche_four/23). backend/serp/ exists and searchqueries.build_provider()
-    # hands run_due() a real dispatcher, so this step now writes `jobs` rows --
-    # which is what the placement above was already anticipating, and why the
-    # step was put at the end of ingest rather than after match.py.
+    # Google Jobs now arrives through actor/, an Apify actor that Pursuit
+    # classmates schedule in their OWN Apify accounts. It claims queries from
+    # api/ (POST /v1/queries/claim), scrapes them, and submits them back
+    # (POST /v1/queries/{dataset}/submit). So the operator no longer pays for
+    # Google Jobs, and nothing here fetches it. The rows still land in `jobs`
+    # as platform google_jobs, through the same normalize_job and google_spec().
     #
-    # IT CAN STILL DISPATCH NOTHING, and it says which of the three reasons on
-    # stderr every run: --dry-run, no credential, or no query was due. That line
-    # is not decoration -- a runner that quietly did nothing is indistinguishable
-    # from one whose key was revoked, and both spend the night looking healthy.
+    # searchqueries went too because its provider defaults to SerpApi
+    # (serp/__init__.py resolve()). Re-adding it means adding it BEFORE
+    # extract.py, the ordering its old comment explained: an ingest-shaped
+    # step whose rows have to reach extract the same night. That comment,
+    # and the one for each Google step, is in git at the commit before 0012.
     #
-    # It has a volume floor as of the same day (config/volume-floors.json,
-    # `searchqueries`), which is the check that answers "did it get anything"
-    # rather than "did it run".
-    "searchqueries.py",
+    # The names are written without quotes on purpose.
+    # tests/test_volume_floors.py collects quoted script names from this list,
+    # and a disabled step must not look like a live one to it. For the same
+    # reason config/volume-floors.json moved their floors to `unfloored`: a
+    # floor for a step that no longer runs would breach every night.
+    #
+    # The replacement's volume is measured from api/'s submission_log, not
+    # from this script's written/dropped line, because run-daily.py never
+    # sees a classmate's run.
     "extract.py",
     "match.py",
     # The warm pass: prepare narratives for profiles that have been active in

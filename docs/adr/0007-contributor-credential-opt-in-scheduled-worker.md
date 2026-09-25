@@ -6,6 +6,8 @@ generator: none
 
 # 0007 — Contributor credentials mint at opt-in; the worker is scheduled, not resident
 
+> **Superseded in part by [0012](0012-contributor-scrape-runs-as-apify-actor.md) (2026-09-24): decisions 2 and 4 are replaced by an Apify actor; 1 and 3 stand.**
+
 **Status:** accepted. Supersedes [0006](0006-contributor-credential-auto-minted-local-daemon.md)
 decisions 1, 2 and 4. Decision 3 there — local execution, contributor's own key, own IP, never
 proxied — is retained unchanged and is load-bearing for everything below.

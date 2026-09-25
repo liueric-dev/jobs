@@ -17,9 +17,9 @@ which is the browser-facing surface.
     python3 manage_app_users.py revoke-sessions --email you@x.com
 
 THIS FILE IS THE ACCESS CONTROL. Google authenticates; it does not authorise.
-A Google login for an address with no row here is refused, and no row is ever
-created by the login path -- see auth.py. That is deliberate and it is not an
-oversight to "fix" by auto-provisioning: an active profile costs real money.
+A Google login with no row here is refused, and the login path creates none except
+docs/adr/0012's domain signup, onto an EXISTING profile -- see auth.py. Deliberate,
+not an oversight to "fix" by auto-provisioning: an active profile costs real money.
 
     CORRECTED 2026-07-31. This paragraph used to read "because extract.py and
     score.py both fan out per active profile." That is true of score.py and

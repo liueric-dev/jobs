@@ -53,9 +53,9 @@ it is a pure SQL-fragment builder with no database access, no `main()` and no `_
 it does not appear in `run-daily.py`'s step list (`backend/relevance.py:1-334`). The executable
 stages are `extract.py` → `match.py` → `score.py`.
 
-**`run-daily.py` runs 14 steps, not nine.** `STEPS` holds 14 entries: `tools/ats-discover.py`, 8
-ingest scripts, `searchqueries.py`, then extract, match, score, and `cohort.py`
-(`backend/run-daily.py:124-241`). Runtime output was always correct because it uses `len(STEPS)`.
+**`run-daily.py` runs 11 steps, not nine or 14.** `STEPS` holds 11 entries: `tools/ats-discover.py`, 6
+ingest scripts, then extract, match, score, and `cohort.py`. The two Google ingest scripts and
+`searchqueries.py` came out on 2026-09-24 (`docs/adr/0012`) (`backend/run-daily.py:126-243`). Runtime output was always correct because it uses `len(STEPS)`.
 
 *Corrected 2026-08-03.* The stale "nine" is gone from all seven places in `run-daily.py`'s own
 docstring, from `deploy/systemd/jobs-ingest.service:41` and from `tools/cost-test.py:113` — the
@@ -142,9 +142,9 @@ stronger claim).
 the supported launcher (`backend/webapp/config.py:123-124`).
 
 **The frontend is shipping, not scaffolding.** 13 ES modules, a 553-line hand-written stylesheet,
-five routed screens — Today, Job detail, Saved, Search and Onboarding — 30 shipped fixtures, both
-checkers green (`frontend/js/app.mjs:120-137`; `frontend/index.html:45-48`). Search landed in
-`3c0452f`, onboarding in `9a774e1`. What is *not* built: the Contribute surface, and the phone test
+six routed screens — Today, Job detail, Saved, Search, Onboarding and Contribute — 30 shipped fixtures, both
+checkers green (`frontend/js/app.mjs:122-140`; `frontend/index.html:45-49`). Search landed in
+`3c0452f`, onboarding in `9a774e1`, Contribute (the actor token, `docs/adr/0012`) on 2026-09-24. What is *not* built: the phone test
 (needs a device and a Google Cloud Console redirect-URI change).
 
 **The client authenticates with `credentials: "same-origin"`, not `'include'`, and `BASE = ""`**

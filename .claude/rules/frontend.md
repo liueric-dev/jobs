@@ -12,8 +12,8 @@ no framework, no npm, no `package.json`**, and that is a constraint to keep.
 bundler, a component framework or a package to install, and all three are refused here regardless of
 how good the suggestion is. Take the typography, spacing and hierarchy reasoning; leave anything
 that needs a dependency. A design that cannot ship as `app.css` plus ES modules is not a design for
-this client. Five screens exist and
-all five are routed: Today, Job detail, Saved, Search and Onboarding. Not built: Contribute. The
+this client. Six screens exist and
+all six are routed: Today, Job detail, Saved, Search, Onboarding and Contribute (the actor token, `docs/adr/0012`). The
 phone test ran 2026-08-04 (`DEV_TASKS.md`'s `OQ-14`) and found three real bugs nobody had hit
 because the client had never been loaded end to end through the deployed tunnel before — see that
 row's closure for what they were.

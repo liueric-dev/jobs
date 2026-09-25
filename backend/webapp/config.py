@@ -173,3 +173,26 @@ def contribute_configured():
     """
     return bool(JOBS_MINT_SHARED_SECRET and CONTRIBUTOR_API_PUBLIC_URL
                 and CONTRIBUTOR_API_INTERNAL_URL)
+
+
+# -- self-serve signup (docs/adr/0012) ------------------------------------
+#
+#: When set (e.g. "pursuit.org"), a Google
+#: account in this Workspace domain, with a verified address, is let in on its
+#: first login without an allowlist row, and gets one created. Unset means
+#: allowlist-only, which is exactly the pre-0012 behaviour.
+#: Both conditions are checked against the id_token: the `hd` claim, which only
+#: a Workspace account carries, and the address suffix. The `hd` parameter
+#: login() sends to Google is a hint for the account picker, not a check.
+ALLOWED_SIGNUP_DOMAIN = os.environ.get("ALLOWED_SIGNUP_DOMAIN", "").strip().lower()
+#: The EXISTING cohort profile a self-served Builder is attached to. Signup
+#: never creates a profile. score.py's cost is per profile
+#: (manage_app_users.py's docstring), so a new Builder on the cohort profile
+#: costs nothing extra there. With no profile set, signup stays off even if
+#: the domain is set: app_users.profile is NOT NULL, and guessing one is worse
+#: than refusing.
+SIGNUP_PROFILE = os.environ.get("SIGNUP_PROFILE", "").strip()
+
+
+def signup_configured():
+    return bool(ALLOWED_SIGNUP_DOMAIN and SIGNUP_PROFILE)

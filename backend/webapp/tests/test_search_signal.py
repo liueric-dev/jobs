@@ -634,14 +634,19 @@ class TestItIsWiredIntoTheNightlyRun(unittest.TestCase):
         spec.loader.exec_module(module)
         return [s if isinstance(s, str) else s[0] for s in module.STEPS]
 
-    def test_searchqueries_is_a_nightly_step(self):
-        self.assertIn("searchqueries.py", self._steps())
+    def test_searchqueries_is_out_of_the_nightly_run(self):
+        # docs/adr/0012 took it out with the other SerpApi-backed steps: its
+        # provider defaults to SerpApi. Whether it returns is DEV_TASKS.md
+        # OQ-41. The two tests below hold only while it is absent, and they
+        # become real checks again on the commit that restores it.
+        self.assertNotIn("searchqueries.py", self._steps())
 
     def test_it_runs_before_extract(self):
         # It is ingest-shaped: what it dispatches produces `jobs` rows, so it
         # must run before extract turns new postings into facts.
         names = self._steps()
-        self.assertLess(names.index("searchqueries.py"), names.index("extract.py"))
+        if "searchqueries.py" in names:
+            self.assertLess(names.index("searchqueries.py"), names.index("extract.py"))
 
     def test_it_runs_with_no_flags(self):
         import importlib.util
@@ -653,9 +658,9 @@ class TestItIsWiredIntoTheNightlyRun(unittest.TestCase):
         spec.loader.exec_module(module)
         entry = [s for s in module.STEPS
                  if (s if isinstance(s, str) else s[0]) == "searchqueries.py"]
-        self.assertEqual(entry, ["searchqueries.py"],
-                         "the nightly run folds every active cohort; a "
-                         "--profile flag here would silently badge one")
+        self.assertIn(entry, ([], ["searchqueries.py"]),
+                      "the nightly run folds every active cohort; a "
+                      "--profile flag here would silently badge one")
 
 
 if __name__ == "__main__":

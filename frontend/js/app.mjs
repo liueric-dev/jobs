@@ -22,6 +22,7 @@ import * as saved from "./saved.mjs";
 import * as detail from "./detail.mjs";
 import * as search from "./search.mjs";
 import * as onboarding from "./onboarding.mjs";
+import * as contribute from "./contribute.mjs";
 
 const view = document.getElementById("view");
 const topbar = document.getElementById("topbar");
@@ -131,6 +132,7 @@ const ROUTES = [
     pattern: /^\/onboarding/,
     show: (root) => onboarding.show(root),
   },
+  { name: "contribute", pattern: /^\/contribute/, show: (root) => contribute.show(root) },
   // The fallback. Anything unrecognised is Today rather than a 404 screen: a
   // hash this client does not know is a stale bookmark, and the list is a
   // better answer to one than an error is.

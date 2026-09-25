@@ -6,7 +6,7 @@ generator: none
 
 # 0006 — Contributor credentials are auto-minted; the worker stays local and long-running
 
-> **Superseded in part by [0007](0007-contributor-credential-opt-in-scheduled-worker.md) (2026-08-07): decisions 1, 2 and 4 are replaced; decision 3 stands unchanged.**
+> **Superseded in part by [0007](0007-contributor-credential-opt-in-scheduled-worker.md) (2026-08-07): decisions 1, 2 and 4 are replaced; decision 3 stands unchanged.** **Decision 3 is superseded in turn by [0012](0012-contributor-scrape-runs-as-apify-actor.md) (2026-09-24): the scrape runs as an Apify actor in the contributor's own Apify account.**
 
 **Status:** accepted. Direction only — no implementation exists yet.
 

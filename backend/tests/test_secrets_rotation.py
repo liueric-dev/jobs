@@ -19,7 +19,7 @@ a commit, a review and a push, which means it does not happen.
 THE ASYMMETRY WORTH KNOWING, and it is recorded here rather than smoothed over:
 the pipeline needs no restart AT ALL, because run-daily.py:237 calls
 envfile.load() at the top of every run and every step is a fresh subprocess
-inheriting that environment (run-daily.py:191). The next nightly run picks up a
+inheriting that environment (run-daily.py:253). The next nightly run picks up a
 new key on its own. webapp/ and api/ are long-lived uvicorn processes that read
 config at import, so they need a restart -- which is still not a redeploy, and
 `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md` says which is which.

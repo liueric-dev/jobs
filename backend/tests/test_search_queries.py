@@ -1375,19 +1375,21 @@ class TestPacingAllowanceReadsThePlan(unittest.TestCase):
 
 class TestTheNightlyStepIsWired(unittest.TestCase):
 
-    def test_searchqueries_runs_before_extract(self):
-        # It is ingest-shaped: what it dispatches produces `jobs` rows, so it
-        # has to run before extract turns new postings into facts. Asserted
-        # rather than assumed because the ordering is the one thing about
-        # run-daily.py's list that is load-bearing.
+    def test_serpapi_backed_steps_are_out_of_the_nightly_run(self):
+        # docs/adr/0012 disabled searchqueries with the two Google ingest steps: its provider
+        # defaults to SerpApi. Asserted so it cannot drift back in quietly.
+        # WHEN IT RETURNS it goes BEFORE extract.py. It is ingest-shaped, since
+        # what it dispatches produces `jobs` rows, so this test becomes an
+        # ordering assertion again.
         import importlib.util
         path = os.path.join(_BACKEND, "run-daily.py")
         spec = importlib.util.spec_from_file_location("run_daily", path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         names = [step if isinstance(step, str) else step[0] for step in module.STEPS]
-        self.assertIn("searchqueries.py", names)
-        self.assertLess(names.index("searchqueries.py"), names.index("extract.py"))
+        for disabled in ("searchqueries.py", "ingest/google-serpapi.py",
+                         "ingest/google-apify.py"):
+            self.assertNotIn(disabled, names)
 
 
 class TestTheContributorDatasetString(unittest.TestCase):

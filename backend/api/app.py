@@ -331,11 +331,11 @@ def mint(req: MintRequest, authorization: str = Header(default=None)):
 def claim(req: ClaimRequest, authorization: str = Header(default=None)):
     """Hand out the stalest unclaimed queries this contributor may work on.
 
-    SerpApi buckets only -- the Apify source is deliberately not offered here.
-    It bills per result against the operator's own account, so letting
-    contributors trigger it would spend the operator's money on someone else's
-    request. Contributors spend their own SerpApi quota, which is the whole
-    point of the arrangement.
+    Every bucket is offered. The main client since docs/adr/0012 is actor/,
+    an Apify actor classmates run in their OWN Apify accounts, so the scrape is
+    billed to whoever ran it, never to the operator -- which removes the reason
+    Apify used to be kept off this route. `date_chip` is still returned, and a
+    client whose scraper has no date filter ignores it.
 
     EVERY GRANTED QUERY IS METERED (defect D41). One submission_log row per
     query handed out, written before the response is built, because a claim is
