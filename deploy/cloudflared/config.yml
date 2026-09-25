@@ -66,7 +66,7 @@ ingress:
 
   # ---- the contributor API ------------------------------------------------
   #
-  # Port 8420, per backend/api/README.md:66. A SEPARATE HOSTNAME rather than a
+  # Port 8420, per backend/api/README.md. A SEPARATE HOSTNAME rather than a
   # path prefix on the one above, and that is the failure-domain boundary made
   # visible: the two are different processes, different venvs and different
   # Postgres roles (jobs_api can touch six tables and nothing else). One
@@ -74,19 +74,15 @@ ingress:
   # first person to reach for a shared session between them would find nothing
   # in the way.
   #
-  # backend/api/README.md's "Before opening this up" section lists two gaps
-  # that are harmless among trusted devices and real once strangers can call
-  # this -- unmetered claiming, and no per-contributor provenance. Neither is
-  # closed. Until they are, mint keys only for people you know, which is what
-  # the runbook's onboarding section says.
+  # Contributor keys grant access to this API. Share them only with intended
+  # contributors and keep the API credential out of this config file.
   - hostname: jobs-api.etotheric.com
     service: http://localhost:8420
 
   # ---- bankan: separate app, separate systemd unit, separate Postgres role -
   #
-  # Port 3011, matching bankan's own systemd unit on this host. Deliberately no
-  # file:line -- that unit lives in a sibling repo, which audit-citations.py
-  # resolves against this root and cannot see (OQ-35). Shared tunnel, nothing more.
+  # Port 3011 matches bankan's systemd unit in a sibling repo. Shared tunnel,
+  # nothing more.
   - hostname: bankan.etotheric.com
     service: http://localhost:3011
 

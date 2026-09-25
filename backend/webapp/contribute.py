@@ -25,11 +25,8 @@ alternative rather than merely different: NO GRANT CROSSES THE TWO ROLES.
 The only new privilege anywhere is on this service's OWN app_users, which it
 already writes.
 
-WHAT THIS COSTS. ../README.md's "Why this is not part of `../api/`" used to end
-"The two do not talk", and that sentence is now false in one specific way --
-amended there rather than left to be discovered here. The coupling is a URL and
-a secret, not an import: this module imports nothing from ../api/ and the call
-is one httpx POST -- the same client auth.py already uses for Google's token
+The coupling is a URL and a secret, not an import: this module imports nothing
+from ../api/ and makes one httpx POST -- the same client auth.py uses for Google's token
 endpoint, so requirements.txt is unchanged -- and the two processes still share
 no code and no database role.
 
