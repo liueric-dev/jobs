@@ -10,7 +10,7 @@ on:
 
 jobs:
   suites:
-    name: Three suites
+    name: Python suites
     runs-on: ubuntu-latest
 
     services:
@@ -40,7 +40,7 @@ jobs:
         with:
           python-version: "3.14"
 
-      # Pipeline dependencies are separate from the webapp and API.
+      # Pipeline dependencies are separate from the webapp.
       - name: Pipeline deps
         run: pip install -r backend/requirements.txt
 
@@ -59,7 +59,7 @@ jobs:
               conn.execute("CREATE DATABASE jobs_test_db OWNER jobs_test")
           PY
 
-      # Provision the same schema the three application components use.
+      # Provision the same schema the pipeline and webapp use.
       - name: Provision public from nothing
         working-directory: backend
         run: python tools/provision-database.py
@@ -79,18 +79,9 @@ jobs:
             exit 1
           fi
 
-      # webapp/ and api/ set include-system-site-packages = false and are built
-      # from their own requirements.txt. They are the second and third suites,
-      # not part of the first.
+      # The webapp has its own isolated environment and requirements.
       - name: webapp suite
         working-directory: backend/webapp
-        run: |
-          python -m venv .venv
-          .venv/bin/pip install -r requirements.txt
-          .venv/bin/python -m unittest discover -s tests
-
-      - name: api suite
-        working-directory: backend/api
         run: |
           python -m venv .venv
           .venv/bin/pip install -r requirements.txt
@@ -146,7 +137,7 @@ jobs:
 
       - name: ruff config is not a runtime dependency
         run: |
-          if grep -rn "ruff" backend/requirements.txt backend/api/requirements.txt backend/webapp/requirements.txt; then
+          if grep -rn "ruff" backend/requirements.txt backend/webapp/requirements.txt; then
             echo "::error::ruff is a dev tool and must not be a runtime dependency"
             exit 1
           fi
@@ -180,7 +171,7 @@ jobs:
 
       - name: mypy config is not a runtime dependency
         run: |
-          if grep -rn "mypy" backend/requirements.txt backend/api/requirements.txt backend/webapp/requirements.txt; then
+          if grep -rn "mypy" backend/requirements.txt backend/webapp/requirements.txt; then
             echo "::error::mypy is a dev tool and must not be a runtime dependency"
             exit 1
           fi

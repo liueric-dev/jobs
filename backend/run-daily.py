@@ -4,9 +4,9 @@ Single daily entry point for the jobs pipeline -- runs ingest/ats.py
 (Greenhouse/Lever/Ashby), ingest/builtin-nyc.py (Built In NYC scrape),
 ingest/weworkremotely.py (WWR category RSS feeds), ingest/hn-hiring.py
 (HN "Who is hiring?" monthly thread) and the other ingest steps in STEPS.
-Google Jobs is NOT among them: docs/adr/0012 disabled the SerpApi and
-Apify steps, and it now arrives through api/ from classmates' Apify
-actor runs (actor/), outside this process. Then the three scoring stages --
+Google Jobs is NOT among them: the SerpApi and Apify steps are disabled, and
+the former contributor API has been removed. The actor is dormant pending
+redesign. Then the three scoring stages --
 extract.py (one LLM call per new posting, shared by every profile),
 match.py (free per-profile ranking) and score.py (narratives for the top
 of each active profile's ranking) -- one after another, in that order, in
@@ -23,10 +23,8 @@ AND WHY THERE IS A LOCK ANYWAY, in the systemd unit rather than here: the
 argument above says a single *trigger* needs no lock, and that is still
 true of timer-vs-timer -- systemd already serialises one unit. It does not
 cover a hand-run overlapping the scheduled one, and two things now make that
-overlap expensive rather than merely untidy. api/ and this pipeline
-coordinate through the same job_ingest_state claim row, so two concurrent
-runs stop serialising against each other; and the Google steps spend a
-metered SerpApi budget, which a double run double-spends. So
+overlap expensive rather than merely untidy. Some ingest steps claim shared
+state, and metered sources can double-spend quota. So
 jobs-ingest.service wraps this in `flock -n -E 0`, where -E 0 makes "already
 running" a silent success rather than a false alarm. The lock lives in the
 unit, not here, so a deliberate manual run can still bypass it.
@@ -172,18 +170,11 @@ STEPS = [
     "ingest/nyc-open-data.py",
     "ingest/weworkremotely.py",
     "ingest/hn-hiring.py",
-    # -- Google Jobs: DISABLED 2026-09-24, docs/adr/0012 ---------------------
+    # -- Google Jobs: DISABLED pending source/actor redesign ------------------
     #
-    # Three steps used to sit here: ingest/google-serpapi, ingest/google-apify
-    # and searchqueries. All three are out of the nightly run, and their files
-    # are kept, unchanged, pending the owner's review of the SerpApi path.
-    #
-    # Google Jobs now arrives through actor/, an Apify actor that Pursuit
-    # classmates schedule in their OWN Apify accounts. It claims queries from
-    # api/ (POST /v1/queries/claim), scrapes them, and submits them back
-    # (POST /v1/queries/{dataset}/submit). So the operator no longer pays for
-    # Google Jobs, and nothing here fetches it. The rows still land in `jobs`
-    # as platform google_jobs, through the same normalize_job and google_spec().
+    # ingest/google-serpapi, ingest/google-apify and searchqueries are retained
+    # but not scheduled. The former contributor actor cannot submit without
+    # its retired API. No Google Jobs source is currently active here.
     #
     # searchqueries went too because its provider defaults to SerpApi
     # (serp/__init__.py resolve()). Re-adding it means adding it BEFORE
@@ -197,9 +188,6 @@ STEPS = [
     # reason config/volume-floors.json moved their floors to `unfloored`: a
     # floor for a step that no longer runs would breach every night.
     #
-    # The replacement's volume is measured from api/'s submission_log, not
-    # from this script's written/dropped line, because run-daily.py never
-    # sees a classmate's run.
     "extract.py",
     "match.py",
     # The warm pass: prepare narratives for profiles that have been active in

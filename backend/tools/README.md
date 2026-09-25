@@ -35,7 +35,7 @@ takes command-line options; run one with `--help` for its own.
 | [`label-findings.py`](label-findings.py) | Re-derive the findings a labelling sitting produces, from `eval_labels`. |
 | [`learned-ranker-probe.py`](learned-ranker-probe.py) | Is the ranking ceiling the FEATURES or the hand-tuned WEIGHTS? |
 | [`mock-acceptance.py`](mock-acceptance.py) | Run the real pipeline over 55 constructed postings and compare it to an answer key. |
-| [`provision-database.py`](provision-database.py) | Create every database object this project's three processes require. |
+| [`provision-database.py`](provision-database.py) | Create every database object the pipeline and webapp require. |
 | [`relevance-report.py`](relevance-report.py) | Show what config/relevance.json actually does to the current table. |
 | [`score-ledger.py`](score-ledger.py) | What did the weights actually DO to the list a user sees? |
 | [`verify-date-filter.py`](verify-date-filter.py) | Does `chips=date_posted:` still filter anything? Costs ~3 SerpApi credits. |

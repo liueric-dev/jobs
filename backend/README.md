@@ -54,4 +54,4 @@ install `ruff`, `mypy`, and `psycopg[binary]` into it.
 The test suite uses temporary Postgres schemas when a scratch database is
 available. Set `JOBS_SCRATCH_DATABASE_URL` to a disposable database for DB
 tests. Ruff currently has an existing nonblocking backlog; mypy is a blocking
-check in CI. `api/` and `webapp/` have separate environments and test suites.
+check in CI. `webapp/` has a separate environment and test suite.

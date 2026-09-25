@@ -1,19 +1,10 @@
 # Google Jobs contributor actor
 
-This optional Apify actor claims due Google Jobs queries from the contributor
-API, scrapes them in the runner's Apify account, and submits results back.
+This actor is dormant pending redesign. Its current claim/submit flow requires
+the contributor API removed during cleanup. Do not deploy or schedule it.
 
-## Contributor setup
-
-Sign in to the jobs site, open Contribute, and generate an actor token. Copy it
-when shown; it cannot be displayed again. In Apify Console, open the actor
-shared by the operator, paste the token into `apiKey`, and run it once before
-adding a daily schedule. The delegated scrape uses the runner's Apify account
-and may incur charges. A green run with no queries means there was nothing due
-or the server paused contributors.
-
-Inputs are `apiKey` (required), `serverUrl` (the contributor API),
-`maxQueries` (default 1), and `resultsPerQuery` (default 10).
+The old inputs are `apiKey`, `serverUrl`, `maxQueries`, and `resultsPerQuery`.
+They describe the retired contributor protocol, not a supported setup.
 
 ## Develop
 

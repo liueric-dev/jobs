@@ -39,13 +39,9 @@ import schema_web  # noqa: E402
 #: and `pg_constraint` (catalog, excluded below) and `cascade` (SQL grammar,
 #: in _KEYWORDS below). No CREATE'd table name among them.
 #:
-#: contribute.py IS SCANNED, and the reason is the whole point of this file: it
-#: is the newest route module and it SELECTs and UPDATEs app_users. A module
-#: missing from this tuple is a module whose SQL nothing checks, which is the
-#: identical hole one level up from the one the scan closes -- so the tuple
-#: itself is asserted against the directory listing in
-#: TestEveryRouteModuleIsScanned below rather than left to be remembered.
-SERVICE_MODULES = ("auth.py", "contribute.py", "jobs.py", "db.py", "app.py",
+#: The tuple is asserted against the directory listing below so new SQL routes
+#: cannot silently evade the privilege scan.
+SERVICE_MODULES = ("auth.py", "jobs.py", "db.py", "app.py",
                    "label.py", "onboarding.py", "search.py", "schema_web.py")
 
 #: Aliases bound inside the SQL itself -- subquery, lateral and correlation
@@ -270,9 +266,8 @@ class TestEveryRouteModuleIsScanned(unittest.TestCase):
     SERVICE_MODULES is a hand-maintained tuple, so a new route module is
     invisible to every test above until somebody remembers to add it -- and the
     failure looks exactly like the one the scan exists to prevent: a service
-    that starts cleanly and 500s on that route with a permission error. T-27
-    added contribute.py and hit this; the tuple is now checked against the
-    directory rather than against memory.
+    that starts cleanly and 500s on that route with a permission error. The
+    tuple is checked against the directory rather than against memory.
 
     THE TWO EXCLUSIONS ARE NAMED, NOT INFERRED. Anything else new in this
     package is a failure here, which is the point: adding a module should
@@ -309,58 +304,6 @@ class TestEveryRouteModuleIsScanned(unittest.TestCase):
         # and the exclusion has to be removed rather than quietly outgrown.
         self.assertEqual(
             sql_strings_in(os.path.join(WEBAPP_DIR, "config.py")), [])
-
-
-class TestContributeIsScanned(unittest.TestCase):
-    """T-27. The route that mints a contributor credential.
-
-    WHAT IT MUST NOT NAME is the interesting half. contribute.py reaches
-    ../api/ over HTTP precisely so that `jobs_web` needs no grant on
-    `contributors` or `api_keys` -- docs/adr/0006's consequences reject that
-    grant outright. If either name ever appears in this module's SQL, the
-    design has been reversed by accident and this goes red.
-    """
-
-    def _named(self):
-        return tables_named_in(os.path.join(WEBAPP_DIR, "contribute.py"))
-
-    def test_it_names_only_app_users(self):
-        self.assertEqual(self._named(), {"app_users"})
-
-    def test_app_users_is_declared_and_writable(self):
-        self.assertEqual(schema_web.REQUIRED_TABLES["app_users"],
-                         ("SELECT", "INSERT", "UPDATE"))
-
-    def test_no_grant_crosses_into_the_contributor_api(self):
-        named = self._named()
-        for table in ("api_keys", "contributors"):
-            self.assertNotIn(
-                table, named,
-                f"contribute.py names {table}. That table belongs to ../api/ "
-                f"and jobs_web is granted nothing on it -- docs/adr/0006 "
-                f"rejects DEC-84 option 1 outright. The credential is minted "
-                f"by asking that service, not by writing its tables.")
-            self.assertNotIn(table, schema_web.REQUIRED_TABLES)
-
-    def test_the_new_columns_are_verified_at_startup(self):
-        # Same argument as job_events and eval_labels below: a deploy that
-        # ships this module ahead of `init-schema` finds an app_users without
-        # the columns the UPDATE names.
-        self.assertEqual(set(schema_web.REQUIRED_COLUMNS["app_users"]),
-                         {"contributor_id", "contributor_opted_in_at"})
-
-    def test_the_declared_columns_are_the_ones_the_writer_names(self):
-        # Read from the UPDATE itself, so this is a statement about the writer
-        # rather than a restatement of the declaration above.
-        import re
-        with open(os.path.join(WEBAPP_DIR, "contribute.py"), encoding="utf-8") as fh:
-            source = fh.read()
-        statements = re.findall(r"UPDATE app_users SET ([^\"]*)", source)
-        self.assertEqual(len(statements), 1,
-                         "opt_in is meant to be the only writer of these columns")
-        for column in schema_web.REQUIRED_COLUMNS["app_users"]:
-            self.assertIn(column, statements[0],
-                          f"{column} is declared required but no writer names it")
 
 
 class TestSchemaWebIsScanned(unittest.TestCase):

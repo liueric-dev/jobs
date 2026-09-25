@@ -6,15 +6,8 @@ of them. This service is the delivery half. A person signs in with Google, gets 
 jobs out of the `jobs_app` view, and their interactions land in `job_events`,
 which nothing has ever written and which ../score.py already reads.
 
-WHY THIS IS NOT PART OF ../api/. That directory is the CONTRIBUTOR api: a
-machine-to-machine work queue for volunteers who submit SerpApi results on
-their own quota. Its whole design assumes the caller is hostile, and its
-`jobs_api` Postgres role is deliberately granted NOTHING on the seven
-pipeline-owned tables -- three sections of its README exist to defend that
-boundary. Serving logged-in users needs SELECT across all of them, so putting
-these routes there would mean relaxing the one property that README is about.
-So: a second process with a second database identity, sharing ../schema.py and
-../lib/ and importing nothing from api/.
+The browser-facing service uses its own restricted database role and shares
+the pipeline's schema and mechanism modules.
 
 RUN LOCALLY:
     python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
@@ -37,7 +30,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import auth
-import contribute
 import jobs
 import label
 import onboarding
@@ -111,15 +103,6 @@ app.include_router(onboarding.router)
 # labelling screen and is not in scope for one. A <form> and a 303 needs no
 # client at all, which is still the right trade for ten volunteers.
 app.include_router(label.router)
-# Opting in to contribute (docs/adr/0007 decision 1). Raises plain
-# HTTPException rather than jobs.ContractError, so it is registered on the
-# auth.py/label.py side of the handler above and its 401/502/503 bodies keep
-# FastAPI's {"detail": ...} shape -- the same choice require_user already
-# makes, and this route's only failures are that dependency's or the
-# operator's.
-app.include_router(contribute.router)
-
-
 @app.get("/v1/health")
 def health():
     """Liveness only, and deliberately no database call: this answers "is the

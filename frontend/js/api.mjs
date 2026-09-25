@@ -316,11 +316,3 @@ export function postEvents(requestId, events, { keepalive = false } = {}) {
     body: JSON.stringify({ request_id: requestId, events }),
   });
 }
-
-/** Mint this Builder's contributor credential (backend/webapp/contribute.py,
- *  docs/adr/0012). EVERY CALL RE-KEYS: the previous token stops working the
- *  moment this one exists, so the screen asks before calling it a second time.
- *  The response's `actor_token` is readable here and nowhere else, ever. */
-export function optIn() {
-  return request("/v1/contribute/opt-in", { method: "POST" });
-}

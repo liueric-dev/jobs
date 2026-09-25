@@ -20,8 +20,8 @@ THE ASYMMETRY WORTH KNOWING, and it is recorded here rather than smoothed over:
 the pipeline needs no restart AT ALL, because run-daily.py:237 calls
 envfile.load() at the top of every run and every step is a fresh subprocess
 inheriting that environment (run-daily.py:253). The next nightly run picks up a
-new key on its own. webapp/ and api/ are long-lived uvicorn processes that read
-config at import, so they need a restart -- which is still not a redeploy, and
+new key on its own. The webapp is a long-lived uvicorn process that reads
+config at import, so it needs a restart -- which is still not a redeploy, and
 `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md` says which is which.
 
 WHAT THIS DOES NOT CHECK. Whether the key in `.env` is valid, whether it has
@@ -41,7 +41,7 @@ import unittest
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO_ROOT = os.path.dirname(BACKEND_DIR)
 
-#: The env vars that carry a credential. Assembled from the three .env.example
+#: The env vars that carry a credential. Assembled from the .env.example
 #: files rather than typed, so a key added to a service's example is covered
 #: here on the day it is added -- see test_the_credential_list_is_derived.
 _CREDENTIAL_HINT = re.compile(r"(KEY|TOKEN|SECRET|PASSWORD|DATABASE_URL)$")
@@ -215,45 +215,6 @@ class TestKeysAreRotatableWithoutARedeploy(unittest.TestCase):
                     if any(f"{n}=" in stripped for n in names):
                         offenders.append(f"{rel}:{lineno}: {stripped}")
         self.assertEqual(offenders, [])
-
-
-class TestTheContributorApiNeverLogsAPayload(unittest.TestCase):
-    """A contributor's SerpApi key lives on their machine and the API only ever
-    receives results. That holds only if nothing here writes a submitted body
-    somewhere it would persist -- a journal line, a log file, or a database
-    column -- because a worker that accidentally put its key in a payload would
-    then have leaked it to the operator permanently.
-
-    The audit behind this test, and its result, are in
-    `git show refactor-freeze-2026-08-02:docs/RUNBOOK.md`."""
-
-    def test_nothing_under_api_writes_to_stdout_or_a_logger_at_request_time(self):
-        api_dir = os.path.join(BACKEND_DIR, "api")
-        emit = re.compile(r"(?:^|[^\w.])(print\s*\(|logging\.|logger\.|"
-                          r"sys\.std(?:out|err)\.write)")
-        offenders = []
-        for name in ("app.py", "query_claims.py"):
-            path = os.path.join(api_dir, name)
-            with open(path, encoding="utf-8") as fh:
-                for lineno, line in enumerate(fh, 1):
-                    if line.lstrip().startswith("#"):
-                        continue
-                    if emit.search(line):
-                        offenders.append(f"api/{name}:{lineno}: {line.strip()}")
-        self.assertEqual(
-            offenders, [],
-            "a request-path emit in the contributor API: confirm it cannot "
-            "carry a submitted payload, then allow it here explicitly")
-
-    def test_submission_log_records_counts_and_not_bodies(self):
-        """`submission_log` is the one table this service writes about a
-        submission itself. It must hold counts and a reason, never the payload."""
-        with open(os.path.join(BACKEND_DIR, "api", "app.py"), encoding="utf-8") as fh:
-            source = fh.read()
-        for insert in re.findall(r"INSERT INTO submission_log[^)]*\)", source):
-            self.assertNotIn("payload", insert.lower())
-            self.assertNotIn("body", insert.lower())
-            self.assertNotIn("raw", insert.lower())
 
 
 if __name__ == "__main__":

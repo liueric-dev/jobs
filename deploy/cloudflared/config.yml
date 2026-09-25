@@ -1,4 +1,4 @@
-# cloudflared ingress for the two services this project exposes.
+# cloudflared ingress for the webapp and a separate application.
 #
 # TEMPLATE. Every ANGLE-BRACKETED value below is the owner's to fill in and none
 # of them can be filled in from this repository -- they come from a Cloudflare
@@ -14,9 +14,8 @@
 #
 # WHAT THIS DOES NOT DO, said plainly because it is easy to assume otherwise:
 # the tunnel authenticates the ORIGIN to Cloudflare, not the USER to the app.
-# Anyone on the internet can reach both hostnames below. The webapp's own Google
-# OAuth session is what keeps strangers out of it, and the contributor API's
-# bearer key is what keeps strangers out of that. A tunnel is not an
+# Anyone on the internet can reach the hostnames below. The webapp's Google
+# OAuth session is what keeps strangers out of it. A tunnel is not an
 # authorization layer and must never be treated as one.
 #
 # INSTALL: this file is the tracked copy. cloudflared reads
@@ -45,7 +44,7 @@ ingress:
   # ---- the webapp: what the ~30 Builders actually use --------------------
   #
   # Port 8421, confirmed at backend/webapp/config.py:124 (`PORT = _int("PORT",
-  # 8421)`), which also records that api/ holds 8420. frontend/serve.py mounts
+  # 8421)`). frontend/serve.py mounts
   # the client on this same origin deliberately -- the session cookie is the
   # client's only credential, and a third origin that neither FRONTEND_ORIGIN
   # nor ALLOWED_ORIGINS names gets its cookie dropped by the browser silently.
@@ -63,21 +62,6 @@ ingress:
   #   FRONTEND_ORIGIN=https://jobs.etotheric.com
   - hostname: jobs.etotheric.com
     service: http://localhost:8421
-
-  # ---- the contributor API ------------------------------------------------
-  #
-  # Port 8420, per backend/api/README.md. A SEPARATE HOSTNAME rather than a
-  # path prefix on the one above, and that is the failure-domain boundary made
-  # visible: the two are different processes, different venvs and different
-  # Postgres roles (jobs_api can touch six tables and nothing else). One
-  # hostname with a path split would put them behind a single name, and the
-  # first person to reach for a shared session between them would find nothing
-  # in the way.
-  #
-  # Contributor keys grant access to this API. Share them only with intended
-  # contributors and keep the API credential out of this config file.
-  - hostname: jobs-api.etotheric.com
-    service: http://localhost:8420
 
   # ---- bankan: separate app, separate systemd unit, separate Postgres role -
   #

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create every database object this project's three processes require.
+"""Create every database object the pipeline and webapp require.
 
     python3 tools/provision-database.py                 # uses DATABASE_URL
     python3 tools/provision-database.py --url ...       # or an explicit one
@@ -43,14 +43,6 @@ it.
   !! symptom arrives later, as the webapp refusing to start. Run --verify-only
   !! first anywhere that matters.
   !!
-  !! STEP 6 REACHES THAT SAME CALL A SECOND TIME, and that is why it is sixth.
-  !! query_claims.ensure_schema() opens by calling schema.ensure_schema(),
-  !! which ends with ensure_app_view() (schema.py:964) -- so the hazard above
-  !! is entered twice per run, not once. Ordering step 6 after step 3 is what
-  !! makes the second entry harmless: by then the view has already been
-  !! reconciled to the shape this run's column list implies, so the second
-  !! call finds nothing to reorder and the DROP fallback stays unreachable.
-  !! Move step 6 earlier and that stops being true.
 """
 
 import argparse
@@ -115,10 +107,6 @@ def _database_url_unchanged():
     get to pick the database -- leaves lib.envfile's semantics untouched for
     every other caller, and keeps the precedence `--url` > exported
     DATABASE_URL > backend/.env, with webapp/.env contributing nothing. It
-    restores before api/ is imported too, so that module's own module-scope
-    DATABASE_URL capture (api/query_claims.py:91-92) does not inherit the same
-    wrong value; nothing in this tool's path reads that constant today, which
-    makes it the kind of thing that is only ever noticed after it matters.
     """
     before = os.environ.get("DATABASE_URL")
     try:
@@ -156,34 +144,13 @@ with _database_url_unchanged():
     import config as _webapp_config  # noqa: F401
     import schema_web
 
-# api/ is APPENDED, not inserted, and that is the whole precaution. It holds an
-# app.py of its own, and so does webapp/; inserting at the front would let
-# api/app.py win a lookup webapp/ expects to own. Appending puts it behind both
-# packages already on the path, and nothing here imports `app` anyway.
-#
-# WHAT THIS COSTS, since T-39 weighed it and found the row's own estimate too
-# high: nothing. query_claims.py imports no third-party package at module
-# scope -- stdlib, psycopg, and ../schema, ../google_jobs, ../lib.*, all of
-# which are already imported above. It does NOT drag in FastAPI: that lives in
-# api/app.py, which is not imported here. So this is the same shape as the
-# schema_web import above, not a third venv, and system python3 runs it.
-sys.path.append(os.path.join(_BACKEND, "api"))
-import query_claims  # noqa: E402
-
-#: In order, and the order is forced: schema_web's tables reference nothing, but
-#: verify_schema() checks the pipeline's alongside its own, and ensure_app_view
-#: reads columns the first step creates. Step 6 is last for three separate
-#: reasons -- the app-view one in the banner above, plus: it commits internally
-#: (mid-loop, a later failure would leave a half-applied run partly committed),
-#: and it issues `SET search_path TO public` on the shared connection, which is
-#: a side effect no earlier step should inherit.
+#: In order: the app view reads columns the pipeline schema creates.
 STEPS = [
     ("pipeline tables", schema.ensure_schema),
     ("search-query tables", schema.ensure_search_query_schema),
     ("jobs_app view", schema.ensure_app_view),
     ("eval label tables", labels.ensure_schema),
     ("webapp tables", schema_web.ensure_schema),
-    ("contributor tables", query_claims.ensure_schema),
 ]
 
 
@@ -213,22 +180,9 @@ def main():
                 print(f"  ok  {name}")
             conn.commit()
 
-        # The same checks the webapp and the api run in their lifespans, so a
-        # green run here means both processes would start. Each raises listing
-        # everything wrong rather than the first thing, which is why they are
-        # printed whole.
-        #
-        # BOTH ARE RUN BEFORE EITHER IS REPORTED, deliberately. Stopping at the
-        # webapp's failure would hide the api's, and an operator fixing a fresh
-        # database one restart at a time is the exact misery each of those
-        # functions already refuses to inflict on its own list.
-        #
-        # The api check matters most under --verify-only, where no step ran: a
-        # database provisioned before T-39 added step 6 has none of the three
-        # contributor tables, and this is what says so instead of not looking.
+        # Check the privileges and columns the webapp needs at startup.
         problems = []
-        for label, verify in (("webapp", schema_web.verify_schema),
-                              ("api", query_claims.verify_schema)):
+        for label, verify in (("webapp", schema_web.verify_schema),):
             try:
                 verify(conn)
             except RuntimeError as exc:
@@ -238,7 +192,7 @@ def main():
                 print(f"\nNOT READY: {problem}", file=sys.stderr)
             return 1
 
-    print("\nverify_schema: ready (webapp, api)")
+    print("\nverify_schema: ready (webapp)")
     return 0
 
 

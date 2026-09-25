@@ -8,8 +8,7 @@ and nowhere in the docs.
 
 IMPORT ORDER: this module performs the sys.path insert that reaches ../schema.py
 and ../lib/, so it must be imported BEFORE either of those anywhere in this
-package. Every other module here imports `config` first for that reason -- the
-same constraint api/app.py has with query_claims, and it is worth keeping
+package. Every other module here imports `config` first for that reason; it is worth keeping
 explicit rather than relying on import side-effects landing in a lucky order.
 
 CREDENTIALS ARE NOT VALIDATED AT IMPORT TIME. GOOGLE_CLIENT_ID and its secret
@@ -120,7 +119,7 @@ SESSION_COOKIE_SECURE = _flag("SESSION_COOKIE_SECURE", True)
 SESSION_TTL_DAYS = _int("SESSION_TTL_DAYS", 30)
 OAUTH_STATE_TTL_MINUTES = _int("OAUTH_STATE_TTL_MINUTES", 10)
 
-#: Documentation only -- uvicorn takes --port. api/ holds 8420.
+#: Documentation only -- uvicorn takes --port.
 PORT = _int("PORT", 8421)
 
 
@@ -128,51 +127,6 @@ def oauth_configured():
     """Whether a login can even be attempted. Routes check this and return a
     named 503 rather than redirecting the user to a Google error page."""
     return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
-
-
-# -- the contributor mint (docs/adr/0007 decision 1) ------------------------
-#
-# THE ONE PLACE THIS SERVICE TALKS TO ../api/. README's "Why this is not part
-# of `../api/`" used to end "The two do not talk"; they now talk over exactly
-# one route, in one direction, and this is every knob that makes that happen.
-# The alternative -- granting `jobs_web` INSERT on `api_keys` -- is rejected by
-# docs/adr/0006's consequences, so the credential is minted by the role that
-# owns the table and this service only asks.
-
-#: Where THIS PROCESS reaches ../api/. A loopback or tailnet address: the call
-#: is server-to-server and never leaves the host in a normal deployment.
-CONTRIBUTOR_API_INTERNAL_URL = os.environ.get(
-    "CONTRIBUTOR_API_INTERNAL_URL", "http://127.0.0.1:8420").rstrip("/")
-
-#: What goes into the Builder's config.json as JOBS_API_BASE_URL -- the address
-#: THEIR MACHINE will call, which is the public one and is emphatically not the
-#: internal URL above. No default: a wrong value here produces a config.json
-#: that fails on a stranger's laptop with a connection error, and 127.0.0.1 is
-#: the wrong value that would look most plausible in a log.
-CONTRIBUTOR_API_PUBLIC_URL = os.environ.get(
-    "CONTRIBUTOR_API_PUBLIC_URL", "").rstrip("/")
-
-#: The server-to-server secret. THE SAME ENV VAR NAME ../api/ READS
-#: (query_claims.MINT_SHARED_SECRET), so the operator sets one value under one
-#: name in two .env files rather than keeping two names in agreement.
-JOBS_MINT_SHARED_SECRET = os.environ.get("JOBS_MINT_SHARED_SECRET", "")
-
-#: Short on purpose. A Builder is waiting on this request, and ../api/ is a
-#: loopback hop away; a long timeout here only converts "api/ is down" into a
-#: page that hangs before it fails.
-CONTRIBUTOR_MINT_TIMEOUT_SECONDS = _int("CONTRIBUTOR_MINT_TIMEOUT_SECONDS", 10)
-
-
-def contribute_configured():
-    """Whether opting in can be attempted at all.
-
-    Same shape as oauth_configured() above and for the same reason: the unit
-    tests, /v1/health and every other route must work on a machine that has no
-    contributor API at all, so this is checked by the one route that needs it
-    rather than at import.
-    """
-    return bool(JOBS_MINT_SHARED_SECRET and CONTRIBUTOR_API_PUBLIC_URL
-                and CONTRIBUTOR_API_INTERNAL_URL)
 
 
 # -- self-serve signup (docs/adr/0012) ------------------------------------

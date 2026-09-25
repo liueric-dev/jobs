@@ -30,6 +30,7 @@ only one that can see it -- it is the test that fails if any of this is undone.
 """
 
 import ast
+import importlib.util
 import inspect
 import os
 import subprocess
@@ -38,10 +39,15 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tests.test_provision_covers_api_schema import _load_tool
-
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _TOOL = os.path.join(_BACKEND, "tools", "provision-database.py")
+
+
+def _load_tool():
+    spec = importlib.util.spec_from_file_location("_provision_database", _TOOL)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 #: A URL shaped like the one that caused this, so a failure message names the
 #: role rather than an opaque string. No credential: this value is never

@@ -1314,58 +1314,6 @@ it("events.forgetImpressions() lets the same job be re-impressed after sign-out"
                   + "impression of the same job is sent rather than swallowed");
    });
 
-// -- contribute (docs/adr/0012) -------------------------------------------------
-
-const contributeView = await import("./js/contribute.mjs");
-
-it("contribute: opening the screen mints nothing; two taps mint once", async () => {
-  // EVERY MINT REVOKES THE PREVIOUS TOKEN (contribute.py's opt_in), so the
-  // property worth a check is that no request leaves on show, or on the first
-  // tap. The second tap is the one that asks.
-  let html = "";
-  let handler = null;
-  const slot = { innerHTML: "" };
-  const button = { dataset: {}, textContent: "", disabled: false };
-  const root = {
-    set innerHTML(v) { html = v; }, get innerHTML() { return html; },
-    addEventListener(_type, fn) { handler = fn; }, removeEventListener() {},
-    querySelector: (sel) => (sel === "#token-slot" ? slot : null),
-  };
-  const calls = [];
-  const before = globalThis.fetch;
-  globalThis.fetch = async (url, options = {}) => {
-    calls.push([(options.method || "GET").toUpperCase(), String(url)]);
-    return { ok: true, status: 200, json: async () => ({ actor_token: "tok<&>" }) };
-  };
-  try {
-    const teardown = await contributeView.show(root);
-    assert.match(html, /data-get-token/);
-    assert.equal(calls.length, 0, "showing the screen must not mint");
-
-    const tap = () => handler({
-      target: { closest: (sel) => (sel === "[data-get-token]" ? button : null) },
-    });
-    await tap();
-    assert.equal(calls.length, 0, "the first tap only asks");
-    await tap();
-    assert.deepEqual(calls, [["POST", "/v1/contribute/opt-in"]]);
-    assert.match(slot.innerHTML, /value="tok&lt;&amp;&gt;"/, "the token is shown, escaped");
-    teardown();
-  } finally {
-    globalThis.fetch = before;
-  }
-});
-
-it("contribute: the route and the field are the ones contribute.py declares", () => {
-  const source = fs.readFileSync(path.join(REPO, "backend/webapp/contribute.py"), "utf8");
-  const declared = [...source.matchAll(/@router\.(get|post)\("([^"]+)"\)/g)]
-    .map((m) => [m[1].toUpperCase(), m[2]]);
-  assert.deepEqual(declared, [["POST", "/v1/contribute/opt-in"]]);
-  assert.match(source, /"actor_token": api_key/,
-               "contribute.py no longer returns actor_token, which the screen reads");
-  assert.match(codeOnly(fileText("js", "api.mjs")), /request\("\/v1\/contribute\/opt-in", \{ method: "POST" \}\)/);
-});
-
 // -- run -----------------------------------------------------------------------
 
 let failed = 0;

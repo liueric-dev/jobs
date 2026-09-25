@@ -698,21 +698,3 @@ button {
 @media (prefers-reduced-motion: no-preference) {
   .card { transition: opacity 0.15s ease; }
 }
-
-/* -- contribute ---------------------------------------------------------- */
-
-/* The actor token. Monospace, and wide enough to see that it is all there. A
-   readonly input rather than text, so one tap selects the whole value on a
-   phone. */
-.token {
-  display: block;
-  width: 100%;
-  margin: 0.5rem 0;
-  padding: 0.6rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--t-meta);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--ink);
-}
