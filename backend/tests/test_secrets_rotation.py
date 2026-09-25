@@ -58,7 +58,8 @@ def _git(*args):
 
 def _tracked_files():
     result = _git("ls-files")
-    return [p for p in result.stdout.splitlines() if p]
+    return [p for p in result.stdout.splitlines()
+            if p and os.path.isfile(os.path.join(REPO_ROOT, p))]
 
 
 def _credential_names():

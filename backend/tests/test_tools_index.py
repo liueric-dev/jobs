@@ -1,23 +1,6 @@
-"""tools/README.md is generated, and this is what stops it going stale.
+"""Keep the generated tools/README.md in sync with tool docstrings.
 
-Run:  python3 -m unittest tests.test_tools_index
-
-WHY THIS FILE EXISTS
-    An index a human has to remember to update is the exact
-    shape of the thing this repo deleted 137 files of on 2026-08-02. Generating
-    it from the docstrings removes the remembering; this test removes the
-    silence when someone adds a tool and does not regenerate.
-
-    Without it, `tools/index.py` is just a different way to go stale -- the
-    README would be wrong and nothing would say so. CLAUDE.md's standard is
-    that a green run is the claim and a number in prose is a rumour, and that
-    applies to a list of tools as much as to a test count.
-
-WHAT IT DOES NOT CHECK
-    Whether a docstring's summary is ACCURATE. Same limit as
-    tools/audit-citations.py, and worth stating rather than assuming: this
-    asserts the README matches the docstrings, never that a docstring matches
-    what its tool does.
+This checks that the index is current, not that each summary is accurate.
 """
 
 import importlib.util

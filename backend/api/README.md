@@ -232,8 +232,8 @@ own server-to-server secret, for the one route in the second.
 | `POST /v1/queries/{dataset}/release` | give a claim back after a failed fetch, watermark untouched |
 | `GET /v1/health` | liveness |
 
-Every bucket is offered. Since [ADR 0012](../../docs/adr/0012-contributor-scrape-runs-as-apify-actor.md),
-the main client is [`actor/`](../../actor/), an Apify actor that classmates run
+Every bucket is offered. The main client is
+[`actor/`](../../actor/), an Apify actor that classmates run
 in their own Apify accounts. They pay for their own scraping, and the operator
 pays for none. The submit body takes raw Google Jobs objects. The shape SerpApi
 returns and the shape the Apify Google Jobs actor returns are the same, field for
@@ -476,7 +476,7 @@ well — `last_run_at`, `run_count`, `provider_last_used`,
 `result_count_last_run`, `last_result_at` — whose only writer by design is
 `../searchqueries.py`'s `record_run()`. A contributor's submit could then forge
 a run history, and writing a future `last_run_at` silences that query for every
-Builder. See [`docs/adr/0009`](../../docs/adr/0009-run-statistics-are-reconciled-not-granted.md).
+Builder.
 
 **`has_table_privilege()` cannot see that grant, and believing otherwise cost a
 deploy.** It considers table-level grants only, so it answers FALSE on the

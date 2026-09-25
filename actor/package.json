@@ -2,7 +2,7 @@
   "name": "pursuit-jobs-google-actor",
   "version": "0.1.0",
   "private": true,
-  "description": "Claims Google Jobs queries from the jobs API, scrapes them in the runner's own Apify account, and submits the results back. See docs/adr/0012.",
+  "description": "Claims Google Jobs queries from the jobs API, scrapes them in the runner's Apify account, and submits the results back.",
   "type": "module",
   "engines": {
     "node": ">=22"

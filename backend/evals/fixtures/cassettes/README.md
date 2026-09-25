@@ -1,8 +1,7 @@
 # Recorded upstream responses
 
 Real bytes from the real endpoints, so the six non-LLM ingest scripts can be
-exercised without a network. Written by task 09
-([`docs/ingestion_tests/05-fetcher-harness.md`](../../../../docs/ingestion_tests/05-fetcher-harness.md)).
+exercised without a network.
 
 **Do not hand-edit.** Each file is a recording; editing one makes it a
 recording of nothing. Re-record instead:

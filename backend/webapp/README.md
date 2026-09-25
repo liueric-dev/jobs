@@ -335,8 +335,7 @@ cd backend && python3 -m evals label sample --n 60 --overlap 20
   cross-user leak.
 - **Event scores are derived server-side.** `match_score` and `fit_score` are
   looked up from `job_matches` / `job_scores` at write time and never accepted
-  from the client — [`../docs/SCORING.md`](../docs/SCORING.md) makes recording
-  them *as of the impression* the load-bearing property of the whole table, and
+  from the client. Recording them *as of the impression* is a property of the table, and
   a client-supplied score is unverifiable training data.
 
 ### The one place a dependency was not added

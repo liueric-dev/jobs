@@ -8,7 +8,6 @@ schedule in **their own** Apify account. Each run does three things:
 3. **Submits** the raw results back (`POST /v1/queries/{dataset}/submit`). The server normalises and
    stores them.
 
-For why it works this way, see [`docs/adr/0012`](../docs/adr/0012-contributor-scrape-runs-as-apify-actor.md).
 
 ## For classmates: setup (5 minutes)
 

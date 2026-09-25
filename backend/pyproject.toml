@@ -1,25 +1,5 @@
-# Dev tool configuration: ruff (T-1) and mypy (T-17). Landed 2026-08-03 / 2026-08-03.
-#
-# WHY THIS FILE HOLDS ONLY DEV-TOOL TABLES, NO [project]:
-# Nothing in this repo is installed as a package. There is no build backend, no
-# [project] table and no packaging metadata, deliberately -- adding them would
-# imply an install step that does not exist and that the three venvs do not use.
-# This file is where a dev tool's config lives if the tool reads pyproject.toml
-# by convention; it is not evidence of an install step.
-#
-# WHY THERE IS A LINTER AT ALL, given .claude/CLAUDE.md said there was not:
-# The tranche-nine README said wiring one in was "wrong for this repo regardless
-# of where it came from". Reversed 2026-08-03 by owner decision. The argument is
-# in ../TASK-52-harness.md, Layer 4: "a rule with no check is a suggestion" is
-# right, and the standard implementation of it is a linter plus CI rather than a
-# hand-rolled audit-*.py per rule. The two hand-rolled doc checkers this repo had
-# were deleted in 5046f98 along with the documents they checked, and nothing
-# caught the resulting drift at all.
-#
-# WHAT DID NOT CHANGE: ruff is a DEV tool. It is installed in backend/.venv-dev
-# and appears in none of the three requirements.txt. The pipeline's only runtime
-# dependency is still psycopg[binary]. `grep -rn ruff requirements.txt
-# api/requirements.txt webapp/requirements.txt` must keep printing nothing.
+# Development-only lint and type-check configuration. The application is not
+# installed as a Python package; each component uses its own environment.
 
 [tool.ruff]
 target-version = "py314"
@@ -34,10 +14,7 @@ extend-exclude = [
     ".venv-dev",
     "api/.venv",
     "webapp/.venv",
-    # Recorded HTTP bodies and the frozen eval corpora. Excluded for the same
-    # stated reason tools/audit-citations.py skips them: their contents are
-    # captured third-party data, not this repo's code, and judging them reports
-    # findings nobody can act on.
+    # Recorded third-party responses and evaluation fixtures are not source code.
     "evals/fixtures",
 ]
 

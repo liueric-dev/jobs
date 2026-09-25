@@ -1,76 +1,53 @@
----
-kind: contract
-written: 2026-08-02
-generator: none
----
+# Jobs
 
-# jobs
+A job discovery app. The backend collects postings, extracts shared facts, and
+ranks matches for each profile. The webapp serves the API and the browser client.
 
-Daily job-discovery automation for the Pursuit AI-Native cohort: ~30 Builders, entry-level,
-AI-adjacent roles, all industries, NYC.
+| Directory | Purpose |
+| --- | --- |
+| `backend/` | Ingestion, extraction, matching, and scoring pipeline |
+| `backend/webapp/` | User accounts and job API |
+| `backend/api/` | Contributor API |
+| `frontend/` | Browser client (plain HTML, CSS, and JavaScript) |
+| `actor/` | Optional Apify contributor worker |
+| `deploy/` | Example systemd and Cloudflare deployment files |
 
-| | what | state |
-|---|---|---|
-| [`backend/`](backend/) | the pipeline that finds, dedupes and scores postings | live |
-| [`backend/webapp/`](backend/webapp/) | Google SSO, ranked jobs, engagement events | live, port 8421 |
-| [`backend/api/`](backend/api/) | the contributor work queue | expected to be deprecated; may not start against the deployed DB |
-| [`frontend/`](frontend/) | the client | shipping — five screens, no build step |
-| [`deploy/`](deploy/) | systemd units and cloudflared ingress | files tracked; not installed on any machine |
+## Local development
 
-**Start with [`docs/STATE-OF-THE-SYSTEM.md`](docs/STATE-OF-THE-SYSTEM.md)** — what the pipeline
-actually does, what is genuinely done, what is open, the landmines, and every figure with the
-instrument that produced it. It is the only document in this repo. On 2026-08-02 the other 137
-files under `docs/` were deleted after an audit found 168 places they contradicted the code; they
-are all still in git behind the tag `refactor-freeze-2026-08-02`.
+The backend uses Python 3.14 and Postgres. Its pipeline, webapp, and contributor
+API have separate environments and requirements. See the README in each
+directory for setup and environment variables. Copy the relevant `.env.example`
+file to `.env`; never commit credentials.
 
-[`.claude/CLAUDE.md`](.claude/CLAUDE.md) holds the rules and invariants for working in this tree.
-
-## backend/
-
-Pulls postings from **eight** ingest scripts into one Postgres table, dedupes them, and has an LLM
-extract facts and write a fit narrative. It **finds and judges** jobs; it does not apply to them,
-track applications, or do outreach — those stay manual on purpose.
-
-`ingest/ats.py` alone reaches six ATS vendors (Greenhouse, Lever, Ashby, Workable, Recruitee,
-SmartRecruiters), reading its roster from the `company_ats` table rather than from a file.
+For the webapp and client on one local origin, set up the webapp environment and
+database, then run:
 
 ```bash
-cd backend
-python3 -m unittest discover -s tests        # the whole suite
-python3 -m unittest tests.test_row_identity  # the guard on row identity
-python3 run-daily.py                         # the 14 steps the nightly timer runs
+./dev.sh
 ```
 
-Scheduled by a **systemd user timer**, not cron — `jobs-ingest.timer`, midnight local. The last
-run's outcome: `journalctl --user -u jobs-ingest.service`.
+Open `http://localhost:8421/`. `dev.sh` starts the development database with
+Docker unless passed `--no-db`. It does not create the schema for you; follow
+its error message if the database is empty.
 
-## frontend/
+## Checks
 
-A shipping client: one HTML shell, one hand-written stylesheet, 13 ES modules, five routed screens
-(Today, Job detail, Saved, Search, Onboarding). **No build step, no framework, no npm, no
-`package.json`** — a constraint to keep, not an accident.
-
-It must be served from the webapp's own origin, because it authenticates with
-`credentials: "same-origin"` and a relative `BASE`. Served from anywhere else every request silently
-loses the session cookie and renders as the sign-in screen.
+Run each Python suite with its own environment:
 
 ```bash
-cd backend/webapp && .venv/bin/python ../../frontend/serve.py   # then http://localhost:8421/
-python3 frontend/verify_fixtures.py    # fixtures still describe the server
-node frontend/check_client.mjs         # client still agrees with the fixtures
+cd backend && .venv/bin/python -m unittest discover -s tests -t .
+cd api && .venv/bin/python -m unittest discover -s tests -t .
+cd ../webapp && .venv/bin/python -m unittest discover -s tests -t .
 ```
 
-Not built: the Contribute surface, and the phone test.
+From the repository root, check the browser client with
+`backend/.venv/bin/python frontend/verify_fixtures.py` and
+`node frontend/check_client.mjs`. The frontend has no build step.
 
-## Layout note
+The optional actor has its own commands: `cd actor && npm ci && npm run lint &&
+npm test && npm run build`.
 
-Everything the backend needs resolves relative to `backend/`, never to this directory or to the
-process's working directory — the `sys.path` inserts in `ingest/`, `tools/`, `migrations/`,
-`scripts/`, `api/` and `webapp/` each reach exactly one level up, and the shell scripts `cd` to
-their own parent. That is what made the original split a pure move, and the tree can be relocated
-again as a unit.
+## Recovery
 
-`backend/` holds three deliberately separate processes, each with its own `.env`, venv and Postgres
-role. `api/` and `webapp/` import nothing from each other, and no pipeline module imports either —
-but `webapp/` does import the pipeline's `profiles`, `searchnorm` and `evals.labels`, and `api/`
-imports `google_jobs`, so the shared surface is wider than `schema.py` and `lib/`.
+The previously tracked documentation and `.claude` configuration are available
+at Git tag `archive/pre-simplification-2026-09-24`.

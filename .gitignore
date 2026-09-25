@@ -64,45 +64,11 @@ backend/evals/.cache/
 serp/.cache/
 backend/serp/.cache/
 
-# Agent worktrees and scratch state. CLAUDE.md is the deliberate exception: it
-# is the project brief every session reads before doing anything, and while it
-# was ignored it was machine-local -- so a correction to it could be made and
-# could not be committed, which is how tasks 38 and 40 found themselves editing
-# a file no diff could carry. settings.local.json stays ignored; it is this
-# machine's permission state and means nothing on another.
-#
-# T-5/T-6/T-7 (TASKS.md) added four more directories in the same category as
-# CLAUDE.md: rules/, agents/ and hooks/ are the harness itself -- landmines,
-# read-only reviewers, the citation-audit hook -- not one machine's state, and
-# settings.json is what wires the hook in. Un-ignoring only these four paths,
-# not `.claude/*` wholesale, keeps everything else (scratch, worktrees,
-# per-machine permission state) exactly as machine-local as it already was.
-.claude/*
-!.claude/CLAUDE.md
-!.claude/rules/
-!.claude/agents/
-!.claude/hooks/
-!.claude/settings.json
+# Local assistant configuration.
+.claude/
+.codex/
 
-# Agent-orchestration harness, not project code. 183b4dc untracked
-# scripts/tranche-two-launcher.sh on purpose -- it hard-codes this machine,
-# drives tmux, and runs tranche_two tasks that are all done -- and 3383f9a said
-# it would. It was NOT deleted: it is the owner's file and the owner's call
-# whether it moves to ~/bin/. But untracked-and-unignored means it shows as ??
-# in every git status and it has already been re-added once by a git add -A,
-# which is the exact thing 183b4dc exists to undo. Ignoring it makes the
-# decision durable instead of dependent on nobody typing -A.
-#
-# ANCHORED TO THE ROOT, and the anchor is the fix, not decoration. Written as a
-# bare `scripts/` this pattern matches at EVERY depth, so it also ignored
-# backend/scripts/ -- a directory with four tracked files in it. Tracked files
-# are unaffected by .gitignore, so nothing broke and nothing was red; what broke
-# was the NEXT file added there. Task 33 added backend/scripts/backup-jobs.sh
-# and `git status` did not show it. A backup script that is silently not in the
-# repo is the same failure mode as a backup that is silently not running.
-#   Verify both halves after editing:
-#     git check-ignore -v scripts/tranche-two-launcher.sh   # must still hit
-#     git check-ignore -v backend/scripts/backup-jobs.sh    # must exit 1
+# Machine-specific scripts outside the application tree.
 /scripts/
 
 # flock target from the systemd unit ExecStart -- created on every run
@@ -114,6 +80,5 @@ backend/serp/.cache/
 # Tuesday becoming another machine's floor. See config/volume-floors.json.
 .run-volumes.jsonl
 
-# Dev-only virtualenv for ruff and other lint/CI tooling (T-1 in TASKS.md).
-# Deliberately NOT one of the three runtime venvs.
+# Dev-only virtualenv for lint and type checks.
 .venv-dev/
